@@ -61,6 +61,16 @@ describe("human conversations", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Dr. One · Clinic One/ }));
     await screen.findByText("Toma 5 mg al dia");
   });
+  it("never shows a translation into another language than the patient's own", async () => {
+    vi.mocked(careConversations.messages).mockResolvedValue({
+      items: [{ ...message("newest", "Take 5 mg daily"), translation: "Toma 5 mg al dia", translation_locale: "es-MX", translation_guard_passed: true }],
+      next_cursor: null,
+    });
+    render(<CareConversations compact locale="en-US" />);
+    fireEvent.click(await screen.findByRole("button", { name: /Dr. One · Clinic One/ }));
+    await screen.findByText("Take 5 mg daily");
+    expect(screen.queryByText("Toma 5 mg al dia")).not.toBeInTheDocument();
+  });
   it("opens only the exact addressed conversation from a notification", async () => {
     vi.mocked(careConversations.list).mockResolvedValue([thread, { ...thread, id: "thread-two", clinician_id: "clinician-two", clinician_name: "Dr. Two" }]);
     render(<CareConversations compact conversationId="thread-two" />);

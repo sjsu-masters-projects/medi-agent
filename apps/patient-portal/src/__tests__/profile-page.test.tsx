@@ -130,8 +130,8 @@ describe("Patient profile page", () => {
             expect(
                 screen.getByRole("button", {
                     name: spanish
-                        ? "Vincular otra clínica"
-                        : "Join another clinic",
+                        ? "Agregar un miembro del equipo de atención"
+                        : "Add a care team member",
                 }),
             ).toBeInTheDocument();
             fireEvent.click(
@@ -163,8 +163,8 @@ describe("Patient profile page", () => {
             render(<ProfilePage />);
             const name =
                 locale === "es-MX"
-                    ? "Conectar tu clínica"
-                    : "Connect your clinic";
+                    ? "Agregar tu equipo de atención"
+                    : "Add your care team";
             fireEvent.click(await screen.findByRole("button", { name }));
             expect(screen.getByRole("dialog", { name })).toBeInTheDocument();
             expect(
@@ -354,17 +354,17 @@ describe("Patient profile page", () => {
         post.mockRejectedValue(new Error("Uncertain transport outcome"));
         render(<ProfilePage />);
         const trigger = await screen.findByRole("button", {
-            name: "Connect your clinic",
+            name: "Add your care team",
         });
         trigger.focus();
         fireEvent.click(trigger);
         expect(
-            screen.getByRole("dialog", { name: "Connect your clinic" }),
+            screen.getByRole("dialog", { name: "Add your care team" }),
         ).toHaveAttribute("aria-modal", "true");
-        fireEvent.change(screen.getByLabelText("Clinic invite code"), {
+        fireEvent.change(screen.getByLabelText("Invite code"), {
             target: { value: " CITY /8832 " },
         });
-        fireEvent.click(screen.getByRole("button", { name: "Join clinic" }));
+        fireEvent.click(screen.getByRole("button", { name: "Add to my care team" }));
         expect(await screen.findByRole("alert")).toHaveTextContent(
             "Refresh to check your care team",
         );
@@ -376,7 +376,7 @@ describe("Patient profile page", () => {
         fireEvent.keyDown(document, { key: "Escape" });
         expect(trigger).toHaveFocus();
         fireEvent.click(trigger);
-        expect(screen.getByLabelText("Clinic invite code")).toHaveValue(
+        expect(screen.getByLabelText("Invite code")).toHaveValue(
             " CITY /8832 ",
         );
         expect(screen.getByRole("alert")).toHaveTextContent(
@@ -430,7 +430,7 @@ describe("Patient profile page", () => {
         expect(screen.getByText("Inactive")).toBeInTheDocument();
         expect(container.querySelector("details")?.open ?? false).toBe(false);
         expect(
-            screen.getByRole("button", { name: "Join another clinic" }),
+            screen.getByRole("button", { name: "Add a care team member" }),
         ).toBeInTheDocument();
         fireEvent.click(
             screen.getByRole("button", { name: "Change saved preference" }),
@@ -621,7 +621,7 @@ describe("Patient profile page", () => {
             if (forceOpen) {
                 expect(
                     screen.getByRole("dialog", {
-                        name: "Add care team access",
+                        name: "Add a care team member",
                     }),
                 ).toBeInTheDocument();
                 fireEvent.keyDown(document, { key: "Escape" });
@@ -675,25 +675,25 @@ describe("Patient profile page", () => {
         render(<ProfilePage />);
         fireEvent.click(
             await screen.findByRole("button", {
-                name: "Conectar tu clínica",
+                name: "Agregar tu equipo de atención",
             }),
         );
         const invite = await screen.findByLabelText(
-            "Código de invitación de la clínica",
+            "Código de invitación",
         );
         expect(invite).toHaveAccessibleDescription(
-            "Usa el código que te proporcionó tu clínica.",
+            "Usa el código que te dio tu clínico.",
         );
         fireEvent.click(
-            screen.getByRole("button", { name: "Vincular clínica" }),
+            screen.getByRole("button", { name: "Agregar a mi equipo" }),
         );
         expect(screen.getByRole("alert")).toHaveTextContent(
-            "Ingresa un código de invitación de la clínica para continuar.",
+            "Ingresa un código de invitación para continuar.",
         );
         expect(post).not.toHaveBeenCalled();
         fireEvent.change(invite, { target: { value: "BAD-CODE" } });
         fireEvent.click(
-            screen.getByRole("button", { name: "Vincular clínica" }),
+            screen.getByRole("button", { name: "Agregar a mi equipo" }),
         );
         expect(await screen.findByRole("alert")).toHaveTextContent(
             "El código de invitación no es válido o ya venció",
@@ -928,13 +928,13 @@ describe("Patient profile page", () => {
         ).toBeInTheDocument();
 
         fireEvent.click(
-            screen.getByRole("button", { name: "Connect your clinic" }),
+            screen.getByRole("button", { name: "Add your care team" }),
         );
-        fireEvent.change(await screen.findByLabelText(/clinic invite code/i), {
+        fireEvent.change(await screen.findByLabelText(/^invite code$/i), {
             target: { value: "NORTH-8832" },
         });
         fireEvent.click(
-            await screen.findByRole("button", { name: /join clinic/i }),
+            await screen.findByRole("button", { name: /add to my care team/i }),
         );
 
         await waitFor(() => {
@@ -946,10 +946,59 @@ describe("Patient profile page", () => {
         });
 
         expect(
-            await screen.findByText(/clinic linked successfully/i),
+            await screen.findByText(/added to your care team/i),
         ).toBeInTheDocument();
         expect(await screen.findByText("Amir Khan")).toBeInTheDocument();
         expect(screen.getByText("Northside Clinic")).toBeInTheDocument();
+    });
+
+    it.each([
+        ["en-US", "Add a care team member", "Enter the invite code your clinician gave you."],
+        ["es-MX", "Agregar un miembro del equipo de atención", "Ingresa el código de invitación que te dio tu clínico."],
+    ])("words the add flow as adding a care team member, not joining a clinic (%s)", async (locale, title, help) => {
+        get.mockImplementation(async (endpoint: string) =>
+            endpoint === "/api/v1/patients/me"
+                ? { ...profileResponse(locale as "en-US" | "es-MX") }
+                : [{ clinician_first_name: "Amir", clinician_id: "c2", clinician_last_name: "Khan", clinic_name: "Northside Clinic", created_at: "2026-02-11T00:00:00Z", id: "ct-2", patient_id: "patient-1", role: "Cardiology", status: "active" }],
+        );
+        render(<ProfilePage />);
+        fireEvent.click(await screen.findByRole("button", { name: title }));
+        expect(screen.getByRole("dialog", { name: title })).toBeInTheDocument();
+        expect(screen.getByText(help)).toBeInTheDocument();
+        expect(screen.queryByText(/join another clinic|vincular otra cl/i)).not.toBeInTheDocument();
+    });
+
+    it("keeps a flat list with the clinic in the subtitle for one clinic", async () => {
+        get.mockImplementation(async (endpoint: string) =>
+            endpoint === "/api/v1/patients/me"
+                ? profileResponse()
+                : [
+                    { clinician_first_name: "Amir", clinician_id: "c2", clinician_last_name: "Khan", clinic_name: "Northside Clinic", created_at: "2026-02-11T00:00:00Z", id: "ct-2", patient_id: "patient-1", role: "Cardiology", status: "active" },
+                    { clinician_first_name: "Priya", clinician_id: "c3", clinician_last_name: "Nair", clinic_name: "Northside Clinic", created_at: "2026-02-11T00:00:00Z", id: "ct-3", patient_id: "patient-1", role: "Nursing", status: "active" },
+                ],
+        );
+        render(<ProfilePage />);
+        await screen.findByText("Amir Khan");
+        expect(screen.queryByRole("heading", { level: 4 })).not.toBeInTheDocument();
+        expect(screen.getAllByText("Northside Clinic")).toHaveLength(2);
+    });
+
+    it("groups care team rows under clinic headings when the team spans two clinics", async () => {
+        get.mockImplementation(async (endpoint: string) =>
+            endpoint === "/api/v1/patients/me"
+                ? profileResponse()
+                : [
+                    { clinician_first_name: "Amir", clinician_id: "c2", clinician_last_name: "Khan", clinic_name: "Northside Clinic", created_at: "2026-02-11T00:00:00Z", id: "ct-2", patient_id: "patient-1", role: "Cardiology", status: "active" },
+                    { clinician_first_name: "Priya", clinician_id: "c3", clinician_last_name: "Nair", clinic_name: "Willow Terrace", created_at: "2026-02-11T00:00:00Z", id: "ct-3", patient_id: "patient-1", role: "Nursing", status: "active" },
+                    { clinician_first_name: "Elena", clinician_id: "c4", clinician_last_name: "Park", clinic_name: "Willow Terrace", created_at: "2026-02-11T00:00:00Z", id: "ct-4", patient_id: "patient-1", role: "Cardiology", status: "active" },
+                ],
+        );
+        render(<ProfilePage />);
+        await screen.findByText("Amir Khan");
+        const headings = screen.getAllByRole("heading", { level: 4 }).map((h) => h.textContent);
+        expect(headings).toEqual(["Northside Clinic", "Willow Terrace"]);
+        // The clinic is the heading, so it is not repeated in each row.
+        expect(screen.getAllByText("Willow Terrace")).toHaveLength(1);
     });
 
     it("surfaces invite-code errors without leaving the page", async () => {
@@ -977,13 +1026,13 @@ describe("Patient profile page", () => {
         ).toBeInTheDocument();
 
         fireEvent.click(
-            screen.getByRole("button", { name: "Connect your clinic" }),
+            screen.getByRole("button", { name: "Add your care team" }),
         );
-        fireEvent.change(await screen.findByLabelText(/clinic invite code/i), {
+        fireEvent.change(await screen.findByLabelText(/^invite code$/i), {
             target: { value: "BAD-CODE" },
         });
         fireEvent.click(
-            await screen.findByRole("button", { name: /join clinic/i }),
+            await screen.findByRole("button", { name: /add to my care team/i }),
         );
 
         expect(
