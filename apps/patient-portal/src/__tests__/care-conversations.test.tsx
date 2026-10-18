@@ -7,7 +7,7 @@ import type { CareConversation, CareConversationMessage } from "@/types/care-con
 const auth = vi.hoisted(() => ({ accessToken: "synthetic-token", user: { id: "patient" } }));
 vi.mock("react-redux", () => ({ useSelector: (select: (state: unknown) => unknown) => select({ auth }) }));
 vi.mock("@/services/care-conversations", () => ({
-  careConversations: { recipients: vi.fn(), list: vi.fn(), open: vi.fn(), messages: vi.fn(), send: vi.fn(), read: vi.fn() },
+  careConversations: { recipients: vi.fn(), list: vi.fn(), open: vi.fn(), messages: vi.fn(), send: vi.fn(), read: vi.fn(), translate: vi.fn() },
 }));
 const thread: CareConversation = {
   id: "thread-one", patient_id: "patient", clinician_id: "clinician-one",
@@ -35,6 +35,61 @@ beforeEach(() => {
   vi.mocked(careConversations.send).mockResolvedValue(message("sent", "My question", "2026-10-09T11:00:00Z"));
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
+
+describe("non-blocking message translation", () => {
+  const pendingMessage = (id: string, body = "Take 5 mg daily") => ({ ...message(id, body), sender_role: "clinician", translation_pending: true });
+  const result = (id: string, overrides = {}) => ({
+    message_id: id, translation: "Toma 5 mg al dia", translation_locale: "es-MX", translation_guard_passed: true, translation_pending: false, ...overrides,
+  });
+  async function open() {
+    render(<CareConversations compact locale="es-MX" />);
+    fireEvent.click(await screen.findByRole("button", { name: /Dr. One · Clinic One/ }));
+  }
+  it("shows the original with a subtle Translating note, then swaps in the translation", async () => {
+    let finish!: (value: ReturnType<typeof result>) => void;
+    vi.mocked(careConversations.messages).mockResolvedValue({ items: [pendingMessage("m1")], next_cursor: null });
+    vi.mocked(careConversations.translate).mockReturnValue(new Promise((done) => { finish = done; }));
+    await open();
+    expect(await screen.findByText("Take 5 mg daily")).toBeInTheDocument();
+    expect(screen.getByText("Traduciendo…")).toBeInTheDocument();
+    expect(careConversations.translate).toHaveBeenCalledWith("synthetic-token", "thread-one", "m1");
+    await act(async () => finish(result("m1")));
+    await screen.findByText("Toma 5 mg al dia");
+    expect(screen.queryByText("Traduciendo…")).not.toBeInTheDocument();
+  });
+  it("keeps the original when the safety check fails or the request errors", async () => {
+    vi.mocked(careConversations.messages).mockResolvedValue({ items: [pendingMessage("m1"), pendingMessage("m2", "Take 5 mg daily two")], next_cursor: null });
+    vi.mocked(careConversations.translate).mockImplementation(async (_t, _c, id) => {
+      if (id === "m2") throw new Error("provider down");
+      return result(id, { translation_guard_passed: false });
+    });
+    await open();
+    await screen.findByText("Traducción automática no disponible para este mensaje");
+    expect(screen.getByText("Take 5 mg daily")).toBeInTheDocument();
+    expect(screen.queryByText("Toma 5 mg al dia")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Traduciendo…")).not.toBeInTheDocument());
+    expect(screen.getByText("Take 5 mg daily two")).toBeInTheDocument();
+  });
+  it("asks for at most three translations at a time and does not block the reader", async () => {
+    const gates: Array<() => void> = [];
+    vi.mocked(careConversations.messages).mockResolvedValue({
+      items: ["m1", "m2", "m3", "m4", "m5"].map((id, index) => ({ ...pendingMessage(id, `Take 5 mg daily ${index}`), created_at: `2026-10-09T10:0${index}:00Z` })),
+      next_cursor: null,
+    });
+    vi.mocked(careConversations.translate).mockImplementation((_t, _c, id) => new Promise((done) => { gates.push(() => done(result(id))); }));
+    await open();
+    await waitFor(() => expect(careConversations.translate).toHaveBeenCalledTimes(3));
+    expect(screen.getByRole("textbox")).toBeEnabled();
+    await act(async () => gates.shift()!());
+    await waitFor(() => expect(careConversations.translate).toHaveBeenCalledTimes(4));
+  });
+  it("makes no translation request when nothing is pending (the English-language patient case)", async () => {
+    vi.mocked(careConversations.messages).mockResolvedValue({ items: [message("m1", "Hello, how are you today?")], next_cursor: null });
+    await open();
+    await screen.findByText("Hello, how are you today?");
+    expect(careConversations.translate).not.toHaveBeenCalled();
+  });
+});
 
 describe("human conversations", () => {
   it.each([

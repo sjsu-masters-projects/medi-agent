@@ -84,6 +84,38 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("VisitsPage cancelled by the care team", () => {
+  const cancelled = (overrides: Partial<Appointment> = {}) =>
+    makeVisit({
+      status: AppointmentStatus.CANCELLED,
+      cancelledBy: "clinician",
+      cancelReasonCode: "clinic_closed",
+      ...overrides,
+    });
+  it("shows the status and the reason in English", () => {
+    hookState.visits = [cancelled({ cancelReasonCode: "other", cancelReason: "Water leak" })];
+    render(<VisitsPage />);
+    expect(screen.getByText("Cancelled")).toBeInTheDocument();
+    const note = screen.getByRole("note");
+    expect(note).toHaveTextContent("Your care team cancelled this visit.");
+    expect(note).toHaveTextContent("Reason: Other reason — Water leak");
+  });
+  it("shows the status and the reason in Spanish (draft wording)", () => {
+    settings.profile = { preferredLanguage: "es-MX", timezone: "America/Los_Angeles" };
+    hookState.visits = [cancelled()];
+    render(<VisitsPage />);
+    expect(screen.getByText("Cancelada")).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent("Tu equipo de atención canceló esta cita.");
+    expect(screen.getByRole("note")).toHaveTextContent("Motivo: La clínica está cerrada");
+  });
+  it("offers no actions on a cancelled visit and shows no care-team note for a patient's own cancel", () => {
+    hookState.visits = [cancelled({ cancelledBy: undefined, cancelReasonCode: undefined })];
+    render(<VisitsPage />);
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Accept|Cancel visit|Request a different time/ })).not.toBeInTheDocument();
+  });
+});
+
 describe("VisitsPage", () => {
   it("focuses the exact visit without accepting or changing it", () => {
     destination.params = new URLSearchParams("appointmentId=exact-visit");

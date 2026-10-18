@@ -14,6 +14,7 @@ import { PatientAdherencePanel } from "@/components/features/patient-adherence-p
 import { SymptomTimeline } from "@/components/features/symptom-timeline";
 import { ChatTranscript } from "@/components/features/chat-transcript";
 import { PatientDocumentsPanel } from "@/components/features/patient-documents-panel";
+import { PatientAppointmentsPanel } from "@/components/features/patient-appointments-panel";
 import { CarePlanPanel } from "@/components/features/care-plan-panel";
 import { SmartImportReviewPanel } from "@/components/features/smart-import-review-panel";
 import Link from "next/link";
@@ -24,7 +25,7 @@ import { formatClinicianDateTime } from "@/utils/dates";
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
 
-type TabId = "profile" | "imports" | "adherence" | "symptoms" | "chat" | "soap" | "documents" | "care-plan" | "adr";
+type TabId = "profile" | "imports" | "adherence" | "symptoms" | "chat" | "soap" | "documents" | "care-plan" | "adr" | "appointments";
 
 const TABS: Array<{ id: TabId; label: string; icon: IconName }> = [
     { id: "profile", label: "Profile", icon: "user" },
@@ -36,6 +37,7 @@ const TABS: Array<{ id: TabId; label: string; icon: IconName }> = [
     { id: "soap", label: "SOAP Notes", icon: "spark" },
     { id: "documents", label: "Documents", icon: "note" },
     { id: "care-plan", label: "Care Plan", icon: "check" },
+    { id: "appointments", label: "Appointments", icon: "cal" },
 ];
 
 function PatientTabs({ activeTab, onChange }: { activeTab: TabId; onChange: (tab: TabId) => void }) {
@@ -662,6 +664,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                         patientId={patientId}
                     />
                 )}
+                {activeTab === "appointments" && <PatientAppointmentsPanel patientId={patientId} />}
                 {activeTab === "care-plan" && <CarePlanPanel patientId={patientId} onPublished={() => void reload()} />}
             </div>
         </div>

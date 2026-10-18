@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { ClinicChip, ClinicFilterEmpty, ClinicFilterField } from "@/components/features/clinic-chip";
 import { RiskBadge } from "@/components/features/risk-badge";
+import { clinicScopeLabel } from "@/hooks/clinic-scope";
 import { useClinicFilter } from "@/hooks/use-clinic-filter";
 import { DataTable, Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
@@ -74,7 +75,7 @@ export default function PatientsPage() {
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Patient roster</h1>
-                    <p className="mt-1 text-sm text-muted">Sort by risk, adherence, or recent activity.</p>
+                    <p className="mt-1 text-sm text-muted">Sort by risk, adherence, or recent activity.{clinicScopeLabel(clinicFilter) ? ` · ${clinicScopeLabel(clinicFilter)}` : ""}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                     <CompactField label="Risk">

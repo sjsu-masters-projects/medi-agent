@@ -18,7 +18,7 @@ import { ClinicianRole, PortalUserRole } from "@/types";
 const primaryNavigation: { href: string; icon: IconName; label: string }[] = [
     { href: "/dashboard", icon: "grid", label: "Risk Radar" },
     { href: "/patients", icon: "users", label: "Patient Roster" },
-    { href: "/appointments", icon: "cal", label: "Appointments" },
+    { href: "/appointments", icon: "cal", label: "My schedule" },
     { href: "/review-queue", icon: "inbox", label: "Review Queue" },
     { href: "/adr-reviews", icon: "alert", label: "ADR Reviews" },
     { href: "/medwatch", icon: "file", label: "MedWatch" },

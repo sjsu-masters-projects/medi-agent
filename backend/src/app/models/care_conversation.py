@@ -62,6 +62,19 @@ class ConversationMessage(BaseModel):
     translation: str | None = None
     translation_locale: str | None = None
     translation_guard_passed: bool | None = None
+    # True when the viewer needs a translation that is not stored yet: ask for it with
+    # POST .../messages/{id}/translation (a read never calls the model).
+    translation_pending: bool = False
+
+
+class MessageTranslationResult(BaseModel):
+    """One message's translation for the viewer, or none if it could not be produced."""
+
+    message_id: UUID
+    translation: str | None = None
+    translation_locale: str | None = None
+    translation_guard_passed: bool | None = None
+    translation_pending: bool = False
 
 
 class ConversationMessagePage(BaseModel):

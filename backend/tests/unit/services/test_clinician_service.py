@@ -1454,3 +1454,47 @@ async def test_dashboard_rows_carry_the_clinic_and_the_filter_narrows_the_patien
         none = await service.get_dashboard_data(uuid4(), clinic_id=uuid4())
     assert result["patients"][0]["clinic_name"] == "Clinic A"
     assert none["patients"] == [] and none["total"] == 0
+
+
+SHARED_LINKS = [
+    {"patient_id": "p-a", "clinic_id": CLINIC_ID, "clinics": {"display_name": "Clinic A"}},
+    {"patient_id": "p-a", "clinic_id": CLINIC_B_ID, "clinics": {"display_name": "Clinic B"}},
+    {"patient_id": "p-b", "clinic_id": CLINIC_B_ID, "clinics": {"display_name": "Clinic B"}},
+]
+
+
+def _link_rows():
+    return [
+        {
+            "id": f"ct-{i}",
+            "clinic_id": link["clinic_id"],
+            "clinics": link["clinics"],
+            "role": "primary_care",
+            "patients": {"id": link["patient_id"], "first_name": "P", "last_name": "Test"},
+        }
+        for i, link in enumerate(SHARED_LINKS)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_roster_and_picker_count_the_same_distinct_patients(service):
+    """A patient shared by two clinics has two links (two picker rows) but is one patient."""
+    service._execute = AsyncMock(return_value=_response(data=_link_rows()))  # type: ignore[method-assign]
+    with _real_scope(service, SHARED_LINKS, [CLINIC_ID, CLINIC_B_ID]):
+        rows = await service.get_patients(uuid4())
+        scope = await service.memberships.link_scope(uuid4())
+    # Each link keeps its own clinic chip and care team; the distinct patients are the roster.
+    assert {(r["id"], r["clinic_name"]) for r in rows} == {
+        ("p-a", "Clinic A"),
+        ("p-a", "Clinic B"),
+        ("p-b", "Clinic B"),
+    }
+    assert len({r["id"] for r in rows}) == len(scope.patient_ids) == 2
+
+
+@pytest.mark.asyncio
+async def test_clinic_filter_does_not_list_the_same_patient_via_another_clinics_link(service):
+    service._execute = AsyncMock(return_value=_response(data=_link_rows()))  # type: ignore[method-assign]
+    with _real_scope(service, SHARED_LINKS, [CLINIC_ID, CLINIC_B_ID]):
+        rows = await service.get_patients(uuid4(), UUID(CLINIC_ID))
+    assert [(r["id"], r["clinic_name"]) for r in rows] == [("p-a", "Clinic A")]

@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { ClinicFilterField } from "@/components/features/clinic-chip";
 import { NotificationList } from "@/components/features/notification-centre";
 import { useNotificationCentre } from "@/components/features/notification-provider";
+import { clinicScopeLabel } from "@/hooks/clinic-scope";
 import { useClinicFilter } from "@/hooks/use-clinic-filter";
 
 function AlertsContent() {
@@ -14,14 +15,16 @@ function AlertsContent() {
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div>
         <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Alerts</h1>
-        <p className="mt-1 max-w-[80ch] text-sm text-muted">Reading or acknowledging an alert does not approve care or resolve a clinical concern.</p>
+        <p className="mt-1 max-w-[80ch] text-sm text-muted">Reading or acknowledging an alert does not approve care or resolve a clinical concern.{clinicScopeLabel(clinicFilter) ? ` · ${clinicScopeLabel(clinicFilter)}` : ""}</p>
       </div>
-      <p className="text-sm text-muted" role="status">{summary.error || !summary.data ? "Counts unavailable" : `${summary.data.action_item_count} need attention · ${summary.data.unread_count} unread`}</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <ClinicFilterField filter={clinicFilter} />
+        <p className="text-sm text-muted" role="status">{summary.error || !summary.data ? "Counts unavailable" : `${summary.data.action_item_count} need attention · ${summary.data.unread_count} unread`}</p>
+      </div>
     </div>
     <div role="group" aria-label="Alerts views" className="inline-flex flex-wrap gap-1 rounded-lg border border-line bg-surface-2 p-1">
       {(["actions", "history"] as const).map((value) => <button key={value} type="button" aria-pressed={view === value} onClick={() => setView(value)} className={`min-h-9 rounded-md px-4 text-sm ${view === value ? "bg-surface font-medium text-ink shadow-sm" : "text-muted"}`}>{value === "actions" ? "Needs attention" : "History"}</button>)}
     </div>
-    {clinicFilter.multi ? <div className="flex justify-end"><ClinicFilterField filter={clinicFilter} /></div> : null}
     <NotificationList key={view} actions={view === "actions"} clinicFilter={clinicFilter} />
 
   </div>;

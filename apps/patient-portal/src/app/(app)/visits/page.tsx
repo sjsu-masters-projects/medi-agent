@@ -126,6 +126,17 @@ function VisitCard({
           <p className="mt-1 whitespace-pre-wrap break-words">{visit.notes}</p>
         </div>
       ) : null}
+      {visit.status === AppointmentStatus.CANCELLED && visit.cancelledBy === "clinician" ? (
+        <div className="mt-2 rounded-xl bg-danger-tint p-3 text-sm text-danger-ink" role="note">
+          <p className="font-semibold">{copy.cancelledByCare}</p>
+          {visit.cancelReasonCode ? (
+            <p className="mt-1 break-words">
+              {copy.cancelReasonLabel} {copy.cancelReasons[visit.cancelReasonCode]}
+              {visit.cancelReason ? ` — ${visit.cancelReason}` : ""}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {visit.patientNote ? (
         <p className="mt-2 break-words text-sm italic text-muted">
           {copy.note} {visit.patientNote}
