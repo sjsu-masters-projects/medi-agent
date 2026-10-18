@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from typing import Any
 from uuid import UUID
 
@@ -33,11 +34,16 @@ from app.middleware.rate_limit import (
     password_reset_email_limiter,
 )
 from app.models.enums import ClinicianRole, coerce_locale
+from app.services.clinic_membership_service import ClinicMembershipService
 from app.services.clinic_service import ClinicService
 from app.services.email_invitation_service import EmailInvitationService
+from app.services.mfa_service import MFAService
 
 logger = logging.getLogger(__name__)
 _SUPPORTED_ROLES = {"patient", "clinician"}
+ACCOUNT_EXISTS_MESSAGE = (
+    "This email already has a MediAgent clinician account. Sign in to add this clinic to it."
+)
 
 
 class AuthService:
@@ -52,6 +58,7 @@ class AuthService:
         self.auth_client = auth_client or create_anon_client()
         self.clinic_repo = ClinicRepository(self)
         self.clinician_repo = ClinicianRepository(self)
+        self.memberships = ClinicMembershipService(self)
 
     # ── Signup ──────────────────────────────────────────────
 
@@ -146,6 +153,9 @@ class AuthService:
             raise ValidationError("Invalid clinician role")
 
         clinic = None if invitation_token else self._resolve_active_clinic(clinic_code or "")
+        # One account per address: an existing clinician adds a clinic by signing in.
+        if self.clinician_repo.list_by_email_any_case(email):
+            raise ValidationError(ACCOUNT_EXISTS_MESSAGE, code="ACCOUNT_EXISTS")
         auth_response = self._create_auth_user(email=email, password=password)
 
         if not auth_response.user:
@@ -154,6 +164,10 @@ class AuthService:
                     getattr(auth_response, "error", None),
                 )
             )
+        if getattr(auth_response.user, "identities", None) == []:
+            # Auth answers an existing address (under email confirmation) with a user that has
+            # no identities. It is not a new account: create nothing and delete nothing.
+            raise ValidationError(ACCOUNT_EXISTS_MESSAGE, code="ACCOUNT_EXISTS")
 
         user_id = auth_response.user.id
 
@@ -201,17 +215,48 @@ class AuthService:
         return result
 
     async def accept_invitation_with_password(
-        self, *, email: str, password: str, invitation_token: str
+        self,
+        *,
+        email: str,
+        password: str,
+        invitation_token: str,
+        mfa_code: str | None = None,
     ) -> dict[str, Any]:
         """Claim an invitation for an existing clinician account without a portal session.
 
-        Works for an unassigned account that cannot pass the normal clinic login yet.
-        The temporary session is ended; the clinician then signs in normally, MFA included.
+        Works for an account that cannot pass the normal sign-in yet (no active clinic). An
+        account that already has an active clinic and a verified authenticator must sign in
+        normally instead (``SIGN_IN_TO_ACCEPT``); one with no active clinic gives its current
+        code here, so adding a clinic never skips the second factor. The temporary session is ended; the clinician
+        then signs in normally, MFA included.
         """
         session = self._sign_in_and_format(
             email=email, password=password, expected_role="clinician"
         )
         try:
+            tokens = session["tokens"]
+            factors = self._list_verified_mfa_factors(
+                tokens["access_token"], tokens["refresh_token"]
+            )
+            if factors:
+                if self.memberships.active_memberships_sync(str(session["user"]["id"])):
+                    # Adding a clinic to a working MFA account must pass the second factor
+                    # at a normal sign-in, then accept from the signed-in session.
+                    raise AuthenticationError(
+                        "Sign in first, then open the invitation link again.",
+                        code="SIGN_IN_TO_ACCEPT",
+                    )
+                if not mfa_code:
+                    raise AuthenticationError(
+                        "Enter the 6-digit code from your authenticator app to accept.",
+                        code="MFA_CODE_REQUIRED",
+                    )
+                await MFAService().verify(
+                    tokens["access_token"],
+                    tokens["refresh_token"],
+                    str(factors[0]["id"]),
+                    mfa_code,
+                )
             return await EmailInvitationService(self.db).accept(
                 UUID(str(session["user"]["id"])), invitation_token
             )
@@ -282,7 +327,11 @@ class AuthService:
                 "requires_clinic_join": not self._has_active_care_team(response["user"]["id"]),
             }
 
-        self._assert_clinician_matches_clinic(response["user"]["id"], clinic_code)
+        if clinic_code:
+            # Deployed portals still send the verified code during rollout.
+            self._assert_clinician_matches_clinic(response["user"]["id"], clinic_code)
+        else:
+            self._assert_clinician_can_sign_in(response["user"]["id"])
         factors = self._list_verified_mfa_factors(
             response["tokens"]["access_token"],
             response["tokens"]["refresh_token"],
@@ -427,55 +476,57 @@ class AuthService:
 
         return clinic
 
-    def _assert_clinician_matches_clinic(
-        self,
-        clinician_id: str,
-        clinic_code: str | None,
-    ) -> None:
-        """Ensure clinician logins are bound to the verified clinic workspace."""
-        if not clinic_code:
-            raise AuthenticationError(
-                "Clinic code is required for clinician login",
-                code="CLINIC_CONTEXT_INVALID",
-            )
-
+    def _sign_in_profile(self, clinician_id: str) -> tuple[dict[str, Any], list[Any]]:
+        """Load the clinician row and the active memberships the sign-in checks need."""
         try:
-            clinic = self._resolve_active_clinic(clinic_code)
             profile = self.clinician_repo.get_context(clinician_id)
+            memberships = self.memberships.active_memberships_sync(clinician_id)
         except (ValidationError, AuthenticationError):
             raise
         except Exception as e:
-            logger.warning(
-                "Failed to verify clinician clinic context for clinician_id=%s clinic_code=%s: %s",
-                clinician_id,
-                clinic_code,
-                e,
-            )
+            logger.warning("Failed to verify clinician clinic context (%s)", type(e).__name__)
             raise ExternalServiceError("clinic lookup is temporarily unavailable") from None
         if not profile:
             raise AuthenticationError(
                 "Clinician account is not linked to a clinic",
                 code="CLINIC_CONTEXT_INVALID",
             )
-        clinic_id = profile.get("clinic_id")
-        clinic_name = profile.get("clinic_name")
-        if not clinic_id and not clinic_name:
+        if not profile.get("clinic_id") and not profile.get("clinic_name") and not memberships:
             # Created from an invitation whose claim did not finish.
             raise AuthenticationError(
                 "Finish joining your clinic: open your invitation email and choose "
                 "Sign in to accept.",
                 code="INVITATION_ACCEPTANCE_REQUIRED",
             )
+        return profile, memberships
 
-        if clinic_id and str(clinic_id) == str(clinic["id"]):
+    def _assert_clinician_can_sign_in(self, clinician_id: str) -> None:
+        """Sign in once: an active membership at any active clinic is enough (CLN-003)."""
+        _profile, memberships = self._sign_in_profile(clinician_id)
+        if memberships:
             return
+        raise AuthenticationError(
+            "Your account is not active at any clinic. Ask a clinic admin to invite you.",
+            code="NO_ACTIVE_CLINIC",
+        )
 
-        if (
-            clinic_name
-            and str(clinic_name).strip().lower() == str(clinic["display_name"]).strip().lower()
-        ):
+    def _assert_clinician_matches_clinic(
+        self,
+        clinician_id: str,
+        clinic_code: str | None,
+    ) -> None:
+        """A client that sends a clinic code must name a clinic the clinician belongs to."""
+        if not clinic_code:
+            raise AuthenticationError(
+                "Clinic code is required for clinician login",
+                code="CLINIC_CONTEXT_INVALID",
+            )
+
+        clinic = self._resolve_active_clinic(clinic_code)
+        # Clinics are compared by id against active memberships, never by name.
+        _profile, memberships = self._sign_in_profile(clinician_id)
+        if any(str(m.clinic_id) == str(clinic["id"]) for m in memberships):
             return
-
         raise AuthenticationError(
             "Clinician account does not belong to the selected clinic",
             code="CLINIC_CONTEXT_INVALID",
@@ -574,6 +625,29 @@ class AuthService:
             return role
         return None
 
+    @staticmethod
+    def _resolve_expires_at(session: Any) -> int:
+        """Return an absolute expiry in epoch seconds; never 0.
+
+        Prefers the provider's ``expires_at``, then ``expires_in`` from now, then the
+        access token's ``exp`` claim (read without verification, only for scheduling).
+        """
+        expires_at = getattr(session, "expires_at", None)
+        if isinstance(expires_at, int | float) and expires_at > 0:
+            return int(expires_at)
+        expires_in = getattr(session, "expires_in", None)
+        if isinstance(expires_in, int | float) and expires_in > 0:
+            return int(time.time() + expires_in)
+        token = getattr(session, "access_token", None)
+        if token:
+            try:
+                exp = decode_unverified_claims(token).get("exp")
+            except JWTError:
+                exp = None
+            if isinstance(exp, int | float) and exp > 0:
+                return int(exp)
+        raise AuthenticationError("Authentication failed — session has no expiry")
+
     @classmethod
     def _format_session(cls, response: Any, expected_role: str | None = None) -> Any:
         """Normalize Supabase auth response into our standard shape."""
@@ -595,7 +669,7 @@ class AuthService:
                 "access_token": session.access_token,
                 "refresh_token": session.refresh_token,
                 "token_type": "bearer",
-                "expires_at": session.expires_at or 0,
+                "expires_at": cls._resolve_expires_at(session),
             },
             "user": {
                 "id": str(user.id),

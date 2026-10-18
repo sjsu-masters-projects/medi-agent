@@ -9,6 +9,7 @@ import { useOptionalNotificationCentre } from "@/components/features/notificatio
 import { Icon, type IconName } from "@/components/ui/icons";
 import { clearStoredSession } from "@/services/auth-session";
 import { readStoredClinicContext } from "@/services/clinic-context";
+import { fetchMyClinics, type ClinicMembershipSummary } from "@/services/clinics";
 import { api } from "@/services/api";
 import { logout } from "@/store/slices/auth-slice";
 import type { AppDispatch, RootState } from "@/store/store";
@@ -17,11 +18,13 @@ import { ClinicianRole, PortalUserRole } from "@/types";
 const primaryNavigation: { href: string; icon: IconName; label: string }[] = [
     { href: "/dashboard", icon: "grid", label: "Risk Radar" },
     { href: "/patients", icon: "users", label: "Patient Roster" },
-    { href: "/appointments", icon: "cal", label: "Appointments" },
+    { href: "/appointments", icon: "cal", label: "My schedule" },
     { href: "/review-queue", icon: "inbox", label: "Review Queue" },
-    { href: "/medwatch", icon: "alert", label: "ADR Reviews" },
+    { href: "/adr-reviews", icon: "alert", label: "ADR Reviews" },
+    { href: "/medwatch", icon: "file", label: "MedWatch" },
     { href: "/messages", icon: "chat", label: "Messages" },
     { href: "/alerts", icon: "bell", label: "Alerts" },
+    { href: "/settings", icon: "gear", label: "Settings" },
 ];
 
 interface SidebarClinicianProfile {
@@ -112,6 +115,8 @@ export function Sidebar() {
     // as the header bell. "Needs attention" is shown on the Alerts page itself.
     const unreadAlerts = useOptionalNotificationCentre()?.summary.data?.unread_count;
     const [profile, setProfile] = useState<SidebarClinicianProfile | null>(null);
+    const [clinics, setClinics] = useState<ClinicMembershipSummary[]>([]);
+    const [defaultClinicId, setDefaultClinicId] = useState<string | null>(null);
     const storedClinic = useSyncExternalStore(noopSubscribe, storedClinicName, () => null);
     const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false);
     const clinicName = profile?.clinic_name || storedClinic;
@@ -137,15 +142,37 @@ export function Sidebar() {
             }
         }
 
+        async function loadClinics() {
+            if (!token) {
+                setClinics([]);
+                return;
+            }
+            try {
+                const result = await fetchMyClinics(token);
+                if (isMounted) {
+                    setClinics(result.clinics.filter((clinic) => clinic.status === "active"));
+                    setDefaultClinicId(result.default_clinic_id);
+                }
+            } catch {
+                if (isMounted) {
+                    setClinics([]);
+                }
+            }
+        }
+
         void loadProfile();
+        void loadClinics();
 
         return () => {
             isMounted = false;
         };
     }, [token]);
 
+    const multiClinic = clinics.length >= 2;
+    const defaultRole = clinics.find((clinic) => clinic.clinic_id === defaultClinicId)?.role;
+    const clinicList = clinics.map((clinic) => clinic.clinic_name).join(", ");
     const displayName = profile ? `${profile.first_name} ${profile.last_name}` : "Clinician";
-    const roleMeta = getRoleMeta(profile?.role ?? user?.role ?? PortalUserRole.CLINICIAN);
+    const roleMeta = getRoleMeta((multiClinic ? defaultRole : undefined) ?? profile?.role ?? user?.role ?? PortalUserRole.CLINICIAN);
     const initials = displayName
         .split(" ")
         .filter(Boolean)
@@ -154,7 +181,7 @@ export function Sidebar() {
         .join("")
         .toUpperCase() || "CL";
     const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
-    const accountSummary = [displayName, roleMeta.label, clinicName].filter(Boolean).join(" · ");
+    const accountSummary = [displayName, multiClinic ? `${roleMeta.label} · ${clinics.length} clinics` : roleMeta.label, multiClinic ? clinicList : clinicName].filter(Boolean).join(" · ");
 
     const handleLogout = () => {
         clearStoredSession();
@@ -186,15 +213,9 @@ export function Sidebar() {
 
             <nav aria-label="Clinician navigation" className="flex gap-1 overflow-x-auto px-3 py-2 md:flex-1 md:flex-col md:gap-0.5 md:overflow-visible md:p-0">
                 {primaryNavigation.map((item) => (
-                    <NavItem key={item.href} {...item} active={isActive(item.href)} collapsed={collapsed} count={item.href === "/medwatch" ? pendingAdr : item.href === "/alerts" ? unreadAlerts : undefined} />
+                    <NavItem key={item.href} {...item} active={isActive(item.href)} collapsed={collapsed} count={item.href === "/adr-reviews" ? pendingAdr : item.href === "/alerts" ? unreadAlerts : undefined} />
                 ))}
 
-                <div className="flex shrink-0 md:block">
-                    {collapsed
-                        ? <span aria-hidden="true" className="mx-2.5 my-3 hidden h-px bg-white/10 md:block" />
-                        : <p className="hidden px-2.5 pb-2 pt-[18px] font-mono text-[11px] uppercase tracking-[0.08em] text-rail-faint md:block">Administration</p>}
-                    <NavItem href="/settings" icon="gear" label="Clinic Settings" active={pathname.startsWith("/settings")} collapsed={collapsed} />
-                </div>
             </nav>
 
             <div className="flex items-center justify-between gap-2 border-t border-white/10 px-3 py-2 md:mt-4 md:flex-col md:items-stretch md:border-t-0 md:p-0">
@@ -209,9 +230,9 @@ export function Sidebar() {
                     </div>
                     <div className={`min-w-0 ${collapsed ? "md:sr-only" : ""}`}>
                         <p className="break-words text-[13px] font-semibold leading-tight text-rail-ink">{displayName}</p>
-                        <p className="mt-0.5 text-xs leading-tight text-[#8B9AB3]">{roleMeta.label}</p>
+                        <p className="mt-0.5 text-xs leading-tight text-[#8B9AB3]" title={multiClinic ? clinicList : undefined}>{multiClinic ? `${roleMeta.label} · ${clinics.length} clinics` : roleMeta.label}</p>
                         {/* Clinic names run long; wrap to two lines rather than cut them off. */}
-                        {clinicName ? <p className="mt-0.5 hidden text-xs leading-snug text-[#8B9AB3] [overflow-wrap:anywhere] line-clamp-2 md:block">{clinicName}</p> : null}
+                        {clinicName && !multiClinic ? <p className="mt-0.5 hidden text-xs leading-snug text-[#8B9AB3] [overflow-wrap:anywhere] line-clamp-2 md:block">{clinicName}</p> : null}
                     </div>
                 </div>
                 <button

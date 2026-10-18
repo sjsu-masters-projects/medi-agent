@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.models.clinic_membership import ClinicTag
 from app.models.enums import ADRStatus, MedWatchStatus, NaranjoCausality
 from app.models.medwatch_form_3500 import (
     Form3500TemplateRead,
@@ -45,7 +46,7 @@ class ADRAssessmentRead(BaseModel):
     created_at: str
 
 
-class ADRReviewQueueItem(BaseModel):
+class ADRReviewQueueItem(ClinicTag):
     """Assigned-patient ADR evidence shown for clinician review.
 
     This intentionally excludes ``thinking_chain``. Clinicians receive the
@@ -395,7 +396,7 @@ class MedWatchAttestationRead(BaseModel):
     text: str
 
 
-class MedWatchDraftRead(BaseModel):
+class MedWatchDraftRead(ClinicTag):
     """Form 3500 draft with evidence attribution, reviewer state and what approval needs."""
 
     id: UUID

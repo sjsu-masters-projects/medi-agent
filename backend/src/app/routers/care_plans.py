@@ -125,6 +125,20 @@ async def translate_care_plan_item(
     return await service.retranslate_item(user.id, patient_id, plan_id, item_id, data.from_locale)
 
 
+@router.get(
+    "/clinician/patients/{patient_id}/{plan_id}/items/{item_id}/back-translate",
+    summary="LOC-003: Back-translate Spanish wording to English for clinician verification",
+)
+async def back_translate_care_plan_item(
+    patient_id: UUID,
+    plan_id: UUID,
+    item_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: CarePlanService = Depends(_service),
+) -> Any:
+    return await service.back_translate_item(user.id, patient_id, plan_id, item_id)
+
+
 @router.post(
     "/clinician/patients/{patient_id}/{plan_id}/approve",
     summary="Approve and publish the complete care plan",

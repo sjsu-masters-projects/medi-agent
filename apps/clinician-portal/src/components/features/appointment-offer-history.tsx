@@ -3,9 +3,10 @@ import { Badge, Button } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { AppointmentStatus, type Appointment } from "@/types";
 import { formatSchedulingTime } from "@/utils/appointment-times";
+import { ClinicChip } from "./clinic-chip";
 import { CalendarExportButton } from "./calendar-export-button";
 
-const LABELS: Record<Appointment["status"], string> = {
+export const STATUS_LABELS: Record<Appointment["status"], string> = {
   scheduled: "Scheduled",
   proposed: "Awaiting patient response",
   confirmed: "Confirmed",
@@ -18,7 +19,7 @@ const LABELS: Record<Appointment["status"], string> = {
   no_show: "No-show",
 };
 
-const TONES: Record<
+export const STATUS_TONES: Record<
   Appointment["status"],
   "success" | "info" | "warning" | "danger" | "neutral"
 > = {
@@ -56,7 +57,11 @@ export function AppointmentOfferHistory({
   onRepropose,
   token,
   appointmentId,
+  patientName,
+  showClinic = false,
 }: {
+  patientName?: string;
+  showClinic?: boolean;
   token?: string | null;
   appointmentId?: string | null;
   appointments: Appointment[];
@@ -131,8 +136,8 @@ export function AppointmentOfferHistory({
                     : ""}
                 </p>
               </div>
-              <Badge variant={TONES[representative.status]} className="shrink-0">
-                {LABELS[representative.status]}
+              <Badge variant={STATUS_TONES[representative.status]} className="shrink-0">
+                {STATUS_LABELS[representative.status]}
               </Badge>
             </div>
             <ul className="mt-3 space-y-2 text-[13px] text-ink-2">
@@ -143,13 +148,29 @@ export function AppointmentOfferHistory({
                   tabIndex={row.id === appointmentId ? -1 : undefined}
                   className={`scroll-mt-6 rounded-[10px] bg-surface-2 px-3 py-2 ${row.id === appointmentId ? "ring-2 ring-primary" : ""}`}
                 >
-                  <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                    <span className="font-mono text-[12.5px] text-ink">
-                      {formatSchedulingTime(row.scheduledAt, timezone)}
+                  <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="order-1 min-w-0 flex-1 break-words sm:flex-none">
+                      <span className="font-mono text-[12.5px] font-semibold text-ink">
+                        {formatSchedulingTime(row.scheduledAt, timezone)}
+                      </span>{" "}
+                      <span className="text-muted">· {timezone}</span>
                     </span>
-                    <span className="text-muted">
-                      · {timezone} — {LABELS[row.status]}
-                    </span>
+                    {(patientName || (showClinic && row.clinicName)) && (
+                      <span className="order-3 flex min-w-0 basis-full items-center gap-2 sm:order-2 sm:basis-auto">
+                        {patientName && (
+                          <span className="min-w-0 break-words text-ink-2">
+                            {patientName}
+                          </span>
+                        )}
+                        {showClinic && <ClinicChip name={row.clinicName} />}
+                      </span>
+                    )}
+                    <Badge
+                      variant={STATUS_TONES[row.status]}
+                      className="order-2 shrink-0 sm:order-3"
+                    >
+                      {STATUS_LABELS[row.status]}
+                    </Badge>
                   </span>
                   {(row.status === AppointmentStatus.CONFIRMED ||
                     row.status === AppointmentStatus.SCHEDULED) && (

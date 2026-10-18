@@ -8,6 +8,7 @@ text and coordinates for the extracted value.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -223,6 +224,10 @@ class IngestionService:
             current=str(claim.get("document_type") or document_type or ""),
             proposed=extraction_result.document.document_type,
         )
+
+        # LOC-003: translate Spanish fact display fields to English at ingestion time.
+        await self._translate_spanish_facts(patient_id, document_id, registered)
+
         # The patient explanation is deliberately not generated here. Ingestion owns the
         # clinical result; the explanation is an optional convenience built afterwards from
         # the candidates just registered. Handing it off means a provider outage is retried
@@ -270,6 +275,55 @@ class IngestionService:
         )
         result, invalid_items = parse_model_extraction(self._parse_json(response))
         return result, telemetry.model, invalid_items
+
+    async def _translate_spanish_facts(
+        self, patient_id: UUID, document_id: UUID, registered: Any
+    ) -> None:
+        """LOC-003: Write English display fields for facts extracted from Spanish documents."""
+        from app.services.fact_display_translation import (
+            is_spanish_fact,
+            translate_fact_to_english,
+        )
+
+        if not getattr(registered, "created", 0):
+            return
+        try:
+            # Only the facts this document supports, never other documents' facts.
+            from app.services.clinical_fact_service import ClinicalFactService
+
+            facts = [
+                fact
+                for fact in ClinicalFactService(self.db).list_facts_for_document(
+                    document_id, patient_id
+                )
+                if fact.get("display_locale") is None
+            ]
+        except Exception:
+            logger.warning("LOC-003: could not load facts for translation", exc_info=True)
+            return
+        for fact in facts:
+            fact_type = str(fact.get("fact_type") or "")
+            value = cast(dict[str, Any], fact.get("value") or {})
+            if not is_spanish_fact(value, fact_type):
+                # Mark English facts so they're not re-checked next run.
+                with contextlib.suppress(Exception):
+                    self.db.table("clinical_facts").update({"display_locale": "en-US"}).eq(
+                        "id", str(fact["id"])
+                    ).execute()
+                continue
+            try:
+                english_fields = await translate_fact_to_english(fact_type, value)
+                if english_fields:
+                    self.db.table("clinical_facts").update(
+                        {"display_locale": "es-MX", "display_value": english_fields}
+                    ).eq("id", str(fact["id"])).execute()
+                else:
+                    # Translation failed guard check; mark as Spanish with no English display.
+                    self.db.table("clinical_facts").update({"display_locale": "es-MX"}).eq(
+                        "id", str(fact["id"])
+                    ).execute()
+            except Exception:
+                logger.warning("LOC-003: fact translation failed for %s", fact["id"], exc_info=True)
 
     def _finish_unvalidated_model_output(
         self,

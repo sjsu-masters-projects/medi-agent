@@ -1,7 +1,7 @@
 import { buildLoginRedirectUrl } from "../../../../packages/shared/src/utils/return-path";
 import { clearStoredSession } from "@/services/auth-session";
 
-export type AuthRedirectReason = "session_expired" | "unauthorized" | "logged_out";
+export type AuthRedirectReason = "session_expired" | "unauthorized" | "logged_out" | "inactivity" | "session_limit";
 
 interface RedirectToLoginParams {
     reason?: AuthRedirectReason;

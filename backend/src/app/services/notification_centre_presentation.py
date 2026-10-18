@@ -32,6 +32,14 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
         "Cita actualizada",
         "Consulta el horario actual en Citas.",
     ),
+    # UX-006: a clinician cancelled a booked visit (event_type appointment_changed, status
+    # cancelled). The Spanish is a draft for native-speaker review (see .agent/TASKS.md).
+    "appointment_cancelled": (
+        "Appointment cancelled",
+        "Your clinician cancelled this visit. See the reason in Visits.",
+        "Cita cancelada",
+        "Tu profesional clínico canceló esta cita. Consulta el motivo en Citas.",
+    ),
     "appointment_response": (
         "Patient responded to an appointment",
         "Review the saved patient response.",
@@ -279,8 +287,11 @@ def _questions(row: dict[str, Any], spanish: bool) -> str:
 
 
 def _display_copy(row: dict[str, Any], role: str, spanish: bool) -> tuple[str, str]:
+    kind = str(row["event_type"])
+    if kind == "appointment_changed" and _metadata(row).get("status") == "cancelled":
+        kind = "appointment_cancelled"
     copy = _COPY.get(
-        str(row["event_type"]),
+        kind,
         (
             "Update available",
             "Open the source to review the saved update.",
@@ -324,4 +335,5 @@ def present_item(row: dict[str, Any], role: str, locale: str) -> CentreItem:
         can_acknowledge=actionable and role == "clinician" and bool(row.get("can_acknowledge")),
         patient_name=_name(row.get("patient_name")) if role == "clinician" else None,
         clinic_name=_name(row.get("clinic_name")),
+        clinic_id=_identifier(row.get("clinic_id")) if role == "clinician" else None,
     )

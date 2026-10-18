@@ -534,3 +534,136 @@ def test_dedicated_code_secret_is_preferred():
         config.email_code_hmac_secret = "dedicated-secret"
         dedicated = service._hash("123456")
     assert fallback != dedicated
+
+
+# ── CLN-003 slice F: the clinic leads the subject and the header line ──────────────────────
+
+_NOTICES = [
+    "message_received",
+    "appointment_offered",
+    "appointment_changed",
+    "appointment_response",
+    "care_plan_published",
+    "document_failed",
+    "adr_information_requested",
+    "document_review",
+    "care_plan_draft",
+    "critical_result",
+]
+
+
+def _notice(service, kind, role, locale, clinic):
+    with patch("app.services.email_service.settings") as config:
+        config.patient_portal_url = "https://app.example.com"
+        config.clinician_portal_url = "https://clinic.example.com"
+        return service._payload(
+            {
+                "role": role,
+                "locale": locale,
+                "email": "owner@example.com",
+                "event": {"event_type": kind, "category": "x", "patient_id": str(uuid4())},
+            },
+            clinic,
+        )
+
+
+@pytest.mark.parametrize("kind", _NOTICES)
+@pytest.mark.parametrize(
+    "role,locale", [("patient", "en-US"), ("patient", "es-MX"), ("clinician", "en-US")]
+)
+def test_every_notice_names_the_clinic_when_given_and_is_unchanged_without(kind, role, locale):
+    service = EmailDeliveryService(MagicMock())
+    plain = _notice(service, kind, role, locale, "")
+    tagged = _notice(service, kind, role, locale, "Clínica <Norte>")
+    assert tagged["subject"] == f"Clínica <Norte> · {plain['subject']}"
+    assert tagged["text"].startswith("Clínica <Norte> · ")
+    # Escaped on its own header line under the brand; the heading keeps the plain subject.
+    assert "Clínica &lt;Norte&gt;</td></tr>" in tagged["html"]
+    assert "Clínica <Norte>" not in tagged["html"]
+    assert f">{plain['subject']}</h1>" in tagged["html"]
+    assert "Clínica" not in plain["html"] and "Clínica" not in plain["subject"]
+    # No health detail, identifier or extra link is introduced.
+    assert tagged["text"].count("https://") == plain["text"].count("https://")
+
+
+def test_staff_invitation_names_the_invitations_clinic_on_the_header_line():
+    content = render_email(
+        "Invitation to join North Clinic",
+        ["You have been invited."],
+        action_url="https://clinic.example.com/signup",
+        action_label="Review clinic invitation",
+        audience="clinician",
+        clinic="North Clinic",
+        clinic_in_subject=False,
+    )
+    assert content.subject == "Invitation to join North Clinic"
+    assert "North Clinic</td></tr>" in content.html
+
+
+class _Rows:
+    """A tiny chainable table stub: returns the rows registered for a table, in order."""
+
+    def __init__(self, tables):
+        self.tables = tables
+
+    def table(self, name):
+        rows = self.tables[name]
+        query = MagicMock()
+        for method in ("select", "eq", "limit"):
+            getattr(query, method).return_value = query
+        query.execute.return_value = SimpleNamespace(data=rows)
+        return query
+
+
+@pytest.mark.asyncio
+async def test_clinic_label_only_for_recipients_with_several_clinics():
+    patient = str(uuid4())
+    row = {
+        "role": "patient",
+        "user_id": patient,
+        "event": {
+            "event_type": "appointment_changed",
+            "source_type": "appointments",
+            "source_id": str(uuid4()),
+            "patient_id": patient,
+        },
+    }
+    two = _Rows(
+        {
+            "appointments": [{"clinic_id": "c2"}],
+            "care_teams": [{"clinic_id": "c1"}, {"clinic_id": "c2"}],
+            "clinics": [{"display_name": "South clinic"}],
+        }
+    )
+    assert await EmailDeliveryService(two)._clinic_label(row) == "South clinic"
+    one = _Rows(
+        {
+            "appointments": [{"clinic_id": "c1"}],
+            "care_teams": [{"clinic_id": "c1"}],
+            "clinics": [{"display_name": "Only clinic"}],
+        }
+    )
+    assert await EmailDeliveryService(one)._clinic_label(row) == ""
+
+
+@pytest.mark.asyncio
+async def test_clinician_notice_uses_the_link_clinic_and_memberships():
+    clinician, patient = str(uuid4()), str(uuid4())
+    row = {
+        "role": "clinician",
+        "user_id": clinician,
+        "event": {"event_type": "critical_result", "patient_id": patient, "metadata": {}},
+    }
+    db = _Rows(
+        {
+            "care_teams": [{"clinic_id": "c2"}],
+            "clinic_memberships": [{"clinic_id": "c1"}, {"clinic_id": "c2"}],
+            "clinics": [{"display_name": "South clinic"}],
+        }
+    )
+    assert await EmailDeliveryService(db)._clinic_label(row) == "South clinic"
+    # A notice with no single link (for example two clinics for the same pair) names none.
+    db.tables["care_teams"] = [{"clinic_id": "c1"}, {"clinic_id": "c2"}]
+    assert await EmailDeliveryService(db)._clinic_label(row) == ""
+    # Frozen payloads (verification, invitation) are never relabelled.
+    assert await EmailDeliveryService(db)._clinic_label({"payload": {}, "role": "x"}) == ""

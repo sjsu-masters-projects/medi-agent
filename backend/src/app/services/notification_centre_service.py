@@ -1,6 +1,7 @@
 """Role-scoped notifications, delegated to atomic authorized database operations."""
 
 import asyncio
+import json
 from typing import Any, cast
 from uuid import UUID
 
@@ -8,11 +9,21 @@ from postgrest.exceptions import APIError
 from pydantic import ValidationError as ModelValidationError
 from supabase import Client
 
+from app.core.db_pools import run_notification_db
 from app.core.exceptions import AuthorizationError, ExternalServiceError, ValidationError
 from app.models.auth import CurrentUser
 from app.models.notification_centre import CentrePage, CentreReadThroughResult, CentreSummary
 from app.services.notification_centre_presentation import present_item
 from app.services.notification_centre_tokens import issue_token, read_token
+
+# A read that has not answered in this long is abandoned for the caller (the portal keeps its
+# last data and tries again later). Its worker thread finishes in the background, but the
+# notification pool is bounded, so it can never occupy threads that Nora turns depend on.
+READ_TIMEOUT_SECONDS = 6.0
+_READ_ACTIONS = {"list", "summary", "action_items"}
+# Identical reads for one person that are already running share their answer (a portal that
+# asks twice at once, or a refresh while one is slow, costs the database one read).
+_in_flight: dict[str, "asyncio.Future[Any]"] = {}
 
 
 class NotificationCentreService:
@@ -21,6 +32,7 @@ class NotificationCentreService:
 
     async def page(self, options: dict[str, Any]) -> CentrePage:
         payload = {"limit": options.get("limit", 50), "unread": options.get("unread", False)}
+        self._add_clinic_filter(payload, options)
         if options.get("cursor"):
             payload["before"] = read_token(self.actor, "cursor", options["cursor"])
         result = cast(dict[str, Any], await self._call("list", payload))
@@ -41,6 +53,7 @@ class NotificationCentreService:
     async def action_items(self, options: dict[str, Any]) -> CentrePage:
         self._clinician_only()
         payload = {"category": options.get("category"), "limit": options.get("limit", 50)}
+        self._add_clinic_filter(payload, options)
         if options.get("cursor"):
             payload["before"] = read_token(self.actor, "action_cursor", options["cursor"])
         result = cast(dict[str, Any], await self._call("action_items", payload))
@@ -70,6 +83,11 @@ class NotificationCentreService:
         self._clinician_only()
         return await self._call("acknowledge", {"id": str(item_id), "note": note})
 
+    def _add_clinic_filter(self, payload: dict[str, Any], options: dict[str, Any]) -> None:
+        """A clinician's clinic filter; the database answers empty for a clinic they lack."""
+        if self.actor.role == "clinician" and options.get("clinic_id"):
+            payload["clinic_id"] = str(options["clinic_id"])
+
     def _clinician_only(self) -> None:
         if self.actor.role != "clinician":
             raise self._denial()
@@ -77,8 +95,44 @@ class NotificationCentreService:
     async def _call(self, action: str, payload: dict[str, Any] | None = None) -> Any:
         if self.actor.role not in {"patient", "clinician"}:
             raise self._denial()
+        if action not in _READ_ACTIONS:
+            return await self._rpc(action, payload)
+        key = json.dumps(
+            [str(self.actor.id), self.actor.role, action, payload or {}],
+            sort_keys=True,
+            default=str,
+        )
+        running = _in_flight.get(key)
+        if running is not None:
+            try:
+                return await asyncio.shield(running)
+            except asyncio.CancelledError:
+                if not running.cancelled():
+                    raise  # this caller was cancelled, not the read it was sharing
+                return await self._rpc(action, payload, timeout=READ_TIMEOUT_SECONDS)
+        future: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
+        _in_flight[key] = future
         try:
-            result = await asyncio.to_thread(
+            result = await self._rpc(action, payload, timeout=READ_TIMEOUT_SECONDS)
+        except asyncio.CancelledError:
+            future.cancel()  # sharers read for themselves
+            raise
+        except Exception as exc:
+            future.set_exception(exc)
+            future.exception()  # mark retrieved when nobody else waited
+            raise
+        else:
+            future.set_result(result)
+            return result
+        finally:
+            if _in_flight.get(key) is future:
+                del _in_flight[key]
+
+    async def _rpc(
+        self, action: str, payload: dict[str, Any] | None, timeout: float | None = None
+    ) -> Any:
+        try:
+            call = run_notification_db(
                 self.db.rpc(
                     "notification_centre_operation",
                     {
@@ -89,6 +143,11 @@ class NotificationCentreService:
                     },
                 ).execute
             )
+            result = await (asyncio.wait_for(call, timeout) if timeout else call)
+        except TimeoutError:
+            raise ExternalServiceError(
+                "Supabase", "Notifications unavailable. Refresh to try again."
+            ) from None
         except APIError as exc:
             if exc.code in {"42501", "P0002"}:
                 raise self._denial() from None

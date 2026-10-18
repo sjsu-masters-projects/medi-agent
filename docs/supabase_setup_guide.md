@@ -86,7 +86,7 @@ Apply every SQL file through the repository migration ledger against an empty de
 
 Copy the URI rather than assembling it: the pooler tenant, host, and password encoding are project-specific. The Session Pooler supports IPv4 clients and is required here because the migration command maintains a session while applying each SQL file.
 
-The checkout contains 79 SQL migration files, prefixes `001`–`065`. Some prefixes are
+The checkout contains 91 SQL migration files, prefixes `001`–`076`. Some prefixes are
 shared by independent files (`011`, `038`–`043`, `047`, `048`, `051`) that came from parallel
 branches; they coexist because the ledger identifies migrations by full filename and
 checksum, not by prefix. Preserve applied names and bytes. The ledger in
@@ -101,7 +101,7 @@ Migration `048_medwatch_draft_lifecycle.sql` adds the assigned-clinician
 draft/edit/approval/export lifecycle with immutable audit events and optimistic revision control.
 It deliberately does not add an FDA submission operation.
 
-### ADR loop and Form 3500 (063/064, PV-001-C) — written, not applied
+### ADR loop and Form 3500 (063/064, PV-001-C) — applied October 13
 
 `063_adr_information_loop_lifecycle.sql` makes each ADR information request its own
 notification source, adds the clinician "patient answered" alert and cascades ADR audit on
@@ -118,16 +118,15 @@ delegates with `'json'`), `discard_medwatch_draft`, `record_medwatch_external_su
 `amend_medwatch_external_submission`. It ends with a fail-closed verification block. No
 function or table sends anything to FDA.
 
-Neither file is applied to any hosted project. Applying either needs the requester's explicit
-authorization naming that action. **Order:** apply 063, then 064, before the backend from
-`fix/adr-information-loop-gaps` deploys (the branch ships as one pull request and its backend
-calls 064 objects; merging deploys the backend, so apply first and merge after). Every 048
+Both files were applied to the hosted project by the requester on October 13, before the backend
+that calls 064 objects deployed. Applying a migration needs the requester's explicit
+authorization naming that action. **Order for a fresh environment:** 063, then 064, before that backend. Every 048
 function keeps its signature, so the currently deployed backend keeps working once 064 is
 applied. Rows written by that backend in the meantime are labelled `fda-3500-legacy-048` and
 are upgraded on read. After applying, verify with the ledger and with the read-only checks the
 fail-closed block already performs (it raises and rolls the migration back on any gap).
 
-### Confirmed symptom ADR handoff (065, PAT-002-B) — written, not applied
+### Confirmed symptom ADR handoff (076, PAT-002-B) — written, not applied
 
 `076_confirmed_symptom_adr_handoff.sql` requires the already-applied confirmed-intake
 migration 060. It normalizes exact active-medication name matching and creates one
@@ -139,10 +138,82 @@ task left unclaimed by an interrupted request is recovered.
 Migration 076 has SHA-256
 `92566fd505a586913ec0d2feb1a554944cc98f73bd1049b4581eb03016c274a7` and is not applied
 to any hosted project. Apply it through the ledger only after explicit authorization and
-before deploying the backend that depends on its atomic-outbox guarantee. Because 063 and
-064 sort before 065 and are also recorded here as pending, do not run the all-pending
-migration script for a 065-only authorization; coordinate the full authorized migration
-set first.
+before deploying the backend that depends on its atomic-outbox guarantee. The hosted ledger
+already contains the migrations through 075 described below; 076 is the only new migration
+for this handoff. Do not apply it without explicit authorization.
+
+### Clinic memberships (065, CLN-003 slice A) — applied October 16
+
+`065_clinic_memberships.sql` adds `clinic_memberships` (one row per clinician and clinic,
+with that clinic's role and an `active`/`inactive` status), backfilled from
+`clinicians.clinic_id` and `clinicians.role`; clinicians without a clinic get no membership
+and are counted in a `NOTICE`. It adds `care_teams.clinic_id`, backfilled from the link's
+clinician, and replaces `UNIQUE (patient_id, clinician_id)` with
+`UNIQUE (patient_id, clinician_id, clinic_id)` (a partial unique index keeps one link per pair
+for clinicians without a clinic). Triggers mirror `clinicians.clinic_id`/`role` into
+memberships during the compatibility period and give a new care-team row its clinician's clinic
+when none is sent. RLS: a clinician reads only their own memberships; only `service_role`
+writes them; nobody deletes them. It also revokes INSERT, UPDATE and DELETE on `clinicians`
+from `anon` and `authenticated` (SELECT unchanged), so a signed-in clinician cannot change
+their own role or clinic through the Data API. `private.is_clinic_member(uuid)` is added for later slices
+and used by no policy; `is_assigned_clinician` and every existing policy are unchanged. It
+ends with a fail-closed verification block.
+
+Applied by the requester on October 16 before #176 merged (its invite-code paths read
+`clinic_memberships` and write `care_teams.clinic_id`, so apply first, merge after). Applying
+needs the requester's explicit authorization naming that action. After applying, confirm the
+ledger row and read the `NOTICE` count of clinicians without a clinic.
+
+### Sign in once (066, CLN-003 slice B) — applied October 16
+
+`066_clinic_sign_in_once.sql` requires 065. It adds the append-only
+`clinic_membership_audit_events` table (RLS on, no foreign keys, identifiers only; `service_role`
+has SELECT and INSERT, nobody has UPDATE, DELETE or TRUNCATE, and triggers refuse them even for
+the owner), `public.clinician_clinic_operation` (list memberships, join by open clinic code,
+change a member's role, remove a member; callable by `service_role` only), membership-aware
+`clinician_email_invitation_operation` (an address that belongs to another clinic can be invited;
+admin rights are read from the membership at the invitation's clinic), and care-conversation and
+notification checks that use the care-team link's clinic. `clinicians.clinic_id` stays the
+clinician's default clinic for legacy readers. It ends with a fail-closed verification block.
+
+Applied by the requester on October 16 before #178 merged, because the new routes call
+`clinician_clinic_operation` (apply first, merge after). Every replaced function keeps its
+signature. After applying, confirm the ledger row.
+
+**Supabase Auth dashboard changes: none.** Sign-in, MFA and email settings are unchanged; the
+service-role backend performs the membership operations.
+
+### Clinic lists, scheduling and message translations (067–069) — applied October 17
+
+Applied by the requester on October 17: `067_clinic_lists_and_roles.sql` (CLN-003 slices C and D),
+`067_english_display_facts.sql` and `068_message_translations.sql` (LOC-003), and
+`069_clinic_scheduling_and_tags.sql` (CLN-003 slices E and F). 068 is re-runnable, has RLS and is
+backend-only (fixed in [#183](https://github.com/sjsu-masters-projects/medi-agent/pull/183)). 069 adds the
+clinician overlap exclusion constraint and restores the intended grants on
+`authorization_denial_events`; its backfill fails closed on an unmatched link or existing overlaps,
+so run `backend/scripts/appointment-clinician-overlap-preflight.sql` (read-only) first. It tagged 38
+appointments in the hosted project. A read-only audit on October 17 found no public table with RLS
+off and no browser-role SELECT or INSERT on a public table.
+
+### Hosted default grants
+
+New public tables and functions created through SQL receive platform default grants to `anon`,
+`authenticated` and `service_role` on the hosted project, and a local or Docker PostgreSQL does not
+reproduce that. Every migration that adds a table or function must therefore `ENABLE ROW LEVEL
+SECURITY` and explicitly `REVOKE` what the object must not expose (`REVOKE ALL ... FROM PUBLIC, anon,
+authenticated`, then grant only what is needed), and end with a fail-closed verification block that
+checks `relrowsecurity` and `has_table_privilege` / `has_function_privilege` for the three roles.
+Migration 033 created `authorization_denial_events` without revoking the defaults, so the
+browser-role grants remained in production until 069 restored the intended ones.
+
+### Renamed migration files
+
+The migration ledger keys on the filename. A renumbered or renamed file is a new file to the ledger
+and is applied again, so every migration must be idempotent (`IF NOT EXISTS`, `CREATE OR REPLACE`,
+guarded constraint and policy creation). Example: LOC-003's migrations were first applied as
+`065_english_display_facts` and `066_message_translations`, then renumbered to `067_english_display_facts`
+and `068_message_translations`; the renumbered files reapplied cleanly because they are re-runnable.
+Never edit an applied migration; renumber only a file that has not merged, and test it twice.
 
 ### Appointment booking guards (042/043)
 
@@ -267,6 +338,28 @@ CARE_PLAN_TEST_POSTGRES=1 PYTHONPATH=src .venv/bin/pytest tests/integration/test
 Use normal test settings and local PostgreSQL, never a remote connection string.
 After authorized rollout, verify ledger checksum, owner vs assigned/unassigned clinician
 reads, and browser write/publication-RPC denial. Local tests do not prove remote application.
+
+## Session settings
+
+The portals enforce their own sign-in limits in the browser (AUTH-002). They do not depend on any Supabase dashboard setting.
+
+| Portal | Idle limit | Absolute limit | Warning |
+| --- | --- | --- | --- |
+| Clinician | 2 hours | 12 hours from sign-in | Modal 2 minutes before the idle limit, with a countdown and "Stay signed in" |
+| Patient | 30 days | 90 days from sign-in | None; signed out silently with a login-page notice |
+
+Activity in any tab counts (a shared `lastActivityAt`, written at most every 30 seconds). Defaults live in `packages/shared/src/utils/session-limits.ts`; optional overrides are `NEXT_PUBLIC_CLINICIAN_SESSION_IDLE_MINUTES`, `NEXT_PUBLIC_CLINICIAN_SESSION_MAX_HOURS`, `NEXT_PUBLIC_CLINICIAN_SESSION_WARNING_SECONDS`, `NEXT_PUBLIC_PATIENT_SESSION_IDLE_MINUTES` and `NEXT_PUBLIC_PATIENT_SESSION_MAX_HOURS`. No override is needed.
+
+These limits are client-side. A user who bypasses the app can keep using a valid token until it expires and its refresh token stops working, so treat them as a usability and shared-device control, not a hard server guarantee.
+
+Recommended Supabase values under **Authentication**, as an optional server-side backstop:
+
+- JWT expiry: 3600 seconds (the current project value).
+- Refresh token rotation: on, with reuse detection on (the current project state).
+- Refresh token reuse interval: 10 to 30 seconds, which tolerates two tabs racing on one refresh token.
+- Time-box user sessions (12 hours) and inactivity timeout: Pro plan only, and this project is on Free, so the app-enforced limits are the only limits. Even on Pro, a time-box is project-wide, so a 12-hour value would also cut patients short of their 90 days. Rely on the app limits for both portals.
+
+The backend accepts access tokens up to 30 seconds past their `exp` (clock-skew leeway), and a session response never reports `expires_at` as 0.
 
 ## Verification checklist
 

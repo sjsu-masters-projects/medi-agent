@@ -75,6 +75,7 @@ export function NotificationCentre({ onNavigate }: { onNavigate?: () => void }) 
               {!item.is_read && <span role="img" aria-label={copy.unread} className="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-brand" />}
               <h2 className={`min-w-0 flex-1 text-[15px] leading-snug ${item.is_read ? "font-medium text-ink-2" : "font-semibold text-ink"}`}>{item.title}</h2>
             </div>
+            {item.clinic_name && <p className="mt-0.5 break-words text-[13px] leading-snug text-muted">{item.clinic_name}</p>}
             {item.body && <p className="mt-0.5 line-clamp-2 whitespace-pre-wrap text-[13px] leading-snug text-muted">{item.body}</p>}
             {href && <Link prefetch={false} className="ma-press -mb-2 -ml-2 inline-flex min-h-11 items-center gap-1 rounded-xl px-2 text-[13px] font-semibold text-brand-ink hover:bg-brand-tint" href={href} onClick={() => { if (!item.is_read) void state.markRead(item.id); onNavigate?.(); }}>{item.action_label}<Icon name="chevron" className="h-3.5 w-3.5" /></Link>}
           </div>

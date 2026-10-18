@@ -7,7 +7,7 @@ import { clearChatState, setMessages } from "@/store/slices/chat-slice";
 import { hydrateSession, logout } from "@/store/slices/auth-slice";
 import { ChatRole, Language, type Locale } from "@/types";
 import { storePendingChatDocumentContext } from "@/services/chat-bridge";
-import { getChatControlsCopy, getPatientChatCopy } from "@/content/chat-copy";
+import { getChatControlsCopy, getPatientChatCopy, getChatRecoveryCopy } from "@/content/chat-copy";
 
 vi.mock("@/services/symptom-intakes", () => ({ fetchActiveIntake: vi.fn().mockResolvedValue(null) }));
 
@@ -133,6 +133,7 @@ class MockWebSocket {
 
     emitOpen() {
         this.onopen?.();
+        this.emitMessage({ type: "chat_turns", turns: [] });
     }
 
     send(data: string) {
@@ -146,7 +147,7 @@ function renderPage() {
             <ChatPage />
         </Provider>,
     );
-    if (!searchParamsValue.has("document")) {
+    if (!searchParamsValue.has("document") && !searchParamsValue.has("session")) {
         fireEvent.click(screen.getByRole("button", { name: /Nora ·/ }));
     }
     return renderedPage;
@@ -311,6 +312,109 @@ describe("Patient chat page", () => {
         expect(voiceSocket.sent.map((event) => JSON.parse(event))).toContainEqual({
             type: "tts_request", message_id: "original-assistant", text: "Original English reply", language: Language.EN,
         });
+    });
+
+    it("keeps the live socket and streamed reply across a silent token refresh and history refresh", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.emitOpen();
+            socket.emitMessage({ type: "assistant_start", intent: "general", urgency: "routine" });
+            socket.emitMessage({ type: "assistant_chunk", content: "Still streaming" });
+        });
+        const sockets = MockWebSocket.instances.length;
+        await act(async () => {
+            store.dispatch(hydrateSession({
+                accessToken: "refreshed-token",
+                expiresAt: 9999999999,
+                refreshToken: "refresh-token-2",
+                user: { email: "patient@example.com", id: "patient-1", role: "patient" },
+            }));
+            socket.emitMessage({ type: "chat_history", messages: [] });
+        });
+        expect(MockWebSocket.instances).toHaveLength(sockets);
+        expect(socket.readyState).toBe(1);
+        expect(screen.getByText(/Still streaming/)).toBeInTheDocument();
+    });
+
+    const turnRow = (status: string, extra: Record<string, unknown> = {}) => ({
+        client_message_id: "other-tab", status, attempt: 1, retryable: false, document_id: null,
+        user_message: { id: "saved-first", patient_id: "patient-1", content: "Explain my recent results", role: "user", language: "en-US", created_at: "2026-10-17T10:00:00Z" },
+        ...extra,
+    });
+    const savedReply = { id: "saved-reply", patient_id: "patient-1", role: "assistant", content: "Your results are stable.", language: "en-US", created_at: "2026-10-17T10:01:00Z" };
+
+    it("shows another tab's in-flight reply, polls only while it is in flight and then shows the saved reply", async () => {
+        vi.useFakeTimers();
+        renderPage();
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.onopen?.(); socket.emitMessage({ type: "chat_turns", turns: [turnRow("processing")] }); });
+        expect(screen.getByText("Nora is preparing your reply")).toBeInTheDocument();
+        const recovers = () => socket.sent.filter((text) => JSON.parse(text).type === "recover_turns").length;
+        await act(async () => { vi.advanceTimersByTime(5_000); });
+        expect(recovers()).toBe(1);
+        await act(async () => {
+            socket.emitMessage({ type: "chat_history", messages: [savedReply] });
+            socket.emitMessage({ type: "chat_turns", turns: [turnRow("completed")] });
+        });
+        expect(screen.getByText("Your results are stable.")).toBeInTheDocument();
+        expect(screen.queryByText("Nora is preparing your reply")).not.toBeInTheDocument();
+        await act(async () => { vi.advanceTimersByTime(30_000); });
+        expect(recovers()).toBe(1);
+        vi.useRealTimers();
+    });
+
+    it("clears a streamed draft as soon as the turn is reported interrupted", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.emitOpen();
+            socket.emitMessage({ type: "assistant_start", intent: "general", urgency: "routine" });
+            socket.emitMessage({ type: "assistant_chunk", content: "Draft that never saves" });
+        });
+        expect(screen.getByText(/Draft that never saves/)).toBeInTheDocument();
+        await act(async () => { socket.emitMessage({ type: "chat_turns", turns: [turnRow("interrupted", { retryable: true })] }); });
+        expect(screen.queryByText(/Draft that never saves/)).not.toBeInTheDocument();
+        expect(screen.getByText("The reply was interrupted")).toBeInTheDocument();
+    });
+
+    it("clears a streamed draft when its socket closes", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.emitOpen();
+            socket.emitMessage({ type: "assistant_chunk", content: "Cut off mid reply" });
+        });
+        expect(screen.getByText(/Cut off mid reply/)).toBeInTheDocument();
+        await act(async () => { socket.close(); });
+        expect(screen.queryByText(/Cut off mid reply/)).not.toBeInTheDocument();
+    });
+
+    it("reconciles a reply whose completion confirmation was lost", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.emitOpen(); });
+        fireEvent.change(screen.getByRole("textbox", { name: "Message to Nora" }), { target: { value: "Explain my recent results" } });
+        fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+        const id = JSON.parse(socket.sent[0]).client_message_id;
+        await act(async () => {
+            socket.emitMessage({ type: "error", code: "CHAT_TURN_UNAVAILABLE", client_message_id: id, message: "Chat recovery is required." });
+            socket.emitMessage({ type: "chat_history", messages: [savedReply] });
+            socket.emitMessage({ type: "chat_turns", turns: [turnRow("completed", { client_message_id: id })] });
+        });
+        expect(screen.getByText("Your results are stable.")).toBeInTheDocument();
+        expect(screen.queryByText("The reply was interrupted")).not.toBeInTheDocument();
+    });
+
+    it("explains a completed turn whose reply is no longer available", async () => {
+        renderPage();
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.onopen?.(); socket.emitMessage({ type: "chat_turns", turns: [turnRow("failed", { failure_code: "reply_unavailable" })] }); });
+        expect(screen.getByText(getChatRecoveryCopy(Language.EN).replyUnavailable)).toBeInTheDocument();
     });
 
     it("renders assistant chunks progressively before completion", async () => {
@@ -612,6 +716,91 @@ describe("Patient chat page", () => {
         expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
 
+    it("restores the URL conversation after refresh without starting a new daily chat", async () => {
+        searchParamsValue = new URLSearchParams("session=chat-saved&focus=none");
+        renderPage();
+        await waitFor(() => expect(fetchChatHistory).toHaveBeenLastCalledWith("patient-1", "access-token", "chat-saved"));
+        expect(buildChatWebSocketUrl).toHaveBeenCalledWith("patient-1", { documentId: null, durableTurns: true, documentDismissed: true, sessionId: "chat-saved" });
+        expect(screen.getByRole("heading", { name: "Nora" })).toBeInTheDocument();
+    });
+
+    it("does not send to an older backend that never acknowledges durable recovery", async () => {
+        renderPage();
+        await act(async () => { MockWebSocket.instances[0].onopen?.(); });
+        fireEvent.change(screen.getByRole("textbox", { name: "Message to Nora" }), { target: { value: "Synthetic question" } });
+        expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+        expect(MockWebSocket.instances[0].sent).toEqual([]);
+    });
+
+    it.each([Language.EN, Language.ES])("stops a missing handshake and offers explicit reconnect (%s)", async (locale) => {
+        profile.preferredLanguage = locale;
+        vi.useFakeTimers();
+        renderPage();
+        // Let the mocked symptom-intake recovery settle before advancing past
+        // both the intake and durable-chat timeouts in one fake-timer step.
+        await act(async () => {});
+        await act(async () => { MockWebSocket.instances[0].onopen?.(); vi.advanceTimersByTime(15_000); });
+        expect(screen.getByRole("alert")).toHaveTextContent(getChatRecoveryCopy(locale).unavailable);
+        expect(screen.getByRole("button", { name: getChatControlsCopy(locale).send })).toBeDisabled();
+        await act(async () => { vi.advanceTimersByTime(120_000); });
+        expect(MockWebSocket.instances).toHaveLength(1);
+        fireEvent.click(screen.getByRole("button", { name: getChatRecoveryCopy(locale).reconnect }));
+        expect(MockWebSocket.instances).toHaveLength(2);
+        await act(async () => { MockWebSocket.instances[1].emitOpen(); });
+        expect(screen.queryByText(getChatRecoveryCopy(locale).unavailable)).not.toBeInTheDocument();
+        vi.useRealTimers();
+    });
+
+    it.each([Language.EN, Language.ES])("explains another tab's in-progress turn and recovers it without resending (%s)", async (locale) => {
+        profile.preferredLanguage = locale;
+        renderPage();
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.emitOpen(); });
+        fireEvent.change(screen.getByRole("textbox", { name: getChatControlsCopy(locale).message }), { target: { value: "New synthetic question" } });
+        fireEvent.click(screen.getByRole("button", { name: getChatControlsCopy(locale).send }));
+        const request = JSON.parse(socket.sent[0]);
+        await act(async () => {
+            socket.emitMessage({ type: "error", code: "CHAT_TURN_BUSY", client_message_id: request.client_message_id, message: "Chat recovery is required." });
+            socket.emitMessage({ type: "chat_turns", turns: [{ client_message_id: "other-tab", status: "processing", attempt: 1, retryable: false, document_id: null, user_message: { id: "saved-first", patient_id: "patient-1", content: "Earlier synthetic question", role: "user", language: locale, created_at: new Date().toISOString() } }] });
+        });
+        expect(screen.getByRole("alert")).toHaveTextContent(getChatRecoveryCopy(locale).busy);
+        expect(screen.getByDisplayValue("New synthetic question")).toBeInTheDocument();
+        expect(screen.getByText("Earlier synthetic question")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: getChatControlsCopy(locale).send })).toBeDisabled();
+        expect(socket.sent.map((text) => JSON.parse(text).type)).toEqual(["user_message", "recover_turns"]);
+    });
+
+    it.each([Language.EN, Language.ES])("explains an expired reply in plain words and offers the saved message's retry (%s)", async (locale) => {
+        profile.preferredLanguage = locale;
+        renderPage();
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.emitOpen(); });
+        fireEvent.change(screen.getByRole("textbox", { name: getChatControlsCopy(locale).message }), { target: { value: "Synthetic slow question" } });
+        fireEvent.click(screen.getByRole("button", { name: getChatControlsCopy(locale).send }));
+        const request = JSON.parse(socket.sent[0]);
+        await act(async () => {
+            socket.emitMessage({ type: "error", code: "CHAT_TURN_EXPIRED", client_message_id: request.client_message_id, message: "This reply took too long and was not kept. Your message is saved: try again." });
+        });
+        expect(screen.getByRole("alert")).toHaveTextContent(getChatRecoveryCopy(locale).expired);
+        expect(screen.queryByText(getChatControlsCopy(locale).chatError)).not.toBeInTheDocument();
+        expect(socket.sent.map((text) => JSON.parse(text).type)).toEqual(["user_message", "recover_turns"]);
+    });
+
+    it("replaces the focused document in an open conversation without losing the unsent draft", async () => {
+        renderPage();
+        fireEvent.change(screen.getByRole("textbox", { name: "Message to Nora" }), { target: { value: "Unsent synthetic question" } });
+        const sessionId = buildChatWebSocketUrl.mock.lastCall?.[1].sessionId;
+        storePendingChatDocumentContext({ documentId: "doc-next", documentName: "New synthetic record", documentType: "other", preferredLanguage: Language.EN, suggestedQuestion: "Suggested replacement" });
+        searchParamsValue = new URLSearchParams(`session=${sessionId}&document=doc-next`);
+        renderedPage.rerender(<Provider store={store}><ChatPage /></Provider>);
+        expect(await screen.findByText("New synthetic record")).toBeInTheDocument();
+        expect(screen.getByDisplayValue("Unsent synthetic question")).toBeInTheDocument();
+        expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith("patient-1", { documentId: "doc-next", durableTurns: true, sessionId });
+        const stale = MockWebSocket.instances[0];
+        await act(async () => { stale.emitMessage({ type: "chat_history", messages: [{ id: "stale", patient_id: "patient-1", role: "assistant", content: "Obsolete socket reply", language: "en-US", created_at: new Date().toISOString() }] }); });
+        expect(screen.queryByText("Obsolete socket reply")).not.toBeInTheDocument();
+    });
+
     it("hydrates document context into chat from the records bridge", async () => {
         searchParamsValue = new URLSearchParams("document=doc-1");
         window.history.replaceState({}, "", "/chat?document=doc-1");
@@ -636,9 +825,9 @@ describe("Patient chat page", () => {
         // A question about a document starts its own conversation.
         expect(buildChatWebSocketUrl).toHaveBeenCalledWith(
             "patient-1",
-            { documentId: "doc-1", sessionId: expect.stringMatching(/^chat-/) },
+            { documentId: "doc-1", durableTurns: true, sessionId: expect.stringMatching(/^chat-/) },
         );
-        expect(replace).toHaveBeenCalledWith("/chat");
+        expect(replace).toHaveBeenCalledWith(expect.stringMatching(/^\/chat\?session=chat-.*&document=doc-1$/));
     });
 
     it("opens Nora with the document when navigation arrives before window.location updates", async () => {
@@ -661,7 +850,7 @@ describe("Patient chat page", () => {
         expect(await screen.findByText(/Physical activity instructions/i)).toBeInTheDocument();
         expect(screen.getByDisplayValue(/Help me understand this document\./i)).toBeInTheDocument();
         expect(buildChatWebSocketUrl).toHaveBeenCalledWith("patient-1", {
-            documentId: "doc-1", sessionId: expect.stringMatching(/^chat-/),
+            documentId: "doc-1", durableTurns: true, sessionId: expect.stringMatching(/^chat-/),
         });
     });
 
@@ -691,9 +880,9 @@ describe("Patient chat page", () => {
         expect(await screen.findByText(/Discharge Summary\.pdf/i)).toBeInTheDocument();
         expect(buildChatWebSocketUrl).toHaveBeenCalledWith(
             "patient-1",
-            { documentId: "doc-2", sessionId: expect.stringMatching(/^(chat|day)-/) },
+            { documentId: "doc-2", durableTurns: true, sessionId: expect.stringMatching(/^(chat|day)-/) },
         );
-        expect(replace).toHaveBeenCalledWith("/chat");
+        expect(replace).toHaveBeenCalledWith(expect.stringMatching(/^\/chat\?session=chat-.*&document=doc-2$/));
     });
 
     it("tells the server about a dismissal so a reconnect does not bring the document back", async () => {
@@ -718,7 +907,7 @@ describe("Patient chat page", () => {
         await waitFor(() => {
             expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
                 "patient-1",
-                { documentId: null, documentDismissed: true, sessionId },
+                { documentId: null, documentDismissed: true, durableTurns: true, sessionId },
             );
         });
         expect(screen.queryByText(/Medication List\.pdf/i)).not.toBeInTheDocument();
@@ -740,7 +929,7 @@ describe("Patient chat page", () => {
         await waitFor(() => expect(MockWebSocket.instances.length).toBeGreaterThan(socketsBefore));
         expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
             "patient-1",
-            { documentId: null, documentDismissed: true, sessionId },
+            { documentId: null, documentDismissed: true, durableTurns: true, sessionId },
         );
         expect(screen.queryByText(/Medication List\.pdf/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/Record context attached/i)).not.toBeInTheDocument();
@@ -769,10 +958,12 @@ describe("Patient chat page", () => {
         });
 
         expect(screen.queryByText(/Old Lab\.pdf/i)).not.toBeInTheDocument();
-        expect(await screen.findByText("This document isn't available anymore. You can keep asking about the rest of your record.")).toBeInTheDocument();
-        // It stops asking for the missing document on the next connection.
+        expect(await screen.findByText(getChatControlsCopy(Language.EN).documentUnavailable)).toBeInTheDocument();
+        // Do not silently answer a focused question from the general chart.
+        expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+        fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
         await waitFor(() => expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
-            "patient-1", { documentId: null, sessionId: expect.stringMatching(/^chat-/) },
+            "patient-1", { documentId: null, documentDismissed: true, durableTurns: true, sessionId: expect.stringMatching(/^chat-/) },
         ));
     });
 
@@ -785,7 +976,7 @@ describe("Patient chat page", () => {
             socket.emitMessage({ type: "chat_context_unavailable", context_type: "document" });
         });
 
-        expect(await screen.findByText("Este documento ya no está disponible. Puedes seguir preguntando sobre el resto de tu expediente.")).toBeInTheDocument();
+        expect(await screen.findByText(getChatControlsCopy(Language.ES).documentUnavailable)).toBeInTheDocument();
     });
 
     it("does not auto-play assistant audio for typed (non-voice) turns", async () => {
@@ -1190,11 +1381,11 @@ describe("Patient chat page", () => {
 
         fireEvent.click(past);
         await waitFor(() => expect(fetchChatHistory).toHaveBeenLastCalledWith("patient-1", "access-token", "day-2026-10-01"));
-        expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith("patient-1", { documentId: null, sessionId: "day-2026-10-01" });
+        expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith("patient-1", { documentId: null, durableTurns: true, sessionId: "day-2026-10-01" });
 
         fireEvent.click(screen.getByRole("button", { name: "New chat" }));
         await waitFor(() => expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
-            "patient-1", { documentId: null, sessionId: expect.stringMatching(/^chat-/) },
+            "patient-1", { documentId: null, durableTurns: true, sessionId: expect.stringMatching(/^chat-/) },
         ));
     });
     it.each([

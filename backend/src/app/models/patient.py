@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
 
+from app.models.clinic_membership import ClinicTag
 from app.models.enums import Gender, Language
 
 
@@ -40,3 +41,7 @@ class PatientRead(BaseModel):
     avatar_url: str | None = None
     created_at: str
     updated_at: str | None = None
+
+
+class PatientDetailRead(PatientRead, ClinicTag):
+    """A patient as the signed-in clinician sees them, with the clinic of their link."""

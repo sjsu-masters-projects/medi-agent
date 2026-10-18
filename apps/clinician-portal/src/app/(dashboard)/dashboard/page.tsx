@@ -7,8 +7,10 @@ import { Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { useFlip } from "@/components/ui/motion";
 import { CompactField, SegmentedControl, compactSelectClass } from "@/components/ui/toolbar";
-import { readStoredClinicContext } from "@/services/clinic-context";
+import { ClinicChip, ClinicFilterEmpty, ClinicFilterField } from "@/components/features/clinic-chip";
 import { RiskBadge } from "@/components/features/risk-badge";
+import { clinicScopeLabel } from "@/hooks/clinic-scope";
+import { useClinicFilter } from "@/hooks/use-clinic-filter";
 import { fetchPatientRiskSnapshot } from "@/services/clinicians";
 import { subscribeDashboardRealtime } from "@/services/dashboard-realtime";
 import { loadDashboard, patchPatient } from "@/store/slices/dashboard-slice";
@@ -105,10 +107,6 @@ function noopSubscribe() {
     return () => undefined;
 }
 
-function storedClinicName() {
-    try { return readStoredClinicContext()?.clinicName ?? null; } catch { return null; }
-}
-
 function todayLabel() {
     return new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 }
@@ -127,6 +125,8 @@ export default function DashboardPage() {
     const [sortBy, setSortBy] = useState<DashboardSortBy>("risk");
     const [sortOrder, setSortOrder] = useState<DashboardSortOrder>("desc");
     const [minMedCount, setMinMedCount] = useState("0");
+    const clinicFilter = useClinicFilter();
+    const { clinicId, ready } = clinicFilter;
 
     const reloadDashboard = useCallback(() => {
         void dispatch(
@@ -135,14 +135,17 @@ export default function DashboardPage() {
                 sortOrder,
                 riskFilter: riskFilter === "all" ? undefined : riskFilter,
                 minMedCount: Number(minMedCount) || 0,
+                clinicId,
             }),
         );
-    }, [dispatch, minMedCount, riskFilter, sortBy, sortOrder]);
+    }, [clinicId, dispatch, minMedCount, riskFilter, sortBy, sortOrder]);
 
     // Fetch real data on mount and when sort/filter changes
     useEffect(() => {
-        reloadDashboard();
-    }, [reloadDashboard]);
+        if (ready) {
+            reloadDashboard();
+        }
+    }, [ready, reloadDashboard]);
 
     useEffect(() => {
         const pendingPatientIds = new Set<string>();
@@ -221,7 +224,7 @@ export default function DashboardPage() {
     }, [minMedCount, patients, query, riskFilter, sortBy, sortOrder]);
 
     const flip = useFlip(visiblePatients.map((patient) => patient.patient_id).join(","));
-    const clinicName = useSyncExternalStore(noopSubscribe, storedClinicName, () => null);
+    const scopeLabel = clinicScopeLabel(clinicFilter);
     const today = useSyncExternalStore(noopSubscribe, todayLabel, () => "");
     const statTone = (label: string) => label.includes("Critical") ? "text-risk" : label.includes("ADR") || label.includes("MedWatch") ? "text-warn-ink" : "text-ink";
     const columns = "grid-cols-[minmax(200px,1.3fr)_112px_minmax(170px,1fr)_minmax(200px,1.4fr)_minmax(150px,1fr)_112px]";
@@ -250,7 +253,7 @@ export default function DashboardPage() {
                 <div className="radar-floor" aria-hidden="true" />
                 <div className="radar-glow" aria-hidden="true" />
                 <div className="relative flex min-w-0 flex-col gap-1.5">
-                    <p className="text-sm text-muted">{today}{clinicName ? ` · ${clinicName}` : ""}</p>
+                    <p className="text-sm text-muted">{today}{scopeLabel ? ` · ${scopeLabel}` : ""}</p>
                     <h1 className="text-[34px] font-semibold leading-[1.05] tracking-[-0.025em] text-ink">Risk Radar</h1>
                     <p className="text-[15px] text-ink-2">Assigned patient overview</p>
                 </div>
@@ -292,6 +295,7 @@ export default function DashboardPage() {
                         value={riskFilter}
                     />
                     <div className="flex flex-wrap items-center gap-2">
+                        <ClinicFilterField filter={clinicFilter} />
                         <CompactField label="Sort">
                             <select
                                 aria-label="Sort by"
@@ -381,7 +385,7 @@ export default function DashboardPage() {
                 ) : visiblePatients.length === 0 ? (
                     <div className="flex h-44 flex-col items-center justify-center gap-2 text-sm text-muted">
                         <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-sunken"><Icon name={query ? "search" : "users"} className="h-5 w-5" /></span>
-                        {error && patients.length === 0 ? "Patient overview is unavailable. Retry to check assigned patients." : patients.length === 0 ? "No patients assigned yet" : "No results found"}
+                        {error && patients.length === 0 ? "Patient overview is unavailable. Retry to check assigned patients." : clinicId && patients.length === 0 ? <ClinicFilterEmpty filter={clinicFilter} /> : patients.length === 0 ? "No patients assigned yet" : "No results found"}
                     </div>
                 ) : (
                     visiblePatients.map((patient) => {
@@ -399,9 +403,12 @@ export default function DashboardPage() {
                                 {/* Name */}
                                 <div className="flex min-w-0 items-center gap-3">
                                     <span aria-hidden="true" className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-track text-xs font-semibold text-ink-2">{initials}</span>
-                                    <p className="min-w-0 break-words text-[15px] font-semibold text-ink">
-                                        {patient.first_name} {patient.last_name}
-                                    </p>
+                                    <div className="flex min-w-0 flex-col items-start gap-0.5">
+                                        <p className="min-w-0 break-words text-[15px] font-semibold text-ink">
+                                            {patient.first_name} {patient.last_name}
+                                        </p>
+                                        <ClinicChip name={clinicFilter.multi ? patient.clinic_name : null} />
+                                    </div>
                                 </div>
 
                                 {/* Risk badge */}

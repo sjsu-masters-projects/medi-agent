@@ -3,11 +3,12 @@ import type { CentrePage, CentreSummary, NotificationCategory } from "@/types/no
 
 const root = "/api/v1/notification-centre";
 export const notificationCentre = {
-  list(token: string, actions = false, cursor?: string, signal?: AbortSignal, category?: NotificationCategory) {
+  list(token: string, actions = false, cursor?: string, signal?: AbortSignal, category?: NotificationCategory, clinicId?: string | null) {
     const query = new URLSearchParams({ locale: "en-US", limit: "50" });
     if (!actions) query.set("unread", "false");
     if (cursor) query.set("cursor", cursor);
     if (actions && category) query.set("category", category);
+    if (clinicId) query.set("clinic_id", clinicId);
     return api.get<CentrePage>(`${root}${actions ? "/action-items" : ""}?${query}`, { token, signal });
   },
   summary: (token: string, signal?: AbortSignal) => api.get<CentreSummary>(`${root}/summary`, { token, signal }),

@@ -20,6 +20,7 @@ from app.models.care_conversation import (
     ConversationRecipient,
     ConversationSend,
     ConversationSummary,
+    MessageTranslationResult,
 )
 from app.services.care_conversation_service import CareConversationService
 
@@ -48,13 +49,19 @@ async def conversation_service(
 
 
 @router.get("/recipients", response_model=list[ConversationRecipient])
-async def recipients(service: CareConversationService = Depends(conversation_service)) -> Any:
-    return await service.recipients()
+async def recipients(
+    clinic_id: UUID | None = Query(default=None),
+    service: CareConversationService = Depends(conversation_service),
+) -> Any:
+    return await service.recipients(clinic_id)
 
 
 @router.get("/", response_model=list[ConversationSummary])
-async def conversations(service: CareConversationService = Depends(conversation_service)) -> Any:
-    return await service.list_conversations()
+async def conversations(
+    clinic_id: UUID | None = Query(default=None),
+    service: CareConversationService = Depends(conversation_service),
+) -> Any:
+    return await service.list_conversations(clinic_id)
 
 
 @router.post("/", response_model=ConversationSummary)
@@ -84,6 +91,19 @@ async def send_message(
     service: CareConversationService = Depends(conversation_service),
 ) -> Any:
     return await service.send(conversation_id, data)
+
+
+@router.post(
+    "/{conversation_id}/messages/{message_id}/translation",
+    response_model=MessageTranslationResult,
+)
+async def translate_message(
+    conversation_id: UUID,
+    message_id: UUID,
+    service: CareConversationService = Depends(conversation_service),
+) -> Any:
+    """Translate one message into the viewer's language (stored once, never on read or send)."""
+    return await service.translate_message(conversation_id, message_id)
 
 
 @router.post("/{conversation_id}/read", response_model=ConversationReadReceipt)

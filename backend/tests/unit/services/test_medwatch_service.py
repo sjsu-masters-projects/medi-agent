@@ -4,6 +4,7 @@ The service runs against ``FakeDB`` (tests/unit/services/medwatch_fake_db.py), a
 client whose RPCs follow migrations 048 and 064. Synthetic data only; nothing contacts FDA.
 """
 
+import copy
 import logging
 import re
 from datetime import date
@@ -472,7 +473,7 @@ async def test_property_12_approval_enforces_the_list_the_draft_shows() -> None:
 
 @pytest.mark.asyncio
 async def test_approval_needs_the_current_revision_and_acknowledged_warnings() -> None:
-    payload = _ready_payload(section_b__narrative="Lucía felt dizzy at Synthetic Valley Clinic.")
+    payload = _ready_payload(section_b__narrative="Lucía felt dizzy at Synthetic Valley Health.")
     stored = _draft_row(form_data=payload)
     db = seeded(medwatch_drafts=[stored])
     service = _service(db)
@@ -619,6 +620,77 @@ async def test_pdf_export_is_audited_before_the_bytes_are_returned(caplog) -> No
     assert params["p_format"] == "pdf" and params["p_template_revision"] == "09/2025"
     assert re.fullmatch(r"[0-9a-f]{64}", params["p_template_sha256"])
     assert "Synthetic dizziness" not in caplog.text
+
+
+def _pdf_pages(content: bytes) -> list[bytes]:
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(BytesIO(content))
+    assert reader.decrypt("")
+    pages = []
+    for page in reader.pages:
+        streams = page["/Contents"]
+        streams = streams if isinstance(streams, list) else [streams]
+        pages.append(b"".join(stream.get_object().get_data() for stream in streams))
+    return pages
+
+
+@pytest.mark.asyncio
+async def test_preview_pdf_is_watermarked_on_every_page_and_records_no_export() -> None:
+    """The preview is audited as a view, never as an export, and changes no draft state."""
+    for stored in (_draft_row(), _approved()):
+        db = seeded(medwatch_drafts=[stored])
+        before = copy.deepcopy(db.tables["medwatch_drafts"])
+        preview = await _service(db).preview_pdf(CLINICIAN, UUID(stored["id"]))
+        assert preview["content"].startswith(b"%PDF-1.7")
+        pages = _pdf_pages(preview["content"])
+        assert pages and all(b"MAWatermarkFont" in page for page in pages)
+        assert all(b"DRAFT \x96 not for submission" in page for page in pages)
+        assert [name for name, _ in db.rpc_calls] == ["record_medwatch_draft_preview_viewed"]
+        assert db.rpc_calls[0][1] == {"p_draft_id": stored["id"], "p_actor_id": str(CLINICIAN)}
+        events = [e["event_type"] for e in db.tables["medwatch_draft_audit_events"]]
+        assert events == ["preview_viewed"]
+        assert db.tables["medwatch_drafts"] == before
+
+
+@pytest.mark.asyncio
+async def test_approved_export_stays_unwatermarked_and_audited() -> None:
+    stored = _approved()
+    db = seeded(medwatch_drafts=[stored])
+    exported = await _service(db).export_pdf(CLINICIAN, UUID(stored["id"]))
+    assert all(b"MAWatermarkFont" not in page for page in _pdf_pages(exported["content"]))
+    assert [name for name, _ in db.rpc_calls] == ["record_medwatch_draft_export"]
+    assert [e["event_type"] for e in db.tables["medwatch_draft_audit_events"]] == ["exported"]
+
+
+@pytest.mark.asyncio
+async def test_single_draft_read_and_preview_hide_unassigned_drafts_as_404() -> None:
+    stored = _draft_row()
+    service = _service(seeded(medwatch_drafts=[stored]))
+    item = await service.get_draft(CLINICIAN, UUID(stored["id"]))
+    assert item["id"] == stored["id"]
+    messages = set()
+    for call in (service.get_draft, service.preview_pdf):
+        for clinician, draft_id in (
+            (UUID(OTHER_CLINICIAN_ID), UUID(stored["id"])),
+            (CLINICIAN, uuid4()),
+        ):
+            with pytest.raises(NotFoundError) as error:
+                await call(clinician, draft_id)
+            messages.add(error.value.message.split("'")[0])
+    assert messages == {"MedWatch draft "}
+
+
+@pytest.mark.asyncio
+async def test_list_states_draft_and_approved_split_the_active_tab() -> None:
+    active, approved = _draft_row(), _approved()
+    service = _service(seeded(medwatch_drafts=[active, approved]))
+    drafts = (await service.list_drafts(CLINICIAN, "draft"))["items"]
+    approved_items = (await service.list_drafts(CLINICIAN, "approved"))["items"]
+    assert [i["id"] for i in drafts] == [active["id"]]
+    assert [i["id"] for i in approved_items] == [approved["id"]]
 
 
 @pytest.mark.asyncio
@@ -1180,3 +1252,43 @@ def test_future_and_reversed_medication_dates_are_not_used() -> None:
         None,
         None,
     )
+
+
+@pytest.mark.asyncio
+async def test_list_drafts_tags_the_links_clinic_and_filters_by_clinic() -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, patch
+
+    from app.db.repositories.care_teams import CareTeamRepository
+    from app.models.enums import ClinicianRole, ClinicMembershipStatus
+    from app.services.medwatch_3500 import dates  # noqa: F401
+
+    stored = _draft_row(form_data=_ready_payload())
+    service = _service(seeded(medwatch_drafts=[stored]))
+    links = [
+        {
+            "patient_id": stored["patient_id"],
+            "clinic_id": CLINIC_A,
+            "clinics": {"display_name": "Synthetic Valley Health"},
+        }
+    ]
+    member = SimpleNamespace(
+        clinic_id=UUID(CLINIC_A), role=ClinicianRole.PROVIDER, status=ClinicMembershipStatus.ACTIVE
+    )
+    with (
+        patch.object(CareTeamRepository, "list_active_links", AsyncMock(return_value=links)),
+        patch(
+            "app.services.clinic_membership_service.ClinicMembershipService.active_memberships",
+            new=AsyncMock(return_value=[member]),
+        ),
+    ):
+        everything = await service.list_drafts(CLINICIAN)
+        own = await service.list_drafts(CLINICIAN, clinic_id=UUID(CLINIC_A))
+        other = await service.list_drafts(CLINICIAN, clinic_id=UUID(CLINIC_B))
+    assert everything["items"][0]["clinic_name"] == "Synthetic Valley Health"
+    assert len(own["items"]) == 1
+    assert other == {"items": [], "total": 0}
+
+
+CLINIC_A = "00000000-0000-0000-0000-00000000000a"
+CLINIC_B = "00000000-0000-0000-0000-00000000000b"

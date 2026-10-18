@@ -81,3 +81,27 @@ def test_text_injection_utf8_folding_and_stable_identity():
 def test_invalid_times_not_exported(values):
     with pytest.raises(ValidationError):
         render_appointment_calendar(appointment(**values), "en-US")
+
+
+def test_calendar_uses_the_appointments_clinic_in_both_locales():
+    row = appointment(clinic_name="Clínica Norte", location="Sala 2")
+    en = render_appointment_calendar(row, "en-US").content.replace("\r\n ", "")
+    es = render_appointment_calendar(row, "es-MX").content.replace("\r\n ", "")
+    assert "LOCATION:Clínica Norte\\, Sala 2\r\n" in en
+    assert "SUMMARY;LANGUAGE=en-US:MediAgent appointment · Clínica Norte" in en
+    assert "DESCRIPTION;LANGUAGE=en-US:Clinic: Clínica Norte\\nThis is" in en
+    assert "SUMMARY;LANGUAGE=es-MX:Cita de MediAgent · Clínica Norte" in es
+    assert "DESCRIPTION;LANGUAGE=es-MX:Clínica: Clínica Norte\\nEsta es" in es
+
+
+def test_calendar_location_is_the_clinic_when_the_visit_has_none_or_already_names_it():
+    assert (
+        "LOCATION:North clinic\r\n"
+        in render_appointment_calendar(appointment(clinic_name="North clinic"), "en-US").content
+    )
+    named = render_appointment_calendar(
+        appointment(clinic_name="North clinic", location="North Clinic, room 3"), "en-US"
+    ).content
+    assert "LOCATION:North Clinic\\, room 3\r\n" in named
+    plain = render_appointment_calendar(appointment(), "en-US").content
+    assert "LOCATION" not in plain and "Clinic:" not in plain

@@ -12,6 +12,8 @@ from uuid import uuid4
 
 import pytest
 
+from tests.integration.supabase_roles import create_roles_sql
+
 pytestmark = pytest.mark.skipif(
     os.environ.get("NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER") != "1",
     reason="explicit opt-in disposable Docker PostgreSQL contract check",
@@ -82,7 +84,7 @@ def postgres():
         ]
         subprocess.run(
             command,
-            input="CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;",
+            input=create_roles_sql(),
             check=True,
             capture_output=True,
             text=True,
@@ -100,8 +102,29 @@ def postgres():
         )
 
 
+def apply_clinic_memberships(execute, *, scheduling=True):
+    """Apply CLN-003 slices A (065), B (066), C+D (067), E+F (069), 070 and 071, found by name like 063/064."""
+    for pattern in (
+        "*_clinic_memberships.sql",
+        "*_clinic_sign_in_once.sql",
+        "*_clinic_lists_and_roles.sql",
+        *(
+            (
+                "*_clinic_scheduling_and_tags.sql",
+                "*_browser_grants_and_medwatch_preview_audit.sql",
+                "*_clinician_visit_management.sql",
+                "*_notification_zone_lookup.sql",
+            )
+            if scheduling
+            else ()
+        ),
+    ):
+        for path in sorted(MIGRATIONS.glob(pattern)):
+            execute(path.read_text())
+
+
 @pytest.fixture
-def sql(postgres):
+def sql(postgres, request):
     database = "notification_" + uuid4().hex
     subprocess.run(
         postgres,
@@ -141,6 +164,7 @@ def sql(postgres):
         return process
 
     execute.start = start
+    execute.command = command
     execute("""CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY);
       CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT NULL::uuid $$;""")
     # Auth/platform bootstrap only is synthetic. Every application table and
@@ -157,6 +181,7 @@ def sql(postgres):
         "017_clinical_facts_provenance.sql",
         "019_clinical_action_approvals.sql",
         "022_grant_service_role_seed_access.sql",
+        "033_authorization_denial_audit.sql",
         "038_appointment_proposal_lifecycle.sql",
         "039_appointment_patient_changes.sql",
         "040_clinician_approved_care_plans.sql",
@@ -222,6 +247,15 @@ def sql(postgres):
         for pattern in ("*_adr_information_loop_lifecycle.sql", "*_medwatch_form_3500.sql"):
             for path in sorted(MIGRATIONS.glob(pattern)):
                 execute(path.read_text())
+    # Clinic memberships (CLN-003 slice A, 065) apply last, so every suite on this fixture
+    # runs with them. A test marked before_clinic_memberships seeds pre-065 rows and applies
+    # 065 itself to check the backfill.
+    if request.node.get_closest_marker("before_clinic_memberships") is None:
+        # before_clinic_scheduling stops short of 069 so a test can seed appointments the way
+        # the deployed schema holds them and check the backfill and its fail-closed checks.
+        apply_clinic_memberships(
+            execute, scheduling=request.node.get_closest_marker("before_clinic_scheduling") is None
+        )
     try:
         yield execute
     finally:
@@ -1154,8 +1188,11 @@ def test_critical_alert_stops_being_work_when_the_document_is_rejected(sql):
     doc = document(sql)
     result(sql, doc)
     sql(f"UPDATE documents SET review_status='rejected' WHERE id='{doc}'")
-    rows = [row for row in clinician(sql)["items"] if row["source_id"] == doc
-            and row["event_type"] == "critical_result"]
+    rows = [
+        row
+        for row in clinician(sql)["items"]
+        if row["source_id"] == doc and row["event_type"] == "critical_result"
+    ]
     assert rows == [] or not rows[0]["actionable"]
 
 
@@ -1163,7 +1200,8 @@ def test_critical_result_is_open_work_until_acknowledged(sql):
     doc = document(sql)
     result(sql, doc)
     items = [
-        row for row in clinician(sql, "action_items")["items"]
+        row
+        for row in clinician(sql, "action_items")["items"]
         if row["event_type"] == "critical_result" and row["source_id"] == doc
     ]
     assert len(items) == 1 and items[0]["can_acknowledge"]
@@ -1172,3 +1210,137 @@ def test_critical_result_is_open_work_until_acknowledged(sql):
         row["source_id"] != doc or row["event_type"] != "critical_result"
         for row in clinician(sql, "action_items")["items"]
     )
+
+
+# ── CLN-003 slice C (067): the clinic filter and the link's clinic on each item ──────────
+
+SECOND_NOTIFICATION_CLINIC = "00000000-0000-0000-0000-0000000000a8"
+
+
+def test_clinic_filter_and_link_clinic_on_notification_items(sql):
+    first_clinic = sql(f"SELECT clinic_id FROM clinicians WHERE id='{CLINICIAN}'")
+    sql(
+        f"""INSERT INTO clinics(id,display_name,canonical_name)
+        VALUES('{SECOND_NOTIFICATION_CLINIC}','Second synthetic clinic','second synthetic clinic');
+      SET ROLE service_role;
+      INSERT INTO clinic_memberships(clinician_id,clinic_id,role)
+        VALUES('{CLINICIAN}','{SECOND_NOTIFICATION_CLINIC}','provider');
+      INSERT INTO care_teams(patient_id,clinician_id,role,clinic_id)
+        VALUES('{FOREIGN}','{CLINICIAN}','primary_care','{SECOND_NOTIFICATION_CLINIC}');"""
+    )
+    here = document(sql, patient=PATIENT)
+    there = document(sql, patient=FOREIGN)
+
+    everything = clinician(sql)["items"]
+    assert {r["source_id"] for r in everything} == {here, there}
+    # Each item names the clinic of the clinician's link, not the default clinic.
+    assert {r["source_id"]: r["clinic_id"] for r in everything} == {
+        here: first_clinic,
+        there: SECOND_NOTIFICATION_CLINIC,
+    }
+    assert {r["clinic_name"] for r in everything if r["source_id"] == there} == {
+        "Second synthetic clinic"
+    }
+
+    for action in ("list", "action_items"):
+        own = clinician(sql, action, {"clinic_id": SECOND_NOTIFICATION_CLINIC})["items"]
+        assert {r["source_id"] for r in own} == {there}, action
+        # A clinic the caller does not belong to, or that does not exist, is just empty.
+        for stranger in (str(uuid4()),):
+            assert clinician(sql, action, {"clinic_id": stranger})["items"] == [], action
+    sql(
+        f"SET ROLE service_role; UPDATE clinic_memberships SET status='inactive' "
+        f"WHERE clinician_id='{CLINICIAN}' AND clinic_id='{SECOND_NOTIFICATION_CLINIC}';"
+    )
+    assert clinician(sql, "list", {"clinic_id": SECOND_NOTIFICATION_CLINIC})["items"] == []
+    # Patients never take the filter.
+    assert call(sql, "list", {"clinic_id": str(uuid4())})["items"] is not None
+
+
+def test_time_zone_lookup_answers_like_the_catalogue_without_scanning_it(sql):
+    sql("SET ROLE service_role;")
+    answers = sql(
+        "SELECT private.notification_zone('America/Los_Angeles')||'|'||private.notification_zone('America/Mexico_City')"
+        "||'|'||private.notification_zone('Not/AZone')||'|'||coalesce(private.notification_zone(NULL),'null');"
+    )
+    assert answers == "America/Los_Angeles|America/Mexico_City|UTC|UTC"
+    # Same answer as the live catalogue for every name it holds, and nothing it lacks.
+    assert (
+        sql(
+            "SELECT count(*) FROM pg_catalog.pg_timezone_names n "
+            "WHERE private.notification_zone(n.name)<>n.name;"
+        )
+        == "0"
+    )
+    assert (
+        sql(
+            "SELECT count(*) FROM pg_catalog.pg_timezone_names n "
+            "WHERE NOT EXISTS(SELECT 1 FROM private.timezone_names t WHERE t.name=n.name);"
+        )
+        == "0"
+    )
+    # 3000 lookups: about 12 s when each one scanned the time-zone files, milliseconds now.
+    seconds = float(
+        sql(
+            "DO $$ DECLARE t0 timestamptz:=clock_timestamp(); n int; BEGIN "
+            "SELECT count(*) INTO n FROM generate_series(1,3000) g "
+            "WHERE private.notification_zone('America/Los_Angeles')='America/Los_Angeles'; "
+            "PERFORM set_config('app.zone_seconds', "
+            "extract(epoch FROM clock_timestamp()-t0)::text, false); END $$; "
+            "SELECT current_setting('app.zone_seconds');"
+        )
+    )
+    assert seconds < 1.5
+
+
+def test_075_is_re_runnable_and_keeps_the_lookup_private(sql):
+    migration = next(MIGRATIONS.glob("*_notification_zone_lookup.sql")).read_text()
+    sql(migration)
+    sql(migration)
+    sql("DELETE FROM private.timezone_names WHERE name='America/Los_Angeles';")
+    # A name missing from the lookup still resolves through the live catalogue.
+    assert sql("SELECT private.notification_zone('America/Los_Angeles');") == "America/Los_Angeles"
+    sql(migration)
+    assert (
+        sql("SELECT count(*) FROM private.timezone_names WHERE name='America/Los_Angeles';") == "1"
+    )
+    for role in ("anon", "authenticated"):
+        assert (
+            sql(f"SELECT has_table_privilege('{role}','private.timezone_names','SELECT');") == "f"
+        )
+
+
+def test_a_patient_with_hundreds_of_reminders_reads_quickly_and_correctly(sql):
+    sql(
+        f"""INSERT INTO notifications(patient_id,notification_type,title,body,is_read,created_at)
+          SELECT '{PATIENT}','med_reminder','Reminder '||g,'Synthetic',false,
+            clock_timestamp()-(g||' hours')::interval FROM generate_series(1,300) g;
+          INSERT INTO notifications(patient_id,notification_type,title,body,is_read,created_at)
+          SELECT '{PATIENT}',(CASE WHEN g%2=0 THEN 'missed_dose' ELSE 'appointment' END)::notification_type_enum,
+            'Update '||g,'Synthetic',(g%3=0),clock_timestamp()-(g||' hours')::interval
+          FROM generate_series(1,150) g;
+          INSERT INTO appointments(patient_id,care_team_id,scheduled_at,status,location)
+          SELECT '{PATIENT}','{TEAM}',clock_timestamp()+(g||' days')::interval,'confirmed','Room '||g
+          FROM generate_series(1,50) g;"""
+    )
+    first = call(sql, "summary")
+    sql("ANALYZE;")
+    # The unread count is the grouped count, and a page holds at most the requested limit.
+    assert first["unread_count"] > 0
+    page = call(sql, "list", {"limit": 50})
+    assert 0 < len(page["items"]) <= 50 and page["next_cursor"]
+    assert call(sql, "summary") == first
+    # Evaluating every unread receipt took 1.2 s before the lookup (4 ms per reminder row).
+    seconds = float(
+        sql(
+            f"""SET ROLE service_role;
+            DO $$ DECLARE t0 timestamptz:=clock_timestamp(); n int; BEGIN
+              SELECT count(*) INTO n FROM public.notification_receipts r
+                CROSS JOIN LATERAL private.notification_row(r,'{PATIENT}','patient') nr
+                WHERE r.recipient_id='{PATIENT}';
+              PERFORM set_config('app.rows_seconds', extract(epoch FROM clock_timestamp()-t0)::text, false);
+            END $$;
+            SELECT current_setting('app.rows_seconds');"""
+        )
+    )
+    assert seconds < 0.6

@@ -84,7 +84,8 @@ export function getEffectiveSessionExpiresAt(
 ): number | null {
     const tokenExpiresAt = getJwtExpiresAt(accessToken);
 
-    if (typeof expiresAt !== "number") {
+    // A missing or zero expiry carries no information; never let it force a refresh loop.
+    if (typeof expiresAt !== "number" || expiresAt <= 0) {
         return tokenExpiresAt;
     }
 

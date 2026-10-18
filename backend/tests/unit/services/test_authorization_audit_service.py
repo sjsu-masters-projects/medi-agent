@@ -62,10 +62,19 @@ async def test_records_the_denial_with_its_context(written):
             "actor_role": "patient",
             "target_type": "patient",
             "target_id": target,
+            "clinic_id": None,
             "request_method": "GET",
             "request_path": "/api/v1/clinicians/me/patients/x",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_a_denial_that_concerns_a_link_records_its_clinic(written):
+    clinic = str(uuid4())
+    assert await record_denial(reason_code=NO_CARE_TEAM_ASSIGNMENT, clinic_id=clinic)
+    assert await record_denial(reason_code=NO_CARE_TEAM_ASSIGNMENT, clinic_id="not-a-uuid")
+    assert [row["clinic_id"] for row in written] == [clinic, None]
 
 
 @pytest.mark.asyncio

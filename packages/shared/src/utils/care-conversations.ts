@@ -3,6 +3,7 @@ import type {
   CareConversationMessage,
   ConversationMessagePage,
   ConversationRecipient,
+  MessageTranslationResult,
 } from "../types/care-conversations";
 
 interface ConversationTransport {
@@ -14,10 +15,17 @@ const root = "/api/v1/care-conversations";
 
 export function createConversationService(api: ConversationTransport) {
   return {
-    recipients: (token: string, signal?: AbortSignal) =>
-      api.get<ConversationRecipient[]>(`${root}/recipients`, { token, signal }),
-    list: (token: string, signal?: AbortSignal) =>
-      api.get<CareConversation[]>(`${root}/`, { token, signal }),
+    // `clinicId` is a clinician-only filter on the clinic of the care-team link.
+    recipients: (token: string, signal?: AbortSignal, clinicId?: string | null) =>
+      api.get<ConversationRecipient[]>(
+        `${root}/recipients${clinicId ? `?clinic_id=${encodeURIComponent(clinicId)}` : ""}`,
+        { token, signal },
+      ),
+    list: (token: string, signal?: AbortSignal, clinicId?: string | null) =>
+      api.get<CareConversation[]>(
+        `${root}/${clinicId ? `?clinic_id=${encodeURIComponent(clinicId)}` : ""}`,
+        { token, signal },
+      ),
     open: (token: string, recipientId: string) =>
       api.post<CareConversation>(`${root}/`, { recipient_id: recipientId }, { token }),
     messages: (token: string, id: string, before?: string, signal?: AbortSignal) =>
@@ -30,6 +38,13 @@ export function createConversationService(api: ConversationTransport) {
         `${root}/${encodeURIComponent(id)}/messages`,
         { body: body.trim(), client_message_id: clientMessageId },
         { token },
+      ),
+    // Translates ONE message into the viewer's language (stored once on the server).
+    translate: (token: string, id: string, messageId: string, signal?: AbortSignal) =>
+      api.post<MessageTranslationResult>(
+        `${root}/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/translation`,
+        {},
+        { token, signal },
       ),
     read: (token: string, id: string, lastMessageId: string) =>
       api.post<{ read_at: string }>(
@@ -68,6 +83,53 @@ export function mergeConversationMessages(
     });
 }
 
+export const MAX_PARALLEL_TRANSLATIONS = 3;
+
+/**
+ * Ask for the translation of every pending message that has not been requested yet, at most
+ * `limit` at a time. Each result (or failure: the original simply stays) is reported through
+ * `apply` as it arrives; nothing here blocks reading, typing or sending.
+ */
+export async function requestPendingTranslations(
+  messages: CareConversationMessage[],
+  requested: Set<string>,
+  translate: (messageId: string) => Promise<MessageTranslationResult>,
+  apply: (messageId: string, result: MessageTranslationResult | null) => void,
+  isActive: () => boolean,
+  limit: number = MAX_PARALLEL_TRANSLATIONS,
+): Promise<void> {
+  const queue = messages.filter((message) => message.translation_pending && !requested.has(message.id));
+  for (const message of queue) requested.add(message.id);
+  const worker = async () => {
+    for (let message = queue.shift(); message; message = queue.shift()) {
+      let result: MessageTranslationResult | null = null;
+      try {
+        result = await translate(message.id);
+      } catch {
+        result = null; // the original stays; a later read asks again once the server allows
+      }
+      if (!isActive()) return;
+      apply(message.id, result);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, queue.length) }, worker));
+}
+
+/** Fold a translation result into a message; a missing result just clears the pending marker. */
+export function applyTranslationResult(
+  message: CareConversationMessage,
+  result: MessageTranslationResult | null,
+): CareConversationMessage {
+  if (!result?.translation) return { ...message, translation_pending: false };
+  return {
+    ...message,
+    translation: result.translation,
+    translation_locale: result.translation_locale,
+    translation_guard_passed: result.translation_guard_passed,
+    translation_pending: false,
+  };
+}
+
 export function getConversationCopy(locale: string) {
   return locale === "es-MX" ? {
     recipient: "Elegir destinatario", choose: "Selecciona una persona", open: "Abrir conversación",
@@ -84,6 +146,11 @@ export function getConversationCopy(locale: string) {
     invalid: "El mensaje fue rechazado. Tu texto se conserva; revísalo o edítalo antes de volver a enviarlo.",
     prepareNew: "Preparar un nuevo envío", confirmNew: "Confirmar: preparar un nuevo envío", cancel: "Cancelar",
     confirmWarning: "El mensaje anterior puede ya existir. Preparar un nuevo envío permite crear otro mensaje y podría duplicarlo. Esta acción no lo envía.",
+    translatedFromEnglish: "Traducido del inglés", translatedFromSpanish: "Traducido del español",
+    showOriginal: "Ver original", showTranslation: "Ver traducción", translationUncertain: "las cifras pueden diferir",
+    translationUnavailable: "Traducción automática no disponible para este mensaje",
+    // Draft for LOC-001 review, not approved wording.
+    translating: "Traduciendo…",
   } : {
     recipient: "Choose recipient", choose: "Select a person", open: "Open conversation",
     threads: "Conversations", empty: "No conversations yet.", noRecipients: "No linked recipients available.",
@@ -99,6 +166,10 @@ export function getConversationCopy(locale: string) {
     invalid: "The message was rejected. Your text is preserved; review or edit it before sending again.",
     prepareNew: "Prepare a new send", confirmNew: "Confirm: prepare a new send", cancel: "Cancel",
     confirmWarning: "The previous message may already exist. Preparing a new send permits another message and could duplicate it. This action does not send it.",
+    translatedFromEnglish: "Translated from English", translatedFromSpanish: "Translated from Spanish",
+    showOriginal: "Show original", showTranslation: "Show translation", translationUncertain: "numbers may differ",
+    translationUnavailable: "Automatic translation unavailable for this message",
+    translating: "Translating…",
   };
 }
 

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EarlierMessages } from "@/components/features/operational-alerts";
 import { fetchAllSentMessages, type ClinicianMessageInboxItem } from "@/services/clinicians";
 
+vi.mock("@/hooks/use-clinic-filter", async () => (await import("@/test/clinic-filter-mock")).clinicFilterModule);
 vi.mock("@/services/clinicians", () => ({
     fetchAllSentMessages: vi.fn(),
 }));

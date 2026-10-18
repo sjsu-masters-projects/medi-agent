@@ -3,13 +3,22 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useSelector } from "react-redux";
-import { Badge, Button, Card, CopyButton, Input } from "@/components/ui";
+import { Badge, Button, Card, CopyButton, Input, Modal } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { api } from "@/services/api";
+import {
+    clinicErrorMessage,
+    fetchMyClinics,
+    isClinicRequiredError,
+    withClinic,
+    type ClinicMembershipSummary,
+} from "@/services/clinics";
 import type { RootState } from "@/store/store";
 import { ClinicianRole } from "@/types";
 import { EmailPreferences } from "@/components/features/email-preferences";
 import { EmailInvitations } from "@/components/features/email-invitations";
+import { ClinicPicker } from "@/components/features/clinic-picker";
+import { YourClinicsCard } from "@/components/features/your-clinics-card";
 import { CLINICIAN_LOCALE } from "@/utils/dates";
 import { CardHeader, IconTile, cardFooterClass } from "@/components/features/settings-card";
 
@@ -96,7 +105,7 @@ function getRoleTone(role: ClinicianRole) {
 }
 
 const GENERAL_SECTIONS = [
-    { id: "clinic-profile", label: "Clinic Profile" },
+    { id: "your-clinics", label: "Your clinics" },
     { id: "my-profile", label: "My Profile" },
     { id: "security", label: "Security" },
     { id: "email-notices", label: "Email notices" },
@@ -155,11 +164,15 @@ function getPatientLabel(record: InviteCodeRecord) {
     return fullName || record.patient.email || "—";
 }
 
+type PendingStaffAction =
+    | { kind: "grant" | "demote"; member: StaffMember; newRole: ClinicianRole }
+    | { kind: "remove"; member: StaffMember };
+
 export default function SettingsPage() {
     const token = useSelector((state: RootState) => state.auth.accessToken);
     const [staffList, setStaffList] = useState<StaffMember[]>([]);
     const [clinicName, setClinicName] = useState("");
-    const [clinicCode, setClinicCode] = useState<string | null>(null);
+    const [pendingAction, setPendingAction] = useState<PendingStaffAction | null>(null);
     const [loading, setLoading] = useState(true);
     const [inviteEmail, setInviteEmail] = useState("");
     const [inviteRole, setInviteRole] = useState<ClinicianRole>(ClinicianRole.PROVIDER);
@@ -178,28 +191,89 @@ export default function SettingsPage() {
     const [inviteRecords, setInviteRecords] = useState<InviteCodeRecord[]>([]);
     const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null);
     // Presentational only: highlights the section navigator entry the user last chose.
-    const [activeSection, setActiveSection] = useState<GeneralSectionId>("clinic-profile");
-    // Staff invitations are admin-only on the server; the loaded profile carries the role.
-    const isClinicAdmin = profile?.role === ClinicianRole.ADMIN;
+    const [activeSection, setActiveSection] = useState<GeneralSectionId>("your-clinics");
+    // Clinic-scoped actions (staff, invitations, invite codes) belong to one clinic. With one
+    // membership the portal sends it automatically; with several the server answers
+    // CLINIC_REQUIRED and the picker below asks which one. Nothing else in the portal changes.
+    const [clinics, setClinics] = useState<ClinicMembershipSummary[]>([]);
+    const [clinicId, setClinicId] = useState<string | null>(null);
+    const [clinicsReady, setClinicsReady] = useState(false);
+    const [clinicRequired, setClinicRequired] = useState(false);
+    const [clinicsRevision, setClinicsRevision] = useState(0);
+    // Staff invitations are admin-only on the server. The right is the role held at the chosen
+    // clinic; the profile role is only a fallback when the clinic list could not be loaded.
+    const roleAtClinic = clinics.length > 0
+        ? clinics.find((clinic) => clinic.clinic_id === clinicId)?.role
+        : profile?.role;
+    const isClinicAdmin = roleAtClinic === ClinicianRole.ADMIN;
+
+    useEffect(() => {
+        if (!token) {
+            return;
+        }
+        let cancelled = false;
+        void (async () => {
+            try {
+                const result = await fetchMyClinics(token);
+                if (cancelled) {
+                    return;
+                }
+                setClinics(result.clinics);
+                const active = result.clinics.filter((clinic) => clinic.status === "active");
+                // Keep the picked clinic while it is still one of ours (after leaving a clinic it
+                // is not); otherwise the only clinic, or the default so the Team tab is never empty.
+                setClinicId((current) => {
+                    if (current && active.some((clinic) => clinic.clinic_id === current)) {
+                        return current;
+                    }
+                    if (result.clinics.length === 1) {
+                        return result.clinics[0].clinic_id;
+                    }
+                    return active.some((clinic) => clinic.clinic_id === result.default_clinic_id)
+                        ? result.default_clinic_id
+                        : null;
+                });
+            } catch {
+                // The server still resolves a single clinic and asks for a choice otherwise.
+            } finally {
+                if (!cancelled) {
+                    setClinicsReady(true);
+                }
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [clinicsRevision, token]);
+
+    const handleClinicError = useCallback((e: unknown) => {
+        if (isClinicRequiredError(e)) {
+            setClinicRequired(true);
+            setError(null);
+            return;
+        }
+        setError(clinicErrorMessage(e, "Something went wrong. Please try again."));
+    }, []);
 
     const loadStaff = useCallback(async () => {
-        if (!token) {
+        if (!token || !clinicsReady) {
             return;
         }
         try {
             const result = await api.get<{ staff: StaffMember[]; clinic_name: string; clinic_code?: string | null }>(
-                "/api/v1/staff/",
+                withClinic("/api/v1/staff/", clinicId),
                 { token },
             );
+            setClinicRequired(false);
             setStaffList(result.staff);
             setClinicName(result.clinic_name);
-            setClinicCode(result.clinic_code ?? null);
         } catch (e) {
-            setError((e as Error).message);
+            setStaffList([]);
+            handleClinicError(e);
         } finally {
             setLoading(false);
         }
-    }, [token]);
+    }, [clinicId, clinicsReady, handleClinicError, token]);
 
     useEffect(() => {
         void loadStaff();
@@ -226,7 +300,7 @@ export default function SettingsPage() {
     }, [loadProfile]);
 
     const loadInviteCodes = useCallback(async () => {
-        if (!token) {
+        if (!token || !clinicsReady) {
             return;
         }
 
@@ -234,9 +308,10 @@ export default function SettingsPage() {
         setError(null);
 
         try {
-            const result = await api.get<InviteCodeListPayload>("/api/v1/clinicians/me/invite-codes", {
-                token,
-            });
+            const result = await api.get<InviteCodeListPayload>(
+                withClinic("/api/v1/clinicians/me/invite-codes", clinicId),
+                { token },
+            );
             const records = result.invites || [];
             setInviteRecords(records);
             const firstActiveCode = records.find(
@@ -244,11 +319,13 @@ export default function SettingsPage() {
             )?.invite_code;
             setInviteCode(firstActiveCode ?? "");
         } catch (e) {
-            setError((e as Error).message);
+            setInviteRecords([]);
+            setInviteCode("");
+            handleClinicError(e);
         } finally {
             setInviteCodeLoading(false);
         }
-    }, [token]);
+    }, [clinicId, clinicsReady, handleClinicError, token]);
 
     useEffect(() => {
         void loadInviteCodes();
@@ -263,15 +340,19 @@ export default function SettingsPage() {
         setError(null);
 
         try {
-            await api.post<InviteCodePayload>("/api/v1/clinicians/me/invite-code", {}, { token });
+            await api.post<InviteCodePayload>(
+                "/api/v1/clinicians/me/invite-code",
+                clinicId ? { clinic_id: clinicId } : {},
+                { token },
+            );
             await loadInviteCodes();
             setInviteStatus("New patient invite code generated");
         } catch (e) {
-            setError((e as Error).message);
+            handleClinicError(e);
         } finally {
             setInviteCodeLoading(false);
         }
-    }, [loadInviteCodes, token]);
+    }, [clinicId, handleClinicError, loadInviteCodes, token]);
 
     const handleRevokeInviteCode = useCallback(
         async (careTeamId: string) => {
@@ -304,7 +385,7 @@ export default function SettingsPage() {
         try {
             const result = await api.post<{ status: string; email_sent?: boolean }>(
                 "/api/v1/staff/invite",
-                { email: inviteEmail, role: inviteRole },
+                { email: inviteEmail, role: inviteRole, ...(clinicId ? { clinic_id: clinicId } : {}) },
                 { token },
             );
             setInviteStatus(result.status === "already_pending"
@@ -315,7 +396,7 @@ export default function SettingsPage() {
             setInviteEmail("");
             void loadStaff();
         } catch (e) {
-            setError((e as Error).message);
+            handleClinicError(e);
         }
     }
 
@@ -340,34 +421,31 @@ export default function SettingsPage() {
             return;
         }
 
-        if (typeof window !== "undefined") {
-            const fullName = `${member.first_name} ${member.last_name}`.trim() || member.email;
-            if (newRole === ClinicianRole.ADMIN) {
-                const confirmed = window.confirm(
-                    `Grant Clinic Admin access to ${fullName}? This allows full staff and clinic management.`,
-                );
-                if (!confirmed) {
-                    return;
-                }
-            }
+        if (newRole === ClinicianRole.ADMIN || member.role === ClinicianRole.ADMIN) {
+            // Granting or removing Clinic Admin is confirmed in a modal before it is sent.
+            setPendingAction({ kind: newRole === ClinicianRole.ADMIN ? "grant" : "demote", member, newRole });
+            return;
+        }
 
-            if (member.role === ClinicianRole.ADMIN && newRole !== ClinicianRole.ADMIN) {
-                const confirmed = window.confirm(
-                    `Remove Clinic Admin access from ${fullName}? They will lose admin permissions.`,
-                );
-                if (!confirmed) {
-                    return;
-                }
-            }
+        await applyRoleChange(memberId, newRole);
+    }
+
+    async function applyRoleChange(memberId: string, newRole: ClinicianRole) {
+        if (!token) {
+            return;
         }
 
         setError(null);
         try {
-            await api.put(`/api/v1/staff/${memberId}/role`, { role: newRole }, { token });
+            await api.put(
+                `/api/v1/staff/${memberId}/role`,
+                { role: newRole, ...(clinicId ? { clinic_id: clinicId } : {}) },
+                { token },
+            );
             await loadStaff();
             setActionMenuId(null);
         } catch (e) {
-            setError((e as Error).message);
+            handleClinicError(e);
         }
     }
 
@@ -381,13 +459,27 @@ export default function SettingsPage() {
             return;
         }
 
+        const member = staffList.find((entry) => entry.id === memberId);
+        if (member) {
+            setPendingAction({ kind: "remove", member });
+            return;
+        }
+
+        await applyRemove(memberId);
+    }
+
+    async function applyRemove(memberId: string) {
+        if (!token) {
+            return;
+        }
+
         setError(null);
         try {
-            await api.delete(`/api/v1/staff/${memberId}`, { token });
+            await api.delete(withClinic(`/api/v1/staff/${memberId}`, clinicId), { token });
             await loadStaff();
             setActionMenuId(null);
         } catch (e) {
-            setError((e as Error).message);
+            handleClinicError(e);
         }
     }
 
@@ -441,8 +533,7 @@ export default function SettingsPage() {
     return (
         <div className="ma-page space-y-5">
             <div>
-                <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Clinic settings</h1>
-                {clinicName ? <p className="mt-1 text-sm text-muted">{clinicName}</p> : null}
+                <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Settings</h1>
             </div>
 
             <div role="group" aria-label="Settings views" className="flex h-11 max-w-full gap-6 overflow-x-auto border-b border-line-strong">
@@ -461,6 +552,10 @@ export default function SettingsPage() {
                     </button>
                 ))}
             </div>
+
+            {activeTab === "Team & Roles" || activeTab === "Patient Invites" ? (
+                <ClinicPicker clinics={clinics} onChange={setClinicId} required={clinicRequired} value={clinicId} />
+            ) : null}
 
             {error ? (
                 <p role="alert" className="flex items-start gap-2.5 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink">
@@ -495,35 +590,16 @@ export default function SettingsPage() {
                     </nav>
 
                     <div className="min-w-0 space-y-5">
-                        <Card padding="none">
-                            <div className="scroll-mt-24" id="clinic-profile">
-                                <CardHeader icon="building">
-                                    <h3 className="text-[15px] font-semibold text-ink">Clinic Profile</h3>
-                                </CardHeader>
-                                <div className="divide-y divide-line">
-                                    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 px-5 py-4">
-                                        <p className="text-[13px] text-muted">Clinic Name</p>
-                                        <p className="text-sm font-medium text-ink">{clinicName || "—"}</p>
-                                    </div>
-                                    <div className="space-y-2 px-5 py-4">
-                                        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-                                            <p className="text-[13px] text-muted">Clinic Code</p>
-                                            <div className="flex items-center gap-2">
-                                                <p className="rounded-[10px] border border-line-strong bg-surface-2 px-3 py-1.5 font-mono text-lg tracking-[0.08em] text-ink">
-                                                    {clinicCode || "Unavailable"}
-                                                </p>
-                                                <CopyButton aria-label="Copy clinic code" value={clinicCode}>
-                                                    Copy
-                                                </CopyButton>
-                                            </div>
-                                        </div>
-                                        <p className="text-[13px] text-muted">
-                                            New clinicians can join with this clinic code. Sending an invite is optional.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        </Card>
+                        {token ? (
+                            <YourClinicsCard
+                                onChanged={() => {
+                                    setClinicsRevision((value) => value + 1);
+                                    void loadProfile();
+                                }}
+                                revision={clinicsRevision}
+                                token={token}
+                            />
+                        ) : null}
 
                         <Card padding="none">
                             <div className="scroll-mt-24" id="my-profile">
@@ -548,10 +624,6 @@ export default function SettingsPage() {
                                         onChange={(event) => setSpecialty(event.target.value)}
                                         placeholder="Family Medicine"
                                         value={specialty}
-                                    />
-                                    <ReadOnlyField
-                                        label="Role"
-                                        value={profile ? getRoleLabel(profile.role) : "Loading profile…"}
                                     />
                                     <ReadOnlyField label="Email" value={profile?.email || "—"} />
                                 </div>
@@ -587,8 +659,8 @@ export default function SettingsPage() {
 
             {activeTab === "Team & Roles" ? (
                 <div className="ma-enter space-y-5">
-                    {token && isClinicAdmin ? <EmailInvitations token={token} revision={inviteStatus} /> : null}
-                    {profile && !isClinicAdmin ? (
+                    {token && isClinicAdmin ? <EmailInvitations clinicId={clinicId} token={token} revision={inviteStatus} /> : null}
+                    {profile && !isClinicAdmin && !clinicRequired ? (
                         <p role="note" className="rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm text-ink-2">
                             Only clinic admins can invite team members.
                         </p>
@@ -692,7 +764,8 @@ export default function SettingsPage() {
                                     {profile?.id && member.id === profile.id ? (
                                         <span className="text-xs font-medium text-muted">You</span>
                                     ) : null}
-                                    <button
+                                    {/* Role changes and removal are admin-only at this clinic; the server rejects the rest. */}
+                                    {isClinicAdmin ? <button
                                         aria-label={`Actions for ${member.first_name} ${member.last_name}`}
                                         aria-expanded={actionMenuId === member.id}
                                         className="ma-press flex h-8 w-8 items-center justify-center rounded-lg text-muted transition hover:bg-sunken hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8] disabled:hover:bg-transparent"
@@ -702,8 +775,8 @@ export default function SettingsPage() {
                                         type="button"
                                     >
                                         <Icon aria-hidden="true" name="more" className="h-4 w-4" />
-                                    </button>
-                                    {actionMenuId === member.id ? (
+                                    </button> : null}
+                                    {isClinicAdmin && actionMenuId === member.id ? (
                                         <div className="absolute right-0 top-full z-30 mt-1 w-52 rounded-xl border border-line bg-surface p-1 shadow-[var(--shadow-pop)]">
                                             {ROLE_OPTIONS.filter((r) => r.value !== member.role).map((option) => (
                                                 <button
@@ -743,7 +816,7 @@ export default function SettingsPage() {
             {activeTab === "Patient Invites" ? (
                 <div className="ma-enter space-y-5">
                     <Card padding="none">
-                        <CardHeader icon="link" sub="Invite history shows codes created by your account.">
+                        <CardHeader icon="link" sub="Invite history shows codes created by your account at this clinic.">
                             <h3 className="text-[15px] font-semibold text-ink">Patient Invite Codes</h3>
                         </CardHeader>
                         <div className="space-y-4 px-5 py-5">
@@ -893,6 +966,36 @@ export default function SettingsPage() {
                     </Card>
                 </div>
             ) : null}
+            {pendingAction ? (() => {
+                const { member } = pendingAction;
+                const fullName = `${member.first_name} ${member.last_name}`.trim() || member.email;
+                const clinicLabel = clinicName || "this clinic";
+                const copy = pendingAction.kind === "grant"
+                    ? { title: `Make ${fullName} a Clinic Admin?`, body: `${fullName} will be able to manage staff, invitations and settings at ${clinicLabel}.`, confirm: "Grant Clinic Admin", destructive: false }
+                    : pendingAction.kind === "demote"
+                        ? { title: `Remove Clinic Admin from ${fullName}?`, body: `${fullName} will lose admin permissions at ${clinicLabel} but stays on the team.`, confirm: "Remove admin access", destructive: true }
+                        : { title: `Remove ${fullName} from ${clinicLabel}?`, body: `Their patient links at ${clinicLabel} end; patients keep their other care-team members.`, confirm: `Remove ${fullName}`, destructive: true };
+                const close = () => setPendingAction(null);
+                const confirm = () => {
+                    const action = pendingAction;
+                    setPendingAction(null);
+                    void (action.kind === "remove" ? applyRemove(action.member.id) : applyRoleChange(action.member.id, action.newRole));
+                };
+                return (
+                    <Modal onClose={close} open title={copy.title}>
+                        <p className="text-sm text-ink-2">{copy.body}</p>
+                        <div className="mt-5 flex flex-wrap justify-end gap-2">
+                            <Button onClick={close} variant="secondary">Cancel</Button>
+                            <Button
+                                className={copy.destructive ? "!border-risk-strong !bg-risk-strong !text-white hover:!bg-risk" : undefined}
+                                onClick={confirm}
+                            >
+                                {copy.confirm}
+                            </Button>
+                        </div>
+                    </Modal>
+                );
+            })() : null}
         </div>
     );
 }

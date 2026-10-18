@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
+import { ClinicChip, ClinicFilterEmpty, ClinicFilterField } from "@/components/features/clinic-chip";
 import { RiskBadge } from "@/components/features/risk-badge";
+import { clinicScopeLabel } from "@/hooks/clinic-scope";
+import { useClinicFilter } from "@/hooks/use-clinic-filter";
 import { DataTable, Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { useFlip } from "@/components/ui/motion";
@@ -36,14 +39,18 @@ export default function PatientsPage() {
     const error = useSelector((state: RootState) => state.dashboard.error);
     const [filter, setFilter] = useState<"all" | PatientRiskData["risk_level"]>("all");
     const [sortBy, setSortBy] = useState<"adherence" | "activity" | "risk">("risk");
+    const clinicFilter = useClinicFilter();
+    const { clinicId, ready } = clinicFilter;
 
     const reloadPatients = useCallback(() => {
-        void dispatch(loadDashboard());
-    }, [dispatch]);
+        void dispatch(loadDashboard(clinicId ? { clinicId } : undefined));
+    }, [clinicId, dispatch]);
 
     useEffect(() => {
-        reloadPatients();
-    }, [reloadPatients]);
+        if (ready) {
+            reloadPatients();
+        }
+    }, [ready, reloadPatients]);
 
     const visiblePatients = useMemo(() => {
         const filtered = filter === "all" ? patients : patients.filter((patient) => patient.risk_level === filter);
@@ -68,7 +75,7 @@ export default function PatientsPage() {
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Patient roster</h1>
-                    <p className="mt-1 text-sm text-muted">Sort by risk, adherence, or recent activity.</p>
+                    <p className="mt-1 text-sm text-muted">Sort by risk, adherence, or recent activity.{clinicScopeLabel(clinicFilter) ? ` · ${clinicScopeLabel(clinicFilter)}` : ""}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                     <CompactField label="Risk">
@@ -87,6 +94,7 @@ export default function PatientsPage() {
                             <option value="activity">Sort by last activity</option>
                         </select>
                     </CompactField>
+                    <ClinicFilterField filter={clinicFilter} />
                 </div>
             </div>
             {error && (
@@ -114,8 +122,11 @@ export default function PatientsPage() {
                     >
                         <span className="flex min-w-0 items-center gap-3">
                             <span aria-hidden="true" className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-track text-xs font-semibold text-ink-2">{`${patient.first_name.charAt(0)}${patient.last_name.charAt(0)}`.toUpperCase()}</span>
-                            <span className="min-w-0 break-words text-[15px] font-semibold text-ink">
-                                {patient.first_name} {patient.last_name}
+                            <span className="flex min-w-0 flex-col items-start gap-0.5">
+                                <span className="min-w-0 break-words text-[15px] font-semibold text-ink">
+                                    {patient.first_name} {patient.last_name}
+                                </span>
+                                <ClinicChip name={clinicFilter.multi ? patient.clinic_name : null} />
                             </span>
                         </span>
                         <span><RiskBadge level={patient.risk_level} /></span>
@@ -130,7 +141,7 @@ export default function PatientsPage() {
                         );
                     })}
                     {visiblePatients.length === 0 && (
-                        <p className="px-4 py-10 text-center text-sm text-muted">{error ? "The roster is unavailable. Retry to check assigned patients." : patients.length ? "No assigned patients match these filters." : "No patients assigned yet."}</p>
+                        <p className="px-4 py-10 text-center text-sm text-muted">{error ? "The roster is unavailable. Retry to check assigned patients." : clinicFilter.clinicId && patients.length === 0 ? <ClinicFilterEmpty filter={clinicFilter} /> : patients.length ? "No assigned patients match these filters." : "No patients assigned yet."}</p>
                     )}
                 </DataTable>
             )}

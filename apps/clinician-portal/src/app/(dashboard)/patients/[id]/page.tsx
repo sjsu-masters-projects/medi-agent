@@ -1,5 +1,7 @@
 "use client";
 
+import { LinkedAt } from "@/components/features/clinic-chip";
+import { useClinicMemberships } from "@/hooks/use-clinic-filter";
 import { Suspense, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSelector } from "react-redux";
@@ -12,26 +14,30 @@ import { PatientAdherencePanel } from "@/components/features/patient-adherence-p
 import { SymptomTimeline } from "@/components/features/symptom-timeline";
 import { ChatTranscript } from "@/components/features/chat-transcript";
 import { PatientDocumentsPanel } from "@/components/features/patient-documents-panel";
+import { PatientAppointmentsPanel } from "@/components/features/patient-appointments-panel";
 import { CarePlanPanel } from "@/components/features/care-plan-panel";
 import { SmartImportReviewPanel } from "@/components/features/smart-import-review-panel";
 import Link from "next/link";
 import { usePatientDetail } from "@/hooks/use-patient-detail";
 import type { RootState } from "@/store/store";
+import { PatientADRPanel } from "@/components/features/patient-adr-panel";
 import { formatClinicianDateTime } from "@/utils/dates";
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
 
-type TabId = "profile" | "imports" | "adherence" | "symptoms" | "chat" | "soap" | "documents" | "care-plan";
+type TabId = "profile" | "imports" | "adherence" | "symptoms" | "chat" | "soap" | "documents" | "care-plan" | "adr" | "appointments";
 
 const TABS: Array<{ id: TabId; label: string; icon: IconName }> = [
     { id: "profile", label: "Profile", icon: "user" },
     { id: "imports", label: "External Records", icon: "link" },
     { id: "adherence", label: "Adherence", icon: "gauge" },
     { id: "symptoms", label: "Symptoms", icon: "alert" },
+    { id: "adr", label: "ADR", icon: "pill" },
     { id: "chat", label: "Chat", icon: "chat" },
     { id: "soap", label: "SOAP Notes", icon: "spark" },
     { id: "documents", label: "Documents", icon: "note" },
     { id: "care-plan", label: "Care Plan", icon: "check" },
+    { id: "appointments", label: "Appointments", icon: "cal" },
 ];
 
 function PatientTabs({ activeTab, onChange }: { activeTab: TabId; onChange: (tab: TabId) => void }) {
@@ -130,6 +136,7 @@ function formatReminderSchedule(
 function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string; enabled: boolean }) {
     const router = useRouter();
     const searchParams = useSearchParams();
+    const { clinics } = useClinicMemberships();
     const hasMounted = useSyncExternalStore(
         () => () => undefined,
         () => true,
@@ -232,6 +239,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                             </h1>
                             <RiskBadge level={patient.risk_level} />
                         </div>
+                        <LinkedAt name={clinics.length >= 2 ? patient.clinic_name : null} />
                         <p className="mt-0.5 flex flex-wrap gap-x-1.5 text-[13px] text-muted">
                             {patient.date_of_birth ? <span>DOB {patient.date_of_birth}</span> : null}
                             {patient.date_of_birth ? <span aria-hidden="true">·</span> : null}
@@ -272,6 +280,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
 
             {/* Tab panels */}
             <div className={activeTab === "care-plan" ? "flex min-h-0 flex-1 flex-col" : "rounded-2xl border border-line bg-surface p-6 shadow-[var(--shadow-card)]"}>
+                {activeTab === "adr" && <PatientADRPanel patientId={patientId} />}
                 {activeTab === "imports" && (
                     <SmartImportReviewPanel
                         patientId={patientId}
@@ -659,6 +668,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                         patientId={patientId}
                     />
                 )}
+                {activeTab === "appointments" && <PatientAppointmentsPanel patientId={patientId} />}
                 {activeTab === "care-plan" && <CarePlanPanel patientId={patientId} onPublished={() => void reload()} />}
             </div>
         </div>

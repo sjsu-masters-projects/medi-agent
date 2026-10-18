@@ -1,5 +1,6 @@
 """API shape, validation, auth and safe errors against the real service RPC boundary."""
 
+from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -12,6 +13,8 @@ from app.core.security import get_current_user
 from app.db.connection import get_db
 from app.main import app
 from app.models.auth import CurrentUser
+from app.services.clinic_link_scope import ClinicLinkScope
+from app.services.clinic_membership_service import ClinicMembershipService
 
 ROOT = "/api/v1/care-conversations"
 
@@ -39,6 +42,11 @@ def conversation():
         "sender_name": "Synthetic Patient",
         "body": "Synthetic message",
         "created_at": "2026-10-09T12:00:00Z",
+        # LOC-003: optional stored-translation metadata, null when no translation exists.
+        "translation": None,
+        "translation_locale": None,
+        "translation_guard_passed": None,
+        "translation_pending": False,
     }
     db = MagicMock()
     db.rpc.return_value.execute.return_value = SimpleNamespace(data=thread)
@@ -49,8 +57,9 @@ def conversation():
 
 
 @pytest.mark.parametrize("role", ["patient", "clinician"])
-def test_all_six_contract_endpoints(client, conversation, role):
+def test_all_six_contract_endpoints(client, conversation, role, monkeypatch):
     actor, thread, message, db = conversation
+    clinic = "00000000-0000-0000-0000-0000000000c1"
     actor.role = role
     message["sender_role"] = role
     recipient = {
@@ -59,10 +68,26 @@ def test_all_six_contract_endpoints(client, conversation, role):
         "role": "provider",
         "clinic_name": "Synthetic clinic",
     }
+    # A clinician's lists are tagged with the clinic of their link (slice C); a patient's
+    # carry no clinic id.
+    scope = ClinicLinkScope(
+        {
+            recipient["id"]: (clinic, "Synthetic clinic"),
+            thread["patient_id"]: (clinic, "Synthetic clinic"),
+        }
+    )
+    monkeypatch.setattr(ClinicMembershipService, "link_scope", AsyncMock(return_value=scope))
+    tagged = clinic if role == "clinician" else None
     cases = [
-        ("GET", ROOT + "/recipients", None, [recipient]),
-        ("GET", ROOT + "/", None, [thread]),
-        ("POST", ROOT + "/", {"recipient_id": recipient["id"]}, thread),
+        ("GET", ROOT + "/recipients", None, [recipient], [{**recipient, "clinic_id": tagged}]),
+        ("GET", ROOT + "/", None, [thread], [{**thread, "clinic_id": tagged}]),
+        (
+            "POST",
+            ROOT + "/",
+            {"recipient_id": recipient["id"]},
+            thread,
+            {**thread, "clinic_id": None},
+        ),
         (
             "GET",
             ROOT + f"/{thread['id']}/messages",
@@ -82,11 +107,11 @@ def test_all_six_contract_endpoints(client, conversation, role):
             {"read_at": message["created_at"]},
         ),
     ]
-    for method, path, payload, result in cases:
-        db.rpc.return_value.execute.return_value.data = result
+    for method, path, payload, result, *expected in cases:
+        db.rpc.return_value.execute.return_value.data = deepcopy(result)
         response = client.request(method, path, json=payload)
         assert response.status_code == 200, response.text
-        assert response.json() == result
+        assert response.json() == (expected[0] if expected else result)
         assert response.headers["cache-control"] == "private, no-store"
         assert db.rpc.call_args.args[1]["p_actor_id"] == str(actor.id)
         assert db.rpc.call_args.args[1]["p_actor_role"] == role
@@ -191,3 +216,23 @@ def test_clinician_keeps_existing_mfa_guard(client, conversation, monkeypatch):
         == 403
     )
     db.rpc.assert_not_called()
+
+
+def test_translation_endpoint_refuses_an_outsider_without_a_model_call(
+    client, conversation, monkeypatch
+):
+    from unittest.mock import AsyncMock
+
+    from postgrest.exceptions import APIError
+
+    _, thread, message, db = conversation
+    db.rpc.return_value.execute.side_effect = APIError(
+        {"code": "42501", "message": "denied", "details": "", "hint": ""}
+    )
+    model = AsyncMock()
+    monkeypatch.setattr("app.services.message_translation.translate_message", model)
+    response = client.post(
+        f"/api/v1/care-conversations/{thread['id']}/messages/{message['id']}/translation"
+    )
+    assert response.status_code in {403, 404}
+    model.assert_not_awaited()

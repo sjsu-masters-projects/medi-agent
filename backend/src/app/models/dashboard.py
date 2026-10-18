@@ -10,6 +10,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.models.clinic_membership import ClinicTag
 from app.models.enums import DocumentReviewStatus, DocumentType, UploaderRole
 
 # ── Risk level type alias ────────────────────────────────────────────────────
@@ -30,7 +31,7 @@ A2ATaskStatus = Literal[
 # ── Per-patient risk card ────────────────────────────────────────────────────
 
 
-class PatientRiskData(BaseModel):
+class PatientRiskData(ClinicTag):
     """Risk snapshot for a single patient — shown on the Risk Radar dashboard."""
 
     patient_id: UUID
@@ -147,7 +148,7 @@ class PatientDocumentRead(BaseModel):
     reviewer: DocumentReviewerRead | None = None
 
 
-class DocumentReviewQueueItem(BaseModel):
+class DocumentReviewQueueItem(ClinicTag):
     """Pending patient-uploaded document awaiting clinician review."""
 
     id: UUID
@@ -199,7 +200,7 @@ class AdherenceBarrierRead(BaseModel):
     logged_at: str
 
 
-class PatientDeepDive(BaseModel):
+class PatientDeepDive(ClinicTag):
     """Aggregated patient data for the Patient Deep Dive view."""
 
     # Basic profile

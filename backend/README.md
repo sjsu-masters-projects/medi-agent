@@ -130,7 +130,11 @@ record is 404, an unassigned clinician 403):
 | Route | Purpose |
 | --- | --- |
 | `POST /api/v1/clinicians/me/adr-assessments/{id}/medwatch-draft` | Prepare a v2 draft (`{decision: "prepare_draft", reportability_rationale}`) |
-| `GET /api/v1/clinicians/me/medwatch-drafts?state=active\|submitted\|discarded` | List; each item has `missing_for_approval`, `name_warnings`, `pdf_available`, `current_submission`, `submission_history` (newest first), `attestation`, `template` |
+| `GET /api/v1/clinicians/me/adr-assessments?status=draft\|reviewed\|submitted\|dismissed\|all&patient_id=` | List assigned-patient assessments (`all` for every status, `patient_id` narrows to one assigned patient) |
+| `GET /api/v1/clinicians/me/adr-assessments/{id}` | One assessment of any status; an unknown or unassigned id is the same 404 |
+| `GET /api/v1/clinicians/me/medwatch-drafts?state=active\|draft\|approved\|submitted\|discarded` | List; each item has `missing_for_approval`, `name_warnings`, `pdf_available`, `current_submission`, `submission_history` (newest first), `attestation`, `template` |
+| `GET .../medwatch-drafts/{id}` | One draft (same shape as a list item); an unknown or unassigned id is the same 404 |
+| `GET .../medwatch-drafts/{id}/preview.pdf` | Filled Form 3500 stamped "DRAFT – not for submission" on every page, `Content-Disposition: inline`, `Cache-Control: no-store`. Not an export: no export record and no state change; one `preview_viewed` audit event with the actor |
 | `GET .../medwatch-drafts/form-3500-options` | Option lists for the editor (units, routes, frequencies, occupations, countries, ...) |
 | `PUT .../medwatch-drafts/{id}` | Save `{form_data (v2), expected_revision}` |
 | `POST .../medwatch-drafts/{id}/approve` | `{approval_note, expected_revision, attested, attestation_version: "medwatch-3500-approval-v1", non_serious_attested, acknowledged_warnings}` |
@@ -166,12 +170,10 @@ permissions.
 
 Database: `048_medwatch_draft_lifecycle.sql` (applied to `mediagent-staging`) and
 `064_medwatch_form_3500.sql`, which requires `063_adr_information_loop_lifecycle.sql`. **063 and
-064 are written and validated locally but not applied anywhere.** This branch ships as one pull
-request, and its backend calls 063 and 064 objects (the 6-argument create, 5-argument approve
-and export, discard and submission RPCs, the submission table and the discard columns), so
-**apply 063 then 064 before the backend from this branch deploys**; merging deploys the
-backend. The deployed backend keeps working after 064 because every 048 function keeps its
-signature. Verify with:
+064 were applied to the hosted project by the requester on October 13** and the backend that
+calls them (the 6-argument create, 5-argument approve and export, discard and submission RPCs,
+the submission table and the discard columns) is deployed. In a fresh environment apply 063
+then 064 before that backend. Verify with:
 
 ```bash
 python scripts/validate_migrations.py
@@ -218,6 +220,36 @@ pass independently of HTTP success. Four cases per primary cannot establish
 clinical quality or availability under load. Offline tests simulate 429s;
 live checks do not deliberately overload providers. Per-process concurrency
 limits do not coordinate across Cloud Run replicas or Jobs.
+
+## Nora turn recovery (PAT-001-A / PAT-004)
+
+The patient websocket opts into durable execution with `turn_protocol=1`.
+`user_message` includes a UUID `client_message_id`, the exact text/language/audio,
+and an explicit `document_id` (null for general questions). Retries reuse those
+values. `chat_turn` and `chat_turns` carry processing/completed/failed/interrupted
+status and safe retry eligibility. `recover_turns` refreshes saved status/history;
+`dismiss_turn` hides only an interrupted/failed reply, never resolves clinical work.
+Client requests stay in memory; saved turns recover from the server after refresh.
+
+Migration `072_nora_turn_recovery.sql` is backend-only, with RLS and browser grants
+revoked. Apply it **only with separate operator authorization**, before backend
+and patient rollout. Older clients retain their existing contract, not durable
+retry guarantees. An unavailable durable store must fail closed, not rerun through
+the legacy path. Full contract and verification:
+[PAT-001-A](../.agent/specs/pat-001-a-nora-turn-recovery.md).
+
+Migration `074_nora_late_completion.sql` lets a finished reply be saved for its current lease
+even just after the deadline, and `075_notification_zone_lookup.sql` makes notification reads
+fast (see [NOT-001](../.agent/specs/not-001-notification-centre.md)). Both are re-runnable and
+need the same separate authorization; the backend is compatible with the database before and
+after (a missing `late` key means not late). Chat-turn and notification database calls use
+their own bounded thread pools (`app/core/db_pools.py`).
+
+072 is re-runnable and ends with RLS/table/function privilege assertions. Turn rows
+retain document identity/version, not summary text. A fresh authorized summary is
+returned only to execution and cleaned with `normalize_patient_summary`. A failed
+startup handshake stops at an unavailable state with manual reconnect; a busy claim
+recovers the existing turn without resending the new text.
 
 ## Package Layout
 
@@ -337,9 +369,29 @@ The legacy patient `/notifications` endpoints remain compatible. No new push,
 email or SMS channel is introduced. Merged in #148/#149 and deployed; migrations
 `051_notification_centre.sql` and 052–056 are applied to the synthetic project.
 
+## Clinic lists, roles and settings (CLN-003 slices C and D)
+
+Every clinician list that returns patients or patient work takes an optional `clinic_id` query
+parameter and tags each item with `clinic_id` and `clinic_name` (the clinic of that clinician's
+care-team link, `care_teams.clinic_id`): `GET /clinicians/me/patients`, `.../dashboard`,
+`.../document-review-queue`, `.../adr-assessments`, `.../medwatch-drafts`, `.../messages`,
+`GET /care-conversations/` and `/recipients`, `GET /appointments/`, and the notification centre
+list and action items (`/notification-centre`, `/notification-centre/action-items`). The patient
+header (`GET /clinicians/me/patients/{id}`) and the patient deep dive carry the tags too. Without
+`clinic_id` nothing is filtered. A clinic where the caller has no active membership returns an
+empty result (never an error that distinguishes it from a clinic with no matches). The shared
+logic is `ClinicMembershipService.link_scope` (`app/services/clinic_link_scope.py`).
+
+New clinic-scoped writes, all through `clinician_clinic_operation` and all audited:
+`PUT /clinicians/me/default-clinic`, `POST /clinicians/me/clinics/{clinic_id}/leave` (refused for
+the last clinic, `LAST_CLINIC`, and the only admin, `SOLE_ADMIN`; ends the caller's own care-team
+links and unused invite codes at that clinic), and `PUT /clinicians/me/clinics/{clinic_id}` (clinic
+display name, admin at that clinic only, `CLINIC_NAME_TAKEN`). Migration
+`067_clinic_lists_and_roles.sql` carries the SQL (applied October 17). See `.agent/specs/clin-003-multi-clinic-clinicians.md` for the design and decisions.
+
 ## Database Migrations
 
-Migrations are plain SQL files in `src/app/db/migrations/`, currently `001`–`064`. Some
+Migrations are plain SQL files in `src/app/db/migrations/`, currently `001`–`067`. Some
 prefixes are shared by independent files; the migration ledger records full filenames and
 checksums, so do not maintain a second migration inventory here. New-environment order for
 the appointment booking guards (042/043) is in the setup guide.
@@ -448,3 +500,38 @@ Run the [acceptance commands and synthetic journey](../docs/pat-002-b-acceptance
 No model is needed for question selection or preview. Exact patient-named product
 context is limited to 4 medications, 5 approved facts and 2 cited 500-character excerpts.
 Confirmation and audit share a transaction; safety alert delivery retries independently.
+
+## Cross-clinic scheduling and clinic tags (CLN-003 slices E and F)
+
+Every appointment and offer group carries `clinic_id` (and `clinician_id`) copied from its care-team
+link by a database trigger, so it cannot disagree with the link. UX-006 adds
+`GET /appointments/schedule?from&to[&clinic_id]` (the caller's own visits, open offers and change
+requests, next visit; 45-day cap), `GET /appointments/busy?from&to` (own booked intervals with clinic
+names, never patients; 48 h cap) and `GET /appointments/?patient_id=` (one linked patient's visits).
+Visit management (migration 071): `POST /appointments/{id}/cancel` (`reason_code`, `reason`),
+`/complete` and `/no-show`, all clinician-only for the appointment's own clinician or one linked at its
+clinic and audited in `appointment_offer_events`; `PUT /appointments/{id}` edits type, location, reason
+and notes but refuses a time change on a confirmed or scheduled visit (`APPOINTMENT_TIME_CHANGE_VIA_OFFER`);
+`GET /appointments/schedule?include_cancelled=true` adds cancelled visits.
+Message translation is never done on send or read: reads set `translation_pending` and
+`POST /care-conversations/{id}/messages/{message_id}/translation` translates one message (same
+authorization as reading the conversation, idempotent, honours a fresh failure marker).
+ `GET /appointments/` rows and the
+propose/respond/update responses carry `clinic_id` and `clinic_name` for both roles; a clinician's list
+shows only visits at clinics where they hold a link. A clinician cannot hold overlapping
+`confirmed`/`scheduled` visits across all their clinics (exclusion constraint
+`appointments_clinician_no_overlap`, `[start, end)`). `POST /appointments/propose` (and a clinician's
+single `POST /appointments/`) checks every slot against that whole schedule first and refuses the whole
+offer with 422 `CLINICIAN_SCHEDULE_CONFLICT`, `details.conflicts[]` = `{slot, clinic_id, clinic_name,
+starts_at, ends_at}`; the message is "You already have an appointment at <clinic> from <time> to <time>."
+No patient of another clinic is read or returned, and the refusal is logged by count only. A patient's
+accept or a patient self-booking that meets a busy clinician gets the existing generic
+`APPOINTMENT_CONFLICT`. Calendar exports, appointment reminders (`cron_service`), the care-team list,
+Today's provider card and Nora's care-team context name the link's or appointment's clinic, never
+`clinicians.clinic_name`. Notice emails lead the subject with `<Clinic> · ` and add a header line for a
+recipient who belongs to more than one clinic (`EmailDeliveryService._clinic_label`); staff invitations
+name the invitation's clinic. `authorization_denial_events.clinic_id` and an `urn:mediagent:audit-clinic`
+extension on FHIR audit events record the clinic when an event concerns a link. Migration
+`069_clinic_scheduling_and_tags.sql` carries the SQL (applied October 17; the read-only
+`scripts/appointment-clinician-overlap-preflight.sql` returned 0 rows first). In a fresh or other
+environment run the preflight before applying if the migration reports overlaps.

@@ -90,6 +90,7 @@ async def record_denial(
     actor_role: str | None = None,
     target_type: str | None = None,
     target_id: str | None = None,
+    clinic_id: str | None = None,
     request_method: str | None = None,
     request_path: str | None = None,
 ) -> bool:
@@ -103,6 +104,8 @@ async def record_denial(
         "actor_role": _truncate(actor_role, 50),
         "target_type": _truncate(target_type, 50),
         "target_id": _coerce_uuid(target_id),
+        # Only when the refusal concerned a care-team link or a clinic (CLN-003 slice F).
+        "clinic_id": _coerce_uuid(clinic_id),
         "request_method": _truncate(request_method, 10),
         "request_path": _truncate(request_path, 2000),
     }

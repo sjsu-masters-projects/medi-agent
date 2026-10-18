@@ -64,6 +64,8 @@ class InvitationSignInRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=1, max_length=128)
     invitation_token: str = Field(..., min_length=32, max_length=128)
+    # Only for an MFA account that has no active clinic and so cannot sign in normally.
+    mfa_code: str | None = Field(default=None, pattern=r"^\d{6}$")
 
 
 class ClinicAdminSignupRequest(BaseModel):
@@ -129,7 +131,7 @@ class InvitationClinic(BaseModel):
     """Clinic context returned once an invitation has granted membership."""
 
     clinic_id: UUID
-    clinic_code: str
+    clinic_code: str | None = None
     clinic_name: str
     status: Literal["active", "suspended"] = "active"
 

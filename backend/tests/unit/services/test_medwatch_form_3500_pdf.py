@@ -91,6 +91,12 @@ def test_output_is_aes_256_with_the_template_permissions(rendered, template_read
     assert encrypt["/CF"]["/StdCF"]["/CFM"] == "/AESV3"
 
 
+def test_output_keeps_the_template_pdf_version(rendered, template_reader) -> None:
+    # AES-256 (V5/R6) needs PDF 1.7 or later; pypdf would otherwise write 1.3.
+    assert rendered.startswith(b"%PDF-1.7")
+    assert _open(rendered).pdf_header == template_reader.pdf_header == "%PDF-1.7"
+
+
 def test_only_the_information_dictionary_notes_it_was_not_submitted(
     rendered, template_reader
 ) -> None:

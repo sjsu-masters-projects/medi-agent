@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, ValidationError
 from app.models.enums import AppointmentResponseAction
 from app.services.appointment_service import AppointmentService
@@ -25,7 +26,7 @@ def _chain(mock_db, *, results):
     """Make each successive `.execute()` return the next payload in `results`."""
     chain = MagicMock()
     chain.execute.side_effect = [SimpleNamespace(data=data) for data in results]
-    for method in ("select", "eq", "order", "insert", "update", "limit", "in_"):
+    for method in ("select", "eq", "order", "insert", "update", "limit", "in_", "gte", "lt"):
         getattr(chain, method).return_value = chain
     mock_db.table.return_value = chain
     return chain
@@ -50,6 +51,7 @@ async def test_clinician_created_appointment_is_proposed(service, mock_db):
                     "status": "active",
                 }
             ],
+            [],
             [{"first_name": "Elena", "last_name": "Park"}],
             [{"id": str(uuid4()), "status": "proposed"}],
         ],
@@ -557,13 +559,206 @@ async def test_direct_write_booking_errors_are_sanitized(service, mock_db, sqlst
     assert "Private" not in caught.value.message
 
 
+def _linked(patient_ids, clinic="clinic-1"):
+    """The clinician's active links, all at one clinic."""
+    from contextlib import ExitStack
+    from unittest.mock import AsyncMock, patch
+
+    from app.services.clinic_link_scope import ClinicLinkScope
+
+    scope = ClinicLinkScope({pid: (clinic, "Synthetic clinic") for pid in patient_ids})
+    stack = ExitStack()
+    stack.enter_context(
+        patch(
+            "app.services.clinic_membership_service.ClinicMembershipService.link_scope",
+            new=AsyncMock(return_value=scope),
+        )
+    )
+    return stack
+
+
+@pytest.mark.asyncio
+async def test_clinician_appointments_carry_the_links_clinic(service, mock_db):
+    chain = _chain(
+        mock_db,
+        results=[
+            [
+                {
+                    "id": "a1",
+                    "patient_id": "p-1",
+                    "clinic_id": "clinic-1",
+                    "clinics": {"display_name": "Synthetic clinic"},
+                }
+            ]
+        ],
+    )
+    mock_db.rpc.return_value.execute.return_value = SimpleNamespace(data={"expired_count": 0})
+    with _linked(["p-1"]):
+        rows = await service.list_for_user(user_id=uuid4(), role="clinician")
+    assert rows[0]["clinic_id"] == "clinic-1"
+    assert rows[0]["clinic_name"] == "Synthetic clinic"
+    assert "clinics" not in rows[0]
+    # Only visits at clinics where the caller holds a link are read.
+    chain.in_.assert_any_call("clinic_id", ["clinic-1"])
+
+
+@pytest.mark.asyncio
+async def test_patient_appointments_name_their_own_clinic(service, mock_db):
+    _chain(
+        mock_db,
+        results=[
+            [
+                {"id": "a1", "clinic_id": "c-1", "clinics": {"display_name": "North clinic"}},
+                {"id": "a2", "clinic_id": "c-2", "clinics": {"display_name": "South clinic"}},
+            ]
+        ],
+    )
+    mock_db.rpc.return_value.execute.return_value = SimpleNamespace(data={"expired_count": 0})
+    rows = await service.list_for_user(user_id=uuid4(), role="patient")
+    assert [r["clinic_name"] for r in rows] == ["North clinic", "South clinic"]
+
+
+def _team(clinician_id, patient_id, team_id):
+    return {
+        "id": str(team_id),
+        "patient_id": str(patient_id),
+        "clinician_id": str(clinician_id),
+        "clinic_id": "clinic-2",
+        "clinics": {"display_name": "South clinic"},
+        "status": "active",
+    }
+
+
+@pytest.mark.asyncio
+async def test_offer_conflict_names_the_clinic_and_never_a_patient(service, mock_db, caplog):
+    clinician, patient, team = uuid4(), uuid4(), uuid4()
+    _chain(mock_db, results=[[_team(clinician, patient, team)]])
+    mock_db.rpc.return_value.execute.return_value = SimpleNamespace(
+        data={
+            "error": "clinician_conflict",
+            "conflicts": [
+                {
+                    "slot": "2099-01-01T10:15:00+00:00",
+                    "clinic_id": "clinic-1",
+                    "clinic_name": "North clinic",
+                    "starts_at": "2099-01-01T10:00:00+00:00",
+                    "ends_at": "2099-01-01T10:30:00+00:00",
+                }
+            ],
+        }
+    )
+    with caplog.at_level("INFO"), pytest.raises(ValidationError) as caught:
+        await service.propose_for_user(
+            user_id=clinician,
+            role="clinician",
+            data={
+                "care_team_id": str(team),
+                "slots": ["2099-01-01T10:15:00+00:00", "2099-01-02T10:00:00+00:00"],
+            },
+        )
+    assert caught.value.code == "CLINICIAN_SCHEDULE_CONFLICT"
+    assert caught.value.message == (
+        "You already have an appointment at North clinic "
+        "from Jan 1, 2099 10:00 UTC to Jan 1, 2099 10:30 UTC."
+    )
+    assert caught.value.details["conflicts"][0]["clinic_name"] == "North clinic"
+    # The refusal is logged by count only: no patient, clinician or clinic identifier.
+    logged = " ".join(r.getMessage() for r in caplog.records)
+    assert "1 slot(s)" in logged
+    for identifier in (str(patient), str(clinician), "clinic-1", "North clinic"):
+        assert identifier not in logged
+
+
+@pytest.mark.asyncio
+async def test_a_clear_offer_is_tagged_with_the_links_clinic(service, mock_db):
+    clinician, patient, team = uuid4(), uuid4(), uuid4()
+    _chain(mock_db, results=[[_team(clinician, patient, team)]])
+    mock_db.rpc.return_value.execute.return_value = SimpleNamespace(
+        data={"appointments": [{"id": "a1", "clinic_id": "clinic-2"}]}
+    )
+    rows = await service.propose_for_user(
+        user_id=clinician,
+        role="clinician",
+        data={
+            "care_team_id": str(team),
+            "slots": ["2099-01-01T10:15:00+00:00", "2099-01-02T10:00:00+00:00"],
+        },
+    )
+    assert rows[0]["clinic_name"] == "South clinic"
+
+
+@pytest.mark.asyncio
+async def test_single_offered_time_runs_against_the_whole_schedule(service, mock_db):
+    clinician, patient, team = uuid4(), uuid4(), uuid4()
+    _chain(
+        mock_db,
+        results=[
+            [_team(clinician, patient, team)],
+            [
+                {
+                    "scheduled_at": "2099-01-01T10:00:00+00:00",
+                    "duration_minutes": 30,
+                    "clinic_id": "clinic-1",
+                    "clinics": {"display_name": "North clinic"},
+                }
+            ],
+        ],
+    )
+    with pytest.raises(ValidationError) as caught:
+        await service.create_for_user(
+            user_id=clinician,
+            role="clinician",
+            data={"care_team_id": str(team), "scheduled_at": "2099-01-01T10:15:00Z"},
+        )
+    assert caught.value.code == "CLINICIAN_SCHEDULE_CONFLICT"
+
+
+@pytest.mark.asyncio
+async def test_adjacent_single_offer_is_not_a_conflict(service, mock_db):
+    clinician, patient, team = uuid4(), uuid4(), uuid4()
+    chain = _chain(
+        mock_db,
+        results=[
+            [_team(clinician, patient, team)],
+            [
+                {
+                    "scheduled_at": "2099-01-01T09:30:00+00:00",
+                    "duration_minutes": 30,
+                    "clinic_id": "clinic-1",
+                    "clinics": {"display_name": "North clinic"},
+                }
+            ],
+            [{"first_name": "Elena", "last_name": "Park"}],
+            [{"id": "new", "status": "proposed"}],
+        ],
+    )
+    row = await service.create_for_user(
+        user_id=clinician,
+        role="clinician",
+        data={"care_team_id": str(team), "scheduled_at": "2099-01-01T10:00:00Z"},
+    )
+    assert row["clinic_name"] == "South clinic"
+    assert chain.insert.call_args.args[0]["clinic_id"] == "clinic-2"
+
+
+@pytest.mark.asyncio
+async def test_clinician_appointments_for_an_unrelated_clinic_are_empty(service, mock_db):
+    chain = _chain(mock_db, results=[[{"id": "a1", "patient_id": "p-1"}]])
+    mock_db.rpc.return_value.execute.return_value = SimpleNamespace(data={"expired_count": 0})
+    with _linked([]):
+        rows = await service.list_for_user(user_id=uuid4(), role="clinician", clinic_id=uuid4())
+    assert rows == []
+    chain.execute.assert_not_called()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("role", ["patient", "clinician"])
 async def test_listing_persists_authorized_expiration_before_reading(service, mock_db, role):
     user = uuid4()
     chain = _chain(mock_db, results=[[]])
     mock_db.rpc.return_value.execute.return_value = SimpleNamespace(data={"expired_count": 2})
-    assert await service.list_for_user(user_id=user, role=role) == []
+    with _linked(["p-1"]):
+        assert await service.list_for_user(user_id=user, role=role) == []
     mock_db.rpc.assert_called_once_with(
         "expire_appointment_proposals", {"p_actor_id": str(user), "p_actor_role": role}
     )
@@ -590,3 +785,110 @@ async def test_already_expired_visit_has_expiry_code(service, mock_db):
         )
     assert caught.value.code == "APPOINTMENT_EXPIRED"
     mock_db.rpc.assert_not_called()
+
+
+# ── Appointment access is scoped to the appointment's own clinic (CLN-003) ──
+
+
+def _visit(*, clinician, clinic="clinic-A", patient="p-1"):
+    return {
+        "id": "a1",
+        "patient_id": patient,
+        "clinician_id": str(clinician),
+        "clinic_id": clinic,
+        "clinics": {"display_name": "Clinic"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_other_clinics_clinician_cannot_edit_or_export_the_visit(service, mock_db):
+    # The caller is linked to the patient, but at a different clinic, so the scoped lookup is empty.
+    chain = _chain(mock_db, results=[[]])
+    appointment = _visit(clinician=uuid4())
+    caller = uuid4()
+    with pytest.raises(AuthorizationError) as caught:
+        await service._ensure_can_access(user_id=caller, role="clinician", appointment=appointment)
+    assert caught.value.reason_code == reasons.NO_CARE_TEAM_ASSIGNMENT
+    chain.eq.assert_any_call("clinic_id", "clinic-A")
+
+
+@pytest.mark.asyncio
+async def test_same_clinic_colleague_with_a_link_may_access_the_visit(service, mock_db):
+    chain = _chain(mock_db, results=[[{"id": "link-1"}]])
+    await service._ensure_can_access(
+        user_id=uuid4(), role="clinician", appointment=_visit(clinician=uuid4())
+    )
+    chain.eq.assert_any_call("clinic_id", "clinic-A")
+
+
+@pytest.mark.asyncio
+async def test_the_appointments_own_clinician_needs_no_lookup(service, mock_db):
+    me = uuid4()
+    chain = _chain(mock_db, results=[])
+    await service._ensure_can_access(user_id=me, role="clinician", appointment=_visit(clinician=me))
+    chain.execute.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_patient_reaches_only_their_own_visit(service, mock_db):
+    me = uuid4()
+    await service._ensure_can_access(
+        user_id=me, role="patient", appointment=_visit(clinician=uuid4(), patient=str(me))
+    )
+    with pytest.raises(AuthorizationError):
+        await service._ensure_can_access(
+            user_id=uuid4(), role="patient", appointment=_visit(clinician=uuid4(), patient="other")
+        )
+
+
+@pytest.mark.asyncio
+async def test_clinician_list_drops_visits_at_a_clinic_where_only_the_patient_is_shared(
+    service, mock_db
+):
+    # X is linked to P1 at clinic A and P2 at clinic B. Z's visit with P1 at clinic B matches both
+    # IN filters but is not on any of X's links.
+    _chain(
+        mock_db,
+        results=[
+            [
+                {"id": "ok-1", "patient_id": "p-1", "clinic_id": "A", "clinics": None},
+                {"id": "ok-2", "patient_id": "p-2", "clinic_id": "B", "clinics": None},
+                {"id": "leak", "patient_id": "p-1", "clinic_id": "B", "clinics": None},
+            ]
+        ],
+    )
+    mock_db.rpc.return_value.execute.return_value = SimpleNamespace(data={"expired_count": 0})
+    from contextlib import ExitStack
+    from unittest.mock import AsyncMock, patch
+
+    from app.services.clinic_link_scope import ClinicLinkScope
+
+    scope = ClinicLinkScope({"p-1": ("A", "A"), "p-2": ("B", "B")})
+    with ExitStack() as stack:
+        stack.enter_context(
+            patch(
+                "app.services.clinic_membership_service.ClinicMembershipService.link_scope",
+                new=AsyncMock(return_value=scope),
+            )
+        )
+        rows = await service.list_for_user(user_id=uuid4(), role="clinician")
+    assert [r["id"] for r in rows] == ["ok-1", "ok-2"]
+
+
+@pytest.mark.asyncio
+async def test_clinician_list_can_narrow_to_one_linked_patient(service, mock_db):
+    chain = _chain(mock_db, results=[[]])
+    mock_db.rpc.return_value.execute.return_value = SimpleNamespace(data={"expired_count": 0})
+    with _linked(["p-1", "p-2"]):
+        await service.list_for_user(user_id=uuid4(), role="clinician", patient_id="p-2")
+    chain.in_.assert_any_call("patient_id", ["p-2"])
+
+
+@pytest.mark.asyncio
+async def test_patient_filter_for_an_unlinked_patient_reads_nothing(service, mock_db):
+    chain = _chain(mock_db, results=[[{"id": "a", "patient_id": "p-9"}]])
+    mock_db.rpc.return_value.execute.return_value = SimpleNamespace(data={"expired_count": 0})
+    with _linked(["p-1"]):
+        rows = await service.list_for_user(user_id=uuid4(), role="clinician", patient_id="p-9")
+    assert rows == []
+    chain.execute.assert_not_called()

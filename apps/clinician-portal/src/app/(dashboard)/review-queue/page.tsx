@@ -1,6 +1,9 @@
 "use client";
 
+import { ClinicChip, ClinicFilterEmpty, ClinicFilterField } from "@/components/features/clinic-chip";
 import { SourceFileIcon } from "@/components/features/source-file";
+import { clinicScopeLabel } from "@/hooks/clinic-scope";
+import { useClinicFilter } from "@/hooks/use-clinic-filter";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -16,6 +19,7 @@ import {
     approveDocumentReview,
     fetchDocumentReviewQueue,
     rejectDocumentReview,
+    type ClinicReviewQueueItem,
 } from "@/services/clinicians";
 import { loadPatientDeepDive } from "@/store/slices/patient-detail-slice";
 import type { AppDispatch, RootState } from "@/store/store";
@@ -23,7 +27,6 @@ import { formatClinicianDateTime } from "@/utils/dates";
 import {
     DocumentReviewStatus,
     getDocumentTypeLabel,
-    type DocumentReviewQueueItem,
 } from "@/types";
 
 const QUEUE_COLUMNS =
@@ -34,20 +37,23 @@ export default function ReviewQueuePage() {
     const activePatientId = useSelector(
         (state: RootState) => state.patientDetail.data?.patient_id ?? null,
     );
-    const [items, setItems] = useState<DocumentReviewQueueItem[]>([]);
+    const [items, setItems] = useState<ClinicReviewQueueItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [busyDocumentId, setBusyDocumentId] = useState<string | null>(null);
-    const [rejectingItem, setRejectingItem] = useState<DocumentReviewQueueItem | null>(null);
+    const [rejectingItem, setRejectingItem] = useState<ClinicReviewQueueItem | null>(null);
     const [rejectNote, setRejectNote] = useState("");
 
     const pendingCount = useMemo(() => items.length, [items.length]);
+
+    const clinicFilter = useClinicFilter();
+    const { clinicId, ready } = clinicFilter;
 
     const loadQueue = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const result = await fetchDocumentReviewQueue();
+            const result = await fetchDocumentReviewQueue(clinicId);
             setItems(result);
         } catch (queueError) {
             setError(
@@ -58,13 +64,15 @@ export default function ReviewQueuePage() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [clinicId]);
 
     useEffect(() => {
-        void loadQueue();
-    }, [loadQueue]);
+        if (ready) {
+            void loadQueue();
+        }
+    }, [loadQueue, ready]);
 
-    async function handleApprove(item: DocumentReviewQueueItem) {
+    async function handleApprove(item: ClinicReviewQueueItem) {
         setBusyDocumentId(item.id);
         setError(null);
         try {
@@ -118,9 +126,11 @@ export default function ReviewQueuePage() {
                         Patient Upload Review Queue
                     </h1>
                     <p className="mt-1 max-w-[80ch] text-sm text-muted">
-                        Review patient-uploaded sources before they can support a new care plan. Document approval does not publish instructions; the complete plan requires separate approval.
+                        Review patient-uploaded sources before they can support a new care plan. Document approval does not publish instructions; the complete plan requires separate approval.{clinicScopeLabel(clinicFilter) ? ` · ${clinicScopeLabel(clinicFilter)}` : ""}
                     </p>
                 </div>
+                <div className="flex flex-wrap items-center gap-2">
+                <ClinicFilterField filter={clinicFilter} />
                 <button
                     disabled={loading || busyDocumentId !== null}
                     className="ma-press inline-flex h-[34px] items-center gap-2 rounded-[9px] border border-line-strong bg-surface px-4 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8]"
@@ -130,6 +140,7 @@ export default function ReviewQueuePage() {
                     <Icon name="refresh" aria-hidden="true" className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                     {loading ? "Refreshing…" : "Refresh"}
                 </button>
+                </div>
             </div>
 
             <dl className="grid overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] md:grid-cols-3">
@@ -208,11 +219,11 @@ export default function ReviewQueuePage() {
                         </span>
                         <div className="space-y-1">
                             <p className="text-[15px] font-semibold text-ink">
-                                Review queue is clear
+                                {clinicId ? <ClinicFilterEmpty filter={clinicFilter} noun="uploads" /> : "Review queue is clear"}
                             </p>
-                            <p className="text-sm text-muted">
+                            {clinicId ? null : <p className="text-sm text-muted">
                                 Refresh to check for new patient uploads.
-                            </p>
+                            </p>}
                         </div>
                     </div>
                 ) : (
@@ -243,9 +254,12 @@ export default function ReviewQueuePage() {
                                             </p>
                                         </div>
                                     </div>
-                                    <p className="min-w-0 break-words text-[13px] text-ink-2">
-                                        {item.patientFirstName} {item.patientLastName}
-                                    </p>
+                                    <div className="flex min-w-0 flex-col items-start gap-0.5">
+                                        <p className="min-w-0 break-words text-[13px] text-ink-2">
+                                            {item.patientFirstName} {item.patientLastName}
+                                        </p>
+                                        <ClinicChip name={clinicFilter.multi ? item.clinicName : null} />
+                                    </div>
                                     <p className="text-[13px] text-ink-2">
                                         <span className="text-muted xl:sr-only">Uploaded </span>
                                         <time className="font-mono text-[12.5px]" dateTime={item.createdAt}>

@@ -123,7 +123,7 @@ See [Slice 6 verification and click-through](../../.agent/specs/sch-001-appointm
 
 Authenticated headers include a compact bell and an accessible notification sheet;
 `/notifications` provides the full All/Unread history. Notification copy and dates
-follow the saved language and timezone. Human messages are not translated and
+follow the saved language and timezone. A visit cancelled by the care team shows as Cancelled with the reason (draft Spanish wording pending review). Human messages are not translated and
 clinical instructions use only approved wording. Opening the sheet does not mark
 everything read or approve care. Exact-resource links open Records, Visits, Today
 or the addressed private care-team conversation.
@@ -133,6 +133,16 @@ lists after network failure. Unavailable counts are not shown as zero. Each load
 page retains a server-signed viewing cutoff; marking displayed items read excludes
 concurrent arrivals. No new email, SMS or push delivery is introduced. See
 [NOT-001](../../.agent/specs/not-001-notification-centre.md) for the contract and tests.
+
+## Clinic on visits and notifications
+
+Appointment and offer rows carry `clinic_id`/`clinic_name` (the clinic of the
+care-team link the visit was made under), mapped to `clinicId`/`clinicName` in
+`src/services/appointments.ts`. Visit cards and offer cards show "at <Clinic>"
+(en-US) or "en <Clinic>" (es-MX) as muted secondary text under the date/title,
+and hide the line when the name is unknown. Notification items show their
+`clinic_name` as small muted text under the title. All lines wrap on narrow
+screens. The es-MX wording is a draft pending native review.
 
 ## ADR care-team follow-up
 

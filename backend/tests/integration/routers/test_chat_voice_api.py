@@ -63,7 +63,9 @@ def test_voice_websocket_transcribes_final_audio(client, monkeypatch, patient_id
 
     monkeypatch.setattr("app.routers.voice.VoiceService.transcribe_audio", _mock_transcribe)
 
-    with client.websocket_connect(f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]) as websocket:
+    with client.websocket_connect(
+        f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]
+    ) as websocket:
         ready = websocket.receive_json()
         assert ready["type"] == "voice_ready"
 
@@ -118,7 +120,9 @@ def test_voice_websocket_generates_assistant_audio(client, monkeypatch, patient_
         _mock_persist_assistant,
     )
 
-    with client.websocket_connect(f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]) as websocket:
+    with client.websocket_connect(
+        f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]
+    ) as websocket:
         assert websocket.receive_json()["type"] == "voice_ready"
         websocket.send_json(
             {
@@ -220,7 +224,9 @@ def test_voice_websocket_streams_audio_chunks_and_persists_user_audio(
     )
     monkeypatch.setattr("app.routers.voice.VoiceService.persist_audio", _mock_persist)
 
-    with client.websocket_connect(f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]) as websocket:
+    with client.websocket_connect(
+        f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]
+    ) as websocket:
         assert websocket.receive_json()["type"] == "voice_ready"
         websocket.send_json(
             {
@@ -258,7 +264,9 @@ def test_voice_websocket_returns_validation_errors(client, monkeypatch, patient_
     token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
     monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
 
-    with client.websocket_connect(f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]) as websocket:
+    with client.websocket_connect(
+        f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]
+    ) as websocket:
         assert websocket.receive_json()["type"] == "voice_ready"
         websocket.send_json(
             {

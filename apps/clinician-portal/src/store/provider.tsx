@@ -7,10 +7,13 @@ import { finishHydration, hydrateSession } from "./slices/auth-slice";
 import { store } from "./store";
 import { refreshClinicianSession } from "@/services/auth-refresh";
 import { useAuthSessionRefresh } from "@/hooks/use-auth-session-refresh";
+import { useSessionLifecycle } from "@/hooks/use-session-lifecycle";
+import { InactivityWarningModal } from "@/components/layouts/inactivity-warning-modal";
 
 function AuthSessionRefresh() {
     useAuthSessionRefresh();
-    return null;
+    const { stay, warningMs } = useSessionLifecycle();
+    return <InactivityWarningModal onStay={stay} remainingMs={warningMs} />;
 }
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {

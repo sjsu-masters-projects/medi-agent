@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -12,7 +13,7 @@ from postgrest.exceptions import APIError
 from supabase import Client
 
 from app.core.exceptions import ExternalServiceError
-from app.models.enums import ChatRole, coerce_locale
+from app.models.enums import ChatRole, Language, coerce_locale
 from app.services.explanation_service import normalize_patient_summary
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,17 @@ def _missing_attachments_column(error: APIError) -> bool:
 # they are validated rather than trusted; anything else falls back to the default.
 _SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 TITLE_CHARS = 80
-logger = logging.getLogger(__name__)
+_TURN_SCAN_LIMIT = 500
+
+
+def _is_past(value: Any, now: datetime) -> bool:
+    try:
+        moment = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    return moment <= now
 
 
 def normalize_session_id(value: Any) -> str:
@@ -190,8 +201,13 @@ class ChatService:
         return list(reversed(rows))
 
     async def list_conversations(self, patient_id: str, limit: int = 30) -> list[dict[str, Any]]:
-        """This patient's conversations, most recent first, for the conversation list."""
-        result = await self._execute(
+        """This patient's conversations, most recent first, for the conversation list.
+
+        Merges completed-conversation state with sessions that only have saved turns
+        (processing, failed, interrupted), so an unfinished reply stays reachable from
+        another tab or device.
+        """
+        states = await self._execute(
             self.db.table("chat_conversation_states")
             .select("session_id, title, turn_count, language, created_at, updated_at")
             .eq("patient_id", patient_id)
@@ -199,7 +215,72 @@ class ChatService:
             .order("updated_at", desc=True)
             .limit(limit)
         )
-        return [row for row in (result.data or []) if isinstance(row, dict)]
+        merged: dict[str, dict[str, Any]] = {
+            str(row["session_id"]): {**row, "status": None}
+            for row in (states.data or [])
+            if isinstance(row, dict) and row.get("session_id")
+        }
+        turn_result = await self._execute(
+            self.db.table("chat_turns")
+            .select(
+                "session_id, status, deadline_at, dismissed_at, user_message_id, "
+                "created_at, updated_at"
+            )
+            .eq("patient_id", patient_id)
+            .order("created_at", desc=True)
+            .limit(_TURN_SCAN_LIMIT)
+        )
+        by_session: dict[str, list[dict[str, Any]]] = {}
+        for turn in turn_result.data or []:
+            if isinstance(turn, dict) and turn.get("session_id"):
+                by_session.setdefault(str(turn["session_id"]), []).append(turn)  # newest first
+        first_message: dict[str, str] = {}
+        for session_id, turns in by_session.items():
+            if session_id not in merged or not str(merged[session_id].get("title") or ""):
+                first_message[session_id] = str(turns[-1].get("user_message_id") or "")
+        texts: dict[str, str] = {}
+        ids = [value for value in first_message.values() if value]
+        if ids:
+            message_result = await self._execute(
+                self.db.table("chat_messages")
+                .select("id, content")
+                .eq("patient_id", patient_id)
+                .in_("id", ids)
+            )
+            texts = {
+                str(row["id"]): str(row.get("content") or "")
+                for row in (message_result.data or [])
+                if isinstance(row, dict) and row.get("id")
+            }
+        now = datetime.now(UTC)
+        for session_id, turns in by_session.items():
+            latest = turns[0]
+            row = merged.get(session_id)
+            if row is None:
+                row = merged[session_id] = {
+                    "session_id": session_id,
+                    "title": "",
+                    "turn_count": 0,
+                    "language": Language.EN.value,
+                    "created_at": turns[-1].get("created_at"),
+                    "updated_at": latest.get("updated_at") or latest.get("created_at"),
+                    "status": None,
+                }
+            if not str(row.get("title") or ""):
+                row["title"] = conversation_title(texts.get(first_message.get(session_id, ""), ""))
+            activity = max(str(row.get("updated_at") or ""), str(latest.get("updated_at") or ""))
+            row["updated_at"] = activity
+            status = str(latest.get("status") or "")
+            if status in {"processing", "failed", "interrupted"} and not latest.get("dismissed_at"):
+                row["status"] = "needs_attention"
+                expired = _is_past(latest.get("deadline_at"), now)
+                row["reply_in_progress"] = status == "processing" and not expired
+        for row in merged.values():
+            row.setdefault("reply_in_progress", False)
+        ordered = sorted(
+            merged.values(), key=lambda r: str(r.get("updated_at") or ""), reverse=True
+        )
+        return ordered[:limit]
 
     async def set_conversation_title(self, patient_id: str, session_id: str, title: str) -> None:
         """Label a conversation once, from its first message; an existing title stays."""
@@ -479,13 +560,19 @@ class ChatService:
         result = await self._execute(
             self.db.table("care_teams")
             .select(
-                "id, clinician_id, role, specialty_context, clinic_name, clinicians(first_name, last_name)"
+                "id, clinician_id, role, specialty_context, clinic_id, "
+                "clinics(display_name), clinicians(first_name, last_name)"
             )
             .eq("patient_id", patient_id)
             .eq("status", "active")
             .limit(5)
         )
-        return [row for row in (result.data or []) if isinstance(row, dict)]
+        teams = [row for row in (result.data or []) if isinstance(row, dict)]
+        for team in teams:
+            # The clinic of each link, so Nora can tell a patient's clinics apart (CLN-003).
+            clinic = team.pop("clinics", None)
+            team["clinic_name"] = clinic.get("display_name") if isinstance(clinic, dict) else None
+        return teams
 
     async def _fetch_document_context(
         self,

@@ -88,13 +88,18 @@ export function ADRReviewActions({
 
     if (!action) {
         return (
-            <div
-                className="flex flex-wrap gap-2 border-t border-line pt-4"
-                aria-label="ADR review actions"
-            >
+            <div className="flex flex-col gap-2" aria-label="ADR review actions" role="group">
+                <Button
+                    disabled={submitting}
+                    fullWidth
+                    onClick={() => begin("mark_reviewed")}
+                >
+                    Mark reviewed
+                </Button>
                 {missingQuestions.length > 0 ? (
                     <Button
                         disabled={submitting}
+                        fullWidth
                         onClick={() => begin("request_information")}
                         variant="secondary"
                     >
@@ -102,17 +107,13 @@ export function ADRReviewActions({
                     </Button>
                 ) : null}
                 <Button
+                    className="text-risk-ink hover:text-risk-ink"
                     disabled={submitting}
+                    fullWidth
                     onClick={() => begin("dismiss")}
-                    variant="danger"
+                    variant="ghost"
                 >
                     Dismiss
-                </Button>
-                <Button
-                    disabled={submitting}
-                    onClick={() => begin("mark_reviewed")}
-                >
-                    Mark reviewed
                 </Button>
             </div>
         );

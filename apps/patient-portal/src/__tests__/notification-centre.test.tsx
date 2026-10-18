@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NOTIFICATION_POLL_MS, NotificationProvider, useNotifications } from "@/contexts/notifications-context";
+import { NOTIFICATION_MIN_GAP_MS, NOTIFICATION_POLL_MS, NotificationProvider, useNotifications } from "@/contexts/notifications-context";
 import { NotificationBell, NotificationCentre } from "@/components/features/notification-centre";
 import { notifications } from "@/services/notifications";
 import type { NotificationPage, PatientNotification } from "@/types/notifications";
@@ -104,15 +104,66 @@ describe("patient notification centre", () => {
     expect(screen.getByRole("textbox")).toHaveValue("Do not lose my retry body");
     expect(notifications.list).toHaveBeenLastCalledWith("refreshed-token", "es-MX", false, undefined, expect.any(AbortSignal));
   });
-  it("keeps rows on network failure and displays unavailable counts rather than zero", async () => {
+  it("keeps rows and the last count when a manual refresh fails, and says so", async () => {
     render(<App />); await screen.findByText("Care team one");
     vi.mocked(notifications.list).mockRejectedValueOnce(new TypeError());
     vi.mocked(notifications.summary).mockRejectedValueOnce(new TypeError());
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
-    await screen.findByText("Count unavailable.");
+    await screen.findByRole("alert");
     expect(screen.getByText("Care team one")).toBeInTheDocument();
     expect(screen.queryByText("0 unread")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Notifications · 1 unread" })).toBeInTheDocument();
+  });
+  it("shows an unavailable count, not zero, when the first load never succeeded", async () => {
+    vi.mocked(notifications.list).mockRejectedValue(new TypeError());
+    vi.mocked(notifications.summary).mockRejectedValue(new TypeError());
+    render(<App />);
+    await screen.findByText("Count unavailable.");
     expect(screen.getByRole("button", { name: "Notifications · Count unavailable." })).toBeInTheDocument();
+  });
+  it("keeps what is shown, with no banner, when background polls hit a slow server, then backs off", async () => {
+    vi.useFakeTimers();
+    render(<App />);
+    await act(async () => {});
+    expect(notifications.list).toHaveBeenCalledTimes(1);
+    vi.mocked(notifications.list).mockRejectedValue(new ApiClientError("Unavailable", 502, null));
+    vi.mocked(notifications.summary).mockRejectedValue(new ApiClientError("Unavailable", 502, null));
+    await act(async () => vi.advanceTimersByTime(NOTIFICATION_POLL_MS));
+    expect(notifications.list).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Notifications · 1 unread" })).toBeInTheDocument();
+    // The next attempt waits twice as long; a recovery returns to the normal pace.
+    await act(async () => vi.advanceTimersByTime(NOTIFICATION_POLL_MS));
+    expect(notifications.list).toHaveBeenCalledTimes(2);
+    await act(async () => vi.advanceTimersByTime(NOTIFICATION_POLL_MS));
+    expect(notifications.list).toHaveBeenCalledTimes(3);
+    vi.mocked(notifications.list).mockResolvedValue(page());
+    vi.mocked(notifications.summary).mockResolvedValue({ unread_count: 3, action_item_count: 0 });
+    await act(async () => vi.advanceTimersByTime(NOTIFICATION_POLL_MS * 4));
+    expect(notifications.list).toHaveBeenCalledTimes(4);
+    expect(screen.getByRole("button", { name: "Notifications · 3 unread" })).toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTime(NOTIFICATION_POLL_MS));
+    expect(notifications.list).toHaveBeenCalledTimes(5);
+  });
+  it("answers a burst of focus and visibility events with one refresh and never interrupts a running one", async () => {
+    vi.useFakeTimers();
+    render(<App />);
+    await act(async () => {});
+    expect(notifications.list).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(notifications.list).toHaveBeenCalledTimes(1);
+    await act(async () => vi.advanceTimersByTime(NOTIFICATION_MIN_GAP_MS + 1));
+    let release!: (value: NotificationPage) => void;
+    vi.mocked(notifications.list).mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(notifications.list).toHaveBeenCalledTimes(2);
+    await act(async () => vi.advanceTimersByTime(NOTIFICATION_MIN_GAP_MS + 1));
+    await act(async () => { window.dispatchEvent(new Event("focus")); document.dispatchEvent(new Event("visibilitychange")); });
+    expect(notifications.list).toHaveBeenCalledTimes(2);
+    await act(async () => release(page()));
   });
   it("rejects an obsolete All response after changing to Unread", async () => {
     let resolveOld!: (value: NotificationPage) => void;
@@ -208,5 +259,15 @@ describe("patient notification centre", () => {
     expect(within(dialog).getByRole("button", { name: "Close notifications" })).toHaveFocus();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(); expect(bell).toHaveFocus();
+  });
+  it.each([["en-US", "Care team one"], ["es-MX", "Care team one"]])("shows the clinic as wrapping secondary text under the title in %s", async (locale) => {
+    session.profile = { preferredLanguage: locale, timezone: "America/Los_Angeles" };
+    vi.mocked(notifications.list).mockResolvedValue(page([{ ...item(), clinic_name: "Harbor Clinic de la Costa Norte" }, item("two")]));
+    render(<NotificationProvider><NotificationCentre /></NotificationProvider>);
+    const clinic = await screen.findByText("Harbor Clinic de la Costa Norte");
+    expect(clinic.className).toContain("text-muted");
+    expect(clinic.className).toContain("break-words");
+    expect(clinic.previousElementSibling).toContainElement(screen.getByText("Care team one"));
+    expect(screen.queryByText("Harbor Clinic")).not.toBeInTheDocument();
   });
 });

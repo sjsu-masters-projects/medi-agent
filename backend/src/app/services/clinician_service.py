@@ -18,7 +18,7 @@ import logging
 import re
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import UUID
 
 from supabase import Client
@@ -34,9 +34,11 @@ from app.db.repositories import CareTeamRepository, ClinicianRepository, ClinicR
 from app.db.supabase_execute import execute_async
 from app.intake.preview import testimony_only
 from app.models.adr import ADRReviewDecisionRequest
+from app.models.clinic_membership import ClinicMembership
 from app.models.dashboard import DashboardSortBy, DashboardSortOrder, RiskLevel
 from app.models.enums import ADRStatus, MessageChannel, NotificationType
 from app.pharmacovigilance import PATIENT_ANSWERABLE_NARANJO_QUESTIONS, NaranjoQuestion
+from app.services.clinic_membership_service import ClinicMembershipService
 from app.services.clinician_document_workflow_service import ClinicianDocumentWorkflowService
 from app.services.notification_service import NotificationService
 from app.services.patient_wording import patient_text
@@ -55,6 +57,7 @@ class ClinicianService:
         self.clinic_repo = ClinicRepository(self)
         self.clinician_repo = ClinicianRepository(self)
         self.care_team_repo = CareTeamRepository(self)
+        self.memberships = ClinicMembershipService(self)
         self.document_workflows = ClinicianDocumentWorkflowService(
             db=db,
             care_team_repo=self.care_team_repo,
@@ -78,11 +81,14 @@ class ClinicianService:
         if not clean:
             return await self.get_profile(clinician_id)
 
-        clinic_code = clean.pop("clinic_code", None)
-        if clinic_code:
-            clinic = await self._resolve_active_clinic(str(clinic_code))
-            clean["clinic_id"] = clinic["id"]
-            clean["clinic_name"] = clinic["display_name"]
+        # A profile update never changes clinics: a clinic is added by clinic code or
+        # invitation (CLN-003), and a free-text clinic name fed legacy peer matching.
+        if "clinic_code" in clean or "clinic_name" in clean:
+            raise ValidationError(
+                "Clinics are not changed from the profile. Use Join a clinic with a clinic "
+                "code, or accept an invitation.",
+                code="CLINIC_CHANGE_NOT_SUPPORTED",
+            )
 
         result = await self._execute(
             self.db.table("clinicians").update(clean).eq("id", str(clinician_id))
@@ -91,35 +97,47 @@ class ClinicianService:
             raise NotFoundError("Clinician", str(clinician_id))
         return result.data[0]
 
-    async def _resolve_active_clinic(self, clinic_code: str) -> dict[str, Any]:
-        """Resolve clinic identity by code and enforce active status."""
-        clinics = await self.clinic_repo.find_matching_by_code_async(clinic_code)
-        if not clinics:
-            raise ValidationError("Clinic code is invalid")
-
-        clinic = clinics[0]
-        if clinic.get("status") != "active":
-            raise ValidationError("Clinic code is inactive")
-
-        return clinic
-
     # ── Patient List ────────────────────────────────────
 
-    async def get_patients(self, clinician_id: UUID) -> Any:
-        """List all patients assigned to this clinician via active care teams."""
+    async def get_patients(self, clinician_id: UUID, clinic_id: UUID | None = None) -> Any:
+        """List all patients assigned to this clinician via active care teams.
+
+        Each patient carries the clinic of the clinician's link. ``clinic_id`` keeps one
+        clinic's links; a clinic the clinician does not belong to gives an empty list.
+        """
+        scope = await self.memberships.link_scope(clinician_id, clinic_id)
+        if not scope.links:
+            return []
         result = await self._execute(
             self.db.table("care_teams")
-            .select("*, patients(id, email, first_name, last_name, date_of_birth, avatar_url)")
+            .select(
+                "*, clinics(display_name),"
+                " patients(id, email, first_name, last_name, date_of_birth, avatar_url)"
+            )
             .eq("clinician_id", str(clinician_id))
             .eq("status", "active")
         )
         patients = []
         for row in cast(list[dict[str, Any]], result.data or []):
             patient = cast(dict[str, Any], row.pop("patients", {}) or {})
-            if patient:
-                patient["care_team_id"] = row["id"]
-                patient["role"] = row.get("role", "")
-                patients.append(patient)
+            if not patient or str(patient.get("id")) not in scope.links:
+                continue
+            # One entry per link (a patient shared by two of the caller's clinics has two, each
+            # with its own care_team_id). With a clinic filter, a link at another clinic is not
+            # in scope and must not be listed, or the list is longer than the roster.
+            clinic = row.get("clinic_id")
+            if clinic and (str(patient["id"]), str(clinic)) not in scope.pairs:
+                continue
+            patient["care_team_id"] = row["id"]
+            patient["role"] = row.get("role", "")
+            scope.annotate(patient, "id")
+            if clinic:
+                # The chip names the clinic of THIS link, not of the patient's first link.
+                linked = row.get("clinics")
+                patient["clinic_id"] = str(clinic)
+                if isinstance(linked, dict):
+                    patient["clinic_name"] = linked.get("display_name")
+            patients.append(patient)
         return patients
 
     async def get_patient_detail(self, clinician_id: UUID, patient_id: UUID) -> Any:
@@ -142,6 +160,13 @@ class ClinicianService:
             raise NotFoundError("Patient", str(patient_id))
         return result.data
 
+    async def get_patient_header(self, clinician_id: UUID, patient_id: UUID) -> dict[str, Any]:
+        """Patient detail plus the clinic of this clinician's link (shown on the header)."""
+        patient = dict(await self.get_patient_detail(clinician_id, patient_id))
+        scope = await self.memberships.link_scope(clinician_id)
+        patient.update(scope.tag(patient_id))
+        return patient
+
     async def send_patient_message(
         self,
         clinician_id: UUID,
@@ -150,6 +175,8 @@ class ClinicianService:
     ) -> dict[str, Any]:
         """Record a legacy in-app message; email notices use private conversations."""
         await self.get_patient_detail(clinician_id, patient_id)
+        # The clinic of this clinician's link to the patient names the notice (CLN-003 slice F).
+        clinic = (await self.memberships.link_scope(clinician_id)).tag(patient_id)
 
         channel = data.get("channel") or MessageChannel.IN_APP
         channel_value = channel.value if isinstance(channel, MessageChannel) else str(channel)
@@ -174,13 +201,17 @@ class ClinicianService:
 
         message = rows[0]
         notification_body = subject if subject else body[:160]
+        clinic_name = clinic.get("clinic_name")
         await NotificationService(self.db).create(
             str(patient_id),
             {
                 "notification_type": NotificationType.DOCTOR_MESSAGE.value,
                 "title": "New message from your care team",
-                "body": notification_body,
+                "body": f"{clinic_name} · {notification_body}"
+                if clinic_name
+                else notification_body,
                 "action_url": "/chat",
+                "metadata": {"clinic_id": clinic.get("clinic_id"), "clinic_name": clinic_name},
             },
         )
         return message
@@ -206,8 +237,17 @@ class ClinicianService:
     async def list_all_sent_messages(
         self,
         clinician_id: UUID,
+        clinic_id: UUID | None = None,
     ) -> list[dict[str, Any]]:
-        """List all messages sent by this clinician across all assigned patients."""
+        """List all messages sent by this clinician across all assigned patients.
+
+        Each message carries the clinic of the clinician's link to its patient;
+        ``clinic_id`` keeps one clinic. Messages to patients no longer linked are not listed
+        once a clinic is named.
+        """
+        scope = await self.memberships.link_scope(clinician_id, clinic_id)
+        if clinic_id is not None and not scope.links:
+            return []
         result = await self._execute(
             self.db.table("clinician_messages")
             .select("*, patients(first_name, last_name)")
@@ -221,30 +261,64 @@ class ClinicianService:
             if patient:
                 row["patient_first_name"] = patient.get("first_name")
                 row["patient_last_name"] = patient.get("last_name")
-        return rows
+        if clinic_id is not None:
+            return scope.keep(rows)
+        return [scope.annotate(row) for row in rows]
 
     # ── Invite Codes ────────────────────────────────────
 
-    async def generate_invite_code(self, clinician_id: UUID) -> Any:
+    async def _require_membership(
+        self, clinician_id: UUID, clinic_id: UUID | None
+    ) -> ClinicMembership:
+        """The membership an invite-code action runs under; fails closed without one.
+
+        Raises:
+            AuthorizationError: no active membership (at the named clinic, if one is named).
+            ValidationError: ``CLINIC_REQUIRED`` when no clinic is named and there are several.
+        """
+        membership = await self.memberships.acting_membership(clinician_id, clinic_id)
+        if membership is None:
+            raise AuthorizationError(
+                "You are not an active member of any clinic.",
+                reason_code=reasons.CLINIC_MEMBERSHIP_REQUIRED,
+                actor_id=str(clinician_id),
+                actor_role="clinician",
+                target_type="clinic",
+            )
+        return membership
+
+    async def _require_membership_any(self, clinician_id: UUID) -> None:
+        if not await self.memberships.active_memberships(clinician_id):
+            raise AuthorizationError(
+                "You are not an active member of any clinic.",
+                reason_code=reasons.CLINIC_MEMBERSHIP_REQUIRED,
+                actor_id=str(clinician_id),
+                actor_role="clinician",
+                target_type="clinic",
+            )
+
+    async def generate_invite_code(self, clinician_id: UUID, clinic_id: UUID | None = None) -> Any:
         """Create a pending care_team row with a unique invite code.
 
         The patient uses this code via POST /patients/me/care-team/join.
-        Codes are 8-char uppercase alphanumeric for easy sharing.
+        Codes are 8-char uppercase alphanumeric for easy sharing. The code records
+        the clinic that issued it, and the care-team link the patient's join creates
+        belongs to that clinic: the clinic named by the request (an active membership
+        is required), or the clinician's only clinic.
         """
         code = secrets.token_hex(4).upper()
         expires_at = (datetime.now(UTC) + timedelta(days=7)).isoformat()
+        membership = await self._require_membership(clinician_id, clinic_id)
+        invite: dict[str, Any] = {
+            "clinician_id": str(clinician_id),
+            "clinic_id": str(membership.clinic_id),
+            "invite_code": code,
+            "invite_expires_at": expires_at,
+            "status": "pending",
+            "role": "provider",
+        }
 
-        result = await self._execute(
-            self.db.table("care_teams").insert(
-                {
-                    "clinician_id": str(clinician_id),
-                    "invite_code": code,
-                    "invite_expires_at": expires_at,
-                    "status": "pending",
-                    "role": "provider",
-                }
-            )
-        )
+        result = await self._execute(self.db.table("care_teams").insert(invite))
         if not result.data:
             raise ExternalServiceError("Supabase", "Failed to generate invite code")
 
@@ -253,7 +327,9 @@ class ClinicianService:
             "care_team_id": cast(list[dict[str, Any]], result.data)[0]["id"],
         }
 
-    async def list_invite_codes(self, clinician_id: UUID) -> dict[str, Any]:
+    async def list_invite_codes(
+        self, clinician_id: UUID, clinic_id: UUID | None = None
+    ) -> dict[str, Any]:
         """List invite codes created by the clinician with lifecycle buckets.
 
         Lifecycle states:
@@ -261,8 +337,14 @@ class ClinicianService:
             - claimed: linked to a patient and active
             - inactive: revoked/expired/otherwise not actionable
         """
-        clinician_ids = await self._get_invite_scope_clinician_ids(clinician_id)
+        membership = await self._require_membership(clinician_id, clinic_id)
+        clinician_ids, admin_clinics = await self._get_invite_scope(membership)
         rows = await self.care_team_repo.list_invites_for_clinician_ids(clinician_ids)
+        rows = [
+            row
+            for row in rows
+            if self._invite_in_scope(row, str(clinician_id), membership.clinic_id, admin_clinics)
+        ]
 
         now = datetime.now(UTC)
         expired_pending_ids: list[str] = []
@@ -291,6 +373,7 @@ class ClinicianService:
             invites.append(
                 {
                     "care_team_id": invite_id,
+                    "clinic_id": row.get("clinic_id"),
                     "invite_code": row.get("invite_code"),
                     "status": status,
                     "role": row.get("role"),
@@ -327,33 +410,38 @@ class ClinicianService:
 
         return {"invites": invites, "counts": counts}
 
-    async def _get_invite_scope_clinician_ids(self, clinician_id: UUID) -> list[str]:
-        """Admins can see clinic-wide invite codes; others see only their own."""
-        context = await self.clinician_repo.get_context_async(str(clinician_id), include_role=True)
-        if not context:
-            raise NotFoundError("Clinician", str(clinician_id))
+    @staticmethod
+    def _invite_in_scope(
+        row: dict[str, Any],
+        clinician_id: str,
+        clinic_id: UUID | str,
+        admin_clinics: set[str],
+    ) -> bool:
+        """The clinic's codes: the clinician's own, and everyone's when they administer it."""
+        row_clinic = str(row.get("clinic_id") or "")
+        if row_clinic != str(clinic_id):
+            return False
+        if str(row.get("clinician_id") or "") == clinician_id:
+            return True
+        return row_clinic in admin_clinics
 
-        if context.get("role") != "admin":
-            return [str(clinician_id)]
+    async def _get_invite_scope(self, membership: ClinicMembership) -> tuple[list[str], set[str]]:
+        """Return the creators whose codes may be listed and the clinics where the clinician
+        is an admin (only the clinic of ``membership``).
 
-        clinician_ids: set[str] = {str(clinician_id)}
-        clinic_id = context.get("clinic_id")
-        clinic_name = str(context.get("clinic_name") or "")
-
-        if clinic_id:
-            clinician_ids.update(
-                await self.clinician_repo.list_ids_by_clinic_id_async(str(clinic_id))
-            )
-
-        if clinic_name:
-            clinician_ids.update(
-                await self.clinician_repo.list_ids_by_clinic_name_async(clinic_name)
-            )
-
-        return sorted(clinician_ids)
+        The admin right is the role held in that membership, so an admin at one clinic never
+        sees another clinic's codes, and two clinics with the same name share nothing.
+        """
+        clinician_ids: set[str] = {str(membership.clinician_id)}
+        admin_clinics: set[str] = set()
+        if membership.role.value == "admin":
+            admin_clinics.add(str(membership.clinic_id))
+            clinician_ids.update(await self.memberships.clinic_member_ids(membership.clinic_id))
+        return sorted(clinician_ids), admin_clinics
 
     async def revoke_invite_code(self, clinician_id: UUID, care_team_id: UUID) -> dict[str, Any]:
-        """Revoke a pending invite code created by this clinician."""
+        """Revoke a pending invite code created by this clinician (active member required)."""
+        await self._require_membership_any(clinician_id)
         invite = await self.care_team_repo.find_invite_for_creator(
             str(care_team_id), str(clinician_id)
         )
@@ -375,14 +463,18 @@ class ClinicianService:
             "status": "inactive",
         }
 
-    async def get_current_invite_code(self, clinician_id: UUID) -> dict[str, str | None]:
-        """Return the latest pending invite code for this clinician.
+    async def get_current_invite_code(
+        self, clinician_id: UUID, clinic_id: UUID | None = None
+    ) -> dict[str, str | None]:
+        """Return the latest pending invite code for this clinician (at one clinic, if named).
 
         This is a read-only lookup used by settings screens so page load does
         not create additional pending invite rows.
         """
         now = datetime.now(UTC)
+        membership = await self._require_membership(clinician_id, clinic_id)
         rows = await self.care_team_repo.list_pending_invites_for_clinician(str(clinician_id))
+        rows = [row for row in rows if str(row.get("clinic_id") or "") == str(membership.clinic_id)]
         for row in rows:
             invite_code = row.get("invite_code")
             expires_at = row.get("invite_expires_at")
@@ -421,8 +513,9 @@ class ClinicianService:
         max_last_activity_days: int | None = None,
         page: int = 1,
         page_size: int = 50,
+        clinic_id: UUID | None = None,
     ) -> Any:
-        """Aggregate risk data for all assigned patients.
+        """Aggregate risk data for all assigned patients (or one clinic's, with ``clinic_id``).
 
         Delegates per-patient risk calculation to RiskScoreService.
         Returns DashboardResponse-compatible dict.
@@ -430,7 +523,8 @@ class ClinicianService:
         from app.services.risk_score_service import RiskScoreService
 
         risk_service = RiskScoreService(self.db)
-        patient_ids = await self._get_assigned_patient_ids(clinician_id)
+        scope = await self.memberships.link_scope(clinician_id, clinic_id)
+        patient_ids = [UUID(pid) for pid in scope.patient_ids]
         pending_adr_reviews, medwatch_count = await asyncio.gather(
             self._get_pending_adr_review_count(patient_ids),
             self._get_pending_medwatch_count(patient_ids),
@@ -449,7 +543,7 @@ class ClinicianService:
                     exc_info=result,
                 )
                 continue
-            risk_data.append(result.model_dump())
+            risk_data.append(scope.annotate(result.model_dump()))
 
         if risk_filter:
             risk_data = [p for p in risk_data if p["risk_level"] == risk_filter]
@@ -505,35 +599,85 @@ class ClinicianService:
             "medwatch_pending": medwatch_count,
         }
 
+    _ADR_REVIEW_COLUMNS = (
+        "id, patient_id, symptom_report_id, suspect_medication_id, "
+        "suspect_medication_name, naranjo_score, causality, naranjo_answers, "
+        "naranjo_assessment, evidence, status, last_review_action, review_note, "
+        "requested_information, reviewed_by, reviewed_at, created_at, "
+        "patients(first_name, last_name), "
+        "symptom_reports(symptom, severity, onset, created_at)"
+    )
+
     async def list_adr_review_queue(
         self,
         clinician_id: UUID,
         *,
-        status_filter: ADRStatus = ADRStatus.DRAFT,
+        status_filter: ADRStatus | Literal["all"] = ADRStatus.DRAFT,
+        patient_id: UUID | None = None,
         limit: int = 100,
+        clinic_id: UUID | None = None,
     ) -> dict[str, Any]:
-        """Return evidence-backed ADR drafts for the clinician's assigned patients."""
-        patient_ids = await self._get_assigned_patient_ids(clinician_id)
+        """Return evidence-backed ADR assessments for the clinician's assigned patients.
+
+        ``status_filter="all"`` lists every status; ``patient_id`` narrows to one patient
+        and, when that patient is not assigned, yields an empty list.
+        """
+        scope = await self.memberships.link_scope(clinician_id, clinic_id)
+        patient_ids = [UUID(pid) for pid in scope.patient_ids]
+        if patient_id is not None:
+            patient_ids = [pid for pid in patient_ids if pid == patient_id]
         if not patient_ids:
             return {"items": [], "total": 0}
 
-        result = await self._execute(
+        query = (
             self.db.table("adr_assessments")
-            .select(
-                "id, patient_id, symptom_report_id, suspect_medication_id, "
-                "suspect_medication_name, naranjo_score, causality, naranjo_answers, "
-                "naranjo_assessment, evidence, status, last_review_action, review_note, "
-                "requested_information, reviewed_by, reviewed_at, created_at, "
-                "patients(first_name, last_name), "
-                "symptom_reports(symptom, severity, onset, created_at)"
-            )
-            .in_("patient_id", [str(patient_id) for patient_id in patient_ids])
-            .eq("status", status_filter.value)
-            .order("created_at", desc=True)
-            .limit(max(1, min(limit, 200)))
+            .select(self._ADR_REVIEW_COLUMNS)
+            .in_("patient_id", [str(pid) for pid in patient_ids])
+        )
+        if status_filter != "all":
+            query = query.eq("status", ADRStatus(status_filter).value)
+        result = await self._execute(
+            query.order("created_at", desc=True).limit(max(1, min(limit, 200)))
         )
 
         rows = cast(list[dict[str, Any]], result.data or [])
+        latest_requests = await self._latest_information_requests(rows)
+        items = [
+            scope.annotate(
+                self._normalize_adr_review_item(
+                    row,
+                    latest_request=latest_requests.get(str(row["id"])),
+                )
+            )
+            for row in rows
+        ]
+        return {"items": items, "total": len(items)}
+
+    async def get_adr_review_item(self, clinician_id: UUID, assessment_id: UUID) -> dict[str, Any]:
+        """One assessment of any status. Unknown and unassigned ids share one 404."""
+        result = await self._execute(
+            self.db.table("adr_assessments")
+            .select(self._ADR_REVIEW_COLUMNS)
+            .eq("id", str(assessment_id))
+            .limit(1)
+        )
+        rows = cast(list[dict[str, Any]], result.data or [])
+        if rows:
+            assignment = await self.care_team_repo.find_active_assignment(
+                str(clinician_id), str(rows[0]["patient_id"])
+            )
+            if not assignment:
+                rows = []
+        if not rows:
+            raise NotFoundError("ADR assessment", str(assessment_id))
+        latest = await self._latest_information_requests(rows)
+        return self._normalize_adr_review_item(
+            rows[0], latest_request=latest.get(str(rows[0]["id"]))
+        )
+
+    async def _latest_information_requests(
+        self, rows: list[dict[str, Any]]
+    ) -> dict[str, dict[str, Any]]:
         latest_requests: dict[str, dict[str, Any]] = {}
         if rows:
             request_result = await self._execute(
@@ -544,15 +688,7 @@ class ClinicianService:
             )
             for request in cast(list[dict[str, Any]], request_result.data or []):
                 latest_requests.setdefault(str(request["adr_assessment_id"]), request)
-
-        items = [
-            self._normalize_adr_review_item(
-                row,
-                latest_request=latest_requests.get(str(row["id"])),
-            )
-            for row in rows
-        ]
-        return {"items": items, "total": len(items)}
+        return latest_requests
 
     async def review_adr_assessment(
         self,
@@ -789,7 +925,9 @@ class ClinicianService:
             risk_level = "unknown"
             adherence_score = 0.0
 
+        link = (await self.memberships.link_scope(clinician_id)).tag(patient_id)
         return {
+            **link,
             "patient_id": pid,
             "first_name": patient.get("first_name", ""),
             "last_name": patient.get("last_name", ""),
@@ -812,9 +950,18 @@ class ClinicianService:
             "obligation_completion_rate": obligation_completion_rate,
         }
 
-    async def list_document_review_queue(self, clinician_id: UUID) -> list[dict[str, Any]]:
-        """List pending patient-uploaded documents for assigned patients."""
-        return await self.document_workflows.list_document_review_queue(clinician_id)
+    async def list_document_review_queue(
+        self, clinician_id: UUID, clinic_id: UUID | None = None
+    ) -> list[dict[str, Any]]:
+        """List pending patient-uploaded documents for assigned patients.
+
+        Each item carries the clinic of the clinician's link; ``clinic_id`` keeps one clinic.
+        """
+        scope = await self.memberships.link_scope(clinician_id, clinic_id)
+        if not scope.links:
+            return []
+        items = await self.document_workflows.list_document_review_queue(clinician_id)
+        return scope.keep(items)
 
     async def approve_document_review(
         self,

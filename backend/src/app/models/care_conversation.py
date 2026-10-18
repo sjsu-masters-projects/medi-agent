@@ -30,6 +30,7 @@ class ConversationReadMarker(BaseModel):
 
 class ConversationRecipient(BaseModel):
     id: UUID
+    clinic_id: UUID | None = None
     name: str
     role: str
     clinic_name: str
@@ -37,6 +38,7 @@ class ConversationRecipient(BaseModel):
 
 class ConversationSummary(BaseModel):
     id: UUID
+    clinic_id: UUID | None = None
     patient_id: UUID
     clinician_id: UUID
     patient_name: str
@@ -56,6 +58,23 @@ class ConversationMessage(BaseModel):
     sender_name: str
     body: str
     created_at: datetime
+    # LOC-003: optional stored translation
+    translation: str | None = None
+    translation_locale: str | None = None
+    translation_guard_passed: bool | None = None
+    # True when the viewer needs a translation that is not stored yet: ask for it with
+    # POST .../messages/{id}/translation (a read never calls the model).
+    translation_pending: bool = False
+
+
+class MessageTranslationResult(BaseModel):
+    """One message's translation for the viewer, or none if it could not be produced."""
+
+    message_id: UUID
+    translation: str | None = None
+    translation_locale: str | None = None
+    translation_guard_passed: bool | None = None
+    translation_pending: bool = False
 
 
 class ConversationMessagePage(BaseModel):

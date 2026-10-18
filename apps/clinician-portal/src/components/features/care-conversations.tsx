@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useSelector } from "react-redux";
 import type { RootState } from "@/store/store";
 import { Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { careConversations } from "@/services/care-conversations";
 import type { CareConversation, CareConversationMessage, ConversationDraft, ConversationRecipient } from "@/types/care-conversations";
-import { conversationAccessDenied, conversationRoleLabel, conversationSendFailure, getConversationCopy, mergeConversationMessages } from "../../../../../packages/shared/src/utils/care-conversations";
+import { applyTranslationResult, conversationAccessDenied, conversationRoleLabel, conversationSendFailure, getConversationCopy, mergeConversationMessages, requestPendingTranslations } from "../../../../../packages/shared/src/utils/care-conversations";
 
 const button = "ma-press inline-flex h-[34px] shrink-0 items-center justify-center gap-2 rounded-[9px] border border-line-strong bg-surface px-4 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8] disabled:hover:bg-surface";
 const smallButton = "ma-press inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 text-xs font-medium text-ink-2 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8] disabled:hover:bg-surface";
@@ -27,13 +27,13 @@ function shortTime(value: string, locale: string) {
     : date.toLocaleDateString(locale, { month: "short", day: "numeric" });
 }
 
-export function CareConversations({ locale = "en-US", audience = "patient", visible = true, conversationId = null }: { locale?: string; audience?: "patient" | "clinician"; visible?: boolean; conversationId?: string | null }) {
+export function CareConversations({ locale = "en-US", audience = "patient", visible = true, conversationId = null, clinicId = null, clinicEmpty = null }: { locale?: string; audience?: "patient" | "clinician"; visible?: boolean; conversationId?: string | null; clinicId?: string | null; clinicEmpty?: ReactNode }) {
   const { accessToken, user } = useSelector((state: RootState) => state.auth);
   if (!accessToken || !user) return null;
-  return <ConversationInbox key={user.id} token={accessToken} locale={locale} audience={audience} visible={visible} conversationId={conversationId} />;
+  return <ConversationInbox key={user.id} token={accessToken} locale={locale} audience={audience} visible={visible} conversationId={conversationId} clinicId={clinicId} clinicEmpty={clinicEmpty} />;
 }
 
-function ConversationInbox({ token, locale, audience, visible, conversationId }: { token: string; locale: string; audience: "patient" | "clinician"; visible: boolean; conversationId: string | null }) {
+function ConversationInbox({ token, locale, audience, visible, conversationId, clinicId, clinicEmpty }: { token: string; locale: string; audience: "patient" | "clinician"; visible: boolean; conversationId: string | null; clinicId: string | null; clinicEmpty: ReactNode }) {
   const copy = getConversationCopy(locale);
   const [recipients, setRecipients] = useState<ConversationRecipient[]>([]);
   const [threads, setThreads] = useState<CareConversation[]>([]);
@@ -71,8 +71,8 @@ function ConversationInbox({ token, locale, audience, visible, conversationId }:
     pollController.current = controller;
     try {
       const [people, conversations] = await Promise.all([
-        careConversations.recipients(token, controller.signal),
-        careConversations.list(token, controller.signal),
+        careConversations.recipients(token, controller.signal, clinicId),
+        careConversations.list(token, controller.signal, clinicId),
       ]);
       if (controller.signal.aborted || request !== pollVersion.current || session !== version.current) return;
       setRecipients(people);
@@ -86,7 +86,7 @@ function ConversationInbox({ token, locale, audience, visible, conversationId }:
         setThreads([]); setRecipients([]); setSelected(null); setError("denied");
       } else setPollFailed(true);
     }
-  }, [token]);
+  }, [token, clinicId]);
 
   useEffect(() => {
     const request = ++version.current;
@@ -96,7 +96,7 @@ function ConversationInbox({ token, locale, audience, visible, conversationId }:
       setLoading(true);
       setOpening(false);
       setError(null);
-      return Promise.all([careConversations.recipients(token, controller.signal), careConversations.list(token, controller.signal)])
+      return Promise.all([careConversations.recipients(token, controller.signal, clinicId), careConversations.list(token, controller.signal, clinicId)])
         .then(([people, conversations]) => {
           if (request !== version.current || controller.signal.aborted) return;
           setRecipients(people);
@@ -114,7 +114,7 @@ function ConversationInbox({ token, locale, audience, visible, conversationId }:
         });
     });
     return () => { controller.abort(); version.current = request + 1; };
-  }, [token, attempt]);
+  }, [token, attempt, clinicId]);
 
   useEffect(() => {
     if (!visible || loading || opening || sending) return;
@@ -179,7 +179,7 @@ function ConversationInbox({ token, locale, audience, visible, conversationId }:
           {[0, 1, 2].map((row) => <div key={row} className="flex items-center gap-3 px-2 py-2.5"><Skeleton variant="circle" className="h-12 w-12 shrink-0" /><div className="flex-1 space-y-2"><Skeleton variant="text" className="w-2/3" /><Skeleton variant="text" className="w-full" /></div></div>)}
         </div> : <div className="min-h-0 flex-1 overflow-y-auto">
           {!recipients.length && <p className="px-4 pt-3 text-[13px] text-muted">{copy.noRecipients}</p>}
-          {!threads.length && <p className="px-4 pt-3 text-[13px] text-muted">{copy.empty}</p>}
+          {!threads.length && <p className="px-4 pt-3 text-[13px] text-muted">{clinicId && clinicEmpty ? clinicEmpty : copy.empty}</p>}
           <ul className="space-y-0.5 p-2">
             {threads.map((thread) => <li key={thread.id}>
               <button className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors disabled:cursor-not-allowed ${selected === thread.id ? "bg-[rgba(96,165,250,.1)]" : "hover:bg-[rgba(100,116,139,.06)]"}`} type="button" aria-pressed={selected === thread.id} disabled={sending || opening} onClick={() => setSelected(thread.id)}>
@@ -288,6 +288,20 @@ function ConversationThread({ token, audience, thread, locale, visible, draft, o
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
   }, [load, visible]);
 
+  // LOC-003: translations are requested one message at a time after the read, three at most in
+  // parallel, so reading, typing and sending never wait for a model. The original shows first.
+  const requestedTranslations = useRef(new Set<string>());
+  useEffect(() => {
+    if (!messages.some((message) => message.translation_pending && !requestedTranslations.current.has(message.id))) return;
+    void requestPendingTranslations(
+      messages,
+      requestedTranslations.current,
+      (messageId) => careConversations.translate(token, thread.id, messageId),
+      (messageId, result) => setMessages((current) => current.map((message) => message.id === messageId ? applyTranslationResult(message, result) : message)),
+      () => alive.current,
+    );
+  }, [messages, token, thread.id]);
+
   // Runs after rendering: the marker is the newest displayed message, never a server clock.
   const lastId = messages.at(-1)?.id;
   useEffect(() => {
@@ -356,9 +370,20 @@ function ConversationThread({ token, audience, thread, locale, visible, draft, o
       <ol className="flex min-h-[160px] flex-1 flex-col gap-3 overflow-y-auto" aria-label={copy.threads}>
         {messages.map((message) => {
           const own = audience === "patient" ? message.sender_role === "patient" : message.sender_role !== "patient";
+          const translation = message.translation;
+          const translationLocale = message.translation_locale;
+          const guardPassed = message.translation_guard_passed;
+          // A clinician reads English: only a translation into English is ever shown.
+          const sourceLabel = own ? undefined : (translationLocale === "en-US" ? "Translated from Spanish" : undefined);
           return <li key={message.id} className={`ma-bubble flex max-w-[78%] flex-col gap-1 ${own ? "items-end self-end" : "items-start self-start"}`}>
             <p className="px-1 text-[11px] text-muted">{message.sender_name} · {conversationRoleLabel(message.sender_role, locale)} · {thread.clinic_name} · <time className="font-mono" dateTime={message.created_at}>{new Date(message.created_at).toLocaleString(locale)}</time></p>
             <p className={`whitespace-pre-wrap break-words px-3.5 py-2.5 text-sm ${own ? "rounded-[18px_18px_6px_18px] bg-primary text-white" : "rounded-[18px_18px_18px_6px] bg-surface-2 text-ink"}`}>{message.body}</p>
+            {message.translation_pending && !own ? <p role="status" className="px-1 text-[11px] text-muted">{copy.translating}</p> : null}
+            {translation && sourceLabel && guardPassed === false ? <p className="px-1 text-[11px] text-muted">{copy.translationUnavailable}</p> : null}
+            {translation && sourceLabel && guardPassed !== false ? <div className="mt-0.5 rounded-lg border border-line bg-surface px-3 py-2 text-xs text-ink-2">
+              <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted"><Icon name="spark" className="h-3 w-3" />{sourceLabel}</p>
+              <p className="mt-1 whitespace-pre-wrap break-words">{translation}</p>
+            </div> : null}
           </li>;
         })}
       </ol>

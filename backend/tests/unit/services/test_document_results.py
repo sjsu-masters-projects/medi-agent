@@ -42,9 +42,20 @@ def test_results_are_printed_values_in_document_order_with_review_status() -> No
     service = _service(
         [
             _fact(5, "vital_sign", "approved", name="Pulse", value="72", unit="bpm"),
-            _fact(3, "lab_result", "pending_review", test_name="Hemoglobin A1c", value="7.8",
-                  unit="%", reference_range="4.0 - 5.6", flag="H", flag_meaning="high",
-                  range_status="above", panel="Glycemic control", consistency="reviewer note"),
+            _fact(
+                3,
+                "lab_result",
+                "pending_review",
+                test_name="Hemoglobin A1c",
+                value="7.8",
+                unit="%",
+                reference_range="4.0 - 5.6",
+                flag="H",
+                flag_meaning="high",
+                range_status="above",
+                panel="Glycemic control",
+                consistency="reviewer note",
+            ),
             _fact(1, "medication", "approved", name="Metformin", dosage="500 mg"),
             _fact(4, "lab_result", "rejected", test_name="Sodium", value="139"),
         ]

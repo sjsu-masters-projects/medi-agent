@@ -102,6 +102,11 @@ function VisitCard({
           {label}
         </span>
       </div>
+      {visit.clinicName ? (
+        <p className="mt-1 break-words text-sm text-muted">
+          {copy.atClinic(visit.clinicName)}
+        </p>
+      ) : null}
       <p className="mt-2 text-sm text-muted">
         {copy.types[visit.appointmentType]} · {visit.durationMinutes}{" "}
         {copy.minutes}
@@ -119,6 +124,17 @@ function VisitCard({
         <div className="mt-3 rounded-xl bg-surface-2 p-3 text-sm text-ink-2">
           <p className="font-semibold">{copy.preparationNotes}</p>
           <p className="mt-1 whitespace-pre-wrap break-words">{visit.notes}</p>
+        </div>
+      ) : null}
+      {visit.status === AppointmentStatus.CANCELLED && visit.cancelledBy === "clinician" ? (
+        <div className="mt-2 rounded-xl bg-danger-tint p-3 text-sm text-danger-ink" role="note">
+          <p className="font-semibold">{copy.cancelledByCare}</p>
+          {visit.cancelReasonCode ? (
+            <p className="mt-1 break-words">
+              {copy.cancelReasonLabel} {copy.cancelReasons[visit.cancelReasonCode]}
+              {visit.cancelReason ? ` — ${visit.cancelReason}` : ""}
+            </p>
+          ) : null}
         </div>
       ) : null}
       {visit.patientNote ? (

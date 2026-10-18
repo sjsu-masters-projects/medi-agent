@@ -612,6 +612,9 @@ export interface Appointment {
     patientId: string;
     careTeamId: string;
     clinicianName?: string;
+    /** The clinic of the clinician's care-team link (clinician lists only). */
+    clinicId?: string;
+    clinicName?: string;
     scheduledAt: string;
     durationMinutes: number;
     appointmentType: AppointmentType;
@@ -623,6 +626,11 @@ export interface Appointment {
     proposalGroupId?: string;
     proposalExpiresAt?: string;
     sourceDocumentId?: string;
+    /** Set when a clinician cancelled the visit (a patient's own cancel leaves it empty). */
+    cancelledBy?: "patient" | "clinician";
+    cancelReasonCode?: "clinician_unavailable" | "clinic_closed" | "patient_request" | "scheduling_error" | "other";
+    cancelReason?: string;
+    cancelledAt?: string;
     createdAt: string;
 }
 

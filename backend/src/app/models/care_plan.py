@@ -180,3 +180,28 @@ class CarePlanAdherenceCreate(BaseModel):
         if self.barrier_code is BarrierCode.OTHER and not (self.note or "").strip():
             raise ValueError("A note is required when the barrier is other")
         return self
+
+
+# ── LOC-003: Back-translation for clinician verification ──────────────────
+
+
+class BackTranslationGuards(BaseModel):
+    """Automated safety checks on the back-translated text."""
+
+    numbers_match: bool
+    medication_names_match: bool
+
+
+class BackTranslationWording(BaseModel):
+    """English back-translation of the Spanish wording."""
+
+    title: str
+    instructions: str
+    frequency: str
+
+
+class BackTranslationResponse(BaseModel):
+    """What the clinician sees beside the Spanish card."""
+
+    back_translation: BackTranslationWording
+    guards: BackTranslationGuards

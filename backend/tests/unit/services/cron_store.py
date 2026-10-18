@@ -159,5 +159,7 @@ def add_visit(store: Store, *, status: str, at: datetime, visit_id: str = "visit
             "location": "Synthetic Clinic",
             "appointment_type": "follow-up",
             "reason": "",
+            "clinic_id": "clinic-visit",
+            "clinics": {"display_name": "Synthetic Visit Clinic"},
         }
     )

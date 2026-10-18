@@ -12,6 +12,8 @@ from uuid import uuid4
 
 import pytest
 
+from tests.integration.supabase_roles import create_roles_sql
+
 pytestmark = pytest.mark.skipif(
     os.environ.get("CARE_CONVERSATION_TEST_POSTGRES_DOCKER") != "1",
     reason="explicitly opt-in disposable Docker PostgreSQL contract check",
@@ -87,7 +89,7 @@ def postgres():
         ]
         subprocess.run(
             command,
-            input="CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;",
+            input=create_roles_sql(),
             check=True,
             capture_output=True,
             text=True,
@@ -162,6 +164,13 @@ def sql(postgres):
         execute(hardening.split("-- Public helper functions remain")[0])
         execute((MIGRATION.parent / "022_grant_service_role_seed_access.sql").read_text())
         execute(MIGRATION.read_text())
+        # Clinic memberships (065, CLN-003 slice A): the rows below go through its triggers.
+        for path in sorted(MIGRATION.parent.glob("*_clinic_memberships.sql")):
+            execute(path.read_text())
+        # CLN-003 slice B (066): conversations take the care-team link's clinic. Its last two
+        # sections replace invitation and notification functions this fixture does not install.
+        for path in sorted(MIGRATION.parent.glob("*_clinic_sign_in_once.sql")):
+            execute(path.read_text().split("-- ── 6. Invitations")[0])
         execute(f"""
           INSERT INTO auth.users VALUES ('{PATIENT}'),('{CLINICIAN}'),('{OTHER}'),('{FOREIGN}');
           INSERT INTO patients(id,email,first_name,last_name,date_of_birth) VALUES
@@ -257,7 +266,10 @@ def test_two_way_sender_clinic_and_partition(sql):
 
 
 def test_same_clinic_clinicians_still_have_separate_private_threads(sql):
+    # Since 066 a thread belongs to the care-team link's clinic: move the clinician and the
+    # link to the first clinic.
     sql(f"UPDATE clinicians SET clinic_id='{CLINIC}' WHERE id='{OTHER}';")
+    sql(f"UPDATE care_teams SET clinic_id='{CLINIC}' WHERE id='{OTHER_TEAM}';")
     first, second = open_thread(sql), open_thread(sql, OTHER)
     assert first["id"] != second["id"]
     assert first["clinic_name"] == second["clinic_name"] == "Synthetic clinic"
@@ -323,7 +335,7 @@ def test_new_authorized_binding_opens_without_old_history(sql, change):
         )
         clinician = OTHER
     else:
-        sql(f"UPDATE clinicians SET clinic_id='{OTHER_CLINIC}' WHERE id='{CLINICIAN}';")
+        move_link_to_other_clinic(sql)
     opened = call(sql, "open", {"recipient_id": clinician}, actor=patient)
     assert opened["id"] != old["id"]
     assert opened["unread_count"] == 0 and opened["last_message_preview"] is None
@@ -382,9 +394,18 @@ def test_new_authorized_binding_opens_without_old_history(sql, change):
     )
 
 
+def move_link_to_other_clinic(sql):
+    """The clinician also works at the second clinic, and the link moves there (066)."""
+    sql(
+        "INSERT INTO clinic_memberships(clinician_id,clinic_id,role) "
+        f"VALUES('{CLINICIAN}','{OTHER_CLINIC}','provider');"
+    )
+    sql(f"UPDATE care_teams SET clinic_id='{OTHER_CLINIC}' WHERE id='{TEAM}';")
+
+
 def test_concurrent_open_after_clinic_reassignment_creates_one_binding(sql):
     old = open_thread(sql)
-    sql(f"UPDATE clinicians SET clinic_id='{OTHER_CLINIC}' WHERE id='{CLINICIAN}';")
+    move_link_to_other_clinic(sql)
     stmt = operation("open", {"recipient_id": CLINICIAN})
     a = sql.start(f"BEGIN; {stmt} SELECT pg_sleep(1.5); COMMIT;", "first")
     wait_event(sql, "first", "PgSleep")

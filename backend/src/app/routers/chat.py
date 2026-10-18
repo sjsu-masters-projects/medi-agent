@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any
+import re
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, WebSocketException
@@ -38,11 +39,19 @@ from app.services.chat_service import (
     conversation_title,
     normalize_session_id,
 )
+from app.services.chat_turn_execution import TurnChatService, TurnEmitter
+from app.services.chat_turn_service import (
+    ChatTurnService,
+    TurnExecution,
+    public_turn,
+    turn_budget,
+)
 from app.services.symptom_intake_service import SymptomIntakeService
 from app.utils.localization import resolve_locale_resource, written_language
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+_STATE_REFRESH_ATTEMPTS = 3
 
 # The outermost fallback: triage itself could not be reached. Every other tier is
 # localized through TRIAGE_COPY, so this one is too — a patient who wrote in Spanish
@@ -93,7 +102,7 @@ def _safety_turn_payload(options: dict[str, Any]) -> dict[str, Any]:
     incoming = options["incoming"]
     decision = options["decision"]
     return {
-        "turn_id": str(uuid4()),
+        "turn_id": str(options.get("turn_id") or uuid4()),
         "content": incoming.content,
         "session_id": options.get("session_id", "default"),
         "language": incoming.language.value,
@@ -315,6 +324,63 @@ def _closed_websocket_error(error: BaseException) -> bool:
         "close message has been sent" in str(error)
         or "websocket is not connected" in str(error).lower()
     )
+
+
+def _failure_label(exc: BaseException) -> str:
+    """Exception type plus a safe machine code, never message text that could hold PHI."""
+    code = getattr(exc, "code", None)
+    if isinstance(exc, ValidationError):
+        code = exc.message
+    cause = type(exc.__cause__).__name__ if exc.__cause__ else ""
+    parts = [type(exc).__name__]
+    if isinstance(code, str) and re.fullmatch(r"[A-Za-z0-9_]{1,40}", code):
+        parts.append(code)
+    if cause:
+        parts.append(f"cause={cause}")
+    return "/".join(parts)
+
+
+async def _refresh_conversation_state(
+    service: ChatService,
+    patient_id: str,
+    pending: dict[str, Any],
+    version: str | None,
+) -> bool:
+    """Persist turn_count/title/summary after a saved reply; the reply is never lost.
+
+    A concurrent writer (a second tab, a document dismissal) changes `updated_at`, which
+    used to skip this refresh silently. On conflict it re-reads the row and retries, never
+    lowering the turn count the other writer saved.
+    """
+    updates = dict(pending)
+    for _attempt in range(_STATE_REFRESH_ATTEMPTS):
+        try:
+            async with asyncio.timeout(5):
+                await service.update_conversation_state(
+                    patient_id, updates, expected_updated_at=version
+                )
+            return True
+        except ConversationStateConflictError:
+            try:
+                async with asyncio.timeout(5):
+                    fresh = await service.get_or_create_conversation_state(
+                        patient_id, {"session_id": updates.get("session_id")}
+                    )
+            except Exception as exc:
+                logger.warning("Conversation state re-read failed: %s", _failure_label(exc))
+                return False
+            version = str(fresh.get("updated_at") or "") or None
+            updates["turn_count"] = max(
+                int(updates.get("turn_count") or 0), int(fresh.get("turn_count") or 0) + 1
+            )
+        except Exception as exc:
+            logger.warning(
+                "Saved chat reply retained; conversation metadata refresh failed: %s",
+                "timeout" if isinstance(exc, TimeoutError) else _failure_label(exc),
+            )
+            return False
+    logger.warning("Saved chat reply retained; conversation metadata kept conflicting")
+    return False
 
 
 async def _send_terminal_event(websocket: WebSocket, payload: dict[str, Any]) -> bool:
@@ -618,6 +684,456 @@ async def list_chat_conversations(
     return [ChatConversation.model_validate(row) for row in rows]
 
 
+def _turn_error_message(code: str) -> str:
+    """Plain, fixed wording per turn failure code; never provider or exception text."""
+    if code == "CHAT_TURN_BUSY":
+        return "A reply is already in progress in this conversation. Recovering it now."
+    if code == "CHAT_TURN_EXPIRED":
+        return "This reply took too long and was not kept. Your message is saved: try again."
+    return "Chat recovery is required."
+
+
+async def _process_durable_message(
+    websocket: WebSocket, service: ChatService, context: dict[str, Any], request: dict[str, Any]
+) -> dict[str, Any]:
+    turns = ChatTurnService(service.db, str(context["patient_id"]), context["session_id"])
+    execution: TurnExecution | None = None
+    try:
+        incoming = context["incoming"]
+        incoming = incoming.model_copy(
+            update={"language": written_language(incoming.content, incoming.language)}
+        )
+        timeout, lease_seconds = turn_budget(settings.chat_turn_timeout_seconds)
+        result = await turns.begin({**request, "language": incoming.language.value}, lease_seconds)
+        record = result["turn"]
+        # Label the conversation now, not after completion, so an interrupted first
+        # turn is still findable. Only an empty title is written (idempotent).
+        if result.get("execute") and result.get("user_message"):
+            try:
+                await service.set_conversation_title(
+                    str(context["patient_id"]),
+                    context["session_id"],
+                    conversation_title(str(result["user_message"].get("content") or "")),
+                )
+            except Exception as exc:  # a missing label must never fail the turn
+                logger.warning(
+                    "Nora conversation title was not saved at turn start: %s",
+                    type(exc).__name__,
+                )
+        await _send_terminal_event(
+            websocket,
+            {
+                "type": "chat_turn",
+                "turn": public_turn({**record, "user_message": result["user_message"]}),
+            },
+        )
+        if not result.get("execute"):
+            await _send_terminal_event(
+                websocket,
+                {
+                    "type": "user_message_saved",
+                    "message": _serialize_chat_message(result["user_message"]),
+                },
+            )
+            if result.get("assistant_message"):
+                await _send_terminal_event(
+                    websocket,
+                    {
+                        "type": "assistant_complete",
+                        "message": _serialize_chat_message(result["assistant_message"]),
+                    },
+                )
+            elif result.get("reply_unavailable"):
+                # Completed, but the saved reply no longer exists: say so, never replay nothing.
+                await _send_terminal_event(
+                    websocket,
+                    {
+                        "type": "chat_turn",
+                        "turn": public_turn(
+                            {
+                                **record,
+                                "status": "failed",
+                                "actions_started": True,
+                                "failure_code": "reply_unavailable",
+                                "user_message": result["user_message"],
+                            }
+                        ),
+                    },
+                )
+            return cast(dict[str, Any], context["conversation_state"])
+        execution = TurnExecution(turns, record)
+        staged = TurnChatService(service, execution, result["user_message"])
+
+        async def send(event: dict[str, Any]) -> bool:
+            return await _send_terminal_event(websocket, event)
+
+        emitter = TurnEmitter(send)
+        async with asyncio.timeout(timeout):
+            history = await service.get_history(
+                str(context["patient_id"]), session_id=context["session_id"]
+            )
+            history = [
+                row for row in history if str(row["id"]) != str(result["user_message"]["id"])
+            ]
+            state = await _process_chat_message(
+                emitter,
+                staged,
+                {
+                    **context,
+                    "incoming": incoming,
+                    "document_context": record.get("document_context"),
+                    "conversation_history": history,
+                },
+            )
+        # Saved outside the processing budget: a finished reply gets its own save call and the
+        # lease's save grace, so a slow model cannot leave no time to keep what it produced.
+        saved = await staged.complete()
+        if staged.pending_state:
+            await _refresh_conversation_state(
+                service,
+                str(context["patient_id"]),
+                staged.pending_state,
+                staged.pending_state_version,
+            )
+        event = emitter.complete_event or {"type": "assistant_complete"}
+        await send({**event, "message": _serialize_chat_message(saved)})
+        await send({"type": "chat_turn", "turn": public_turn({**record, "status": "completed"})})
+        return state
+    except asyncio.CancelledError:
+        if execution:
+            try:
+                await asyncio.shield(execution.fail(interrupted=True))
+            except Exception as exc:
+                logger.warning(
+                    "Cancelled chat turn will reconcile from its saved deadline: %s",
+                    _failure_label(exc),
+                )
+        raise
+    except Exception as exc:
+        if execution:
+            try:
+                await execution.fail(interrupted=isinstance(exc, TimeoutError))
+            except Exception as fail_exc:
+                logger.warning(
+                    "Chat turn will reconcile from its saved deadline: %s",
+                    _failure_label(fail_exc),
+                )
+        code = exc.message if isinstance(exc, ValidationError) else "CHAT_TURN_UNAVAILABLE"
+        logger.warning(
+            "Durable chat turn did not complete: %s",
+            _failure_label(exc),
+            extra={"failure_category": type(exc).__name__},
+        )
+        await _send_terminal_event(
+            websocket,
+            {
+                "type": "error",
+                "code": code,
+                "client_message_id": request.get("client_message_id"),
+                "message": _turn_error_message(code),
+            },
+        )
+        try:
+            recovered = await turns.call("recover")
+            finished = any(
+                row.get("client_message_id") == request.get("client_message_id")
+                and row.get("status") == "completed"
+                for row in recovered["items"]
+            )
+            if finished:
+                # The reply was committed although its confirmation was lost (for example a
+                # timed-out completion call): deliver it from the saved history.
+                history = await service.get_history(
+                    str(context["patient_id"]), session_id=context["session_id"]
+                )
+                await _send_terminal_event(
+                    websocket,
+                    {
+                        "type": "chat_history",
+                        "messages": [_serialize_chat_message(row) for row in history],
+                    },
+                )
+            await _send_terminal_event(
+                websocket,
+                {"type": "chat_turns", "turns": [public_turn(row) for row in recovered["items"]]},
+            )
+        except Exception as recover_exc:
+            logger.warning(
+                "Saved chat status temporarily unavailable: %s", _failure_label(recover_exc)
+            )
+        return cast(dict[str, Any], context["conversation_state"])
+
+
+async def _process_chat_message(
+    websocket: Any, service: ChatService, context: dict[str, Any]
+) -> dict[str, Any]:
+    patient_id = context["patient_id"]
+    session_id = context["session_id"]
+    incoming = context["incoming"]
+    current_user = context["current_user"]
+    document_context = context["document_context"]
+    patient_context = context["patient_context"]
+    conversation_history = context["conversation_history"]
+    conversation_state = context["conversation_state"]
+    care_coordinator = context["care_coordinator"]
+    # Label and answer the message in the language it is written in; the client
+    # sends the app language, which mislabelled Spanish messages as English.
+    incoming = incoming.model_copy(
+        update={"language": written_language(incoming.content, incoming.language)}
+    )
+    user_message = await service.save_message(
+        patient_id=str(patient_id),
+        data={**incoming.model_dump(), "session_id": session_id},
+    )
+    if not any(item.get("role") == ChatRole.USER.value for item in conversation_history):
+        await service.set_conversation_title(
+            str(patient_id), session_id, conversation_title(incoming.content)
+        )
+    user_payload = _serialize_chat_message(user_message)
+    conversation_history.append(user_payload)
+    await websocket.send_json({"type": "user_message_saved", "message": user_payload})
+
+    if is_document_catalog_question(incoming.content):
+        conversation_state = await _send_document_catalog_reply(
+            websocket=websocket,
+            service=service,
+            patient_id=str(patient_id),
+            incoming=incoming,
+            session_id=session_id,
+            document_context=document_context,
+            conversation_history=conversation_history,
+            conversation_state=conversation_state,
+        )
+        return cast(dict[str, Any], conversation_state)
+
+    assistant_content = ""
+    cited_documents: list[str] = []
+    assistant_intent = "general"
+    assistant_urgency = "routine"
+    escalation_required = False
+    route = "triage"
+    assistant_start_sent = False
+    streamed_response = False
+
+    try:
+        # The patient's own record is read by the coordinator through a tool
+        # rather than pushed in here, so the identifier travels and the record
+        # does not. Conversation history is carried by the runtime's session,
+        # keyed on this same session id.
+        stream_iter = care_coordinator.process_stream(
+            patient_id=str(patient_id),
+            user_id=str(current_user.id),
+            session_id=session_id,
+            message=incoming.content,
+            language=incoming.language.value,
+            document_context=document_context,
+            # Stored messages, not the process's memory, so a restart keeps context.
+            earlier_messages=conversation_history[:-1],
+        )
+        async for event in stream_iter:
+            ev_type = event.get("type")
+            if ev_type == "classification":
+                assistant_intent = str(event.get("intent", "general"))
+                assistant_urgency = str(event.get("urgency", "routine"))
+                route = str(event.get("route", "triage"))
+                escalation_required = bool(event.get("escalation_required", False))
+
+                await websocket.send_json(
+                    {
+                        "type": "assistant_start",
+                        "intent": assistant_intent,
+                        "urgency": assistant_urgency,
+                    }
+                )
+                assistant_start_sent = True
+
+                # The symptom route is answered by the follow-up worker below, not
+                # by the coordinator. Closing the stream here is what keeps the
+                # patient from watching one reply arrive and then be replaced by
+                # a different one.
+                #
+                # An emergency is the exception, and must stay one. The floor
+                # labels a medical emergency `intent="symptom"`, so it arrives
+                # here too — but its reviewed 911 answer comes from the floor in
+                # the `complete` event, and the guard below deliberately stops the
+                # worker replacing it. Closing the stream early therefore threw
+                # that answer away and left the patient reading "I am having
+                # trouble answering right now". Nothing replaces an emergency
+                # reply, so there is nothing to protect the patient from seeing.
+                if route == "symptom" and assistant_urgency != "emergency":
+                    await stream_iter.aclose()
+                    break
+            elif ev_type == "chunk":
+                chunk_text = str(event.get("content", ""))
+                if not chunk_text:
+                    continue
+                await websocket.send_json({"type": "assistant_chunk", "content": chunk_text})
+                streamed_response = True
+            elif ev_type == "complete":
+                assistant_content = str(event.get("response_text", "")).strip()
+                cited_documents = [str(item) for item in event.get("cited_documents") or [] if item]
+    except Exception as exc:
+        fallback_reason = categorize_llm_failure(exc)
+        record_chat_fallback(layer="L3_outer", reason=fallback_reason)
+        logger.warning(
+            "Triage processing failed, using outer deterministic fallback: %s",
+            exc,
+            extra={
+                "chat_fallback_layer": "L3_outer",
+                "chat_fallback_reason": fallback_reason,
+            },
+        )
+        # Every other fallback tier is localized through TRIAGE_COPY; this one
+        # answered a Spanish-speaking patient in English.
+        assistant_content = resolve_locale_resource(incoming.language, OUTER_FALLBACK_COPY)[
+            "outer_fallback"
+        ]
+        assistant_intent = "general"
+        assistant_urgency = "routine"
+        escalation_required = False
+        route = "triage"
+
+    delegation_events: list[dict[str, Any]] = []
+    if route == "symptom" and assistant_urgency != "emergency":
+        intake = SymptomIntakeService(service.db, current_user)
+        try:
+            draft = await intake.start(
+                IntakeStart(
+                    source_message_id=user_message["id"],
+                    session_id=session_id,
+                )
+            )
+            await websocket.send_json(
+                {
+                    "type": "symptom_intake_updated",
+                    "intake_id": draft["intake_id"],
+                    "revision": draft["revision"],
+                }
+            )
+            assistant_content = (
+                "Tu borrador privado está abierto. Revisa el formulario antes de compartirlo."
+                if incoming.language == Language.ES
+                else "Your private draft is open. Review the form before sharing it."
+            )
+        except Exception:
+            # If the guided form or its schema is unavailable, do not imply that a
+            # symptom report or ADR record was saved.
+            assistant_content = (
+                "La captura guiada de síntomas no está disponible. No se guardó un informe de síntomas."
+                if incoming.language == Language.ES
+                else "Guided symptom intake is unavailable. No symptom report was saved."
+            )
+            await websocket.send_json({"type": "symptom_intake_unavailable"})
+        assistant_intent = "symptom"
+        # Guided intake replaces automatic persistence, not triage. Preserve an
+        # urgent classification so assigned clinicians still receive the same alert.
+
+    # If we never sent assistant_start (e.g. exception before classification),
+    # emit it now so the client transitions out of "loading" state.
+    if not assistant_start_sent:
+        await websocket.send_json(
+            {
+                "type": "assistant_start",
+                "intent": assistant_intent,
+                "urgency": assistant_urgency,
+            }
+        )
+
+    # Buffered fallback paths (symptom route, outer fallback) need their
+    # text chunked here. Streamed responses already had per-token chunks.
+    if not streamed_response and assistant_content:
+        for chunk in _chunk_text(assistant_content):
+            await websocket.send_json({"type": "assistant_chunk", "content": chunk})
+
+    # Results of the documents the reply cited, as a card under it. Built from the
+    # patient's own source-checked facts, never from the reply's text.
+    attachments = (
+        await asyncio.to_thread(service.result_attachments, str(patient_id), cited_documents)
+        if cited_documents
+        else []
+    )
+    assistant_message = await service.save_message(
+        patient_id=str(patient_id),
+        data={
+            "content": assistant_content,
+            "role": ChatRole.ASSISTANT,
+            "intent": assistant_intent,
+            "language": written_language(assistant_content, incoming.language),
+            "session_id": session_id,
+            "attachments": attachments,
+        },
+    )
+    if attachments and not assistant_message.get("attachments"):
+        # Saved as text only (migration 062 not applied); still show the card live.
+        assistant_message = {**assistant_message, "attachments": attachments}
+    assistant_payload = _serialize_chat_message(assistant_message)
+    conversation_history.append(assistant_payload)
+    next_state = _build_conversation_state(
+        conversation_history,
+        prior_state=conversation_state,
+        last_intent=assistant_intent,
+        last_urgency=assistant_urgency,
+        last_route=route,
+    )
+    conversation_state = await _persist_conversation_state_with_retry(
+        service,
+        patient_id=str(patient_id),
+        session_id=session_id,
+        language=incoming.language,
+        document_context=document_context,
+        conversation_history=conversation_history,
+        fallback_state=next_state,
+        last_intent=assistant_intent,
+        last_urgency=assistant_urgency,
+        last_route=route,
+    )
+
+    await websocket.send_json(
+        {
+            "type": "assistant_complete",
+            "message": assistant_payload,
+            "intent": assistant_intent,
+            "urgency": assistant_urgency,
+            "escalation_required": escalation_required,
+        }
+    )
+    if delegation_events:
+        await _emit_a2a_task_events(websocket, delegation_events)
+    if assistant_intent == "schedule":
+        proposal = _build_appointment_proposal(
+            patient_id=patient_id,
+            message=incoming.content,
+            patient_context=patient_context,
+        )
+        if proposal:
+            await websocket.send_json(
+                {
+                    "type": "appointment_proposal",
+                    "proposal": proposal,
+                }
+            )
+    if escalation_required:
+        clinicians_notified = await service.notify_assigned_clinicians(
+            patient_id=str(patient_id),
+            payload={
+                "urgency": assistant_urgency,
+                "intent": assistant_intent,
+                "message_excerpt": incoming.content,
+            },
+        )
+        await websocket.send_json(
+            {
+                "type": "escalation_recommended",
+                "message": (
+                    "Please contact your care team today. If severe symptoms appear, seek "
+                    "emergency care immediately."
+                ),
+                "clinicians_notified": clinicians_notified,
+            }
+        )
+    return cast(dict[str, Any], conversation_state)
+
+
 async def chat_websocket_endpoint(
     websocket: WebSocket,
     patient_id: UUID,
@@ -640,9 +1156,15 @@ async def chat_websocket_endpoint(
 
     try:
         session_id = _read_session_id(websocket)
+        durable_protocol = websocket.query_params.get("turn_protocol") == "1"
         history = await service.get_history(str(patient_id), limit=50, session_id=session_id)
         conversation_history = [_serialize_chat_message(item) for item in history]
         await websocket.send_json({"type": "chat_history", "messages": conversation_history})
+        if durable_protocol:
+            recovered = await ChatTurnService(db, str(patient_id), session_id).call("recover")
+            await websocket.send_json(
+                {"type": "chat_turns", "turns": [public_turn(row) for row in recovered["items"]]}
+            )
         clinician_messages = await service.get_recent_clinician_messages(str(patient_id))
         for message in clinician_messages:
             await websocket.send_json({"type": "clinician_message", "message": message})
@@ -696,16 +1218,19 @@ async def chat_websocket_endpoint(
         logger.info("Chat websocket disconnected during initialization")
         return
     except Exception as exc:
-        logger.error("Chat initialization failed (%s)", type(exc).__name__)
-        sent = await _send_terminal_event(
+        if _closed_websocket_error(exc):
+            logger.info("Chat websocket disconnected during initialization")
+            return
+        # Never leave an accepted socket to die silently: the client needs an explicit state.
+        logger.warning("Chat websocket initialization failed: %s", _failure_label(exc))
+        if await _send_terminal_event(
             websocket,
             {
                 "type": "error",
-                "code": "chat_initialization_failed",
-                "message": "Chat is temporarily unavailable. Please try again later.",
+                "code": "CHAT_STARTUP_UNAVAILABLE",
+                "message": "Chat is temporarily unavailable.",
             },
-        )
-        if sent and websocket.application_state is WebSocketState.CONNECTED:
+        ):
             await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
         return
 
@@ -737,6 +1262,51 @@ async def chat_websocket_endpoint(
 
             if event_type == "ping":
                 await websocket.send_json({"type": "pong"})
+                continue
+
+            if durable_protocol and event_type in {"recover_turns", "dismiss_turn"}:
+                turns = ChatTurnService(service.db, str(patient_id), session_id)
+                if event_type == "dismiss_turn":
+                    try:
+                        key = str(UUID(str(payload.get("client_message_id", ""))))
+                    except ValueError:
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "code": "CHAT_TURN_INVALID",
+                                "message": "Invalid recovery request.",
+                            }
+                        )
+                        continue
+                try:
+                    if event_type == "dismiss_turn":
+                        await turns.call("dismiss", {"client_message_id": key})
+                    recovered = await turns.call("recover")
+                    history = await service.get_history(str(patient_id), session_id=session_id)
+                except Exception as exc:
+                    if _closed_websocket_error(exc):
+                        raise
+                    logger.warning("Chat recovery request failed: %s", _failure_label(exc))
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "code": "CHAT_TURN_UNAVAILABLE",
+                            "message": "Chat recovery is required.",
+                        }
+                    )
+                    continue
+                await websocket.send_json(
+                    {
+                        "type": "chat_history",
+                        "messages": [_serialize_chat_message(row) for row in history],
+                    }
+                )
+                await websocket.send_json(
+                    {
+                        "type": "chat_turns",
+                        "turns": [public_turn(row) for row in recovered["items"]],
+                    }
+                )
                 continue
 
             if event_type != "user_message":
@@ -785,6 +1355,20 @@ async def chat_websocket_endpoint(
             )
             safety_decision = evaluate_intake_safety(incoming.content, incoming.language.value)
             if safety_decision is not None:
+                safety_turn_id: str | None = None
+                if durable_protocol:
+                    try:
+                        safety_turn_id = str(UUID(str(payload.get("client_message_id", ""))))
+                    except ValueError:
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "code": "CHAT_TURN_INVALID",
+                                "client_message_id": payload.get("client_message_id"),
+                                "message": "Chat recovery is required.",
+                            }
+                        )
+                        continue
                 record = await _send_safety_turn(
                     websocket,
                     safety_service,
@@ -793,270 +1377,46 @@ async def chat_websocket_endpoint(
                         "incoming": incoming,
                         "session_id": session_id,
                         "decision": safety_decision,
+                        "turn_id": safety_turn_id,
                     },
                 )
                 if record["persistence_status"] == "saved":
                     conversation_history.extend(
                         [record["user_message"], record["assistant_message"]]
                     )
+                if durable_protocol and safety_turn_id:
+                    await _send_terminal_event(
+                        websocket,
+                        {
+                            "type": "chat_turn",
+                            "turn": {
+                                "client_message_id": safety_turn_id,
+                                "status": "completed",
+                                "retryable": False,
+                                "attempt": 1,
+                                "document_id": payload.get("document_id"),
+                            },
+                        },
+                    )
                 continue
 
-            user_message = await service.save_message(
-                patient_id=str(patient_id),
-                data={**incoming.model_dump(), "session_id": session_id},
-            )
-            if not any(item.get("role") == ChatRole.USER.value for item in conversation_history):
-                await service.set_conversation_title(
-                    str(patient_id), session_id, conversation_title(incoming.content)
+            turn_context = {
+                "patient_id": patient_id,
+                "session_id": session_id,
+                "incoming": incoming,
+                "current_user": current_user,
+                "document_context": document_context,
+                "patient_context": patient_context,
+                "conversation_history": conversation_history,
+                "conversation_state": conversation_state,
+                "care_coordinator": care_coordinator,
+            }
+            if durable_protocol:
+                conversation_state = await _process_durable_message(
+                    websocket, service, turn_context, payload
                 )
-            user_payload = _serialize_chat_message(user_message)
-            conversation_history.append(user_payload)
-            await websocket.send_json({"type": "user_message_saved", "message": user_payload})
-
-            if is_document_catalog_question(incoming.content):
-                conversation_state = await _send_document_catalog_reply(
-                    websocket=websocket,
-                    service=service,
-                    patient_id=str(patient_id),
-                    incoming=incoming,
-                    session_id=session_id,
-                    document_context=document_context,
-                    conversation_history=conversation_history,
-                    conversation_state=conversation_state,
-                )
-                continue
-
-            assistant_content = ""
-            cited_documents: list[str] = []
-            assistant_intent = "general"
-            assistant_urgency = "routine"
-            escalation_required = False
-            route = "triage"
-            assistant_start_sent = False
-            streamed_response = False
-
-            try:
-                # The patient's own record is read by the coordinator through a tool
-                # rather than pushed in here, so the identifier travels and the record
-                # does not. Conversation history is carried by the runtime's session,
-                # keyed on this same session id.
-                stream_iter = care_coordinator.process_stream(
-                    patient_id=str(patient_id),
-                    user_id=str(current_user.id),
-                    session_id=session_id,
-                    message=incoming.content,
-                    language=incoming.language.value,
-                    document_context=document_context,
-                    # Stored messages, not the process's memory, so a restart keeps context.
-                    earlier_messages=conversation_history[:-1],
-                )
-                async for event in stream_iter:
-                    ev_type = event.get("type")
-                    if ev_type == "classification":
-                        assistant_intent = str(event.get("intent", "general"))
-                        assistant_urgency = str(event.get("urgency", "routine"))
-                        route = str(event.get("route", "triage"))
-                        escalation_required = bool(event.get("escalation_required", False))
-
-                        await websocket.send_json(
-                            {
-                                "type": "assistant_start",
-                                "intent": assistant_intent,
-                                "urgency": assistant_urgency,
-                            }
-                        )
-                        assistant_start_sent = True
-
-                        # The symptom route is answered by the follow-up worker below, not
-                        # by the coordinator. Closing the stream here is what keeps the
-                        # patient from watching one reply arrive and then be replaced by
-                        # a different one.
-                        #
-                        # An emergency is the exception, and must stay one. The floor
-                        # labels a medical emergency `intent="symptom"`, so it arrives
-                        # here too — but its reviewed 911 answer comes from the floor in
-                        # the `complete` event, and the guard below deliberately stops the
-                        # worker replacing it. Closing the stream early therefore threw
-                        # that answer away and left the patient reading "I am having
-                        # trouble answering right now". Nothing replaces an emergency
-                        # reply, so there is nothing to protect the patient from seeing.
-                        if route == "symptom" and assistant_urgency != "emergency":
-                            await stream_iter.aclose()
-                            break
-                    elif ev_type == "chunk":
-                        chunk_text = str(event.get("content", ""))
-                        if not chunk_text:
-                            continue
-                        await websocket.send_json(
-                            {"type": "assistant_chunk", "content": chunk_text}
-                        )
-                        streamed_response = True
-                    elif ev_type == "complete":
-                        assistant_content = str(event.get("response_text", "")).strip()
-                        cited_documents = [
-                            str(item) for item in event.get("cited_documents") or [] if item
-                        ]
-            except Exception as exc:
-                fallback_reason = categorize_llm_failure(exc)
-                record_chat_fallback(layer="L3_outer", reason=fallback_reason)
-                logger.warning(
-                    "Triage processing failed, using outer deterministic fallback: %s",
-                    exc,
-                    extra={
-                        "chat_fallback_layer": "L3_outer",
-                        "chat_fallback_reason": fallback_reason,
-                    },
-                )
-                # Every other fallback tier is localized through TRIAGE_COPY; this one
-                # answered a Spanish-speaking patient in English.
-                assistant_content = resolve_locale_resource(incoming.language, OUTER_FALLBACK_COPY)[
-                    "outer_fallback"
-                ]
-                assistant_intent = "general"
-                assistant_urgency = "routine"
-                escalation_required = False
-                route = "triage"
-
-            delegation_events: list[dict[str, Any]] = []
-            if route == "symptom" and assistant_urgency != "emergency":
-                intake = SymptomIntakeService(db, current_user)
-                try:
-                    draft = await intake.start(
-                        IntakeStart(
-                            source_message_id=user_message["id"],
-                            session_id=session_id,
-                        )
-                    )
-                    await websocket.send_json(
-                        {
-                            "type": "symptom_intake_updated",
-                            "intake_id": draft["intake_id"],
-                            "revision": draft["revision"],
-                        }
-                    )
-                    assistant_content = (
-                        "Tu borrador privado está abierto. Revisa el formulario antes de compartirlo."
-                        if incoming.language == Language.ES
-                        else "Your private draft is open. Review the form before sharing it."
-                    )
-                except Exception:
-                    # An unavailable library/schema cannot restore automatic report saving.
-                    assistant_content = (
-                        "La captura guiada de síntomas no está disponible. No se guardó un informe de síntomas."
-                        if incoming.language == Language.ES
-                        else "Guided symptom intake is unavailable. No symptom report was saved."
-                    )
-                    await websocket.send_json({"type": "symptom_intake_unavailable"})
-                assistant_intent = "symptom"
-                # Guided intake replaces persistence, not triage. Preserve an urgent
-                # classification so assigned clinicians still receive the same alert
-                # they would have received before the private draft was introduced.
-
-            # If we never sent assistant_start (e.g. exception before classification),
-            # emit it now so the client transitions out of "loading" state.
-            if not assistant_start_sent:
-                await websocket.send_json(
-                    {
-                        "type": "assistant_start",
-                        "intent": assistant_intent,
-                        "urgency": assistant_urgency,
-                    }
-                )
-
-            # Buffered fallback paths (symptom route, outer fallback) need their
-            # text chunked here. Streamed responses already had per-token chunks.
-            if not streamed_response and assistant_content:
-                for chunk in _chunk_text(assistant_content):
-                    await websocket.send_json({"type": "assistant_chunk", "content": chunk})
-
-            # Results of the documents the reply cited, as a card under it. Built from the
-            # patient's own source-checked facts, never from the reply's text.
-            attachments = (
-                await asyncio.to_thread(
-                    service.result_attachments, str(patient_id), cited_documents
-                )
-                if cited_documents
-                else []
-            )
-            assistant_message = await service.save_message(
-                patient_id=str(patient_id),
-                data={
-                    "content": assistant_content,
-                    "role": ChatRole.ASSISTANT,
-                    "intent": assistant_intent,
-                    "language": written_language(assistant_content, incoming.language),
-                    "session_id": session_id,
-                    "attachments": attachments,
-                },
-            )
-            if attachments and not assistant_message.get("attachments"):
-                # Saved as text only (migration 062 not applied); still show the card live.
-                assistant_message = {**assistant_message, "attachments": attachments}
-            assistant_payload = _serialize_chat_message(assistant_message)
-            conversation_history.append(assistant_payload)
-            next_state = _build_conversation_state(
-                conversation_history,
-                prior_state=conversation_state,
-                last_intent=assistant_intent,
-                last_urgency=assistant_urgency,
-                last_route=route,
-            )
-            conversation_state = await _persist_conversation_state_with_retry(
-                service,
-                patient_id=str(patient_id),
-                session_id=session_id,
-                language=incoming.language,
-                document_context=document_context,
-                conversation_history=conversation_history,
-                fallback_state=next_state,
-                last_intent=assistant_intent,
-                last_urgency=assistant_urgency,
-                last_route=route,
-            )
-
-            await websocket.send_json(
-                {
-                    "type": "assistant_complete",
-                    "message": assistant_payload,
-                    "intent": assistant_intent,
-                    "urgency": assistant_urgency,
-                    "escalation_required": escalation_required,
-                }
-            )
-            if delegation_events:
-                await _emit_a2a_task_events(websocket, delegation_events)
-            if assistant_intent == "schedule":
-                proposal = _build_appointment_proposal(
-                    patient_id=patient_id,
-                    message=incoming.content,
-                    patient_context=patient_context,
-                )
-                if proposal:
-                    await websocket.send_json(
-                        {
-                            "type": "appointment_proposal",
-                            "proposal": proposal,
-                        }
-                    )
-            if escalation_required:
-                clinicians_notified = await service.notify_assigned_clinicians(
-                    patient_id=str(patient_id),
-                    payload={
-                        "urgency": assistant_urgency,
-                        "intent": assistant_intent,
-                        "message_excerpt": incoming.content,
-                    },
-                )
-                await websocket.send_json(
-                    {
-                        "type": "escalation_recommended",
-                        "message": (
-                            "Please contact your care team today. If severe symptoms appear, seek "
-                            "emergency care immediately."
-                        ),
-                        "clinicians_notified": clinicians_notified,
-                    }
-                )
+            else:
+                conversation_state = await _process_chat_message(websocket, service, turn_context)
     except WebSocketDisconnect:
         logger.info("Chat websocket disconnected")
     except ValidationError as exc:

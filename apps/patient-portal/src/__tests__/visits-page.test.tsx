@@ -84,6 +84,38 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("VisitsPage cancelled by the care team", () => {
+  const cancelled = (overrides: Partial<Appointment> = {}) =>
+    makeVisit({
+      status: AppointmentStatus.CANCELLED,
+      cancelledBy: "clinician",
+      cancelReasonCode: "clinic_closed",
+      ...overrides,
+    });
+  it("shows the status and the reason in English", () => {
+    hookState.visits = [cancelled({ cancelReasonCode: "other", cancelReason: "Water leak" })];
+    render(<VisitsPage />);
+    expect(screen.getByText("Cancelled")).toBeInTheDocument();
+    const note = screen.getByRole("note");
+    expect(note).toHaveTextContent("Your care team cancelled this visit.");
+    expect(note).toHaveTextContent("Reason: Other reason — Water leak");
+  });
+  it("shows the status and the reason in Spanish (draft wording)", () => {
+    settings.profile = { preferredLanguage: "es-MX", timezone: "America/Los_Angeles" };
+    hookState.visits = [cancelled()];
+    render(<VisitsPage />);
+    expect(screen.getByText("Cancelada")).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent("Tu equipo de atención canceló esta cita.");
+    expect(screen.getByRole("note")).toHaveTextContent("Motivo: La clínica está cerrada");
+  });
+  it("offers no actions on a cancelled visit and shows no care-team note for a patient's own cancel", () => {
+    hookState.visits = [cancelled({ cancelledBy: undefined, cancelReasonCode: undefined })];
+    render(<VisitsPage />);
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Accept|Cancel visit|Request a different time/ })).not.toBeInTheDocument();
+  });
+});
+
 describe("VisitsPage", () => {
   it("focuses the exact visit without accepting or changing it", () => {
     destination.params = new URLSearchParams("appointmentId=exact-visit");
@@ -729,5 +761,50 @@ describe("Grouped appointment offers", () => {
       screen.getAllByRole("button", { name: /^Choose this time:/ }),
     ).toHaveLength(3);
     expect(screen.getByRole("button", { name: "Accept" })).toBeInTheDocument();
+  });
+});
+
+describe("Clinic on visits", () => {
+  it.each([
+    ["en-US", "at Harbor Clinic"],
+    ["es-MX", "en Harbor Clinic"],
+  ] as const)("shows the clinic under a visit card in %s", (locale, text) => {
+    settings.profile!.preferredLanguage = locale;
+    hookState.visits = [makeVisit({ clinicId: "c1", clinicName: "Harbor Clinic" })];
+    render(<VisitsPage />);
+    const line = screen.getByText(text);
+    expect(line.className).toContain("text-muted");
+    expect(line.className).toContain("break-words");
+  });
+  it.each([
+    ["en-US", "at Harbor Clinic"],
+    ["es-MX", "en Harbor Clinic"],
+  ] as const)("shows the clinic on an offer card in %s", (locale, text) => {
+    settings.profile!.preferredLanguage = locale;
+    hookState.visits = [
+      makeVisit({ id: "o1", proposalGroupId: "g", clinicName: "Harbor Clinic" }),
+      makeVisit({ id: "o2", proposalGroupId: "g", clinicName: "Harbor Clinic" }),
+    ];
+    render(<VisitsPage />);
+    expect(screen.getAllByText(text)).toHaveLength(1);
+  });
+  it("hides the clinic line when no clinic is known", () => {
+    hookState.visits = [
+      makeVisit(),
+      makeVisit({ id: "o1", proposalGroupId: "g" }),
+    ];
+    render(<VisitsPage />);
+    expect(screen.queryByText(/^at /)).not.toBeInTheDocument();
+  });
+  it("shows each card with its own clinic for a multi-clinic patient", () => {
+    hookState.visits = [
+      makeVisit({ id: "a", status: AppointmentStatus.CONFIRMED, clinicName: "North Clinic" }),
+      makeVisit({ id: "b", status: AppointmentStatus.CONFIRMED, clinicName: "South Clinic" }),
+    ];
+    render(<VisitsPage />);
+    const north = screen.getByText("at North Clinic").closest("article")!;
+    const south = screen.getByText("at South Clinic").closest("article")!;
+    expect(north).not.toBe(south);
+    expect(within(north).queryByText("at South Clinic")).not.toBeInTheDocument();
   });
 });

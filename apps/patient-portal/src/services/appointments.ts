@@ -16,6 +16,8 @@ interface AppointmentApiRecord {
   patient_id: string;
   care_team_id: string;
   clinician_name?: string | null;
+  clinic_id?: string | null;
+  clinic_name?: string | null;
   scheduled_at: string;
   duration_minutes: number;
   appointment_type: Appointment["appointmentType"];
@@ -27,6 +29,10 @@ interface AppointmentApiRecord {
   proposal_group_id?: string | null;
   proposal_expires_at?: string | null;
   source_document_id?: string | null;
+  cancelled_by?: "patient" | "clinician" | null;
+  cancel_reason_code?: Appointment["cancelReasonCode"] | null;
+  cancel_reason?: string | null;
+  cancelled_at?: string | null;
   created_at: string;
 }
 
@@ -36,6 +42,8 @@ function mapAppointment(record: AppointmentApiRecord): Appointment {
     patientId: record.patient_id,
     careTeamId: record.care_team_id,
     clinicianName: record.clinician_name ?? undefined,
+    clinicId: record.clinic_id ?? undefined,
+    clinicName: record.clinic_name ?? undefined,
     scheduledAt: record.scheduled_at,
     durationMinutes: record.duration_minutes,
     appointmentType: record.appointment_type,
@@ -47,6 +55,10 @@ function mapAppointment(record: AppointmentApiRecord): Appointment {
     proposalGroupId: record.proposal_group_id ?? undefined,
     proposalExpiresAt: record.proposal_expires_at ?? undefined,
     sourceDocumentId: record.source_document_id ?? undefined,
+    cancelledBy: record.cancelled_by ?? undefined,
+    cancelReasonCode: record.cancel_reason_code ?? undefined,
+    cancelReason: record.cancel_reason ?? undefined,
+    cancelledAt: record.cancelled_at ?? undefined,
     createdAt: record.created_at,
   };
 }

@@ -11,6 +11,7 @@ from supabase import Client
 from app.clients.resend import ResendClient
 from app.config import settings
 from app.core.exceptions import AuthorizationError, ValidationError
+from app.services.clinic_membership_service import ClinicMembershipService
 from app.services.email_service import (
     AccountNotFoundError,
     EmailDeliveryService,
@@ -43,13 +44,34 @@ class EmailInvitationService:
             {"p_actor": str(actor) if actor else None, "p_action": action, "p_payload": payload},
         )
 
-    async def history(self, actor: UUID) -> dict[str, Any]:
-        return await self.operation(actor, "list", {})
+    async def history(self, actor: UUID, clinic_id: UUID | None = None) -> dict[str, Any]:
+        """One clinic's invitation history: the named clinic or the admin's only clinic.
+
+        Admin rights are the role held at that clinic (checked here and again in SQL).
+        """
+        membership = await ClinicMembershipService(self).acting_membership(
+            actor, clinic_id, require_admin=True
+        )
+        if membership is None:
+            raise AuthorizationError("Only a clinic admin can manage invitations.")
+        return await self.operation(actor, "list", self._clinic(membership.clinic_id))
+
+    @staticmethod
+    def _clinic(clinic_id: UUID | None) -> dict[str, Any]:
+        return {"clinic_id": str(clinic_id)} if clinic_id else {}
 
     async def revoke(self, actor: UUID, invitation_id: UUID) -> dict[str, Any]:
         return await self.operation(actor, "revoke", {"id": str(invitation_id)})
 
-    async def create(self, actor: UUID, email: str, role: str, clinic_name: str) -> dict[str, Any]:
+    async def create(
+        self,
+        actor: UUID,
+        email: str,
+        role: str,
+        clinic_name: str,
+        *,
+        clinic_id: UUID | None = None,
+    ) -> dict[str, Any]:
         transport = ResendClient()
         if not transport.deliverable(email):
             raise ValidationError("Use a real mailbox for a clinician invitation")
@@ -68,6 +90,10 @@ class EmailInvitationService:
             action_url=settings.clinician_portal_url.rstrip("/") + "/signup#invitation=" + token,
             action_label="Review clinic invitation",
             audience="clinician",
+            # The invitation's own clinic, on the header line like every other email; the
+            # subject already names it.
+            clinic=clinic,
+            clinic_in_subject=False,
         )
         result = await self.operation(
             actor,
@@ -77,6 +103,7 @@ class EmailInvitationService:
                 "role": role,
                 "hash": self.token_hash(token),
                 "payload": transport.payload(content, email, onboarding=True),
+                **self._clinic(clinic_id),
             },
         )
         outbox_id = result.pop("outbox_id", None)
@@ -109,7 +136,8 @@ class EmailInvitationService:
             "status": "accepted",
             "clinic": {
                 "clinic_id": result.get("clinic_id"),
-                "clinic_code": result.get("clinic_code"),
+                # The open join code is for admins; an invitee gets it from the clinic list if so.
+                "clinic_code": None,
                 "clinic_name": result.get("clinic_name"),
                 "status": result.get("clinic_status") or "active",
             },

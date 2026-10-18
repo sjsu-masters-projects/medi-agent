@@ -49,6 +49,7 @@ def guarded_service():
         ("PUT", f"/{PLAN}", EDIT),
         ("POST", f"/{PLAN}/approve", {"note": "Synthetic access-denial test"}),
         ("POST", "/retry-generation", None),
+        ("GET", f"/{PLAN}/items/{PLAN}/back-translate", None),
     ],
 )
 def test_outsider_cannot_read_edit_approve_or_retry(
@@ -81,3 +82,20 @@ def test_patient_cannot_read_another_patients_approved_plan(client, guarded_serv
 
     assert response.status_code == 403
     guarded_service.table.assert_not_called()
+
+
+def test_back_translate_of_a_removed_item_is_not_found(client):
+    clinician = CurrentUser(id=OUTSIDER, email="c@example.test", role="clinician", aal="aal2")
+    app.dependency_overrides[get_current_user] = lambda: clinician
+    service = CarePlanService(MagicMock())
+    service._require_assignment = MagicMock()  # type: ignore[method-assign]
+    service._plan = MagicMock(return_value={"id": str(PLAN)})  # type: ignore[method-assign]
+    service._items = MagicMock(  # type: ignore[method-assign]
+        return_value=[{"id": str(PLAN), "is_removed": True, "wording": {"es-MX": {"title": "x"}}}]
+    )
+    app.dependency_overrides[_service] = lambda: service
+    try:
+        response = client.get(f"{BASE}/{PLAN}/items/{PLAN}/back-translate")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 404

@@ -632,7 +632,7 @@ class MedWatchGateIssue(BaseModel):
     code: GateIssueCode
 
 
-MedWatchListState = Literal["active", "submitted", "discarded"]
+MedWatchListState = Literal["active", "draft", "approved", "submitted", "discarded"]
 SubmissionMethod = Literal["medwatch_online", "fax", "mail", "other"]
 SUBMISSION_METHOD_LABELS: Mapping[str, str] = {
     "medwatch_online": "MedWatch Online",

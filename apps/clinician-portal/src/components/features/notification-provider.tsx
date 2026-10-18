@@ -10,6 +10,10 @@ import type { CentreItem, CentrePage, CentreSummary, NotificationCategory } from
 /** Background refresh while the tab is visible. Every poll re-authorizes in the database,
  * so it stays slow; opening, focusing, reading or acting refreshes at once. */
 export const NOTIFICATION_POLL_MS = 60_000;
+/** After failures the poll backs off (60 s, 2 min, 4 min, then 5 min) and resets on success. */
+export const NOTIFICATION_MAX_BACKOFF_MS = 300_000;
+/** Focus and visibility events arrive together; one refresh serves them. */
+export const NOTIFICATION_MIN_GAP_MS = 10_000;
 
 type Feed = "history" | "actions";
 type Resource<T> = { data: T | null; error: string | null };
@@ -53,15 +57,22 @@ function SessionCache({ token, children }: { token: string | null; children: Rea
   const [actionsCategory, setActionsCategory] = useState<NotificationCategory | "">("");
   const categoryRef = useRef<NotificationCategory | "">("");
   const generation = useRef(0);
+  const inFlight = useRef(0);
+  const lastStart = useRef(0);
+  const failures = useRef(0);
   const alive = useRef(false);
   const session = useRef(0);
   const lock = useRef(false);
   const controller = useRef<AbortController | null>(null);
   const depth = useRef({ history: 1, actions: 1 });
 
-  const refresh = useCallback(async () => {
+  /** `background` refreshes (poll, focus) never interrupt one already running and stay quiet
+   * about a failure when there is already something to show. */
+  const refresh = useCallback(async (background = false) => {
     if (!token || !alive.current || lock.current) return;
+    if (background && inFlight.current) return;
     const request = ++generation.current;
+    inFlight.current = request; lastStart.current = Date.now();
     controller.current?.abort();
     const abort = new AbortController();
     controller.current = abort;
@@ -77,6 +88,8 @@ function SessionCache({ token, children }: { token: string | null; children: Rea
     }
     const results = await Promise.allSettled([pages("history"), pages("actions"), notificationCentre.summary(token, abort.signal)]);
     if (!alive.current || abort.signal.aborted || request !== generation.current) return;
+    inFlight.current = 0;
+    failures.current = results.some((result) => result.status === "rejected") ? Math.min(failures.current + 1, 6) : 0;
     setCache((previous) => {
       const next = { ...previous };
       const keys = ["history", "actions", "summary"] as const;
@@ -87,7 +100,8 @@ function SessionCache({ token, children }: { token: string | null; children: Rea
           Object.assign(next, { [key]: { data: result.value, error: null } });
         } else {
           const denied = result.reason instanceof ApiClientError && [401, 403].includes(result.reason.status);
-          Object.assign(next, { [key]: { data: denied ? null : previous[key].data, error: denied ? "Access to alerts is unavailable." : "Could not refresh alerts. Previously loaded data remains visible." } });
+          const quiet = background && !denied && previous[key].data !== null;
+          Object.assign(next, { [key]: { data: denied ? null : previous[key].data, error: quiet ? previous[key].error : denied ? "Access to alerts is unavailable." : "Could not refresh alerts. Previously loaded data remains visible." } });
         }
       });
       return next;
@@ -105,13 +119,24 @@ function SessionCache({ token, children }: { token: string | null; children: Rea
       setCache(empty()); setCacheToken(token); setBusy(false); setWriteError(null);
       if (document.visibilityState === "visible") void refresh();
     });
-    const visibleRefresh = () => { if (document.visibilityState === "visible") void refresh(); };
-    const timer = window.setInterval(visibleRefresh, NOTIFICATION_POLL_MS);
+    let timer: number | undefined;
+    const schedule = () => {
+      const delay = Math.min(NOTIFICATION_POLL_MS * 2 ** failures.current, NOTIFICATION_MAX_BACKOFF_MS);
+      timer = window.setTimeout(() => {
+        const run = document.visibilityState === "visible" ? refresh(true) : Promise.resolve();
+        void run.finally(() => { if (alive.current) schedule(); });
+      }, delay);
+    };
+    schedule();
+    const visibleRefresh = () => {
+      if (document.visibilityState !== "visible" || Date.now() - lastStart.current < NOTIFICATION_MIN_GAP_MS) return;
+      void refresh(true);
+    };
     window.addEventListener("focus", visibleRefresh);
     document.addEventListener("visibilitychange", visibleRefresh);
     return () => {
       alive.current = false; controller.current?.abort();
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
       window.removeEventListener("focus", visibleRefresh);
       document.removeEventListener("visibilitychange", visibleRefresh);
     };
@@ -119,7 +144,7 @@ function SessionCache({ token, children }: { token: string | null; children: Rea
 
   async function write(operation: () => Promise<unknown>) {
     if (!token || cacheToken !== token || lock.current || !alive.current) return false;
-    lock.current = true; generation.current++; controller.current?.abort();
+    lock.current = true; generation.current++; inFlight.current = 0; controller.current?.abort();
     const identity = session.current;
     setBusy(true); setWriteError(null);
     try {
@@ -141,6 +166,7 @@ function SessionCache({ token, children }: { token: string | null; children: Rea
     if (!token || !cursor || lock.current) return;
     lock.current = true; setBusy(true);
     const request = ++generation.current;
+    inFlight.current = 0;
     const identity = session.current;
     controller.current?.abort();
     try {
@@ -165,7 +191,7 @@ function SessionCache({ token, children }: { token: string | null; children: Rea
   }
 
   const value: CentreContext = {
-    ...(cacheToken === token ? cache : empty()), busy, writeError, skipped, refresh, more,
+    ...(cacheToken === token ? cache : empty()), busy, writeError, skipped, refresh: () => refresh(), more,
     actionsCategory,
     filterActions: (category) => {
       if (lock.current || category === categoryRef.current) return;

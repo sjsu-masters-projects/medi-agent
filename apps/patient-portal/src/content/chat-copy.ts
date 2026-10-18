@@ -111,12 +111,51 @@ export function getPatientChatCopy(locale: Locale): PatientChatCopy {
   return resolveLocaleResource(locale, PATIENT_CHAT_COPY);
 }
 
+/** PAT-001-A interface wording; es-MX candidates are tracked for bilingual review. */
+export function getChatRecoveryCopy(locale: Locale) {
+  return locale === "es-MX" ? {
+    preparing: "Nora está preparando tu respuesta",
+    checking: "Comprobando el estado de tu mensaje",
+    interrupted: "La respuesta quedó incompleta",
+    uncertain: "Es posible que se haya registrado una acción. No la repetiremos automáticamente. Si necesitas ayuda, contacta a tu equipo de atención.",
+    returnLater: "Puedes volver a esta conversación. La respuesta se mostrará cuando esté guardada.",
+    safeRetry: "Puedes reintentar el mismo mensaje sin enviarlo dos veces.",
+    noRetry: "No volveremos a ejecutar este mensaje. Puedes continuar con una pregunta nueva.",
+    retry: "Reintentar mensaje",
+    leaveUnfinished: "Dejar esta respuesta incompleta",
+    reconnectBeforeRetry: "Vuelve a conectar el chat para reintentar este mensaje.",
+    waitBeforeRetry: "Espera a que termine la respuesta en curso antes de reintentar este mensaje.",
+    busy: "Ya hay una respuesta en curso en esta conversación, posiblemente en otra pestaña. Estamos recuperándola. Tu nuevo mensaje sigue en el cuadro de texto.",
+    expired: "Esa respuesta tardó demasiado y no se guardó. Tu mensaje está guardado: usa Reintentar mensaje más abajo.",
+    unavailable: "Nora no está disponible en este momento. No se enviará ningún mensaje hasta que el chat vuelva a conectarse. Puedes reintentar la conexión.",
+    reconnect: "Volver a conectar",
+    replyUnavailable: "La respuesta de esta conversación ya no está disponible. No la volveremos a ejecutar. Puedes continuar con una pregunta nueva.",
+  } : {
+    preparing: "Nora is preparing your reply",
+    checking: "Checking your message status",
+    interrupted: "The reply was interrupted",
+    uncertain: "An action may already have been recorded. We will not repeat it automatically. Contact your care team if you need help.",
+    returnLater: "You can return to this conversation. The reply will appear when it is saved.",
+    safeRetry: "You can retry the same message without sending it twice.",
+    noRetry: "We will not rerun this message. You can continue with a new question.",
+    retry: "Retry message",
+    leaveUnfinished: "Leave this reply unfinished",
+    reconnectBeforeRetry: "Reconnect chat before retrying this message.",
+    waitBeforeRetry: "Wait for the reply in progress to finish before retrying this message.",
+    busy: "A reply is already in progress in this conversation, possibly in another tab. We are recovering it. Your new message is still in the composer.",
+    expired: "That reply took too long and was not kept. Your message is saved: use Retry message below.",
+    unavailable: "Nora is temporarily unavailable. No message will be sent until chat reconnects. You can retry the connection.",
+    reconnect: "Reconnect chat",
+    replyUnavailable: "The reply for this message is no longer available. We will not rerun it. You can continue with a new question.",
+  };
+}
+
 export function getChatControlsCopy(locale: Locale) {
   return locale === "es-MX" ? {
     connection: { idle: "Sin conexión", connected: "Conectado", connecting: "Conectando…", disconnected: "Sin conexión", error: "Problema de conexión" },
     caution: "Nora es una IA y puede equivocarse. No cambies tu tratamiento sin consultar a tu equipo clínico. Para una emergencia, llama al 911.",
     loading: "Cargando conversación…", recordContext: "Registro adjunto", dismiss: "Cerrar", message: "Mensaje para Nora", send: "Enviar mensaje",
-    documentUnavailable: "Este documento ya no está disponible. Puedes seguir preguntando sobre el resto de tu expediente.",
+    documentUnavailable: "Este documento no está disponible o cambió. Desvincúlalo antes de hacer una pregunta sobre el resto de tu expediente.",
     speak: "Toca para hablar", stopVoice: "Detener grabación de voz", interrupt: "Interrumpir y hablar", listening: "Escuchando…", transcribing: "Transcribiendo…",
     handsFreeOn: "Manos libres: activado", handsFreeOff: "Activar manos libres", autoPlay: "Las respuestas de voz se reproducirán automáticamente.",
     chatError: "No se pudo cargar o completar la conversación. Revisa la conexión y vuelve a intentarlo.", voiceError: "No se pudo completar la función de voz. Puedes escribir tu mensaje.",
@@ -127,7 +166,7 @@ export function getChatControlsCopy(locale: Locale) {
     connection: { idle: "Offline", connected: "Connected", connecting: "Connecting…", disconnected: "Offline", error: "Connection issue" },
     caution: "Nora is AI and can make mistakes. Check with your care team before changing treatment. For an emergency, call 911.",
     loading: "Loading conversation…", recordContext: "Record context attached", dismiss: "Dismiss", message: "Message to Nora", send: "Send message",
-    documentUnavailable: "This document isn't available anymore. You can keep asking about the rest of your record.",
+    documentUnavailable: "This document is unavailable or has changed. Dismiss it before asking about the rest of your record.",
     speak: "Tap to speak", stopVoice: "Stop voice recording", interrupt: "Interrupt and speak", listening: "Listening…", transcribing: "Transcribing…",
     handsFreeOn: "Hands-free mode is on. Tap to turn off.", handsFreeOff: "Turn on hands-free mode", autoPlay: "Voice replies will play automatically.",
     chatError: "Could not load or complete the conversation. Check your connection and try again.", voiceError: "Could not complete the voice action. You can type your message.",

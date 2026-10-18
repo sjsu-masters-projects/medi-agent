@@ -4,21 +4,31 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
 
+// Open modals, outermost first. A dialog opened over a side panel owns Escape and Tab alone.
+const openModals: symbol[] = [];
+
 interface ModalProps {
     open: boolean;
     onClose: () => void;
     title: string;
     children: ReactNode;
     contentClassName?: string;
+    /**
+     * "side" is a right-hand panel: about 440px wide on desktop and full screen below 640px.
+     * Its children fill the panel under the title (own scroll area and sticky footer).
+     */
+    placement?: "center" | "side";
 }
 
-export function Modal({ children, contentClassName, onClose, open, title }: ModalProps) {
+export function Modal({ children, contentClassName, onClose, open, placement = "center", title }: ModalProps) {
     const titleId = useId();
     const dialogRef = useRef<HTMLDivElement>(null);
     const closeRef = useRef(onClose);
     useEffect(() => { closeRef.current = onClose; }, [onClose]);
     useEffect(() => {
         if (!open) return;
+        const id = Symbol("modal");
+        openModals.push(id);
         const previousFocus = document.activeElement;
         const previousOverflow = document.body.style.overflow;
         document.body.style.overflow = "hidden";
@@ -34,6 +44,7 @@ export function Modal({ children, contentClassName, onClose, open, title }: Moda
         });
         focusable()[0]?.focus();
         function handleKey(event: KeyboardEvent) {
+            if (openModals[openModals.length - 1] !== id) return;
             if (event.key === "Escape") { event.preventDefault(); closeRef.current(); }
             if (event.key !== "Tab") return;
             const elements = focusable();
@@ -48,6 +59,7 @@ export function Modal({ children, contentClassName, onClose, open, title }: Moda
         document.addEventListener("keydown", handleKey);
         return () => {
             document.removeEventListener("keydown", handleKey);
+            openModals.splice(openModals.indexOf(id), 1);
             document.body.style.overflow = previousOverflow;
             if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
         };
@@ -59,21 +71,24 @@ export function Modal({ children, contentClassName, onClose, open, title }: Moda
     // Rendered into <body>: an animated or transformed ancestor would otherwise become the
     // containing block for `fixed`, so the backdrop covered only part of the screen and
     // left the sidebar and header clickable behind the dialog.
+    const side = placement === "side";
     const dialog = (
-        <div className="ma-fade fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,.45)] p-4 backdrop-blur-[2px]" onClick={onClose}>
+        <div className={`ma-fade fixed inset-0 z-50 flex bg-[rgba(15,23,42,.45)] backdrop-blur-[2px] ${side ? "justify-end" : "items-center justify-center p-4"}`} onClick={onClose}>
             <div
                 ref={dialogRef}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={titleId}
-                className={`ma-pop max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-pop)] sm:p-6 ${contentClassName ?? ""}`}
+                className={side
+                    ? `flex h-dvh w-full min-w-0 flex-col border-line bg-surface shadow-[var(--shadow-pop)] sm:max-w-[440px] sm:rounded-l-2xl sm:border-l ${contentClassName ?? ""}`
+                    : `ma-pop max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-pop)] sm:p-6 ${contentClassName ?? ""}`}
                 onClick={(event) => event.stopPropagation()}
             >
-                <div className="mb-4 flex items-center justify-between">
+                <div className={`flex items-center justify-between ${side ? "shrink-0 border-b border-line px-5 py-3.5" : "mb-4"}`}>
                     <h2 id={titleId} className="text-lg font-semibold tracking-[-0.01em] text-ink">{title}</h2>
                     <button
                         aria-label="Close modal"
-                        className="ma-press flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-sunken hover:text-ink"
+                        className="ma-press flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-sunken hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                         onClick={onClose}
                         type="button"
                     >

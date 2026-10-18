@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from "rea
 import { useRouter, useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { getPatientChatCopy } from "@/content/chat-copy";
+import { useChatTurnRecovery, type RecoverableTurn } from "@/hooks/use-chat-turn-recovery";
 import {
     createSpeechRecognitionController,
     getVoiceCapabilities,
@@ -28,6 +29,7 @@ import {
     mapClinicianMessageFromApi,
     mapChatMessageFromApi,
     type ChatDocumentContextApi,
+    type ChatTurnApi,
 } from "@/services/chat-api";
 import {
     buildVoiceAudioDataUrl,
@@ -54,6 +56,7 @@ import {
     type Locale as ChatLocale,
 } from "@/types";
 
+const MAX_RECOVERY_POLLS = 60;
 const HANDS_FREE_STORAGE_KEY = "patient-portal.chat.handsFree";
 const FALLBACK_DOCUMENT_NAME = "medical record";
 
@@ -150,9 +153,14 @@ interface PatientChatSessionState {
     voiceError: string | null;
     voiceInterimTranscript: string;
     voiceStatus: VoiceStatus;
+    recoveryTurns: RecoverableTurn[];
+    turnBusy: boolean;
 }
 
 interface PatientChatSessionActions {
+    reconnectChat: () => void;
+    retryTurn: (id: string) => void;
+    dismissTurn: (id: string) => void;
     dismissDocumentContext: () => void;
     dismissSafetyNotice: () => void;
     handleHandsFreeToggle: () => void;
@@ -181,7 +189,9 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     );
     // Today's conversation by default; a question about a document starts its own.
     const [sessionId, setSessionId] = useState<string>(() =>
-        searchParams.get("document") ? newConversationId() : todayConversationId(),
+        /^[A-Za-z0-9_-]{1,64}$/.test(searchParams.get("session") ?? "")
+            ? searchParams.get("session")!
+            : searchParams.get("document") ? newConversationId() : todayConversationId(),
     );
     const [voiceCapabilities] = useState(getVoiceCapabilities);
     const [input, setInput] = useState(
@@ -203,7 +213,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     const [activeDocumentId, setActiveDocumentId] = useState<string | null>(initialDocumentId);
     // A dismissal travels with the next connection so the server stops restoring the
     // document it saved for this conversation; clearing it here alone brought it back.
-    const [documentDismissed, setDocumentDismissed] = useState(false);
+    const [documentDismissed, setDocumentDismissed] = useState(searchParams.get("focus") === "none");
     const [documentUnavailable, setDocumentUnavailable] = useState(false);
     const [safetyNotice, setSafetyNotice] = useState<string | null>(null);
     const [reconnectSignal, setReconnectSignal] = useState(0);
@@ -241,7 +251,29 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         handsFreeMode: resolveInitialHandsFree(),
     });
     const socketRef = useRef<WebSocket | null>(null);
+    const durableReadyRef = useRef(false);
     const historyScopeRef = useRef<string | null>(null);
+    const recovery = useChatTurnRecovery(`${user?.id ?? ""}:${sessionId}`, socketRef);
+    const receiveTurns = useEffectEvent((rows: ChatTurnApi[], snapshot = false) => {
+        recovery.accept(rows, snapshot);
+        if (error === "CHAT_TURN_BUSY" && !rows.some((row) => row.status === "processing")) dispatch(setChatError(null));
+        if (snapshot || rows.some((row) => row.status !== "processing")) {
+            setAssistantDraft("");
+            setAssistantDraftStartedAt(null);
+            dispatch(setTyping(rows.some((row) => row.status === "processing")));
+        }
+    });
+    const rejectTurn = useEffectEvent((id: string) => {
+        const content = recovery.reject(id);
+        if (content) setInput((current) => !current || current === content ? content : `${content}\n\n${current}`);
+    });
+    const reconcilePersistedSafetyTurns = useEffectEvent((messageIds: string[]) => {
+        const persisted = new Set(messageIds);
+        const completed = recovery.turns
+            .filter((turn) => turn.status === "unknown" && persisted.has(turn.client_message_id))
+            .map((turn) => ({ ...turn, status: "completed" as const, retryable: false }));
+        if (completed.length > 0) recovery.accept(completed);
+    });
     const voiceSocketRef = useRef<WebSocket | null>(null);
     const reconnectRef = useRef<{
         attempts: number;
@@ -292,20 +324,16 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             return;
         }
 
-        if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-            dispatch(setChatError("Chat is reconnecting. Try sending in a moment."));
+        if (!durableReadyRef.current || !socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+            dispatch(setChatError("CHAT_STARTUP_UNAVAILABLE"));
+            voiceRefs.current.autoPlayNextAssistantMessage = false;
+            setInput((current) => current || trimmedContent);
             setVoiceStatus("idle");
             return;
         }
 
-        socketRef.current.send(
-            JSON.stringify({
-                type: "user_message",
-                content: trimmedContent,
-                language: voiceRefs.current.selectedLanguage,
-                audio_url: audioUrl ?? null,
-            }),
-        );
+        if (documentUnavailable || !recovery.send(trimmedContent,
+            voiceRefs.current.selectedLanguage, activeDocumentId, audioUrl)) return;
 
         // Feedback must begin when the user sends, not after the model has classified the turn.
         // `assistant_complete`, socket errors, and socket close all clear this state.
@@ -534,8 +562,9 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     }
 
     function clearChatStabilityTimer(): void {
-        if (reconnectRef.current.stabilityTimer) {
-            clearTimeout(reconnectRef.current.stabilityTimer);
+        const timer = reconnectRef.current.stabilityTimer;
+        if (timer) {
+            clearTimeout(timer);
             reconnectRef.current.stabilityTimer = null;
         }
     }
@@ -614,27 +643,70 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         voiceRefs.current.selectedLanguage = selectedLanguage;
     }, [selectedLanguage]);
 
-    useEffect(() => {
-        const documentId = searchParams.get("document");
-        if (!documentId) {
+    const applyDocumentRoute = useEffectEvent(() => {
+        const requestedSession = searchParams.get("session");
+        if (requestedSession && /^[A-Za-z0-9_-]{1,64}$/.test(requestedSession) && requestedSession !== sessionId) {
+            setSessionId(requestedSession);
+            setDocumentContext(null);
+            setActiveDocumentId(searchParams.get("document"));
+            setDocumentDismissed(searchParams.get("focus") === "none");
+            setDocumentUnavailable(false);
             return;
         }
+        const documentId = searchParams.get("document")?.trim();
+        if (!documentId) return;
+        if (documentId !== activeDocumentId) {
+            const next = resolveInitialDocumentContext(documentId);
+            setActiveDocumentId(documentId);
+            setDocumentContext(next);
+            setDocumentDismissed(false);
+            setDocumentUnavailable(false);
+            if (next?.suggestedQuestion) setInput((draft) => draft || next.suggestedQuestion || "");
+        }
+        if (searchParams.get("session") !== sessionId) {
+            router.replace(`/chat?session=${encodeURIComponent(sessionId)}&document=${encodeURIComponent(documentId)}`);
+        }
+    });
+    useEffect(() => { applyDocumentRoute(); }, [searchParams]);
 
-        router.replace("/chat");
-    }, [router, searchParams]);
-
+    // A reply still being saved by another tab or connection is polled while it is in
+    // flight only, and never for more than MAX_RECOVERY_POLLS (the server deadline is shorter).
+    const turnInFlight = recovery.turns.some((turn) => turn.status === "processing" || turn.status === "unknown");
     useEffect(() => {
+        if (!turnInFlight) return;
+        let polls = 0;
+        const recover = () => {
+            if (polls >= MAX_RECOVERY_POLLS) return;
+            if (document.visibilityState === "visible" && socketRef.current?.readyState === WebSocket.OPEN) {
+                polls += 1;
+                socketRef.current.send(JSON.stringify({ type: "recover_turns" }));
+            }
+        };
+        const timer = window.setInterval(recover, 5000);
+        document.addEventListener("visibilitychange", recover);
+        window.addEventListener("focus", recover);
+        return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", recover); window.removeEventListener("focus", recover); };
+    }, [turnInFlight, sessionId]);
+
+    // A silent token refresh replaces the token and user objects. The socket must not be
+    // rebuilt for that (it interrupted the live reply); it reads them once per connection.
+    const connectionUserId = user?.id ?? null;
+    const hasAccessToken = Boolean(accessToken);
+    const readSession = useEffectEvent(() => ({ accessToken, user }));
+    useEffect(() => {
+        const { accessToken, user } = readSession();
         if (!accessToken || !user) {
             historyScopeRef.current = null;
             return;
         }
 
         let isMounted = true;
+        let socketHistoryReceived = false;
         const historyScope = JSON.stringify([user.id, sessionId]);
         const changingConversation = historyScopeRef.current !== historyScope;
         historyScopeRef.current = historyScope;
-        // Reconnecting the same conversation must not collapse its history or
-        // reset the reader's scroll position while REST/WebSocket recover.
+        // A reconnect should not blank the transcript or move the reader while
+        // the REST and WebSocket recovery paths rehydrate the same conversation.
         if (changingConversation) {
             clearChatReconnectTimer();
             reconnectRef.current.attempts = 0;
@@ -644,20 +716,18 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
 
         fetchChatHistory(user.id, accessToken, sessionId)
             .then((history) => {
-                if (!isMounted) {
+                if (!isMounted || socketHistoryReceived) {
                     return;
                 }
 
-                dispatch(
-                    setMessages(
-                        history.length > 0
-                            ? history
-                            : [buildWelcomeMessage(user.id, voiceRefs.current.selectedLanguage)],
-                    ),
-                );
+                if (history.length > 0) {
+                    dispatch(setMessages(history));
+                } else if (changingConversation) {
+                    dispatch(setMessages([buildWelcomeMessage(user.id, voiceRefs.current.selectedLanguage)]));
+                }
             })
             .catch(() => {
-                if (!isMounted) {
+                if (!isMounted || socketHistoryReceived) {
                     return;
                 }
 
@@ -677,6 +747,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
 
         const socket = new WebSocket(
             buildChatWebSocketUrl(user.id, {
+                durableTurns: true,
                 documentId: activeDocumentId,
                 sessionId,
                 ...(documentDismissed && !activeDocumentId ? { documentDismissed: true } : {}),
@@ -684,6 +755,17 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             socketAuthProtocols(accessToken),
         );
         socketRef.current = socket;
+        durableReadyRef.current = false;
+        let durableReady = false;
+        let handshakeTimedOut = false;
+        const handshakeTimer = window.setTimeout(() => {
+            if (isMounted && !durableReady) {
+                handshakeTimedOut = true;
+                dispatch(setConnectionStatus("error"));
+                dispatch(setChatError("CHAT_STARTUP_UNAVAILABLE"));
+                socket.close();
+            }
+        }, 15000);
 
         socket.onopen = () => {
             if (!isMounted) {
@@ -692,23 +774,21 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
 
             clearChatReconnectTimer();
             clearChatStabilityTimer();
-            // Accepting the socket does not prove initialization succeeded.
-            // Repeated short-lived opens must still exhaust the retry budget.
+            // Opening and completing the recovery handshake are necessary, but
+            // a connection must stay healthy before it earns a fresh retry budget.
             reconnectRef.current.stabilityTimer = setTimeout(() => {
                 reconnectRef.current.stabilityTimer = null;
-                if (isMounted && socket.readyState === WebSocket.OPEN) {
+                if (isMounted && socket.readyState === WebSocket.OPEN && durableReady) {
                     reconnectRef.current.attempts = 0;
                 }
             }, CHAT_CONNECTION_STABLE_MS);
-            dispatch(setConnectionStatus("connected"));
-            window.dispatchEvent(new Event("symptom-intake-updated"));
+            // A socket opening alone does not prove the backend supports safe retries.
+            // Keep sending disabled until its durable recovery handshake arrives.
             dispatch(setChatError(null));
         };
 
         socket.onmessage = (event) => {
-            if (!isMounted) {
-                return;
-            }
+            if (!isMounted) return;
             let payload: unknown;
 
             try {
@@ -722,15 +802,27 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             }
 
             switch (payload.type) {
+                case "chat_turn": receiveTurns([payload.turn]); return;
+                case "chat_turns":
+                    durableReady = true;
+                    durableReadyRef.current = true;
+                    window.clearTimeout(handshakeTimer);
+                    dispatch(setConnectionStatus("connected"));
+                    receiveTurns(payload.turns, true);
+                    window.dispatchEvent(new Event("symptom-intake-updated"));
+                    return;
                 case "chat_history": {
+                    socketHistoryReceived = true;
                     const incomingHistory = payload.messages.map(mapChatMessageFromApi);
-                    dispatch(
-                        setMessages(
-                            incomingHistory.length > 0
-                                ? incomingHistory
-                                : [buildWelcomeMessage(user.id, voiceRefs.current.selectedLanguage)],
-                        ),
-                    );
+                    // Emergency turns use the client id as the atomically persisted user
+                    // message id. If the completion event was lost, history proves that
+                    // the safety turn landed and clears the optimistic recovery card.
+                    reconcilePersistedSafetyTurns(incomingHistory.map((message) => message.id));
+                    if (incomingHistory.length > 0) {
+                        dispatch(setMessages(incomingHistory));
+                    } else if (changingConversation) {
+                        dispatch(setMessages([buildWelcomeMessage(user.id, voiceRefs.current.selectedLanguage)]));
+                    }
                     return;
                 }
                 case "symptom_intake_updated":
@@ -754,7 +846,6 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                 case "chat_context_unavailable":
                     // Nora would otherwise answer from the general chart while the card
                     // still named a document she cannot read.
-                    setActiveDocumentId(null);
                     setDocumentContext(null);
                     setDocumentUnavailable(true);
                     return;
@@ -852,9 +943,17 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                     return;
                 }
                 case "error":
+                    if (payload.client_message_id && ["CHAT_TURN_BUSY", "CHAT_TURN_CONFLICT", "CHAT_TURN_INVALID", "CHAT_DOCUMENT_UNAVAILABLE", "CHAT_DOCUMENT_CHANGED"].includes(payload.code ?? "")) {
+                        rejectTurn(payload.client_message_id);
+                    }
+                    if (["CHAT_DOCUMENT_UNAVAILABLE", "CHAT_DOCUMENT_CHANGED"].includes(payload.code ?? "")) setDocumentUnavailable(true);
                     resetAssistantDraft();
                     dispatch(setTyping(false));
-                    dispatch(setChatError(payload.message || "Chat request failed."));
+                    dispatch(setChatError(payload.code === "CHAT_TURN_BUSY" || payload.code === "CHAT_TURN_EXPIRED" ? payload.code : payload.message || "Chat request failed."));
+                    // The saved message and its Retry card come from the server's turn list.
+                    if ((payload.code === "CHAT_TURN_BUSY" || payload.code === "CHAT_TURN_EXPIRED") && socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({ type: "recover_turns" }));
+                    }
                     // A backend error mid-turn invalidates pending auto-play
                     // but does NOT take the mic offline; user can retry.
                     voiceRefs.current.autoPlayNextAssistantMessage = false;
@@ -886,7 +985,21 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                 return;
             }
 
+            durableReadyRef.current = false;
             clearChatStabilityTimer();
+            // Chunks from a reply that may never be saved must not outlive its socket.
+            resetAssistantDraft();
+            if (!durableReady) {
+                dispatch(setTyping(false));
+                if (handshakeTimedOut) {
+                    dispatch(setConnectionStatus("error"));
+                    dispatch(setChatError("CHAT_STARTUP_UNAVAILABLE"));
+                    return;
+                }
+                dispatch(setConnectionStatus("disconnected"));
+                scheduleChatReconnectEvent();
+                return;
+            }
             dispatch(setConnectionStatus("disconnected"));
             dispatch(setTyping(false));
             voiceRefs.current.autoPlayNextAssistantMessage = false;
@@ -899,14 +1012,16 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
 
         return () => {
             isMounted = false;
+            window.clearTimeout(handshakeTimer);
             clearChatStabilityTimer();
+            durableReadyRef.current = false;
             stopSpeechRecognition();
             stopAssistantPlayback();
             closeVoiceSocket();
             socketRef.current = null;
             socket.close();
         };
-    }, [accessToken, activeDocumentId, dispatch, documentDismissed, reconnectSignal, sessionId, user]);
+    }, [connectionUserId, hasAccessToken, activeDocumentId, dispatch, documentDismissed, reconnectSignal, sessionId]);
 
     useEffect(() => {
         return () => {
@@ -915,6 +1030,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             stopAssistantVoicePlayback();
             closeVoiceSocket();
             clearChatReconnectTimer();
+            clearChatStabilityTimer();
         };
     }, []);
 
@@ -922,14 +1038,19 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         setActiveDocumentId(null);
         setDocumentContext(null);
         setDocumentDismissed(true);
+        setDocumentUnavailable(false);
+        router.replace(`/chat?session=${encodeURIComponent(sessionId)}&focus=none`);
     }
 
     function openConversation(nextSessionId: string): void {
+        if (!/^[A-Za-z0-9_-]{1,64}$/.test(nextSessionId)) return;
+        router.replace(`/chat?session=${encodeURIComponent(nextSessionId)}`);
+        setSafetyNotice(null);
+        if (nextSessionId === sessionId) return;
         setActiveDocumentId(null);
         setDocumentContext(null);
         setDocumentDismissed(false);
         setDocumentUnavailable(false);
-        setSafetyNotice(null);
         setSessionId(nextSessionId);
     }
 
@@ -1139,6 +1260,11 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     }
 
     return {
+        reconnectChat: () => { clearChatReconnectTimer(); reconnectRef.current.attempts = 0; setReconnectSignal((current) => current + 1); },
+        recoveryTurns: recovery.turns,
+        turnBusy: recovery.turnBusy,
+        retryTurn: (id: string) => { if (durableReadyRef.current && recovery.retry(id)) { dispatch(setTyping(true)); dispatch(setChatError(null)); } },
+        dismissTurn: recovery.dismiss,
         assistantDraft,
         assistantDraftStartedAt,
         canPlayAssistantAudio,

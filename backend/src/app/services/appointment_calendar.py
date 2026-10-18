@@ -14,11 +14,14 @@ _COPY = {
         "MediAgent appointment",
         "This is a one-time calendar copy. Changes and cancellations do not sync. "
         "Check MediAgent for the latest appointment details.",
+        "Clinic",
     ),
     "es-MX": (
         "Cita de MediAgent",
         "Esta es una copia del calendario. Los cambios y las cancelaciones no se sincronizan. "
         "Consulta MediAgent para ver los datos actuales de la cita.",
+        # CLN-003 slice F draft: pending native-speaker review (see .agent/TASKS.md).
+        "Clínica",
     ),
 }
 
@@ -60,7 +63,8 @@ def render_appointment_calendar(
     start = appointment.scheduled_at
     if start.tzinfo is None or not 5 <= appointment.duration_minutes <= 480:
         raise ValidationError("Appointment time is unavailable", code="APPOINTMENT_UNAVAILABLE")
-    title, notice = _COPY[locale]
+    title, notice, clinic_label = _COPY[locale]
+    clinic = " ".join((appointment.clinic_name or "").split())
     end = start.astimezone(UTC) + timedelta(minutes=appointment.duration_minutes)
     lines = [
         "BEGIN:VCALENDAR",
@@ -72,13 +76,18 @@ def render_appointment_calendar(
         f"DTSTAMP:{_utc(datetime.now(UTC))}",
         f"DTSTART:{_utc(start)}",
         f"DTEND:{_utc(end)}",
-        "STATUS:CONFIRMED",
+        f"STATUS:{'CANCELLED' if appointment.status == 'cancelled' else 'CONFIRMED'}",
         "CLASS:PRIVATE",
-        f"SUMMARY;LANGUAGE={locale}:{_escape(title)}",
-        f"DESCRIPTION;LANGUAGE={locale}:{_escape(notice)}",
+        # The appointment's own clinic, so a patient with several clinics can tell them apart.
+        f"SUMMARY;LANGUAGE={locale}:{_escape(f'{title} · {clinic}' if clinic else title)}",
+        f"DESCRIPTION;LANGUAGE={locale}:"
+        f"{_escape(f'{clinic_label}: {clinic}{chr(10)}{notice}' if clinic else notice)}",
     ]
-    if appointment.location:
-        lines.append(f"LOCATION:{_escape(appointment.location)}")
+    place = [part for part in (clinic, appointment.location) if part]
+    if len(place) == 2 and clinic.casefold() in str(appointment.location).casefold():
+        place = [str(appointment.location)]
+    if place:
+        lines.append(f"LOCATION:{_escape(', '.join(place))}")
     lines.extend(["END:VEVENT", "END:VCALENDAR"])
     return AppointmentCalendarExport(
         filename=f"appointment-{appointment.id}.ics",
