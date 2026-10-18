@@ -288,3 +288,24 @@ async def test_turn_failure_category_is_in_the_log_message(monkeypatch, turn_run
         await chat._process_durable_message(socket, service, context, {})
     assert "Durable chat turn did not complete: KeyError" in caplog.text
     assert "patient" not in caplog.text.replace("patient_id", "")
+
+
+def test_public_turn_serializes_the_user_message_like_history():
+    row = {
+        "id": str(uuid4()),
+        "patient_id": str(uuid4()),
+        "session_id": "chat-test",
+        "role": "user",
+        "content": "Synthetic question",
+        "language": "en-US",
+        "audio_url": "https://private.example/audio.webm",
+        "created_at": "2026-10-17T10:00:00Z",
+        "lease_hint": "extra",
+    }
+    shown = public_turn({"id": "t", "status": "failed", "user_message": row})["user_message"]
+    assert shown == chat._serialize_chat_message(row)
+    assert "lease_hint" not in shown
+    partial = public_turn(
+        {"id": "t", "status": "failed", "user_message": {"content": "x", "junk": 1}}
+    )
+    assert partial["user_message"] == {"content": "x"}

@@ -24,6 +24,7 @@ def turn_sql(sql):
         "051_health_knowledge_and_chat_sessions.sql",
         "062_chat_message_attachments.sql",
         "072_nora_turn_recovery.sql",
+        "073_nora_turn_begin_validation.sql",
     ):
         sql((MIGRATIONS / name).read_text())
     return sql
@@ -273,3 +274,33 @@ def test_foreign_unprocessed_and_deleted_documents_never_fall_back_to_general_ch
         turn_sql, payload=request(document_id=document), succeeds=False
     )
     assert turn_sql("SELECT count(*) FROM chat_messages;") == "0"
+
+
+@pytest.mark.parametrize("field", ["content", "language", "client_message_id"])
+def test_begin_rejects_null_fields_explicitly(turn_sql, field):
+    data = request()
+    data[field] = None
+    assert "CHAT_TURN_INVALID" in call(turn_sql, payload=data, succeeds=False)
+    assert turn_sql("SELECT count(*) FROM chat_messages;") == "0"
+
+
+def test_completed_turn_without_its_reply_replays_as_reply_unavailable(turn_sql):
+    data = request()
+    record = call(turn_sql, payload=data)["turn"]
+    reply = call(turn_sql, "complete", finish(record))["message"]
+    turn_sql(f"DELETE FROM chat_messages WHERE id='{reply['id']}';")
+    replay = call(turn_sql, payload=data)
+    assert replay["reply_unavailable"] and not replay["execute"]
+    assert "assistant_message" not in replay
+
+
+def test_073_is_re_runnable_and_keeps_grants(turn_sql):
+    migration = (MIGRATIONS / "073_nora_turn_begin_validation.sql").read_text()
+    turn_sql(migration)
+    turn_sql(migration)
+    assert (
+        turn_sql(
+            "SELECT has_function_privilege('anon','chat_turn_operation(uuid,text,text,jsonb)','EXECUTE');"
+        )
+        == "f"
+    )

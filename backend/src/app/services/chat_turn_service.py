@@ -8,9 +8,11 @@ from typing import Any, cast
 from uuid import UUID
 
 from postgrest.exceptions import APIError
+from pydantic import ValidationError as PydanticValidationError
 from supabase import Client
 
 from app.core.exceptions import ExternalServiceError, ValidationError
+from app.models.chat import ChatMessage
 from app.models.enums import coerce_locale
 from app.safety import TRIAGE_COPY, deterministic_safety_floor
 from app.services.explanation_service import normalize_patient_summary
@@ -133,6 +135,17 @@ class TurnExecution:
             await self.service.call("interrupted" if interrupted else "failed", self.identity)
 
 
+_SAFE_MESSAGE_KEYS = ("id", "role", "content", "language", "session_id", "created_at")
+
+
+def _serialize_user_message(row: dict[str, Any]) -> dict[str, Any]:
+    """Same shape as chat history; a partial or malformed row keeps only safe fields."""
+    try:
+        return ChatMessage.model_validate(row).model_dump(mode="json")
+    except PydanticValidationError:
+        return {key: row[key] for key in _SAFE_MESSAGE_KEYS if key in row}
+
+
 def public_turn(record: dict[str, Any]) -> dict[str, Any]:
     """No lease, fingerprint, clinical context snapshot or private URL enters socket events."""
     fields = (
@@ -156,7 +169,7 @@ def public_turn(record: dict[str, Any]) -> dict[str, Any]:
     return {
         **{key: record[key] for key in fields if key in record},
         **(
-            {"user_message": record["user_message"]}
+            {"user_message": _serialize_user_message(record["user_message"])}
             if record.get("user_message") and record.get("status") != "completed"
             else {}
         ),

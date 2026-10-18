@@ -659,6 +659,23 @@ async def _process_durable_message(
                         "message": _serialize_chat_message(result["assistant_message"]),
                     },
                 )
+            elif result.get("reply_unavailable"):
+                # Completed, but the saved reply no longer exists: say so, never replay nothing.
+                await _send_terminal_event(
+                    websocket,
+                    {
+                        "type": "chat_turn",
+                        "turn": public_turn(
+                            {
+                                **record,
+                                "status": "failed",
+                                "actions_started": True,
+                                "failure_code": "reply_unavailable",
+                                "user_message": result["user_message"],
+                            }
+                        ),
+                    },
+                )
             return cast(dict[str, Any], context["conversation_state"])
         execution = TurnExecution(turns, record)
         staged = TurnChatService(service, execution, result["user_message"])
@@ -736,6 +753,24 @@ async def _process_durable_message(
         )
         try:
             recovered = await turns.call("recover")
+            finished = any(
+                row.get("client_message_id") == request.get("client_message_id")
+                and row.get("status") == "completed"
+                for row in recovered["items"]
+            )
+            if finished:
+                # The reply was committed although its confirmation was lost (for example a
+                # timed-out completion call): deliver it from the saved history.
+                history = await service.get_history(
+                    str(context["patient_id"]), session_id=context["session_id"]
+                )
+                await _send_terminal_event(
+                    websocket,
+                    {
+                        "type": "chat_history",
+                        "messages": [_serialize_chat_message(row) for row in history],
+                    },
+                )
             await _send_terminal_event(
                 websocket,
                 {"type": "chat_turns", "turns": [public_turn(row) for row in recovered["items"]]},
@@ -1178,6 +1213,22 @@ async def chat_websocket_endpoint(
     except WebSocketDisconnect:
         logger.info("Chat websocket disconnected during initialization")
         return
+    except Exception as exc:
+        if _closed_websocket_error(exc):
+            logger.info("Chat websocket disconnected during initialization")
+            return
+        # Never leave an accepted socket to die silently: the client needs an explicit state.
+        logger.warning("Chat websocket initialization failed: %s", _failure_label(exc))
+        if await _send_terminal_event(
+            websocket,
+            {
+                "type": "error",
+                "code": "CHAT_STARTUP_UNAVAILABLE",
+                "message": "Chat is temporarily unavailable.",
+            },
+        ):
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        return
 
     try:
         while True:
@@ -1223,9 +1274,23 @@ async def chat_websocket_endpoint(
                             }
                         )
                         continue
-                    await turns.call("dismiss", {"client_message_id": key})
-                recovered = await turns.call("recover")
-                history = await service.get_history(str(patient_id), session_id=session_id)
+                try:
+                    if event_type == "dismiss_turn":
+                        await turns.call("dismiss", {"client_message_id": key})
+                    recovered = await turns.call("recover")
+                    history = await service.get_history(str(patient_id), session_id=session_id)
+                except Exception as exc:
+                    if _closed_websocket_error(exc):
+                        raise
+                    logger.warning("Chat recovery request failed: %s", _failure_label(exc))
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "code": "CHAT_TURN_UNAVAILABLE",
+                            "message": "Chat recovery is required.",
+                        }
+                    )
+                    continue
                 await websocket.send_json(
                     {
                         "type": "chat_history",
