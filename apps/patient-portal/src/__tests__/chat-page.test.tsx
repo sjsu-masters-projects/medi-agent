@@ -306,6 +306,30 @@ describe("Patient chat page", () => {
         });
     });
 
+    it("keeps the live socket and streamed reply across a silent token refresh and history refresh", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.emitOpen();
+            socket.emitMessage({ type: "assistant_start", intent: "general", urgency: "routine" });
+            socket.emitMessage({ type: "assistant_chunk", content: "Still streaming" });
+        });
+        const sockets = MockWebSocket.instances.length;
+        await act(async () => {
+            store.dispatch(hydrateSession({
+                accessToken: "refreshed-token",
+                expiresAt: 9999999999,
+                refreshToken: "refresh-token-2",
+                user: { email: "patient@example.com", id: "patient-1", role: "patient" },
+            }));
+            socket.emitMessage({ type: "chat_history", messages: [] });
+        });
+        expect(MockWebSocket.instances).toHaveLength(sockets);
+        expect(socket.readyState).toBe(1);
+        expect(screen.getByText(/Still streaming/)).toBeInTheDocument();
+    });
+
     it("renders assistant chunks progressively before completion", async () => {
         renderPage();
 

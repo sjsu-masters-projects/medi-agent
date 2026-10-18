@@ -662,7 +662,13 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", recover); window.removeEventListener("focus", recover); };
     }, [recovery.turns.length, sessionId]);
 
+    // A silent token refresh replaces the token and user objects. The socket must not be
+    // rebuilt for that (it interrupted the live reply); it reads them once per connection.
+    const connectionUserId = user?.id ?? null;
+    const hasAccessToken = Boolean(accessToken);
+    const readSession = useEffectEvent(() => ({ accessToken, user }));
     useEffect(() => {
+        const { accessToken, user } = readSession();
         if (!accessToken || !user) {
             return;
         }
@@ -936,7 +942,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             socketRef.current = null;
             socket.close();
         };
-    }, [accessToken, activeDocumentId, dispatch, documentDismissed, reconnectSignal, sessionId, user]);
+    }, [connectionUserId, hasAccessToken, activeDocumentId, dispatch, documentDismissed, reconnectSignal, sessionId]);
 
     useEffect(() => {
         return () => {
