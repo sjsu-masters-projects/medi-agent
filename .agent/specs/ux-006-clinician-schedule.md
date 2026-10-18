@@ -84,3 +84,16 @@ Terrace) showed the unified view works but reads as messy:
   MedWatch headers use the same title size and subtitle tone as the other pages.
 - **Not done:** the Settings consolidation (duplicate clinic, default-clinic "Role", placement under
   "Administration") from decision 5 is not part of this change.
+
+## Visit management (added October 17, same pull request)
+
+The visit detail has an action row: one primary action that fits the status ("Offer new times" for an
+upcoming booked visit, "Mark completed" once it has ended) and a small "More actions" menu ("Edit
+details", "Mark no-show" after the end, "Cancel visit" in destructive style). Rules, notifications,
+audit and the migration (`071_clinician_visit_management.sql`) are recorded in
+[SCH-001](sch-001-appointment-scheduling.md#clinician-visit-management--2026-10-17-ux-006-migration-071).
+Decisions: no direct time change on a booked visit (time changes are offers); a cancel needs a reason
+from a list (free text for "Other"), tells the patient in app and by email, and frees the slot; complete
+and no-show only after the visit ends and notify nobody. The agenda hides cancelled visits behind a
+"Show cancelled" toggle (off by default) and shows them muted with a "Cancelled" chip.
+

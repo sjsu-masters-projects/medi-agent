@@ -438,6 +438,11 @@ link by a database trigger, so it cannot disagree with the link. UX-006 adds
 `GET /appointments/schedule?from&to[&clinic_id]` (the caller's own visits, open offers and change
 requests, next visit; 45-day cap), `GET /appointments/busy?from&to` (own booked intervals with clinic
 names, never patients; 48 h cap) and `GET /appointments/?patient_id=` (one linked patient's visits).
+Visit management (migration 071): `POST /appointments/{id}/cancel` (`reason_code`, `reason`),
+`/complete` and `/no-show`, all clinician-only for the appointment's own clinician or one linked at its
+clinic and audited in `appointment_offer_events`; `PUT /appointments/{id}` edits type, location, reason
+and notes but refuses a time change on a confirmed or scheduled visit (`APPOINTMENT_TIME_CHANGE_VIA_OFFER`);
+`GET /appointments/schedule?include_cancelled=true` adds cancelled visits.
 Message translation is never done on send or read: reads set `translation_pending` and
 `POST /care-conversations/{id}/messages/{message_id}/translation` translates one message (same
 authorization as reading the conversation, idempotent, honours a fresh failure marker).

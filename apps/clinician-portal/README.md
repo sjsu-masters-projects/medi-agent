@@ -309,6 +309,13 @@ phone): patient picker, the clinic read-only, 2–4 times, and, under each chose
 booked times that day across all clinics (no patient names). A patient record's **Appointments** tab lists
 that patient's visits and offers and opens the same panel.
 
+The visit detail has an action row: a primary action that fits the status ("Offer new times" for an
+upcoming booked visit, "Mark completed" after it ends) and a "More actions" menu: **Edit details**
+(type, location, reason, notes; never the time of a booked visit), **Mark no-show** (after the visit
+ends, with a confirm dialog) and **Cancel visit** (destructive; a reason from a list, free text required
+for "Other"; the patient is told in the app and by email). The agenda hides cancelled visits behind
+**Show cancelled**, and shows them muted with a "Cancelled" chip.
+
 The patient picker supplies the care-team ID automatically.
 The patient profile supplies the explicitly labelled timezone for entry and display;
 missing/invalid values use UTC, and profile failures require retry before entry.
