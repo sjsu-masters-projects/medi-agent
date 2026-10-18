@@ -109,17 +109,34 @@ class ClinicianService:
             return []
         result = await self._execute(
             self.db.table("care_teams")
-            .select("*, patients(id, email, first_name, last_name, date_of_birth, avatar_url)")
+            .select(
+                "*, clinics(display_name),"
+                " patients(id, email, first_name, last_name, date_of_birth, avatar_url)"
+            )
             .eq("clinician_id", str(clinician_id))
             .eq("status", "active")
         )
         patients = []
         for row in cast(list[dict[str, Any]], result.data or []):
             patient = cast(dict[str, Any], row.pop("patients", {}) or {})
-            if patient and str(patient.get("id")) in scope.links:
-                patient["care_team_id"] = row["id"]
-                patient["role"] = row.get("role", "")
-                patients.append(scope.annotate(patient, "id"))
+            if not patient or str(patient.get("id")) not in scope.links:
+                continue
+            # One entry per link (a patient shared by two of the caller's clinics has two, each
+            # with its own care_team_id). With a clinic filter, a link at another clinic is not
+            # in scope and must not be listed, or the list is longer than the roster.
+            clinic = row.get("clinic_id")
+            if clinic and (str(patient["id"]), str(clinic)) not in scope.pairs:
+                continue
+            patient["care_team_id"] = row["id"]
+            patient["role"] = row.get("role", "")
+            scope.annotate(patient, "id")
+            if clinic:
+                # The chip names the clinic of THIS link, not of the patient's first link.
+                linked = row.get("clinics")
+                patient["clinic_id"] = str(clinic)
+                if isinstance(linked, dict):
+                    patient["clinic_name"] = linked.get("display_name")
+            patients.append(patient)
         return patients
 
     async def get_patient_detail(self, clinician_id: UUID, patient_id: UUID) -> Any:

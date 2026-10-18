@@ -1,5 +1,6 @@
 """Appointment routes."""
 
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -15,12 +16,44 @@ from app.models import (
     AppointmentResponse,
     AppointmentUpdate,
 )
-from app.models.appointment import AppointmentCalendarExport
+from app.models.appointment import AppointmentCalendarExport, BusyInterval, ScheduleRead
 from app.models.auth import CurrentUser
 from app.services.appointment_calendar import CalendarLocale
+from app.services.appointment_schedule_service import AppointmentScheduleService
 from app.services.appointment_service import AppointmentService
 
 router = APIRouter()
+
+
+@router.get("/schedule", response_model=ScheduleRead)
+async def my_schedule(
+    start: datetime = Query(alias="from"),
+    end: datetime = Query(alias="to"),
+    clinic_id: UUID | None = Query(default=None),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_db),
+) -> Any:
+    """The caller's own visits in [from, to), what needs action, and the next visit."""
+    return await AppointmentScheduleService(db).schedule(
+        user_id=current_user.id,
+        role=current_user.role,
+        start=start,
+        end=end,
+        clinic_id=clinic_id,
+    )
+
+
+@router.get("/busy", response_model=list[BusyInterval])
+async def my_busy_times(
+    start: datetime = Query(alias="from"),
+    end: datetime = Query(alias="to"),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_db),
+) -> Any:
+    """The caller's booked intervals in [from, to) at every clinic: no patient data."""
+    return await AppointmentScheduleService(db).busy(
+        user_id=current_user.id, role=current_user.role, start=start, end=end
+    )
 
 
 @router.get("/{appointment_id}/calendar", response_model=AppointmentCalendarExport)
@@ -43,6 +76,7 @@ async def export_appointment_calendar(
 @router.get("/", response_model=list[AppointmentRead])
 async def list_appointments(
     clinic_id: UUID | None = Query(default=None),
+    patient_id: UUID | None = Query(default=None),
     current_user: CurrentUser = Depends(get_current_user),
     db: Client = Depends(get_db),
 ) -> Any:
@@ -50,6 +84,7 @@ async def list_appointments(
         user_id=current_user.id,
         role=current_user.role,
         clinic_id=clinic_id,
+        patient_id=patient_id,
     )
 
 

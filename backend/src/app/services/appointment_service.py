@@ -138,7 +138,12 @@ class AppointmentService:
         return render_appointment_calendar(AppointmentRead.model_validate(appointment), locale)
 
     async def list_for_user(
-        self, *, user_id: UUID, role: str, clinic_id: UUID | None = None
+        self,
+        *,
+        user_id: UUID,
+        role: str,
+        clinic_id: UUID | None = None,
+        patient_id: UUID | None = None,
     ) -> list[dict[str, Any]]:
         if role not in {"patient", "clinician"}:
             raise AuthorizationError(
@@ -159,6 +164,9 @@ class AppointmentService:
         if role == "clinician":
             scope = await ClinicMembershipService(self).link_scope(user_id, clinic_id)
             assignments = scope.patient_ids
+            if patient_id is not None:
+                # One patient's record: only if the caller holds a link to them.
+                assignments = [pid for pid in assignments if pid == str(patient_id)]
             if not assignments:
                 return []
             result = await self._execute(

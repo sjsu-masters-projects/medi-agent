@@ -1,6 +1,7 @@
 """Appointment schemas."""
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, Field, field_validator
@@ -71,3 +72,38 @@ class AppointmentRead(ClinicTag):
     proposal_expires_at: datetime | None = None
     source_document_id: UUID | None = None  # parsed from "return in 2 weeks"
     created_at: str
+
+
+class ScheduleVisit(AppointmentRead):
+    """A visit on the clinician's own schedule, with the patient's name."""
+
+    patient_name: str | None = None
+
+
+class ScheduleNeedsAction(ClinicTag):
+    """One offer (or change request) that needs the clinician's attention."""
+
+    kind: Literal["awaiting_reply", "change_request", "expired"]
+    appointment_id: UUID  # the first slot of the offer; opens the offer in the visit panel
+    proposal_group_id: UUID | None = None
+    patient_id: UUID
+    patient_name: str | None = None
+    slot_count: int
+    first_slot_at: datetime
+    expires_at: datetime | None = None
+    expiring_soon: bool = False
+
+
+class ScheduleRead(BaseModel):
+    """The caller's own schedule in a date range, plus what needs action (UX-006)."""
+
+    visits: list[ScheduleVisit]
+    needs_action: list[ScheduleNeedsAction]
+    next_visit: ScheduleVisit | None = None
+
+
+class BusyInterval(ClinicTag):
+    """One booked interval of the caller's own: the time and the clinic, never a patient."""
+
+    starts_at: datetime
+    ends_at: datetime
