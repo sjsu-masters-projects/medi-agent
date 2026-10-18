@@ -406,3 +406,107 @@ def test_platform_default_grants_on_the_denial_trail_are_restored_before_verific
             ORDER BY 1"""
     ).splitlines()
     assert granted == ["service_role:INSERT", "service_role:SELECT"]
+
+
+# ── Visit management (migration 071) ────────────────────────────────────────────────────────
+
+
+def manage(sql, visit, action, *, actor=CLINICIAN, code="clinic_closed", reason="Synthetic reason"):
+    out = sql(
+        f"""SET ROLE service_role; SELECT manage_appointment('{actor}','{visit}','{action}',
+        {f"'{code}'" if code else "NULL"},{f"'{reason}'" if reason else "NULL"})::text;"""
+    )
+    return json.loads(out)
+
+
+def end_in_the_past(sql, visit):
+    sql(
+        f"""SET session_replication_role = replica;
+        UPDATE appointments SET scheduled_at = clock_timestamp() - interval '3 hours' WHERE id='{visit}';"""
+    )
+
+
+def test_a_clinician_cancel_frees_both_slots_and_is_audited(sql):
+    visit = book(sql, PATIENT, TEAM, 0, status="confirmed")
+    done = manage(sql, visit, "cancel", code="other", reason="Room flooded")["appointment"]
+    assert (done["status"], done["cancelled_by"], done["cancel_reason_code"]) == (
+        "cancelled",
+        "clinician",
+        "other",
+    )
+    assert done["cancel_reason"] == "Room flooded" and done["cancelled_at"]
+    # Neither the patient's nor the clinician's schedule is blocked any more.
+    assert book(sql, PATIENT, TEAM, 0, status="confirmed")
+    audit = sql(
+        f"""SELECT action||'|'||actor_id||'|'||previous_status||'>'||new_status||'|'||note
+        FROM appointment_offer_events WHERE appointment_id='{visit}'"""
+    )
+    assert audit == f"clinician_cancel|{CLINICIAN}|confirmed>cancelled|other: Room flooded"
+
+
+def test_a_clinician_cancel_notifies_the_patient_and_a_patient_cancel_the_clinician(sql):
+    visit = book(sql, PATIENT, TEAM, 0, status="confirmed")
+    manage(sql, visit, "cancel")
+    patient_items = [i for i in call(sql)["items"] if i["category"] == "appointments"]
+    assert "appointment_changed" in {i["event_type"] for i in patient_items}
+    assert "appointment_response" not in {i["event_type"] for i in patient_items}
+    assert not [
+        i
+        for i in call(sql, actor=CLINICIAN, role="clinician")["items"]
+        if i["event_type"] == "appointment_response"
+    ]
+    # The patient's own cancel (043) still reaches the clinician.
+    other = book(sql, PATIENT, TEAM, 600, status="confirmed")
+    sql(
+        f"""SET ROLE service_role; SELECT respond_to_appointment_offer('{PATIENT}','{other}','cancel',NULL)::text;"""
+    )
+    kinds = {i["event_type"] for i in call(sql, actor=CLINICIAN, role="clinician")["items"]}
+    assert "appointment_response" in kinds
+
+
+def test_only_the_owner_or_a_linked_colleague_may_manage(sql):
+    visit = book(sql, PATIENT, TEAM, 0, status="confirmed")
+    assert manage(sql, visit, "cancel", actor=OTHER) == {"error": "forbidden"}
+    link(sql, OTHER, clinic=CLINIC)
+    assert manage(sql, visit, "cancel", actor=OTHER)["appointment"]["status"] == "cancelled"
+
+
+def test_wrong_status_and_missing_reason_are_refused(sql):
+    visit = book(sql, PATIENT, TEAM, 0, status="confirmed")
+    assert manage(sql, visit, "cancel", code=None, reason=None) == {"error": "invalid"}
+    assert manage(sql, visit, "cancel", code="other", reason=None) == {"error": "invalid"}
+    manage(sql, visit, "cancel")
+    assert manage(sql, visit, "cancel") == {"error": "stale"}
+    assert manage(sql, visit, "complete", code=None) == {"error": "stale"}
+    proposed = book(sql, PATIENT, TEAM, 600, status="proposed")
+    assert manage(sql, proposed, "cancel") == {"error": "stale"}
+
+
+def test_complete_and_no_show_wait_for_the_end_of_the_visit(sql):
+    visit = book(sql, PATIENT, TEAM, 0, status="confirmed")
+    assert manage(sql, visit, "complete", code=None) == {"error": "too_early"}
+    end_in_the_past(sql, visit)
+    assert manage(sql, visit, "complete", code=None)["appointment"]["status"] == "completed"
+    second = book(sql, PATIENT, TEAM, 600, status="scheduled")
+    end_in_the_past(sql, second)
+    assert manage(sql, second, "no_show", code=None)["appointment"]["status"] == "no_show"
+    actions = sql(
+        "SELECT string_agg(action, ',' ORDER BY created_at) FROM appointment_offer_events"
+    )
+    assert actions == "complete,no_show"
+    # Neither tells the patient.
+    assert not [
+        i
+        for i in call(sql)["items"]
+        if i["category"] == "appointments" and i["event_type"] != "appointment_changed"
+    ]
+
+
+def test_manage_appointment_is_not_executable_from_a_browser_role(sql):
+    assert (
+        sql(
+            """SELECT has_function_privilege('authenticated','public.manage_appointment(uuid,uuid,text,text,text)','EXECUTE')
+            OR has_function_privilege('anon','public.manage_appointment(uuid,uuid,text,text,text)','EXECUTE')"""
+        )
+        == "f"
+    )
