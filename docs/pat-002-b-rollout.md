@@ -64,3 +64,16 @@ intake flag to pause new ordinary intake; keep safety alert delivery operational
 Do not roll back by dropping guards or restoring unconfirmed writers. Fix forward
 with an additive migration if SQL changes are needed. Inspect retry/dead-letter
 state through the existing operational path; never fabricate successful processing.
+
+
+## Authorized synthetic application — October 18 continuation
+
+The requester explicitly authorized only the exact 071 file above. It was applied
+through the authenticated synthetic project's SQL editor in a guarded transaction;
+the resulting ledger and read-only target preflight pass. The local backend now
+runs intake and the existing retry worker. One patient-confirmed synthetic report
+reached Elena's Symptoms and ADR workspace, with one completed task and one review
+notice. No deployed service configuration or other remote migration changed.
+Candidate-2 approval/activation remains pending. See the October 18 continuation
+in the acceptance record for IDs and actual observations. New main's independent
+071 filename does not authorize renaming this already applied file.

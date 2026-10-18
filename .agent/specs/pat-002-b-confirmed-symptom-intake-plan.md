@@ -1154,3 +1154,20 @@ denial and connectivity interruption. Record actual evidence and remaining relea
 gates. Prepare a concrete rollout preflight before asking for exact migration,
 configuration/deployment and merge authorization; never treat a green CI run as
 peer review or deployed acceptance.
+
+
+## 26. October 18 continuation
+
+The exact additive 071 migration was explicitly authorized, applied in a guarded
+transaction and verified by ledger/readiness reads. A synthetic patient confirmation
+produced one completed ADR task, one assessment awaiting clinician review and one
+assigned-clinician notice; the real assigned clinician UI shows both the confirmed
+summary and existing ADR workspace. An unassigned canonical fixture is denied and
+audited. Candidate-2 remains pending genuine approval; no clinical review signature
+or professional decision was fabricated. Details and remaining patient login,
+Spanish/physical voice/mobile checks are in the dated acceptance record.
+
+Main advanced overnight to 582c397 (Nora recovery, session lifecycle and notification
+performance). Integrate that existing work without expanding PAT-002-B or renaming
+applied migration files, then rerun owning regressions and required checks. Add the
+25 intake SQL cases to required CI with zero-skips/minimum-count enforcement.

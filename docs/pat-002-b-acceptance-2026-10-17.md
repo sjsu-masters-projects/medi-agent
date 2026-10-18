@@ -115,3 +115,47 @@ override was reset. Physical microphone, bilingual/source-locale, authenticated
 access-denial, connectivity interruption, new SQL handoff and deployed acceptance
 remain pending until recorded. No new screenshot is evidence of a completed path
 unless its corresponding state is described here.
+
+
+## October 18 continuation — authorized SQL and authenticated handoff
+
+The requester authorized only `071_confirmed_symptom_handoff.sql` with SHA-256
+`f690b788d5f29c3d7583f2fe8cc43b7a51a6af817c276d6839cc9c9ab2ded36b`.
+It was applied in the authenticated synthetic-project SQL editor with prerequisite
+checksum guards, the existing advisory transaction lock and its ledger insert in
+one transaction. The returned ledger row and a separate read-only preflight match.
+Preflight passes 059/060/065/071, candidate-1 eligibility, trigger presence and
+browser report/task write denial. No other remote migration, seed/reset, manual
+deployment or merge was performed. There were zero existing due ADR retry tasks
+before starting the local backend with both intake and retry flags enabled.
+
+The patient confirmed the prepared preview through the checkbox/button. Report
+`6675bec7-c256-4c1f-ae29-ad06f24e2ea6` has exactly one completed task
+`c35c66d2-3065-4639-b7d7-8b8fc2489726`, ADR draft
+`c6860843-bf91-4bfb-b4bf-5a781d112c7f` and one Elena review notice. Its exact
+active-list product is Metformin. The unlisted herbal tea is absent from medications.
+These are synthetic application records, not a professional clinical judgment.
+
+Authenticated Elena → Maya → Symptoms shows the new Patient-confirmed summary,
+3/10 severity and unverified testimony. ADR opens the new Metformin case awaiting
+review. Its score is 0 with all ten Naranjo inputs missing, visibly labelled decision
+support; no reviewer decision or causality evidence was fabricated. The canonical
+unassigned José fixture shows Access denied with no patient record content. Its
+normal authorization audit records `ASSIGNMENT_EXISTS_FOR_DIFFERENT_PATIENT_ONLY`.
+
+Screenshots: `migration-071-applied.png`, `clinician-confirmed-summary.png`,
+`clinician-adr-draft.png` under the local verification directory. The patient session
+expired during the next refresh and a sign-in tab is prepared; further authenticated
+patient recovery, Spanish and physical voice checks await sign-in.
+
+All PR checks on code commit `708403c` passed, including full backend coverage and
+shards, both portals, migration syntax and security checks. The PR description's
+required checklist was restored and its policy job passed on rerun. The new intake
+SQL suites are now added to the required PostgreSQL CI matrix with 17/8 minimum
+case counts and zero-skips enforcement; workflow YAML and the required-summary
+edge parse correctly. A new CI result is needed for that addition.
+
+Main advanced to `582c397` with merged Nora recovery/session/notification work.
+Integration and post-integration verification are in progress; earlier results
+remain evidence for their named commit. The already applied intake 071 file will
+not be renamed even though main independently added another 071 filename.

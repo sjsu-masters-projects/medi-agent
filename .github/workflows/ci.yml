@@ -317,6 +317,10 @@ jobs:
           - name: care-conversations
             files: tests/integration/test_care_conversation_postgres.py tests/integration/test_clinic_memberships_postgres.py
             minimums: test_care_conversation_postgres=33 test_clinic_memberships_postgres=38
+          - name: confirmed-symptoms
+            image: postgres:16-alpine
+            files: tests/integration/test_symptom_intake_postgres.py tests/integration/test_symptom_handoff_postgres.py
+            minimums: test_symptom_intake_postgres=17 test_symptom_handoff_postgres=8
     defaults:
       run:
         working-directory: backend
@@ -332,7 +336,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Pull the PostgreSQL image
-        run: docker pull postgres:16
+        run: docker pull ${{ matrix.image || 'postgres:16' }}
       - name: Run the contract suites
         env:
           SUPABASE_URL: "https://test.supabase.co"
@@ -342,6 +346,8 @@ jobs:
           CARE_CONVERSATION_TEST_POSTGRES_DOCKER: "1"
           NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER: "1"
           EMAIL_TEST_POSTGRES_DOCKER: "1"
+          SYMPTOM_INTAKE_TEST_POSTGRES: "1"
+          CHAT_SAFETY_TEST_POSTGRES_DOCKER: "1"
         run: |
           mkdir -p test-results
           pytest ${{ matrix.files }} -v -rs --tb=short --no-cov --junitxml=test-results/postgres-${{ matrix.name }}.xml
