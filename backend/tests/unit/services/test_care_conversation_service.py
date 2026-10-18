@@ -176,9 +176,9 @@ async def test_on_the_fly_translation_is_bounded_and_skips_stored(monkeypatch):
     from app.services import care_conversation_service as module
 
     fake = MagicMock()
-    fake.get_translations_for_messages.return_value = {
-        "m-0": {"translated_text": "stored", "guard_passed": True}
-    }
+    fake.get_translations_for_messages = AsyncMock(
+        return_value={"m-0": {"translated_text": "stored", "guard_passed": True}}
+    )
     fake.translate_and_store = AsyncMock(
         return_value={"translated_text": "x", "guard_passed": True}
     )
@@ -197,7 +197,7 @@ async def test_translation_failure_is_logged_without_message_text(caplog):
     from unittest.mock import AsyncMock, patch
 
     fake = MagicMock()
-    fake.get_translations_for_messages.return_value = {}
+    fake.get_translations_for_messages = AsyncMock(return_value={})
     fake.translate_and_store = AsyncMock(side_effect=RuntimeError("provider down"))
     svc = _translating_service()
     page = _spanish_page(2)
@@ -209,3 +209,173 @@ async def test_translation_failure_is_logged_without_message_text(caplog):
     assert "translation" in caplog.text.lower()
     assert "dolor" not in caplog.text
     assert "translation" not in page["items"][0]
+
+
+# ── LOC-003 review fixes: the patient's own language, stored rows, failure markers ──
+
+
+def _page(*messages: tuple[str, str, str]) -> dict:
+    return {
+        "items": [
+            {"id": mid, "conversation_id": "c-1", "sender_role": role, "body": body}
+            for mid, role, body in messages
+        ]
+    }
+
+
+def _fake_translator(stored: dict | None = None, result: dict | None = None):
+    from unittest.mock import AsyncMock
+
+    fake = MagicMock()
+    fake.get_translations_for_messages = AsyncMock(return_value=stored or {})
+    fake.translate_and_store = AsyncMock(
+        return_value=result or {"translated_text": "translated", "guard_passed": True}
+    )
+    # The real routing helper decides who translates what; keep it real.
+    from app.services.message_translation import MessageTranslationService
+
+    fake.detect_and_get_target_locale = MessageTranslationService(
+        MagicMock()
+    ).detect_and_get_target_locale
+    return fake
+
+
+def _patched(svc, fake, locale: str):
+    from unittest.mock import AsyncMock, patch
+
+    svc._patient_locale = AsyncMock(return_value=locale)
+    svc._medication_names = AsyncMock(return_value=[])
+    return patch("app.services.message_translation.MessageTranslationService", return_value=fake)
+
+
+ENGLISH_REPLY = "Please take your medication every morning with breakfast and some water."
+
+
+@pytest.mark.asyncio
+async def test_english_patient_sees_original_english_with_no_model_call():
+    fake = _fake_translator()
+    svc = _translating_service("patient")
+    page = _page(("m-1", "clinician", ENGLISH_REPLY))
+    with _patched(svc, fake, "en-US"):
+        await svc._attach_translations(page)
+    svc._patient_locale.assert_awaited()  # the patient's own language decides the target
+    fake.translate_and_store.assert_not_awaited()
+    assert "translation" not in page["items"][0]
+
+
+@pytest.mark.asyncio
+async def test_spanish_patient_sees_the_translation_into_spanish():
+    fake = _fake_translator(result={"translated_text": "Toma tu medicina", "guard_passed": True})
+    svc = _translating_service("patient")
+    page = _page(("m-1", "clinician", ENGLISH_REPLY))
+    with _patched(svc, fake, "es-MX"):
+        await svc._attach_translations(page)
+    assert fake.translate_and_store.await_args.kwargs["target_locale"] == "es-MX"
+    assert page["items"][0]["translation"] == "Toma tu medicina"
+    assert page["items"][0]["translation_locale"] == "es-MX"
+
+
+@pytest.mark.asyncio
+async def test_clinician_sees_a_spanish_patient_message_in_english_only():
+    fake = _fake_translator(result={"translated_text": "I feel bad", "guard_passed": True})
+    svc = _translating_service("clinician")
+    page = _page(
+        ("m-1", "patient", "Hola doctora, no me siento bien y tengo mucho dolor hoy."),
+        ("m-2", "patient", "Thank you doctor, I feel better and the pain is gone today."),
+    )
+    with _patched(svc, fake, "es-MX"):
+        await svc._attach_translations(page)
+    assert fake.translate_and_store.await_count == 1
+    assert fake.translate_and_store.await_args.kwargs["target_locale"] == "en-US"
+    assert page["items"][0]["translation"] == "I feel bad"
+    assert "translation" not in page["items"][1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("locale", "calls"), [("en-US", 0), ("es-MX", 1)])
+async def test_clinician_reply_is_translated_only_for_a_spanish_patient(locale, calls):
+    fake = _fake_translator(result={"translated_text": "Toma tu medicina", "guard_passed": True})
+    svc = _translating_service("clinician")
+    message = {
+        "id": "m-9",
+        "conversation_id": "c-1",
+        "sender_role": "clinician",
+        "body": ENGLISH_REPLY,
+    }
+    with _patched(svc, fake, locale):
+        await svc._translate_message(message)
+    assert fake.translate_and_store.await_count == calls
+    assert ("translation" in message) is bool(calls)
+
+
+@pytest.mark.asyncio
+async def test_stored_translations_are_attached_beyond_the_new_call_cap():
+    from app.services import care_conversation_service as module
+
+    count = module.MAX_ON_THE_FLY_TRANSLATIONS + 5
+    page = _spanish_page(count)
+    for item in page["items"]:
+        item["conversation_id"] = "c-1"
+    stored = {
+        f"m-{i}": {"translated_text": f"stored {i}", "guard_passed": True} for i in range(count)
+    }
+    fake = _fake_translator(stored=stored)
+    svc = _translating_service("clinician")
+    with _patched(svc, fake, "es-MX"):
+        await svc._attach_translations(page)
+    fake.translate_and_store.assert_not_awaited()
+    assert all(item["translation"] == f"stored {i}" for i, item in enumerate(page["items"]))
+
+
+@pytest.mark.asyncio
+async def test_new_calls_are_capped_but_messages_after_the_cap_still_get_stored_rows():
+    from app.services import care_conversation_service as module
+
+    cap = module.MAX_ON_THE_FLY_TRANSLATIONS
+    page = _spanish_page(cap + 3)
+    for item in page["items"]:
+        item["conversation_id"] = "c-1"
+    last = f"m-{cap + 2}"
+    fake = _fake_translator(stored={last: {"translated_text": "stored last", "guard_passed": True}})
+    svc = _translating_service("clinician")
+    with _patched(svc, fake, "es-MX"):
+        await svc._attach_translations(page)
+    assert fake.translate_and_store.await_count == cap
+    assert page["items"][-1]["translation"] == "stored last"
+
+
+@pytest.mark.asyncio
+async def test_a_recent_failure_marker_is_not_retried_or_shown():
+    from datetime import UTC, datetime
+
+    marker = {
+        "translated_text": "-",
+        "guard_passed": False,
+        "guard_failure_code": "model_error",
+        "translated_at": datetime.now(UTC).isoformat(),
+    }
+    page = _spanish_page(1)
+    page["items"][0]["conversation_id"] = "c-1"
+    fake = _fake_translator(stored={"m-0": marker})
+    svc = _translating_service("clinician")
+    with _patched(svc, fake, "es-MX"):
+        await svc._attach_translations(page)
+    fake.translate_and_store.assert_not_awaited()
+    assert "translation" not in page["items"][0]
+
+
+@pytest.mark.asyncio
+async def test_an_old_failure_marker_is_retried():
+    marker = {
+        "translated_text": "-",
+        "guard_passed": False,
+        "guard_failure_code": "model_error",
+        "translated_at": "2020-01-01T00:00:00+00:00",
+    }
+    page = _spanish_page(1)
+    page["items"][0]["conversation_id"] = "c-1"
+    fake = _fake_translator(stored={"m-0": marker})
+    svc = _translating_service("clinician")
+    with _patched(svc, fake, "es-MX"):
+        await svc._attach_translations(page)
+    fake.translate_and_store.assert_awaited_once()
