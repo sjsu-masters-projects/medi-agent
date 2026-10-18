@@ -8,7 +8,7 @@ import { Button, Input } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { AuthShell, AuthSteps, VerifiedClinic } from "@/components/features/auth-shell";
 import { api } from "@/services/api";
-import { writeStoredSession } from "@/services/auth-session";
+import { consumeSignOutReason, writeStoredSession } from "@/services/auth-session";
 import {
     clearStoredClinicContext,
     writeStoredClinicContext,
@@ -103,12 +103,26 @@ function ClinicianLoginPageContent() {
     const [submitting, setSubmitting] = useState(false);
 
     const returnPath = sanitizeReturnPath(searchParams?.get("return_path")) ?? "/dashboard";
-    const reason = searchParams?.get("reason") ?? "";
+    const queryReason = searchParams?.get("reason") ?? "";
+    // A sign-out recorded by the session limits or another tab can arrive without the query reason.
+    const [storedReason, setStoredReason] = useState<string | null>(null);
+    useEffect(() => {
+        setStoredReason(consumeSignOutReason());
+    }, []);
+    const reason = queryReason || storedReason || "";
     const joining = clinicContext !== null && (stage === "join-login" || (stage === "mfa" && pendingMFAChallenge?.joining));
 
     useEffect(() => {
         if (reason === "session_expired") {
             setError("Your session expired. Please sign in again.");
+        }
+
+        if (reason === "inactivity") {
+            setError("You were signed out after 2 hours of inactivity.");
+        }
+
+        if (reason === "session_limit") {
+            setError("Your session reached its 12-hour limit.");
         }
 
         if (reason === "unauthorized") {
@@ -210,7 +224,7 @@ function ClinicianLoginPageContent() {
         } else {
             await rememberDisplayClinic(session.accessToken);
         }
-        writeStoredSession(session);
+        writeStoredSession(session, { signIn: true });
         dispatch(hydrateSession(session));
         router.replace(returnPath.startsWith("/login") ? "/dashboard" : returnPath);
     }
@@ -333,7 +347,7 @@ function ClinicianLoginPageContent() {
             return;
         }
         await rememberDisplayClinic(joinFailedSession.accessToken);
-        writeStoredSession(joinFailedSession);
+        writeStoredSession(joinFailedSession, { signIn: true });
         dispatch(hydrateSession(joinFailedSession));
         router.replace(returnPath.startsWith("/login") ? "/dashboard" : returnPath);
     }

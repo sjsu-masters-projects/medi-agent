@@ -74,6 +74,7 @@ describe("Clinic admin signup page", () => {
             expect.objectContaining({
                 user: expect.objectContaining({ email: "admin@example.com", role: "clinician" }),
             }),
+            { signIn: true },
         );
         expect(replace).toHaveBeenCalledWith("/dashboard");
     });

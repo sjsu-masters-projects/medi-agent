@@ -37,7 +37,7 @@ const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
     const token =
         typeof window !== "undefined"
-            ? readStoredSession()?.accessToken ?? localStorage.getItem("access_token") ?? ""
+            ? readStoredSession()?.accessToken ?? ""
             : "";
 
     if (!token) {
@@ -1306,7 +1306,7 @@ export function form3500PdfFilename(draftId: string, contentDisposition?: string
 export async function fetchForm3500PreviewPdf(draftId: string): Promise<Blob> {
     const token =
         typeof window !== "undefined"
-            ? readStoredSession()?.accessToken ?? localStorage.getItem("access_token") ?? ""
+            ? readStoredSession()?.accessToken ?? ""
             : "";
     if (!token) throw new MedWatchRequestError("AUTHENTICATION_ERROR", 401);
     let response: Response;
@@ -1332,7 +1332,7 @@ export async function fetchForm3500PreviewPdf(draftId: string): Promise<Blob> {
 export async function downloadForm3500Pdf(draftId: string): Promise<Form3500PdfDownload> {
     const token =
         typeof window !== "undefined"
-            ? readStoredSession()?.accessToken ?? localStorage.getItem("access_token") ?? ""
+            ? readStoredSession()?.accessToken ?? ""
             : "";
     if (!token) throw new MedWatchRequestError("AUTHENTICATION_ERROR", 401);
     let response: Response;
