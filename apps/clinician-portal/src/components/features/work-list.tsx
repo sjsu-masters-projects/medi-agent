@@ -279,17 +279,20 @@ export function ListSkeleton({ label }: { label: string }) {
 export function PageHeader({
     title,
     subtitle,
+    scope,
     action,
 }: {
     title: string;
     subtitle: string;
+    /** "All clinics" or the filtered clinic, for a multi-clinic clinician only. */
+    scope?: string | null;
     action?: ReactNode;
 }) {
     return (
         <header className="flex flex-wrap items-end justify-between gap-3">
             <div className="min-w-0 max-w-[72ch]">
-                <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em] text-ink">{title}</h1>
-                <p className="mt-1 text-sm leading-relaxed text-ink-2">{subtitle}</p>
+                <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">{title}</h1>
+                <p className="mt-1 text-sm text-muted">{subtitle}{scope ? ` · ${scope}` : ""}</p>
             </div>
             {action}
         </header>

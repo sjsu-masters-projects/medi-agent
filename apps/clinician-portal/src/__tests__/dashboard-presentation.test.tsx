@@ -42,7 +42,7 @@ describe("Dashboard presentation", () => {
         expect(screen.getByLabelText("Clinic")).toBeInTheDocument();
         resetClinicFilter();
     });
-    it("names All clinics, the filtered clinic or the only clinic in the header", () => {
+    it("names All clinics or the filtered clinic, and nothing for a single-clinic clinician", () => {
         const two = [
             { clinic_id: "clinic-a", clinic_code: "A", clinic_name: "City Health", role: "admin", status: "active" },
             { clinic_id: "clinic-b", clinic_code: "B", clinic_name: "Bay Clinic", role: "provider", status: "active" },
@@ -59,7 +59,7 @@ describe("Dashboard presentation", () => {
         resetClinicFilter();
         clinicFilterState.clinics = [two[0]] as never;
         render(<DashboardPage />);
-        expect(screen.getByText(/ · City Health$/)).toBeInTheDocument();
+        expect(screen.queryByText(/ · (City Health|All clinics)$/)).not.toBeInTheDocument();
         resetClinicFilter();
     });
     it("keeps internal patient identity in navigation without displaying it or inferring missed doses", () => {

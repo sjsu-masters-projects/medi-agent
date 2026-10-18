@@ -17,6 +17,7 @@ import {
     rowLinkClass,
     useListUrlState,
 } from "@/components/features/work-list";
+import { clinicScopeLabel } from "@/hooks/clinic-scope";
 import { ClinicChip, ClinicFilterEmpty, ClinicFilterField } from "@/components/features/clinic-chip";
 import { useResolvedClinicFilter } from "@/hooks/use-clinic-filter";
 import {
@@ -182,6 +183,7 @@ function ReportsContent() {
             <PageHeader
                 subtitle="Form FDA 3500 reports prepared from reviewed ADR cases. MediAgent never submits a report to FDA; you submit it yourself."
                 title="MedWatch"
+                scope={clinicScopeLabel(clinicFilter)}
             />
             <StatusTabs
                 label="MedWatch report status"
