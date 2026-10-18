@@ -230,6 +230,13 @@ retry guarantees. An unavailable durable store must fail closed, not rerun throu
 the legacy path. Full contract and verification:
 [PAT-001-A](../.agent/specs/pat-001-a-nora-turn-recovery.md).
 
+Migration `075_nora_late_completion.sql` lets a finished reply be saved for its current lease
+even just after the deadline, and `076_notification_zone_lookup.sql` makes notification reads
+fast (see [NOT-001](../.agent/specs/not-001-notification-centre.md)). Both are re-runnable and
+need the same separate authorization; the backend is compatible with the database before and
+after (a missing `late` key means not late). Chat-turn and notification database calls use
+their own bounded thread pools (`app/core/db_pools.py`).
+
 072 is re-runnable and ends with RLS/table/function privilege assertions. Turn rows
 retain document identity/version, not summary text. A fresh authorized summary is
 returned only to execution and cleaned with `normalize_patient_summary`. A failed
