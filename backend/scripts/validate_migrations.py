@@ -11,6 +11,10 @@ from pglast.parser import ParseError
 
 MIGRATION_NAME = re.compile(r"^(?P<sequence>\d{3})_(?P<name>[a-z0-9_]+)\.sql$")
 MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "src" / "app" / "db" / "migrations"
+# Preserve historical independent files already recorded by filename/checksum.
+# New collisions must be fixed by renumbering the unapplied migration, not by
+# extending this grandfathered list or changing applied migration bytes.
+LEGACY_SHARED_SEQUENCES = frozenset({11, 38, 39, 40, 41, 42, 43, 47, 48, 51, 67})
 
 
 def validate_migrations() -> list[str]:
@@ -32,7 +36,10 @@ def validate_migrations() -> list[str]:
         if migration_path.name in seen_names:
             errors.append(f"{migration_path.name}: duplicate migration filename")
         seen_names.add(migration_path.name)
-        sequences.add(int(match.group("sequence")))
+        sequence = int(match.group("sequence"))
+        if sequence in sequences and sequence not in LEGACY_SHARED_SEQUENCES:
+            errors.append(f"{migration_path.name}: duplicate migration sequence {sequence:03d}")
+        sequences.add(sequence)
 
         source = migration_path.read_text(encoding="utf-8")
         if not source.strip():

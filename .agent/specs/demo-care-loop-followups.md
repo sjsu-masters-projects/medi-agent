@@ -54,7 +54,7 @@ No new cross-clinic sharing or implicit broadcast recipient behavior is introduc
   the existing approved-plan endpoint; recipient selection remains explicit.
   Attaching/changing an activity does not send. An uncertain retry locks body,
   source identity and client message UUID together. Confirmed sends clear them.
-- Migration `073_care_conversation_activity_review.sql` extends existing message
+- Migration `074_care_conversation_activity_review.sql` extends existing message
   and plan-item tables. It stores an item reference, not a second clinical summary.
   The saved message presents the source's approved wording; a superseded source
   is labelled historical. Database authorization still owns thread isolation.
@@ -73,7 +73,7 @@ No new cross-clinic sharing or implicit broadcast recipient behavior is introduc
   existing actions. The source plan stays approved until an authorized publication.
 - This uses today's patient-level approved-plan model. Per-team plan ownership is
   PLAN-002, not implicitly implemented by attaching an item to a private thread.
-- Apply 073 only with separate authorization, before deploying this backend.
+- Apply 074 only with separate authorization, before deploying this backend.
   Rerunning it is tested; existing conversation reads/legacy deployments remain
   compatible. No remote migration, publication or live acceptance is claimed.
 
@@ -95,16 +95,16 @@ All checks use synthetic fixtures and isolated data, not live patient accounts.
 
 | Check | Result |
 | --- | --- |
-| Backend `PYTHONPATH=src .venv/bin/pytest tests --ignore=tests/integration/test_appointment_offer_transactions.py --no-cov -q --tb=short --disable-warnings` | 3,599 passed / 339 opt-in skips; excluded native database fixture run separately |
+| Backend `PYTHONPATH=src .venv/bin/pytest tests --ignore=tests/integration/test_appointment_offer_transactions.py --no-cov -q --tb=short --disable-warnings` | 3,622 passed / 344 opt-in skips after merging current main; excluded native database fixture run separately |
 | Native appointment transaction suite, same pytest flags | 31 passed outside sandbox; its disposable PostgreSQL startup was denied in the initial sandbox run |
-| Conversation PostgreSQL suite with `CARE_CONVERSATION_TEST_POSTGRES_DOCKER=1` | 42 passed before final review fixes; final `-k activity` rerun: 11 passed, including publication lock order, rerun permissions and concurrent draft review |
+| Conversation PostgreSQL suite with `CARE_CONVERSATION_TEST_POSTGRES_DOCKER=1` | 43 passed after merging current main and renumbering the activity migration to 074, including publication lock order, rerun permissions, concurrent draft review and preservation of main's clinic guard functions |
 | Final conversation service/API suites | 60 passed, including neutral errors for concurrent draft changes |
 | AI/SOAP/evaluation/ingestion focused checks | 563 passed; exact commands in the [operator guide](../../docs/demo-ai-evaluation.md) |
-| Patient `npm run test -- --silent` | 727 passed; final activity/composer rerun: 44 passed (includes added localized stale-attachment feedback test) |
+| Patient `npm run test -- --silent` | 737 passed after merging current main (includes localized stale-attachment feedback and current chat recovery tests) |
 | Clinician `npm run test -- --silent` | 576 passed, including one-time focus without stealing focus during edits |
 | Both portals `npm run lint`, `npm run typecheck`, `SENTRY_AUTH_TOKEN='' npm run build -- --webpack` | Passed; existing font fetch required network access for clinician build |
 | Changed Python Ruff / targeted mypy | Passed; nine source files in final targeted mypy pass |
-| Migration validator / diff whitespace / documentation links | 86 migration files validated; checks passed |
+| Migration validator / diff whitespace / documentation links | 87 migration files validated; checks passed |
 | Demo evaluation `--suite demo --dry-run` | 34 selected; paired locale runs 17 / 17; no model called |
 
 Browser check: the locally built Spanish login and signup render Spanish labels,

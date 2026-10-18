@@ -58,9 +58,10 @@ async def test_every_provider_answers_the_same_request():
 @pytest.mark.asyncio
 async def test_a_failing_provider_does_not_lose_the_others():
     providers = [
-        _StubProvider("medgemma", raises=GenerationProviderError(
-            GenerationErrorCode.UNAVAILABLE, "endpoint cold"
-        )),
+        _StubProvider(
+            "medgemma",
+            raises=GenerationProviderError(GenerationErrorCode.UNAVAILABLE, "endpoint cold"),
+        ),
         _StubProvider("flash", text="answer"),
     ]
 

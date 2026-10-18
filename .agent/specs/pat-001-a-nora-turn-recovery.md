@@ -155,4 +155,41 @@ copy is reused unchanged from the existing reviewed resources.
 | busy / Existing reply, draft preserved | Ya hay una respuesta en curso en esta conversación, posiblemente en otra pestaña. Estamos recuperándola. Tu nuevo mensaje sigue en el cuadro de texto. |
 | unavailable / Chat unavailable | Nora no está disponible en este momento. No se enviará ningún mensaje hasta que el chat vuelva a conectarse. Puedes reintentar la conexión. |
 | reconnect / Reconnect chat | Volver a conectar |
+| replyUnavailable / Completed reply no longer saved | La respuesta de esta conversación ya no está disponible. No la volveremos a ejecutar. Puedes continuar con una pregunta nueva. |
 | documentUnavailable / Dismiss unavailable context | Este documento no está disponible o cambió. Desvincúlalo antes de hacer una pregunta sobre el resto de tu expediente. |
+
+### Past-conversations list wording drafts — not approved
+
+Source: `apps/patient-portal/src/components/features/nora-conversations.tsx`. Draft; pending LOC-001 bilingual review.
+
+| Copy key / English intent | es-MX draft |
+| --- | --- |
+| unfinished / Reply unfinished | Respuesta incompleta |
+| replying / Nora is replying… | Nora está respondiendo… |
+
+## Cross-tab discovery
+
+`GET /chat/conversations/{patient_id}` merges `chat_conversation_states` with the patient's
+`chat_turns` sessions (two patient-scoped queries, merged by session id, ordered by latest
+activity). A session whose latest, non-dismissed turn is processing, failed or interrupted
+returns `status: "needs_attention"` (`reply_in_progress` while still within its deadline).
+The title falls back to the first user message and is also set at turn begin.
+
+## Production recovery fixes (branch `fix/nora-unfinished-conversations`)
+
+- Logs: the turn failure category (exception type, safe code, cause type) is in the message text,
+  and every turn RPC failure logs its action and Postgres code; no patient text.
+- Reconnect churn: the chat socket depended on the access-token and user objects, so every silent
+  session refresh rebuilt it, and a token inside the 30-minute refresh window re-triggered the
+  refresh at once. The socket now keys on user id only; refreshes are floored at 5 minutes apart.
+  The server never cancels a turn when its socket closes, so a reconnecting client reattaches to
+  the processing turn through `recover_turns` and spends no attempt.
+- State refresh after commit retries on conflict (never lowering `turn_count`) and logs its category.
+- `public_turn` serializes `user_message` like history. Migration 073 rejects NULL
+  content/language/client id explicitly and replays a completed turn whose reply row is gone as
+  `reply_unavailable`. Socket startup and recovery failures send explicit errors instead of raising.
+- Lost completion confirmation: after a failed turn the server sends saved history when the turn
+  turned out completed. Another tab's processing turn is polled (5 s, at most 60 times, only
+  while in flight). Streamed drafts clear on interruption and on socket close.
+- Not a defect: the retry never re-feeds its failed attempt; the turn's own user message is
+  excluded from history (covered by `test_disconnected_socket_does_not_discard_reply...`).

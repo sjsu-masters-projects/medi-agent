@@ -90,7 +90,7 @@ medications, reminders or adherence history. All existing publication and biling
 verification gates still apply. `ACTIVITY_CONTEXT_UNAVAILABLE` is a safe rejection,
 not raw database text.
 
-Apply reviewed `073_care_conversation_activity_review.sql` **before** deploying
+Apply reviewed `074_care_conversation_activity_review.sql` **before** deploying
 this backend; application needs separate requester authorization. The migration is
 rerunnable, retains prior data and verifies backend-only function access and RLS.
 No remote application is recorded by this PR. The existing generic conversation

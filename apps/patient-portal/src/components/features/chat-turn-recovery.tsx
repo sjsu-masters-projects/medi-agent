@@ -22,6 +22,8 @@ export function ChatTurnRecovery({ turns, locale, connected, onRetry, onDismiss 
             {turn.user_message && <p className="mt-1 line-clamp-2 break-words text-ink-2">{turn.user_message.content}</p>}
             <p className="mt-1 text-ink-2">{turn.failure_code === "action_uncertain"
                 ? copy.uncertain
+                : turn.failure_code === "reply_unavailable"
+                    ? copy.replyUnavailable
                 : turn.status === "processing"
                     ? copy.returnLater
                     : turn.retryable

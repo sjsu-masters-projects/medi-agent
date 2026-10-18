@@ -49,6 +49,7 @@ def turn_runtime(monkeypatch):
     service = MagicMock()
     service.get_history = AsyncMock(return_value=[user])
     service.update_conversation_state = AsyncMock()
+    service.set_conversation_title = AsyncMock()
     websocket = MagicMock()
     websocket.application_state = WebSocketState.CONNECTED
     websocket.send_json = AsyncMock()
@@ -228,3 +229,83 @@ def test_reviewed_emergency_guidance_survives_deadline_and_reload(locale, status
     assert (
         public_turn(record)["safety_guidance"] == resolve_locale_resource(locale, TRIAGE_COPY)[key]
     )
+
+
+@pytest.mark.asyncio
+async def test_turn_start_labels_the_conversation_before_the_reply(monkeypatch, turn_runtime):
+    turns, service, socket, context, record, saved = turn_runtime
+    monkeypatch.setattr(chat, "_process_chat_message", AsyncMock(return_value={}))
+    await chat._process_durable_message(socket, service, context, {})
+    service.set_conversation_title.assert_awaited_once_with(
+        context["patient_id"], "chat-test", "Synthetic question"
+    )
+
+
+@pytest.mark.asyncio
+async def test_title_failure_does_not_fail_the_turn(monkeypatch, turn_runtime):
+    turns, service, socket, context, record, saved = turn_runtime
+    service.set_conversation_title.side_effect = RuntimeError("down")
+    pipeline = AsyncMock(return_value={})
+    monkeypatch.setattr(chat, "_process_chat_message", pipeline)
+    await chat._process_durable_message(socket, service, context, {})
+    pipeline.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_state_refresh_retries_after_a_concurrent_write_without_lowering_turn_count():
+    service = MagicMock()
+    calls = []
+
+    async def update(patient, updates, expected_updated_at=None):
+        calls.append((updates["turn_count"], expected_updated_at))
+        if len(calls) == 1:
+            raise chat.ConversationStateConflictError("changed")
+        return {}
+
+    service.update_conversation_state = update
+    service.get_or_create_conversation_state = AsyncMock(
+        return_value={"updated_at": "v2", "turn_count": 4}
+    )
+    assert await chat._refresh_conversation_state(service, "p", {"turn_count": 2}, "v1")
+    assert calls == [(2, "v1"), (5, "v2")]
+
+
+@pytest.mark.asyncio
+async def test_state_refresh_failure_is_logged_with_its_category(caplog):
+    service = MagicMock()
+    service.update_conversation_state = AsyncMock(side_effect=RuntimeError("secret text"))
+    with caplog.at_level("WARNING"):
+        assert not await chat._refresh_conversation_state(service, "p", {"turn_count": 1}, None)
+    assert "RuntimeError" in caplog.text
+    assert "secret text" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_turn_failure_category_is_in_the_log_message(monkeypatch, turn_runtime, caplog):
+    turns, service, socket, context, _, _ = turn_runtime
+    monkeypatch.setattr(chat, "_process_chat_message", AsyncMock(side_effect=KeyError("patient")))
+    with caplog.at_level("WARNING"):
+        await chat._process_durable_message(socket, service, context, {})
+    assert "Durable chat turn did not complete: KeyError" in caplog.text
+    assert "patient" not in caplog.text.replace("patient_id", "")
+
+
+def test_public_turn_serializes_the_user_message_like_history():
+    row = {
+        "id": str(uuid4()),
+        "patient_id": str(uuid4()),
+        "session_id": "chat-test",
+        "role": "user",
+        "content": "Synthetic question",
+        "language": "en-US",
+        "audio_url": "https://private.example/audio.webm",
+        "created_at": "2026-10-17T10:00:00Z",
+        "lease_hint": "extra",
+    }
+    shown = public_turn({"id": "t", "status": "failed", "user_message": row})["user_message"]
+    assert shown == chat._serialize_chat_message(row)
+    assert "lease_hint" not in shown
+    partial = public_turn(
+        {"id": "t", "status": "failed", "user_message": {"content": "x", "junk": 1}}
+    )
+    assert partial["user_message"] == {"content": "x"}
