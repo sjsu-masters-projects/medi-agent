@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, Field, field_validator
 
+from app.models.clinic_membership import ClinicTag
 from app.models.enums import AppointmentResponseAction, AppointmentStatus, AppointmentType
 
 
@@ -53,7 +54,7 @@ class AppointmentCalendarExport(BaseModel):
     content: str
 
 
-class AppointmentRead(BaseModel):
+class AppointmentRead(ClinicTag):
     id: UUID
     patient_id: UUID
     care_team_id: UUID

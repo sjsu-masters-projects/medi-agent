@@ -10,8 +10,9 @@ const { profileGetMock } = vi.hoisted(() => ({
     profileGetMock: vi.fn(),
 }));
 
+const pathnameRef = vi.hoisted(() => ({ value: "/dashboard" }));
 vi.mock("next/navigation", () => ({
-    usePathname: () => "/dashboard",
+    usePathname: () => pathnameRef.value,
     useRouter: () => ({ replace: replaceMock }),
 }));
 
@@ -69,9 +70,12 @@ describe("Sidebar", () => {
         expect(screen.getByText("Patient Roster")).toBeInTheDocument();
         expect(screen.getByRole("link", { name: "Appointments" })).toHaveAttribute("href", "/appointments");
         expect(screen.getByText("Review Queue")).toBeInTheDocument();
-        expect(screen.getByText("ADR Reviews")).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "ADR Reviews" })).toHaveAttribute("href", "/adr-reviews");
+        expect(screen.getByRole("link", { name: "MedWatch" })).toHaveAttribute("href", "/medwatch");
         expect(screen.getByText("Messages")).toBeInTheDocument();
-        expect(screen.getByText("Clinic Settings")).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+        expect(screen.queryByText("Clinic Settings")).not.toBeInTheDocument();
+        expect(screen.queryByText("Administration")).not.toBeInTheDocument();
         await waitFor(() => expect(profileGetMock).toHaveBeenCalled());
         expect(screen.getByText("Rajeevranjan Chaurasia")).toBeInTheDocument();
         expect(screen.getByText("Clinic Admin")).toBeInTheDocument();
@@ -79,6 +83,22 @@ describe("Sidebar", () => {
         expect(screen.getByRole("link", { name: /risk radar/i }).className).toContain("bg-rail-active");
         expect(screen.getByRole("link", { name: /risk radar/i })).toHaveAttribute("aria-current", "page");
         expect(screen.getByRole("navigation", { name: "Clinician navigation" })).toBeInTheDocument();
+    });
+
+    it.each([
+        ["/adr-reviews", "ADR Reviews", "MedWatch"],
+        ["/adr-reviews/adr-1", "ADR Reviews", "MedWatch"],
+        ["/medwatch", "MedWatch", "ADR Reviews"],
+        ["/medwatch/draft-1", "MedWatch", "ADR Reviews"],
+    ])("marks only the matching section active on %s", (path, active, inactive) => {
+        pathnameRef.value = path;
+        try {
+            render(<Provider store={store}><Sidebar /></Provider>);
+            expect(screen.getByRole("link", { name: active })).toHaveAttribute("aria-current", "page");
+            expect(screen.getByRole("link", { name: inactive })).not.toHaveAttribute("aria-current");
+        } finally {
+            pathnameRef.value = "/dashboard";
+        }
     });
 
     it("does not invent an invalid fallback email when the session is unavailable", () => {
@@ -124,6 +144,33 @@ describe("Sidebar", () => {
         expect(await screen.findByRole("button", { name: "Collapse sidebar" })).toBeInTheDocument();
         expect(window.localStorage.getItem("clinician-portal.sidebar-collapsed")).toBe("0");
     });
+    it("shows the role at the default clinic and the clinic count for two or more clinics", async () => {
+        profileGetMock.mockImplementation(async (path: string) => path.endsWith("/clinics")
+            ? {
+                default_clinic_id: "c2",
+                clinics: [
+                    { clinic_id: "c1", clinic_name: "North Clinic", role: "admin", status: "active", clinic_code: null },
+                    { clinic_id: "c2", clinic_name: "South Clinic", role: "provider", status: "active", clinic_code: null },
+                    { clinic_id: "c3", clinic_name: "Old Clinic", role: "nurse", status: "suspended", clinic_code: null },
+                ],
+            }
+            : { first_name: "Rajeevranjan", last_name: "Chaurasia", role: "admin", clinic_name: "North Clinic" });
+        render(<Provider store={store}><Sidebar /></Provider>);
+        const label = await screen.findByText("Provider · 2 clinics");
+        expect(label).toHaveAttribute("title", "North Clinic, South Clinic");
+        expect(screen.queryByText("Clinic Admin")).not.toBeInTheDocument();
+    });
+
+    it("keeps the single clinic name for one clinic", async () => {
+        profileGetMock.mockImplementation(async (path: string) => path.endsWith("/clinics")
+            ? { default_clinic_id: "c1", clinics: [{ clinic_id: "c1", clinic_name: "North Clinic", role: "admin", status: "active", clinic_code: null }] }
+            : { first_name: "Rajeevranjan", last_name: "Chaurasia", role: "admin", clinic_name: "North Clinic" });
+        render(<Provider store={store}><Sidebar /></Provider>);
+        expect(await screen.findByText("North Clinic")).toBeInTheDocument();
+        expect(screen.getByText("Clinic Admin")).toBeInTheDocument();
+        expect(screen.queryByText(/clinics$/)).not.toBeInTheDocument();
+    });
+
     it("shows the same unread count on Alerts as the header bell", () => {
         notificationSummary.current = { unread_count: 8, action_item_count: 11 };
         render(<Provider store={store}><Sidebar /></Provider>);

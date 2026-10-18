@@ -119,6 +119,16 @@ function ProfilePageContent() {
         "en-US";
     const copy = profileCopy(locale);
     const genderLabels = profileGenderLabels(locale);
+    // With care teams at two or more clinics, rows sit under small clinic headings;
+    // otherwise the list stays flat with the clinic in each subtitle.
+    const clinicNames = Array.from(new Set(careTeam.map((member) => member.clinicName).filter(Boolean)));
+    const groupedByClinic = clinicNames.length >= 2;
+    const teamGroups: { clinic: string | null; members: CareTeamMember[] }[] = groupedByClinic
+        ? [...clinicNames, ""].map((clinic) => ({
+            clinic: clinic || copy.teamFallback,
+            members: careTeam.filter((member) => (member.clinicName || "") === clinic),
+        })).filter((group) => group.members.length)
+        : [{ clinic: null, members: careTeam }];
     const hasActiveTeam = careTeam.some((member) => member.status === "active");
     const forceJoinOpen = searchParams.get("joinClinic") === "1";
     const showJoinClinicPrompt = forceJoinOpen && !hasActiveTeam;
@@ -475,7 +485,12 @@ function ProfilePageContent() {
                             </h3>
                             <div className={groupClass}>
                                 {careTeam.length ? (
-                                    careTeam.map((member) => (
+                                    teamGroups.map((group) => (
+                                        <div key={group.clinic ?? "all"}>
+                                            {group.clinic ? (
+                                                <h4 className="px-[14px] pb-1 pt-3 font-mono text-[11px] uppercase tracking-[0.08em] text-muted">{group.clinic}</h4>
+                                            ) : null}
+                                            {group.members.map((member) => (
                                         <div
                                             className="flex items-center gap-3 px-[14px] py-3"
                                             key={member.id}
@@ -491,10 +506,10 @@ function ProfilePageContent() {
                                                         member.role,
                                                         locale,
                                                     )}</span>
-                                                    <span aria-hidden="true"> · </span>
-                                                    <span>{member.clinicName ||
-                                                        member.specialtyContext ||
-                                                        copy.teamFallback}</span>
+                                                    {(groupedByClinic ? member.specialtyContext : member.clinicName || member.specialtyContext || copy.teamFallback) ? <>
+                                                        <span aria-hidden="true"> · </span>
+                                                        <span>{groupedByClinic ? member.specialtyContext : member.clinicName || member.specialtyContext || copy.teamFallback}</span>
+                                                    </> : null}
                                                 </p>
                                             </div>
                                             <span
@@ -511,6 +526,8 @@ function ProfilePageContent() {
                                                         ? copy.transferred
                                                         : copy.unknownStatus}
                                             </span>
+                                        </div>
+                                            ))}
                                         </div>
                                     ))
                                 ) : (

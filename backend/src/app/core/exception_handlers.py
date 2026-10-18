@@ -107,6 +107,7 @@ async def _forbidden_handler(request: Request, exc: AuthorizationError) -> JSONR
         actor_role=exc.actor_role,
         target_type=exc.target_type,
         target_id=exc.target_id,
+        clinic_id=exc.clinic_id,
         request_method=getattr(request, "method", None),
         request_path=getattr(getattr(request, "url", None), "path", None),
     )

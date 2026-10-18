@@ -48,6 +48,7 @@ from app.models.medwatch_form_3500 import (
     MedWatchListState,
 )
 from app.pharmacovigilance import NaranjoQuestion
+from app.services.clinic_membership_service import ClinicMembershipService
 from app.services.medwatch_3500.dates import (
     clinic_date_of,
     clinic_today,
@@ -576,8 +577,7 @@ class _ReadContext:
                 name
                 for name in (
                     _text(team, "clinic_name"),
-                    _text(clinician, "clinic_name"),
-                    self.clinic_names.get(str(clinician.get("clinic_id")), ""),
+                    self.clinic_names.get(str(team.get("clinic_id")), ""),
                 )
                 if name
             )
@@ -738,16 +738,25 @@ class MedWatchService:
         return (await self._read_models([row]))[0]
 
     async def list_drafts(
-        self, clinician_id: UUID, state: MedWatchListState = "active"
+        self,
+        clinician_id: UUID,
+        state: MedWatchListState = "active",
+        clinic_id: UUID | None = None,
     ) -> dict[str, Any]:
-        """List drafts for currently assigned patients: active, submitted or discarded."""
-        assignments = await self.care_team_repo.list_assigned_patient_ids(str(clinician_id))
-        patient_ids = [str(row["patient_id"]) for row in assignments if row.get("patient_id")]
+        """List drafts for currently assigned patients: active, submitted or discarded.
+
+        Each draft carries the clinic of the clinician's link; ``clinic_id`` keeps one clinic.
+        """
+        scope = await ClinicMembershipService(self).link_scope(clinician_id, clinic_id)
+        patient_ids = scope.patient_ids
         if not patient_ids:
             return {"items": [], "total": 0}
         query = self.db.table("medwatch_drafts").select("*").in_("patient_id", patient_ids)
         if state == "submitted":
             query = query.eq("status", MedWatchStatus.SUBMITTED.value)
+        elif state in ("draft", "approved"):
+            status = MedWatchStatus.DRAFT if state == "draft" else MedWatchStatus.REVIEWED
+            query = query.eq("status", status.value).is_("discarded_at", "null")
         elif state == "discarded":
             query = query.not_.is_("discarded_at", "null")
         else:
@@ -756,7 +765,40 @@ class MedWatchService:
             ).is_("discarded_at", "null")
         result = await self._execute(query.order("created_at", desc=True))
         items = await self._read_models(cast(list[dict[str, Any]], result.data or []))
+        items = [scope.annotate(item) for item in items]
         return {"items": items, "total": len(items)}
+
+    async def get_draft(self, clinician_id: UUID, draft_id: UUID) -> dict[str, Any]:
+        """One draft, readable by exactly the clinicians who can list it.
+
+        An unknown id and an unassigned one are indistinguishable (the same 404).
+        """
+        draft = await self._get_readable_draft(clinician_id, draft_id)
+        return (await self._read_models([draft]))[0]
+
+    async def preview_pdf(self, clinician_id: UUID, draft_id: UUID) -> dict[str, Any]:
+        """The filled Form 3500 stamped as a draft. Not an export.
+
+        It changes no draft state and creates no export record. Each successful render records
+        one separate ``preview_viewed`` audit event with the actor.
+        """
+        draft = await self._get_readable_draft(clinician_id, draft_id)
+        context = await self._context([draft])
+        form, _upgraded = self._form(draft, context)
+        if form.section_b.report_date is None and draft.get("approved_at"):
+            form.section_b.report_date = clinic_date_of(draft["approved_at"])
+        content = await asyncio.to_thread(render_form_3500, form, draft_id, watermark=True)
+        await self._rpc(
+            "record_medwatch_draft_preview_viewed",
+            {"p_draft_id": str(draft_id), "p_actor_id": str(clinician_id)},
+            failure="MedWatch preview could not be recorded",
+            resource=("MedWatch draft", draft_id),
+        )
+        return {
+            "filename": f"fda-3500-{str(draft_id)[:8]}-draft-preview.pdf",
+            "media_type": "application/pdf",
+            "content": content,
+        }
 
     async def get_preview(self, clinician_id: UUID, draft_id: UUID) -> Form3500PreviewRead:
         """The read-only Form 3500 layout of a draft in any status."""
@@ -1141,7 +1183,7 @@ class MedWatchService:
         )
         teams = await self._rows(
             self.db.table("care_teams")
-            .select("patient_id, clinician_id, clinic_name")
+            .select("patient_id, clinician_id, clinic_id, clinic_name")
             .in_("patient_id", patient_ids)
             .eq("status", "active")
         )
@@ -1158,13 +1200,14 @@ class MedWatchService:
         clinicians = (
             await self._rows(
                 self.db.table("clinicians")
-                .select("id, first_name, last_name, clinic_name, clinic_id")
+                .select("id, first_name, last_name")
                 .in_("id", clinician_ids)
             )
             if clinician_ids
             else []
         )
-        clinic_ids = sorted({str(c["clinic_id"]) for c in clinicians if c.get("clinic_id")})
+        # The clinic of each link, not the clinician's default clinic (CLN-003).
+        clinic_ids = sorted({str(t["clinic_id"]) for t in teams if t.get("clinic_id")})
         clinics = (
             await self._rows(
                 self.db.table("clinics").select("id, display_name").in_("id", clinic_ids)
@@ -1207,6 +1250,12 @@ class MedWatchService:
         draft = dict(rows[0])
         await self._assert_assignment(clinician_id, UUID(str(draft["patient_id"])))
         return draft
+
+    async def _get_readable_draft(self, clinician_id: UUID, draft_id: UUID) -> dict[str, Any]:
+        try:
+            return await self._get_authorized_draft(clinician_id, draft_id)
+        except AuthorizationError:
+            raise NotFoundError("MedWatch draft", str(draft_id)) from None
 
     async def _load_sources(
         self,

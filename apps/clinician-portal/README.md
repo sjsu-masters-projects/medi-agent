@@ -33,13 +33,92 @@ npm run test
 - That flow creates the clinic and provisions the initial clinic code
 - Clinic admins land in the clinician dashboard after successful auth
 
-### Clinician Login
+### Clinician Login (sign in once)
 
-1. User enters a clinic code on `/login`
-2. Frontend verifies the clinic through `POST /api/v1/clinics/resolve-code`
-3. Verified clinic context is stored locally and reused on refresh
-4. User chooses login and submits email/password through `POST /api/v1/auth/login`
-5. If MFA is required, the user completes TOTP verification before session hydration
+1. `/login` opens on **Sign in**: email and password through `POST /api/v1/auth/login`, with no
+   clinic code. The account must have an active clinic membership (`NO_ACTIVE_CLINIC` otherwise).
+2. If MFA is required, the user completes TOTP verification before session hydration.
+3. The clinician lands where they did before: the return path or `/dashboard`. There is no
+   "Choose a clinic" step, no header switcher and no global active clinic. Lists stay
+   clinician-wide through the care-team link.
+4. After sign-in the portal reads `GET /api/v1/clinicians/me/clinics` only to decide what the
+   sidebar shows: the clinic name when there is exactly one clinic, nothing otherwise.
+
+The clinic code is the **secondary path**, **Join a clinic** on `/login`:
+
+- verify the code (`POST /api/v1/clinics/resolve-code`), then choose
+  - **I already have an account**: sign in (and MFA), then `POST /api/v1/clinicians/me/clinics`
+    adds the clinic with a Provider or Nurse / MA role. The clinic is added only after the
+    second factor. A membership ended by that clinic's admin is refused (`MEMBERSHIP_INACTIVE`:
+    ask the admin to invite you again). If adding fails the clinician is signed in and can
+    continue to the dashboard.
+  - **Join this clinic (Provider / Nurse)**: create an account at `/signup` (an address that
+    already has an account is refused with `ACCOUNT_EXISTS`: sign in to add the clinic).
+  - **Create a clinic workspace**: `/signup/admin`.
+- An addressed email invitation adds a clinic from `/signup#invitation=...`. An account with
+  MFA and an active clinic must sign in first (`SIGN_IN_TO_ACCEPT`).
+
+### Clinic-scoped actions
+
+Staff, role changes and removals, email invitations, patient invite codes (and their history)
+and the clinic code shown in Settings belong to one clinic. The portal sends `clinic_id`
+automatically for a clinician with one clinic. With several, the server answers
+`CLINIC_REQUIRED` and Settings shows a small **Clinic for this page** picker (component
+`src/components/features/clinic-picker.tsx`); the choice applies only to those sections. Admin
+controls (invitations, staff role changes and removal, clinic name) follow the role held at the
+chosen clinic, not a profile-wide role. Error copy for
+`CLINIC_REQUIRED`, `ACCOUNT_EXISTS`, `MEMBERSHIP_INACTIVE`, `NO_ACTIVE_CLINIC`,
+`SIGN_IN_TO_ACCEPT` and the clinic-code errors lives in `src/services/clinics.ts`.
+
+### Clinic chips and the Clinic filter (CLN-003 slice C)
+
+Patient lists (Patient roster, Risk Radar, Patient Upload Review Queue, ADR Reviews, MedWatch,
+Messages, Appointments, Alerts) and the patient header show **which clinic a patient is linked at**,
+but only for a clinician with two or more clinics. A single-clinic clinician sees no chip, no
+filter and no new request parameter.
+
+- **Chip:** `ClinicChip` in `src/components/features/clinic-chip.tsx`: a small neutral pill (11 px,
+  medium weight, `bg-surface-2 text-ink-2 border-line`) with the clinic name, truncated with a
+  `title` tooltip. The same tone for every clinic; the meaning is the text. It follows the patient
+  name on wide rows and sits on a second line at 390 px. The patient header says "Linked at
+  &lt;clinic&gt;" (`LinkedAt`).
+- **Filter:** `ClinicFilterField`, a labelled **Clinic** select (All clinics first, then each active
+  clinic) on the right of the existing toolbar, never a tab row. State is the URL query parameter
+  `clinic` (default All clinics), so it survives reload and back navigation. Hook:
+  `src/hooks/use-clinic-filter.ts` (`useClinicFilter`; `useResolvedClinicFilter` for the work lists
+  that keep their own URL state). The portal sends `clinic_id` to the list endpoint only after a
+  clinic is picked; the server answers an empty list for a clinic the clinician does not belong to.
+- **Empty filtered list:** "No patients at &lt;clinic&gt; match" with a **Show all clinics** text button.
+- Messages filter the conversation list on the server; Alerts filter the loaded items by
+  `clinic_id` (the notification cache is shared with the bell, so it is not refetched per clinic).
+
+### Appointments across clinics (CLN-003 slice E)
+
+- **Rows:** each appointment row in the Appointments history shows the time first and in bold,
+  then the patient name, then the clinic chip, then the status chip. The chip appears only for a
+  clinician with two or more clinics and uses the appointment's own clinic. At 390 px the first line
+  is time plus status and the second line is patient plus clinic; wider screens keep one row.
+- **Clinic row:** directly under the Patient selector a muted, read-only line "Clinic: &lt;name&gt;"
+  shows the selected patient's clinic. The clinic is never chosen here and the offer payload does
+  not carry one.
+- **Conflicts:** if a proposed slot overlaps a visit the clinician already has at any clinic, the
+  server refuses the whole offer (`CLINICIAN_SCHEDULE_CONFLICT`). A `risk-soft` callout under each
+  offending slot reads "You already have an appointment at &lt;clinic&gt; from &lt;time&gt; to
+  &lt;time&gt;." in the patient's timezone (server prose is never shown). Send stays disabled while
+  a callout remains; editing or removing a slot clears only its own callout. Nothing is saved for
+  a refused offer (no partial offers), and adjacent visits are not conflicts.
+
+### Your clinics, default clinic and leaving (CLN-003 slice D)
+
+Settings -> General Profile has a **Your clinics** card
+(`src/components/features/your-clinics-card.tsx`): one row per clinic with the name, a role chip, a
+**Default** badge, and, for admins, the clinic code with the Copy button. Row actions are two text
+buttons: **Make default** (changes only which clinic is preselected; nothing ends) and **Leave**.
+Leave opens a confirm dialog that says the clinician's patient links and unused invite codes at
+that clinic will end (nothing is deleted); the confirm button is destructive. Leave is disabled with
+a reason for the last clinic ("This is your only clinic.") and for the only admin of a clinic
+("You're the only admin here."). Clinic name editing (an Edit name button on the admin's row) and the staff role-change and
+removal actions show only to an admin at the picked clinic.
 
 ### Clinician MFA
 
@@ -53,11 +132,12 @@ npm run test
 
 ## Invite-Code Behavior
 
-Invite history is intentionally role-sensitive:
+Invite codes belong to the clinic that issued them (the patient's care-team link takes that
+clinic). Invite history is intentionally role-sensitive, per clinic:
 
-- clinic admins can see clinic-wide invite history
-- admins also see who generated each code
-- non-admin clinicians only see invite codes they created
+- clinic admins can see that clinic's invite history, and who generated each code
+- non-admin clinicians only see invite codes they created at that clinic
+- an admin at one clinic sees nothing of another clinic's codes
 - revoke remains owner-scoped, so admins do not revoke peer-issued codes from the current UI
 
 ## Relevant Files
@@ -65,13 +145,17 @@ Invite history is intentionally role-sensitive:
 - login flow: `src/app/(auth)/login/page.tsx`
 - admin bootstrap: `src/app/(auth)/signup/admin/page.tsx`
 - dashboard review queue: `src/app/(dashboard)/review-queue/page.tsx`
-- ADR evidence queue: `src/app/(dashboard)/medwatch/page.tsx`
+- ADR review queue: `src/app/(dashboard)/adr-reviews/page.tsx`; case page: `src/app/(dashboard)/adr-reviews/[assessmentId]/page.tsx`
+- MedWatch reports list: `src/app/(dashboard)/medwatch/page.tsx`; report workspace: `src/app/(dashboard)/medwatch/[draftId]/page.tsx`
+- shared list pieces (tabs, search, sort, pagination, URL state): `src/components/features/work-list.tsx`
 - patient deep dive: `src/app/(dashboard)/patients/[id]/page.tsx`
 - patient deep dive documents panel: `src/components/features/patient-documents-panel.tsx`
 - settings / invite history: `src/app/(dashboard)/settings/page.tsx`
 - MFA setup: `src/app/(dashboard)/settings/mfa/page.tsx`
 - clinician API client: `src/services/clinicians.ts`
-- stored clinic context: `src/services/clinic-context.ts`
+- stored clinic context (sidebar display and the join path only): `src/services/clinic-context.ts`
+- clinic memberships, `clinic_id` helper and error copy: `src/services/clinics.ts`
+- clinic picker for clinic-scoped actions: `src/components/features/clinic-picker.tsx`
 
 ## Document review workflow
 
@@ -79,7 +163,22 @@ Invite history is intentionally role-sensitive:
 - Review actions are surfaced in both the dedicated review queue and the patient deep dive documents tab.
 - The deep-dive documents experience is intentionally factored into `PatientDocumentsPanel` so document review state, modal flows, and refresh behavior stay isolated from the rest of the deep-dive page.
 
+## Routes: ADR Reviews and MedWatch (UX-005)
+
+| Route | Purpose |
+| --- | --- |
+| `/adr-reviews` | Compact work queue, one row per case. Tabs: Awaiting review, Information requested, Reviewed, Dismissed (with counts). Search by patient, medicine or reaction; sort by score or age; 10 rows per page. Tab, search, sort and page live in the URL query, so Back from a case restores them. |
+| `/adr-reviews/[assessmentId]` | Case page: summary, evidence with provenance labels, collapsed scoring details, missing information, and a side action panel (stacked under the evidence below 1024 px). Mark reviewed is the one primary action; Prepare MedWatch draft opens the report; a reviewed case with a report links to it. |
+| `/patients/[id]?tab=adr` | The patient's ADR cases, current and past, linking to the case page. |
+| `/medwatch` | Reports table. Tabs: Drafts, Approved, Submitted, Discarded. `/medwatch?assessment=<id>` (an old link) redirects to `/adr-reviews/<id>`. |
+| `/medwatch/[draftId]` | Report stepper: Complete (gate issues first, link to each field; Form 3500 sections collapsed) → Preview (the watermarked PDF inline) → Approve (attestation dialog) → Download and record submission. |
+
+- The preview is `GET /api/v1/clinicians/me/medwatch-drafts/{id}/preview.pdf` fetched with the bearer token and shown from a blob URL that is revoked on leaving the step. It is watermarked "DRAFT – not for submission", is not an export, and records no audit event. Continuing from Complete saves pending edits first so the PDF matches the screen. The audited, unwatermarked download stays on the Download step after approval.
+- Layouts: below 768 px the tables become stacked rows and the stepper reads "Step N of 4" with previous and next step buttons (#180); from 768 px a grid table and a numbered stepper. Neither page scrolls horizontally at 390 px or 1280 px.
+
 ## ADR Review Workflow
+
+- The cases page and report page replace the single `/medwatch` page: where this section says "queue" or "editor", read the routes above.
 
 - `GET /api/v1/clinicians/me/adr-assessments` returns draft assessments only for patients assigned to the authenticated clinician.
 - `POST /api/v1/clinicians/me/adr-assessments/{assessment_id}/review` atomically marks a draft reviewed, dismisses it with a reason, or records an information request. The database rechecks active assignment and writes an immutable audit event.
@@ -93,7 +192,7 @@ Invite history is intentionally role-sensitive:
 - An approved draft offers **Download Form 3500 (PDF)**. A confirmation states "MediAgent did not submit this report. You submit it to FDA." before the official fillable PDF is saved under the server filename (`fda-3500-<id prefix>-not-submitted.pdf`). Each download is audited by the server and is never retried automatically. The JSON export stays as a secondary action. An approved earlier draft that cannot fill the PDF says to discard it and prepare a new draft.
 - **Record FDA submission** records a submission the clinician made outside MediAgent: date (not in the future or before approval), method (MedWatch Online, fax, mail, or other with a description), an optional FDA reference and an attestation. Recording sends nothing to FDA. The draft then appears read-only under **Submitted** with "Submitted by <clinician> outside MediAgent on <date>", its amendment history and **Amend record** (date, method or reference, with a required reason; the original record is kept).
 - **Discard draft** (for a draft, or an approved draft without a submission record) asks for a reason and returns the ADR assessment to review. Discarded drafts are listed read-only under **Discarded** with the reason and date.
-- The Active, Submitted and Discarded switch is bound to `?state=` on `/medwatch`. The application has no FDA filing action and never presents an export or a download as a submission.
+- The Drafts, Approved, Submitted and Discarded tabs are bound to `?tab=` on `/medwatch`. The application has no FDA filing action and never presents an export or a download as a submission.
 
 ## Care-plan revision review
 

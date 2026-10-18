@@ -7,14 +7,14 @@ import { useDispatch } from "react-redux";
 import { Button, Input } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { AuthShell, AuthSteps, VerifiedClinic } from "@/components/features/auth-shell";
-import { ApiClientError, api, isRetryableApiError } from "@/services/api";
+import { api } from "@/services/api";
 import { writeStoredSession } from "@/services/auth-session";
 import {
     clearStoredClinicContext,
-    readStoredClinicContext,
     writeStoredClinicContext,
     type ClinicContext,
 } from "@/services/clinic-context";
+import { clinicErrorMessage, fetchMyClinics, joinClinicByCode } from "@/services/clinics";
 import { hydrateSession, type ClinicianAuthSession } from "@/store/slices/auth-slice";
 import type { AppDispatch } from "@/store/store";
 import { PortalUserRole } from "@/types";
@@ -49,6 +49,8 @@ interface MFAVerifyResponse {
 interface PendingMFAChallenge {
     factorId: string;
     friendlyName: string;
+    /** True when the clinic code path is adding a clinic once sign-in completes. */
+    joining: boolean;
     session: ClinicianAuthSession;
 }
 
@@ -59,19 +61,11 @@ interface ClinicResolveResponse {
     status: "active" | "suspended";
 }
 
-type LoginStage = "verify" | "choose" | "login" | "mfa";
+// "login" is the default: email, password and MFA, with no clinic code. "verify", "choose" and
+// "join-login" are the secondary path for adding a clinic to an existing account.
+type LoginStage = "verify" | "choose" | "login" | "join-login" | "mfa";
 
-type ApiErrorWithEnvelope = {
-    error?: {
-        code?: string;
-    };
-};
-
-const CLINIC_CONTEXT_ERROR_CODES = new Set([
-    "CLINIC_CONTEXT_INVALID",
-    "CLINIC_CODE_INVALID",
-    "CLINIC_CODE_INACTIVE",
-]);
+type JoinRole = "provider" | "nurse";
 
 function mapClinicContext(response: ClinicResolveResponse): ClinicContext {
     return {
@@ -83,33 +77,18 @@ function mapClinicContext(response: ClinicResolveResponse): ClinicContext {
 }
 
 function getErrorMessage(error: unknown, fallbackMessage: string): string {
-    if (error instanceof Error && error.message) {
-        return error.message;
-    }
-
-    if (typeof error === "string" && error) {
-        return error;
-    }
-
-    return fallbackMessage;
-}
-
-function isClinicContextInvalidError(error: unknown): boolean {
-    if (!(error instanceof ApiClientError)) {
-        return false;
-    }
-
-    const code = (error.details as ApiErrorWithEnvelope | null)?.error?.code;
-    return typeof code === "string" && CLINIC_CONTEXT_ERROR_CODES.has(code);
+    return clinicErrorMessage(error, fallbackMessage);
 }
 
 function ClinicianLoginPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const dispatch = useDispatch<AppDispatch>();
-    const [stage, setStage] = useState<LoginStage>("verify");
+    const [stage, setStage] = useState<LoginStage>("login");
     const [clinicCode, setClinicCode] = useState("");
+    // The clinic being added to an existing account (secondary path only).
     const [clinicContext, setClinicContext] = useState<ClinicContext | null>(null);
+    const [joinRole, setJoinRole] = useState<JoinRole>("provider");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
@@ -119,10 +98,13 @@ function ClinicianLoginPageContent() {
     const [passwordVisible, setPasswordVisible] = useState(false);
     const [pendingMFAChallenge, setPendingMFAChallenge] =
         useState<PendingMFAChallenge | null>(null);
+    // Signed in, but adding the clinic failed: keep the session so the clinician can retry or go on.
+    const [joinFailedSession, setJoinFailedSession] = useState<ClinicianAuthSession | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
     const returnPath = sanitizeReturnPath(searchParams?.get("return_path")) ?? "/dashboard";
     const reason = searchParams?.get("reason") ?? "";
+    const joining = clinicContext !== null && (stage === "join-login" || (stage === "mfa" && pendingMFAChallenge?.joining));
 
     useEffect(() => {
         if (reason === "session_expired") {
@@ -134,36 +116,13 @@ function ClinicianLoginPageContent() {
         }
     }, [reason]);
 
-    useEffect(() => {
-        const stored = readStoredClinicContext();
-        if (!stored) {
-            return;
-        }
-
-        const revalidateStoredClinicContext = async () => {
-            setClinicCode(stored.clinicCode);
-            setSubmitting(true);
-
-            try {
-                const resolved = await api.post<ClinicResolveResponse>("/api/v1/clinics/resolve-code", {
-                    clinic_code: stored.clinicCode,
-                });
-                const nextClinicContext = mapClinicContext(resolved);
-                writeStoredClinicContext(nextClinicContext);
-                setClinicContext(nextClinicContext);
-                setStage("choose");
-            } catch {
-                clearStoredClinicContext();
-                setClinicContext(null);
-                setStage("verify");
-                setError("Saved clinic access expired. Please verify your clinic code again.");
-            } finally {
-                setSubmitting(false);
-            }
-        };
-
-        void revalidateStoredClinicContext();
-    }, []);
+    function resetSignInFields() {
+        setError("");
+        setMfaFactors([]);
+        setMfaCode("");
+        setPendingMFAChallenge(null);
+        setJoinFailedSession(null);
+    }
 
     async function handleVerifyClinicCode(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -192,6 +151,7 @@ function ClinicianLoginPageContent() {
             });
             const context = mapClinicContext(resolved);
 
+            // The signup page reads this to continue joining the verified clinic.
             writeStoredClinicContext(context);
             setClinicCode(context.clinicCode);
             setClinicContext(context);
@@ -208,14 +168,51 @@ function ClinicianLoginPageContent() {
         }
     }
 
-    function expireClinicContext(message: string) {
-        const retainedClinicCode = clinicContext?.clinicCode ?? clinicCode;
-        clearStoredClinicContext();
-        setClinicContext(null);
-        setMfaFactors([]);
-        setStage("verify");
-        setClinicCode(retainedClinicCode);
-        setError(message);
+    // Show the clinician's clinic name in the sidebar only when there is exactly one: with
+    // several there is no single clinic to show, and no clinic is "active".
+    async function rememberDisplayClinic(accessToken: string) {
+        try {
+            const { clinics } = await fetchMyClinics(accessToken);
+            if (clinics.length === 1) {
+                writeStoredClinicContext({
+                    clinicCode: clinics[0].clinic_code ?? "",
+                    clinicId: clinics[0].clinic_id,
+                    clinicName: clinics[0].clinic_name,
+                    status: clinics[0].status,
+                });
+            } else {
+                clearStoredClinicContext();
+            }
+        } catch {
+            // Display only; the portal works without it.
+        }
+    }
+
+    async function finishSignIn(session: ClinicianAuthSession, joinTarget: ClinicContext | null) {
+        if (joinTarget) {
+            try {
+                const joined = await joinClinicByCode(session.accessToken, joinTarget.clinicCode, joinRole);
+                writeStoredClinicContext({
+                    clinicCode: joined.clinic_code,
+                    clinicId: joined.clinic_id,
+                    clinicName: joined.clinic_name,
+                    status: joined.clinic_status,
+                });
+            } catch (joinError) {
+                setJoinFailedSession(session);
+                setPendingMFAChallenge(null);
+                setStage("join-login");
+                setError(
+                    getErrorMessage(joinError, "Signed in, but this clinic could not be added. Please try again."),
+                );
+                return;
+            }
+        } else {
+            await rememberDisplayClinic(session.accessToken);
+        }
+        writeStoredSession(session);
+        dispatch(hydrateSession(session));
+        router.replace(returnPath.startsWith("/login") ? "/dashboard" : returnPath);
     }
 
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -225,16 +222,13 @@ function ClinicianLoginPageContent() {
         setMfaFactors([]);
         setMfaCode("");
         setPendingMFAChallenge(null);
+        setJoinFailedSession(null);
 
-        if (!clinicContext) {
-            setError("Enter and verify your clinic code first.");
-            setSubmitting(false);
-            return;
-        }
+        const joinTarget = stage === "join-login" ? clinicContext : null;
 
         try {
+            // A deployed portal may still send a clinic code; this one does not need to.
             const response = await api.post<LoginResponse>("/api/v1/auth/login", {
-                clinic_code: clinicContext.clinicCode,
                 email,
                 password,
             });
@@ -242,36 +236,6 @@ function ClinicianLoginPageContent() {
                 throw new Error(
                     "This account is registered as a patient. Please use the patient portal to sign in.",
                 );
-            }
-
-            if (response.mfa_required) {
-                const factors = response.mfa_factors ?? [];
-                const primaryFactor = factors[0];
-                if (!primaryFactor) {
-                    throw new Error(
-                        "Multi-factor authentication is required, but no verification method is set up for your account. Please contact your clinic administrator to set up MFA, then try signing in again.",
-                    );
-                }
-
-                const pendingSession: ClinicianAuthSession = {
-                    accessToken: response.tokens.access_token,
-                    expiresAt: response.tokens.expires_at,
-                    refreshToken: response.tokens.refresh_token,
-                    user: {
-                        email: response.user.email,
-                        id: response.user.id,
-                        role: PortalUserRole.CLINICIAN,
-                    },
-                };
-
-                setMfaFactors(factors);
-                setPendingMFAChallenge({
-                    factorId: primaryFactor.id,
-                    friendlyName: primaryFactor.friendly_name ?? "Authenticator",
-                    session: pendingSession,
-                });
-                setStage("mfa");
-                return;
             }
 
             const session: ClinicianAuthSession = {
@@ -285,17 +249,28 @@ function ClinicianLoginPageContent() {
                 },
             };
 
-            writeStoredSession(session);
-            dispatch(hydrateSession(session));
-            router.replace(returnPath.startsWith("/login") ? "/dashboard" : returnPath);
-        } catch (submissionError) {
-            if (
-                !isRetryableApiError(submissionError)
-                && isClinicContextInvalidError(submissionError)
-            ) {
-                expireClinicContext("Saved clinic access expired. Please verify your clinic code again.");
+            if (response.mfa_required) {
+                const factors = response.mfa_factors ?? [];
+                const primaryFactor = factors[0];
+                if (!primaryFactor) {
+                    throw new Error(
+                        "Multi-factor authentication is required, but no verification method is set up for your account. Please contact your clinic administrator to set up MFA, then try signing in again.",
+                    );
+                }
+
+                setMfaFactors(factors);
+                setPendingMFAChallenge({
+                    factorId: primaryFactor.id,
+                    friendlyName: primaryFactor.friendly_name ?? "Authenticator",
+                    joining: joinTarget !== null,
+                    session,
+                });
+                setStage("mfa");
                 return;
             }
+
+            await finishSignIn(session, joinTarget);
+        } catch (submissionError) {
             setError(
                 getErrorMessage(
                     submissionError,
@@ -340,9 +315,7 @@ function ClinicianLoginPageContent() {
                 refreshToken: response.refresh_token,
                 user: pendingMFAChallenge.session.user,
             };
-            writeStoredSession(session);
-            dispatch(hydrateSession(session));
-            router.replace(returnPath.startsWith("/login") ? "/dashboard" : returnPath);
+            await finishSignIn(session, pendingMFAChallenge.joining ? clinicContext : null);
         } catch (submissionError) {
             setError(
                 getErrorMessage(
@@ -355,18 +328,58 @@ function ClinicianLoginPageContent() {
         }
     }
 
+    async function continueWithoutJoining() {
+        if (!joinFailedSession) {
+            return;
+        }
+        await rememberDisplayClinic(joinFailedSession.accessToken);
+        writeStoredSession(joinFailedSession);
+        dispatch(hydrateSession(joinFailedSession));
+        router.replace(returnPath.startsWith("/login") ? "/dashboard" : returnPath);
+    }
+
+    function backToSignIn() {
+        clearStoredClinicContext();
+        setClinicContext(null);
+        setClinicCode("");
+        setClinicCodeError("");
+        setPassword("");
+        setPasswordVisible(false);
+        resetSignInFields();
+        setStage("login");
+    }
+
     function useDifferentClinicCode() {
         clearStoredClinicContext();
         setClinicContext(null);
         setClinicCode("");
         setEmail("");
-        setError("");
         setClinicCodeError("");
-        setMfaFactors([]);
         setPassword("");
         setPasswordVisible(false);
+        resetSignInFields();
         setStage("verify");
     }
+
+    const secondaryPath = stage !== "login" && !(stage === "mfa" && !joining);
+    const heading =
+        stage === "verify"
+            ? "Join a clinic"
+            : stage === "choose"
+                ? "Choose sign-in path"
+                : stage === "mfa"
+                    ? "Verify MFA"
+                    : "Sign in";
+    const subcopy =
+        stage === "verify"
+            ? "Enter the clinic code to join that clinic or create a workspace. You can belong to more than one clinic with a single account."
+            : stage === "choose"
+                ? "Clinic verified. Sign in to add it to your account, or create an account to join this clinic."
+                : stage === "join-login"
+                    ? "Sign in to add this clinic to your account. Your other clinics and patients stay as they are."
+                    : stage === "login"
+                        ? "Access your dashboard, roster, and active alerts."
+                        : "Use your authenticator app to complete sign-in.";
 
     return (
         <AuthShell
@@ -376,26 +389,17 @@ function ClinicianLoginPageContent() {
         >
                 <div className="space-y-6">
                     <div className="space-y-2">
-                        <AuthSteps label="Clinic access" step={stage === "verify" ? 1 : stage === "choose" ? 2 : 3} />
-                        <p className="sr-only">Clinic access</p>
+                        {secondaryPath ? (
+                            <AuthSteps
+                                label="Join a clinic"
+                                step={stage === "verify" ? 1 : stage === "choose" ? 2 : 3}
+                            />
+                        ) : null}
+                        <p className="sr-only">Clinician sign in</p>
                         <h2 className="pt-3 text-[26px] font-semibold leading-tight tracking-[-0.02em] text-ink">
-                            {stage === "verify"
-                                ? "Enter clinic code"
-                                : stage === "choose"
-                                    ? "Choose sign-in path"
-                                    : stage === "login"
-                                        ? "Sign in"
-                                        : "Verify MFA"}
+                            {heading}
                         </h2>
-                        <p className="text-sm leading-relaxed text-muted">
-                            {stage === "verify"
-                                ? "Your clinic code opens your workspace. Next, you'll sign in or join the clinic."
-                                : stage === "choose"
-                                    ? "Clinic verified. Sign in, or create an account to join this clinic."
-                                    : stage === "login"
-                                        ? "Access your dashboard, roster, and active alerts."
-                                        : "Use your authenticator app to complete sign-in."}
-                        </p>
+                        <p className="text-sm leading-relaxed text-muted">{subcopy}</p>
                     </div>
 
                     {stage === "verify" ? (
@@ -426,6 +430,9 @@ function ClinicianLoginPageContent() {
                                 </p>
                                 <p className="text-xs text-muted">You&apos;ll set it up as its first Clinic Admin.</p>
                             </div>
+                            <button className="w-full text-sm text-muted hover:text-ink" onClick={backToSignIn} type="button">
+                                Back to sign in
+                            </button>
                         </form>
                     ) : null}
 
@@ -436,7 +443,15 @@ function ClinicianLoginPageContent() {
                                 <p className="sr-only">Code: {clinicContext.clinicCode}</p>
                             </VerifiedClinic>
                             {error ? <p role="alert" className="rounded-lg bg-risk-soft px-3 py-2 text-sm text-risk-ink">{error}</p> : null}
-                            <Button fullWidth onClick={() => setStage("login")} size="lg" type="button">
+                            <Button
+                                fullWidth
+                                onClick={() => {
+                                    resetSignInFields();
+                                    setStage("join-login");
+                                }}
+                                size="lg"
+                                type="button"
+                            >
                                 I already have an account
                             </Button>
                             <Link className="block" href="/signup">
@@ -450,15 +465,20 @@ function ClinicianLoginPageContent() {
                         </div>
                     ) : null}
 
-                    {stage === "mfa" && clinicContext ? (
+                    {stage === "mfa" ? (
                         <div className="space-y-4">
                             <div className="flex items-start gap-3 rounded-xl border border-warn-line bg-warn-soft px-4 py-3 text-sm text-warn-ink">
                                 <Icon name="shield" className="mt-0.5 h-4 w-4 shrink-0" />
                                 <div>
                                 <p className="font-semibold">Multi-factor authentication required</p>
                                 <p className="mt-1">
-                                    Enter the 6-digit code from your authenticator app to continue signing in to{" "}
-                                    <span className="font-medium">{clinicContext.clinicName}</span>.
+                                    Enter the 6-digit code from your authenticator app to continue signing in
+                                    {joining && clinicContext ? (
+                                        <>
+                                            {" "}and add <span className="font-medium">{clinicContext.clinicName}</span>
+                                        </>
+                                    ) : null}
+                                    .
                                 </p>
                                 </div>
                             </div>
@@ -492,7 +512,7 @@ function ClinicianLoginPageContent() {
                                 <button
                                     className="inline-flex items-center gap-1 font-medium text-muted hover:text-ink"
                                     onClick={() => {
-                                        setStage("login");
+                                        setStage(joining ? "join-login" : "login");
                                         setMfaCode("");
                                         setPendingMFAChallenge(null);
                                         setError("");
@@ -505,12 +525,27 @@ function ClinicianLoginPageContent() {
                         </div>
                     ) : null}
 
-                    {stage === "login" && clinicContext ? (
+                    {stage === "login" || stage === "join-login" ? (
                         <>
-                            <div className="flex items-center gap-2.5 rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-ink-2">
-                                <Icon name="building" className="h-4 w-4 shrink-0 text-muted" />
-                                <span>Signing into clinic: <span className="font-semibold text-ink">{clinicContext.clinicName}</span></span>
-                            </div>
+                            {stage === "join-login" && clinicContext ? (
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-2.5 rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-ink-2">
+                                        <Icon name="building" className="h-4 w-4 shrink-0 text-muted" />
+                                        <span>Adding clinic: <span className="font-semibold text-ink">{clinicContext.clinicName}</span></span>
+                                    </div>
+                                    <label className="block">
+                                        <span className="mb-1.5 block text-[13px] font-medium text-ink-2">Your role at this clinic</span>
+                                        <select
+                                            className="h-[42px] w-full rounded-[10px] border border-line-strong bg-surface px-3.5 text-sm text-ink"
+                                            onChange={(event) => setJoinRole(event.target.value as JoinRole)}
+                                            value={joinRole}
+                                        >
+                                            <option value="provider">Provider</option>
+                                            <option value="nurse">Nurse / MA</option>
+                                        </select>
+                                    </label>
+                                </div>
+                            ) : null}
                             <form className="space-y-4" onSubmit={handleSubmit}>
                                 <Input
                                     autoComplete="email"
@@ -541,15 +576,46 @@ function ClinicianLoginPageContent() {
                                     Forgot your password?
                                 </Link>
                                 <Button disabled={submitting} fullWidth size="lg" type="submit">
-                                    {submitting ? "Signing in..." : "Sign in"}
+                                    {submitting ? "Signing in..." : stage === "join-login" ? "Sign in and add clinic" : "Sign in"}
                                 </Button>
+                                {joinFailedSession ? (
+                                    <Button fullWidth onClick={() => void continueWithoutJoining()} size="lg" type="button" variant="secondary">
+                                        Continue to my dashboard
+                                    </Button>
+                                ) : null}
                             </form>
-                            <div className="flex items-center justify-start text-sm">
-                                <button className="inline-flex items-center gap-1 font-medium text-muted hover:text-ink" onClick={() => setStage("choose")} type="button">
-                                    <Icon name="back" className="h-3.5 w-3.5" />
-                                    Back
-                                </button>
-                            </div>
+                            {stage === "login" ? (
+                                <div className="space-y-0.5 border-t border-line pt-4 text-sm">
+                                    <p className="text-muted">
+                                        Joining a clinic or setting one up?{" "}
+                                        <button
+                                            className="font-medium text-primary hover:underline"
+                                            onClick={() => {
+                                                resetSignInFields();
+                                                setStage("verify");
+                                            }}
+                                            type="button"
+                                        >
+                                            Join a clinic
+                                        </button>
+                                    </p>
+                                    <p className="text-xs text-muted">Add a clinic to this account with its clinic code, or create a new workspace.</p>
+                                </div>
+                            ) : (
+                                <div className="flex items-center justify-start text-sm">
+                                    <button
+                                        className="inline-flex items-center gap-1 font-medium text-muted hover:text-ink"
+                                        onClick={() => {
+                                            resetSignInFields();
+                                            setStage("choose");
+                                        }}
+                                        type="button"
+                                    >
+                                        <Icon name="back" className="h-3.5 w-3.5" />
+                                        Back
+                                    </button>
+                                </div>
+                            )}
                         </>
                     ) : null}
                 </div>

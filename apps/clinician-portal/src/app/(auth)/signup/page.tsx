@@ -8,6 +8,7 @@ import { Button, Input } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { AuthShell, AuthSteps, VerifiedClinic } from "@/components/features/auth-shell";
 import { api } from "@/services/api";
+import { apiErrorCode, clinicErrorMessage } from "@/services/clinics";
 import { writeStoredSession } from "@/services/auth-session";
 import {
     readStoredClinicContext,
@@ -81,6 +82,9 @@ function ClinicianSignupPageContent() {
     const [invitation, setInvitation] = useState<InvitationPreview | null>(null);
     const [signInOpen, setSignInOpen] = useState(false);
     const [signInPassword, setSignInPassword] = useState("");
+    // Asked for only when the account has an authenticator but no active clinic to sign in to.
+    const [needsMfaCode, setNeedsMfaCode] = useState(false);
+    const [mfaCode, setMfaCode] = useState("");
     const [accepted, setAccepted] = useState(false);
     const accessToken = useSelector((state: RootState) => state.auth.accessToken);
     const existingAccountPanelRef = useRef<HTMLDivElement>(null);
@@ -260,7 +264,7 @@ function ClinicianSignupPageContent() {
             }
             router.replace("/dashboard");
         } catch (submissionError) {
-            setError((submissionError as Error).message);
+            setError(clinicErrorMessage(submissionError, "Unable to create your account. Please try again."));
             setSubmitting(false);
         }
     }
@@ -316,7 +320,7 @@ function ClinicianSignupPageContent() {
                                                 writeStoredClinicContext(mapClinicContext(result.clinic));
                                                 router.replace("/dashboard");
                                             })
-                                            .catch((acceptError) => setError((acceptError as Error).message || "This invitation cannot be accepted by the signed-in account."))
+                                            .catch((acceptError) => setError(clinicErrorMessage(acceptError, "This invitation cannot be accepted by the signed-in account.")))
                                             .finally(() => setSubmitting(false));
                                     }}>Accept invitation</Button>
                                 </>
@@ -326,16 +330,21 @@ function ClinicianSignupPageContent() {
                                     setSubmitting(true); setError("");
                                     void api.post<InvitationAcceptResponse>("/api/v1/auth/invitations/accept", {
                                         email: invitation.email, password: signInPassword, invitation_token: invitationToken,
+                                        ...(needsMfaCode && mfaCode ? { mfa_code: mfaCode } : {}),
                                     }).then((result) => {
                                         const context = mapClinicContext(result.clinic);
                                         writeStoredClinicContext(context); setClinicContext(context);
                                         setSignInPassword(""); setAccepted(true);
-                                    }).catch((acceptError) => setError((acceptError as Error).message || "This invitation could not be accepted."))
+                                    }).catch((acceptError) => {
+                                        if (apiErrorCode(acceptError) === "MFA_CODE_REQUIRED") setNeedsMfaCode(true);
+                                        setError(clinicErrorMessage(acceptError, "This invitation could not be accepted."));
+                                    })
                                       .finally(() => setSubmitting(false));
                                 }}>
                                     <p className="text-sm text-muted">Use your existing clinician account for {invitation.email}. You will sign in normally afterwards, including MFA.</p>
                                     <Input label="Existing account password" autoComplete="current-password" type="password" value={signInPassword} onChange={(event) => setSignInPassword(event.target.value)} />
-                                    <Button disabled={submitting || !signInPassword} type="submit">{submitting ? "Accepting..." : "Sign in to accept"}</Button>
+                                    {needsMfaCode ? <Input label="Authenticator code" autoComplete="one-time-code" inputMode="numeric" maxLength={6} value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ""))} /> : null}
+                                    <Button disabled={submitting || !signInPassword || (needsMfaCode && mfaCode.length !== 6)} type="submit">{submitting ? "Accepting..." : "Sign in to accept"}</Button>
                                 </form>
                             ) : null}
                             {error ? <p role="alert" className="rounded-lg bg-risk-soft px-3 py-2 text-sm text-risk-ink">{error}</p> : null}

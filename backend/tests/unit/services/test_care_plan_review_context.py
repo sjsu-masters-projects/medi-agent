@@ -541,3 +541,60 @@ def test_abbreviated_source_title_requires_edit_or_removal(edited: bool, removed
     assert service._audit.call_args.args[3]["removed_item_ids"] == (
         [str(PATIENT_ID)] if removed else []
     )
+
+
+@pytest.mark.parametrize(
+    ("spanish", "message"),
+    [
+        ({"instructions": "Camina 30 minutos (es)"}, "numbers"),
+        ({"instructions": "No camines 20 minutos (es)"}, "negation"),
+    ],
+)
+def test_verifying_wording_that_fails_the_safety_checks_is_rejected(spanish, message) -> None:
+    original = {
+        "id": str(PATIENT_ID),
+        "category": "movement",
+        "confidence_score": 0.95,
+        **verified_wording(),
+        "wording_verified": False,
+    }
+    db, service = _draft_save_service(original)
+    wording = original["wording"]
+    update = CarePlanDraftUpdate.model_validate(
+        {
+            "items": [
+                {
+                    "id": str(PATIENT_ID),
+                    "title": "Walk",
+                    "instructions": "Walk 20 minutes",
+                    "frequency": "daily",
+                    "wording": {
+                        "en-US": wording["en-US"],
+                        "es-MX": {**wording["es-MX"], **spanish},
+                    },
+                    "wording_verified": True,
+                }
+            ]
+        }
+    )
+    with pytest.raises(ValidationError, match=message):
+        service.update_draft(CLINICIAN_ID, PATIENT_ID, PATIENT_ID, update)
+    db.table.return_value.update.assert_not_called()
+
+
+def test_approval_preflight_rejects_stored_verified_wording_that_fails_the_checks() -> None:
+    service = CarePlanService(MagicMock())
+    item = {
+        "id": str(PATIENT_ID),
+        "category": "movement",
+        "is_removed": False,
+        **verified_wording(),
+    }
+    item["wording"]["es-MX"]["instructions"] = "Camina 30 minutos (es)"
+    service._require_assignment = MagicMock()  # type: ignore[method-assign]
+    service._draft = MagicMock(return_value={"id": str(PATIENT_ID)})  # type: ignore[method-assign]
+    service._require_generation_complete = MagicMock()  # type: ignore[method-assign]
+    service._active_medications = MagicMock(return_value=[])  # type: ignore[method-assign]
+    service._items = MagicMock(return_value=[item])  # type: ignore[method-assign]
+    with pytest.raises(ValidationError, match="numbers"):
+        service.publication_snapshot(CLINICIAN_ID, PATIENT_ID, PATIENT_ID)

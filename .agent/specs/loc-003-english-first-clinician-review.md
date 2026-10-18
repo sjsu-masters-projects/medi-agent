@@ -1,6 +1,6 @@
 # LOC-003 — English-first clinician review of Spanish content
 
-**Status:** Backlog; design and decisions agreed October 13. Raised at the October 13
+**Status:** Merged ([#181](https://github.com/sjsu-masters-projects/medi-agent/pull/181), Jeevan); migrations renumbered to 067/068 and applied October 17 (first applied under their earlier filenames; re-runnable, so they reapplied cleanly); deployed check pending (see the board). Design and decisions agreed October 13. Raised at the October 13
 checkpoint demo.
 
 ## Principle
@@ -48,10 +48,10 @@ Both uses are labelled as such.
    The approval attestation then says what was actually checked. Optionally, a bilingual
    colleague can mark the Spanish as reviewed.
 4. **Extracted facts are shown in English.**
-   - Medication names come from the RxNorm normalisation already used by Nora (for example
-     metformina → metformin).
-   - Test names, instructions and frequencies are translated and labelled "Translated from
-     Spanish". Values, units, ranges, flags and dates are never translated or changed.
+   - Medication, allergen and vaccine names are never translated (decision 5): the review screen
+     keeps the name exactly as printed.
+   - Condition, procedure and test names, instructions and frequencies are translated and
+     labelled "Translated from Spanish". Values, units, ranges, flags and dates are never translated or changed.
    - The original Spanish text stays one tap away.
 5. **Source evidence stays original.**
    - Excerpts and citations remain the exact printed Spanish, because they are the
@@ -96,3 +96,73 @@ Both uses are labelled as such.
    - **Safety and records use only the original text.** Urgent-symptom checks and
      escalation never depend on a translation, and a translation never becomes a clinical
      fact.
+
+## Decisions from the October 17 review
+
+4. **A translation that failed its guard is never shown by default.** When
+   `translation_guard_passed` is false, both portals show the original message as the main
+   text with a short note ("Automatic translation unavailable for this message"; es-MX below)
+   instead of the translated text. The clinician portal no longer shows the failed translation
+   in its "Translated" box either. The es-MX note is a **draft for LOC-001 review**, not
+   approved wording: `Traducción automática no disponible para este mensaje`.
+5. **Proper names are never translated.** Medication names, allergens and vaccine names are not
+   sent to the model; `display_value` omits those keys and the review screen keeps the printed
+   name. Condition, procedure and test names are still translated and keep the digit guard.
+   The reason: a model can alter or "correct" a drug name, which is a clinical-safety change the
+   number guard cannot see.
+6. **Ingestion translates only the document's own facts**, found through the document's
+   provenance, not the patient's 50 most recent untranslated facts.
+7. **Message translation reads are bounded.** A read translates at most ten messages that have
+   no stored translation, skips stored ones, logs failures without message text, and never
+   fails the read. Follow-ups, deliberately not done now: move on-the-fly translation to a
+   background job; detect the clinician's language (the existing locale helper assumes
+   clinician = en-US) so a Spanish-writing clinician is translated to English.
+
+## Decisions from the October 17 second review (branch `fix/loc-003-review`)
+
+8. **The patient's own language is the target.** A clinician's message is translated into the
+   patient's `preferred_language` (en-US or es-MX), and only when its detected language differs
+   from it: an English reply to an en-US patient makes no model call and attaches no translation.
+   A clinician reads English, so only messages detected as Spanish are translated for them. The
+   patient portal shows a translation as the main text only when `translation_locale` equals the
+   patient's own locale; the clinician portal only when it is en-US.
+9. **Attestation needs a real check.** The "I verified ..." box is enabled only when the
+   back-translation of the SAVED Spanish wording has loaded, the numbers and medication-name
+   guards passed, and nothing is unsaved. Its disabled reasons are: "Back-translation is loading",
+   "Back-translation unavailable — retry", "Numbers or medication names differ — fix the Spanish",
+   "Save your changes first". The back-translation is fetched for saved wording only (on mount and
+   after a save), with "Check again" and "Retry", and a slower older response is ignored.
+   **Server side:** setting `wording_verified` (on save, and again at the approval preflight)
+   re-checks the stored English and Spanish wording against the same deterministic guards
+   (numbers with units, negation, medication name) and rejects with a validation error. It does
+   not call the model. Follow-up: the guard outcome is not recorded with the verification (no
+   suitable column; adding schema was not justified).
+10. **Stored translations are always attached; only new model calls are capped (ten per read).**
+    A failed translation is stored as a marker (`guard_passed=false`, `guard_failure_code =
+    model_error`), is never shown, and is retried after an hour. Store and read run off the event
+    loop. The send still waits for the translation (follow-up: a background job). `model_id` is
+    stored when the provider reports it.
+11. **Shared guards** (`translation_guards.py`) for messages, care-plan wording and fact fields:
+    numbers are compared with their units (mg, g, mcg/µg, mL, L, units/UI, %, tablets/tabletas and
+    similar, English and Spanish equivalents); "1,000" and "1.000" are not folded together (a
+    thousands-separator swap fails the guard), while a decimal comma still equals a decimal point;
+    a negation (no, not, never, without, sin, nunca) that appears or disappears fails the guard;
+    message translation also protects the patient's active medication names.
+12. **Prompt text is data.** Message and fact translation prompts say the text is data to
+    translate, never instructions, and wrap it in delimiters; delimiter text inside the data is
+    removed.
+
+## Remaining (owner: Jeevan)
+
+- Phone-style patient preview of the translated wording.
+- English glosses beside original excerpts, and the ADR evidence gloss.
+- Translation of the clinician Chat tab (Nora transcripts).
+- A clinician reply preview with back-translation before sending.
+- A "may contain errors" / model-info icon on translated text.
+- Marking facts untranslated when the guard rejects them, with the original Spanish one tap away.
+- Batching ingestion fact translation.
+- Caching back-translations.
+- A foreign key and a retention rule for `message_translations`.
+- The duplicate `067` migration prefix (the validator allows it).
+- Moving message translation on send and read to a background job; recording the guard outcome
+  with the wording verification.

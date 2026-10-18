@@ -91,6 +91,7 @@ _ERRORS: dict[str, tuple[Callable[[str], MediAgentError], str]] = {
         _validation,
         "This clinician already belongs to a clinic. An invitation cannot move them.",
     ),
+    "already_member": (_validation, "This clinician already belongs to this clinic."),
     "synthetic_address": (_validation, "Demo login addresses cannot receive email."),
     "invalid_address": (_validation, "Enter a valid email address."),
 }
@@ -295,7 +296,78 @@ class EmailDeliveryService:
             )
         return kinds
 
-    def _payload(self, row: dict[str, Any]) -> dict[str, Any]:
+    async def _rows(self, query: Any) -> list[dict[str, Any]]:
+        result = await asyncio.to_thread(query.execute)
+        return [item for item in (result.data or []) if isinstance(item, dict)]
+
+    async def _clinic_label(self, row: dict[str, Any]) -> str:
+        """The clinic a notice is from, only when its recipient belongs to more than one.
+
+        The clinic is the appointment's own, or the clinic of the care-team link between the
+        patient and the clinician the notice concerns; never the clinician's default clinic. A
+        notice with no single such link (for example a document result) carries no clinic. A
+        lookup failure propagates so the row stays queued and is retried rather than sent
+        without the clinic a multi-clinic recipient needs.
+        """
+        event = row.get("event")
+        if isinstance(row.get("payload"), dict) or not isinstance(event, dict):
+            return ""
+        role = str(row.get("role") or "")
+        patient_id = str(event.get("patient_id") or "")
+        raw_metadata = event.get("metadata")
+        metadata: dict[str, Any] = raw_metadata if isinstance(raw_metadata, dict) else {}
+        clinic_id = ""
+        if event.get("source_type") == "appointments" and event.get("source_id") and patient_id:
+            found = await self._rows(
+                self.db.table("appointments")
+                .select("clinic_id")
+                .eq("id", str(event["source_id"]))
+                .eq("patient_id", patient_id)
+                .limit(1)
+            )
+            clinic_id = str(found[0].get("clinic_id") or "") if found else ""
+        else:
+            clinician_id = (
+                str(row.get("user_id") or "")
+                if role == "clinician"
+                else str(metadata.get("clinician_id") or "")
+            )
+            if clinician_id and patient_id:
+                links = await self._rows(
+                    self.db.table("care_teams")
+                    .select("clinic_id")
+                    .eq("patient_id", patient_id)
+                    .eq("clinician_id", clinician_id)
+                    .eq("status", "active")
+                )
+                clinics = {str(link["clinic_id"]) for link in links if link.get("clinic_id")}
+                clinic_id = clinics.pop() if len(clinics) == 1 else ""
+        if not clinic_id:
+            return ""
+        if role == "patient":
+            others = await self._rows(
+                self.db.table("care_teams")
+                .select("clinic_id")
+                .eq("patient_id", patient_id)
+                .eq("status", "active")
+            )
+            belongs_to = {str(link["clinic_id"]) for link in others if link.get("clinic_id")}
+        else:
+            memberships = await self._rows(
+                self.db.table("clinic_memberships")
+                .select("clinic_id")
+                .eq("clinician_id", str(row.get("user_id") or ""))
+                .eq("status", "active")
+            )
+            belongs_to = {str(item["clinic_id"]) for item in memberships if item.get("clinic_id")}
+        if len(belongs_to) < 2:
+            return ""
+        clinic = await self._rows(
+            self.db.table("clinics").select("display_name").eq("id", clinic_id).limit(1)
+        )
+        return str(clinic[0].get("display_name") or "") if clinic else ""
+
+    def _payload(self, row: dict[str, Any], clinic: str = "") -> dict[str, Any]:
         if isinstance(row.get("payload"), dict):
             return cast(dict[str, Any], row["payload"])
         event = row.get("event") or {}
@@ -321,6 +393,7 @@ class EmailDeliveryService:
             action_label=label,
             audience="patient" if role == "patient" else "clinician",
             locale="es-MX" if spanish else "en-US",
+            clinic=clinic,
             note=(
                 "Puedes cambiar los avisos opcionales en Preferencias de correo."
                 if spanish
@@ -386,7 +459,7 @@ class EmailDeliveryService:
         counts["claimed"] += 1
         try:
             try:
-                payload: dict[str, Any] | None = self._payload(row)
+                payload: dict[str, Any] | None = self._payload(row, await self._clinic_label(row))
             except ValueError:
                 payload = None
             request: dict[str, Any] = {"id": row["id"], "lease": row["lease"], "payload": payload}

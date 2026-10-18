@@ -1,6 +1,6 @@
 """Integration tests for Auth API endpoints."""
 
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
 from uuid import uuid4
 
 import pytest
@@ -464,7 +464,7 @@ class TestLogin:
         assert result.json()["mfa_required"] is True
         assert result.json()["mfa_factors"][0]["id"] == "factor-1"
 
-    def test_clinician_login_requires_clinic_code(
+    def test_clinician_login_needs_no_clinic_code_but_an_active_membership(
         self, client, override_db, override_auth_service, mock_supabase_db
     ):
         response = _make_auth_response(
@@ -474,14 +474,23 @@ class TestLogin:
         )
         mock_supabase_db.auth.sign_in_with_password.return_value = response
 
-        result = client.post(
-            "/api/v1/auth/login",
-            json={"email": "doctor@example.com", "password": "SecurePass123!"},
-        )
+        with (
+            patch(
+                "app.services.auth_service.ClinicianRepository.get_context",
+                return_value={"clinic_id": str(uuid4()), "clinic_name": "Synthetic Clinic"},
+            ),
+            patch(
+                "app.services.auth_service.ClinicMembershipService.active_memberships_sync",
+                return_value=[],
+            ),
+        ):
+            result = client.post(
+                "/api/v1/auth/login",
+                json={"email": "doctor@example.com", "password": "SecurePass123!"},
+            )
 
         assert result.status_code == status.HTTP_401_UNAUTHORIZED
-        assert result.json()["error"]["code"] == "CLINIC_CONTEXT_INVALID"
-        assert "Clinic code is required" in result.json()["error"]["message"]
+        assert result.json()["error"]["code"] == "NO_ACTIVE_CLINIC"
 
     def test_invalid_credentials(
         self, client, override_db, override_auth_service, mock_supabase_db

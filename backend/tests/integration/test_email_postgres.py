@@ -400,10 +400,11 @@ def test_invitation_wrong_account_and_revocation(email_sql):
     assert delivery(email_sql)["items"] == []
 
 
-def test_existing_clinic_membership_cannot_be_moved(email_sql):
+def test_an_existing_member_of_the_clinic_cannot_be_invited_again(email_sql):
     create_invitation(email_sql)
     email_sql(f"UPDATE clinicians SET email='clinician@example.com' WHERE id='{CLINICIAN}';")
-    assert "must not be changed" in invitation(
+    # Since 066 an account at another clinic can be invited; one already here cannot.
+    assert "Already a member of this clinic" in invitation(
         email_sql,
         "create",
         {"email": "clinician@example.com", "role": "admin", "hash": "other", "payload": {}},

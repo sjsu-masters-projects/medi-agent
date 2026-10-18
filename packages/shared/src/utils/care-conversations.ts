@@ -14,10 +14,17 @@ const root = "/api/v1/care-conversations";
 
 export function createConversationService(api: ConversationTransport) {
   return {
-    recipients: (token: string, signal?: AbortSignal) =>
-      api.get<ConversationRecipient[]>(`${root}/recipients`, { token, signal }),
-    list: (token: string, signal?: AbortSignal) =>
-      api.get<CareConversation[]>(`${root}/`, { token, signal }),
+    // `clinicId` is a clinician-only filter on the clinic of the care-team link.
+    recipients: (token: string, signal?: AbortSignal, clinicId?: string | null) =>
+      api.get<ConversationRecipient[]>(
+        `${root}/recipients${clinicId ? `?clinic_id=${encodeURIComponent(clinicId)}` : ""}`,
+        { token, signal },
+      ),
+    list: (token: string, signal?: AbortSignal, clinicId?: string | null) =>
+      api.get<CareConversation[]>(
+        `${root}/${clinicId ? `?clinic_id=${encodeURIComponent(clinicId)}` : ""}`,
+        { token, signal },
+      ),
     open: (token: string, recipientId: string) =>
       api.post<CareConversation>(`${root}/`, { recipient_id: recipientId }, { token }),
     messages: (token: string, id: string, before?: string, signal?: AbortSignal) =>
@@ -84,6 +91,9 @@ export function getConversationCopy(locale: string) {
     invalid: "El mensaje fue rechazado. Tu texto se conserva; revísalo o edítalo antes de volver a enviarlo.",
     prepareNew: "Preparar un nuevo envío", confirmNew: "Confirmar: preparar un nuevo envío", cancel: "Cancelar",
     confirmWarning: "El mensaje anterior puede ya existir. Preparar un nuevo envío permite crear otro mensaje y podría duplicarlo. Esta acción no lo envía.",
+    translatedFromEnglish: "Traducido del inglés", translatedFromSpanish: "Traducido del español",
+    showOriginal: "Ver original", showTranslation: "Ver traducción", translationUncertain: "las cifras pueden diferir",
+    translationUnavailable: "Traducción automática no disponible para este mensaje",
   } : {
     recipient: "Choose recipient", choose: "Select a person", open: "Open conversation",
     threads: "Conversations", empty: "No conversations yet.", noRecipients: "No linked recipients available.",
@@ -99,6 +109,9 @@ export function getConversationCopy(locale: string) {
     invalid: "The message was rejected. Your text is preserved; review or edit it before sending again.",
     prepareNew: "Prepare a new send", confirmNew: "Confirm: prepare a new send", cancel: "Cancel",
     confirmWarning: "The previous message may already exist. Preparing a new send permits another message and could duplicate it. This action does not send it.",
+    translatedFromEnglish: "Translated from English", translatedFromSpanish: "Translated from Spanish",
+    showOriginal: "Show original", showTranslation: "Show translation", translationUncertain: "numbers may differ",
+    translationUnavailable: "Automatic translation unavailable for this message",
   };
 }
 

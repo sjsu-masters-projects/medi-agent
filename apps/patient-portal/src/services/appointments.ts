@@ -16,6 +16,8 @@ interface AppointmentApiRecord {
   patient_id: string;
   care_team_id: string;
   clinician_name?: string | null;
+  clinic_id?: string | null;
+  clinic_name?: string | null;
   scheduled_at: string;
   duration_minutes: number;
   appointment_type: Appointment["appointmentType"];
@@ -36,6 +38,8 @@ function mapAppointment(record: AppointmentApiRecord): Appointment {
     patientId: record.patient_id,
     careTeamId: record.care_team_id,
     clinicianName: record.clinician_name ?? undefined,
+    clinicId: record.clinic_id ?? undefined,
+    clinicName: record.clinic_name ?? undefined,
     scheduledAt: record.scheduled_at,
     durationMinutes: record.duration_minutes,
     appointmentType: record.appointment_type,

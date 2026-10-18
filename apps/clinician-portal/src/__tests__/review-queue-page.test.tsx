@@ -9,7 +9,9 @@ import {
 } from "@/services/clinicians";
 import { store } from "@/store/store";
 import { simulateNonUsDefaultLocale } from "./fixtures/locale";
+import { clinicFilterState, resetClinicFilter } from "@/test/clinic-filter-mock";
 
+vi.mock("@/hooks/use-clinic-filter", async () => (await import("@/test/clinic-filter-mock")).clinicFilterModule);
 vi.mock("@/services/clinicians", () => ({
     fetchDocumentReviewQueue: vi.fn(),
     approveDocumentReview: vi.fn(),
@@ -21,6 +23,33 @@ describe("ReviewQueuePage", () => {
         vi.mocked(fetchDocumentReviewQueue).mockReset();
         vi.mocked(approveDocumentReview).mockReset();
         vi.mocked(rejectDocumentReview).mockReset();
+    });
+
+    it("shows each upload's clinic and a Clinic filter only with several clinics", async () => {
+        const item = {
+            id: "doc-9", patientId: "patient-9", patientFirstName: "Ana", patientLastName: "Lopez",
+            fileName: "upload.pdf", documentType: "lab_report", parseStatus: "pending",
+            createdAt: "2026-04-22T10:00:00Z", uploadedByRole: "patient", reviewStatus: "pending",
+            clinicId: "clinic-b", clinicName: "Bay Clinic",
+        };
+        vi.mocked(fetchDocumentReviewQueue).mockResolvedValue([item] as never);
+        resetClinicFilter();
+        const { unmount } = render(<Provider store={store}><ReviewQueuePage /></Provider>);
+        await screen.findByText("Ana Lopez");
+        expect(screen.queryByText("Bay Clinic")).not.toBeInTheDocument();
+        expect(screen.queryByLabelText("Clinic")).not.toBeInTheDocument();
+        unmount();
+
+        clinicFilterState.clinics = [
+            { clinic_id: "clinic-a", clinic_code: "A", clinic_name: "City Health", role: "admin", status: "active" },
+            { clinic_id: "clinic-b", clinic_code: "B", clinic_name: "Bay Clinic", role: "provider", status: "active" },
+        ] as never;
+        clinicFilterState.clinicId = "clinic-b";
+        render(<Provider store={store}><ReviewQueuePage /></Provider>);
+        await screen.findByText("Ana Lopez");
+        expect(screen.getByText("Bay Clinic", { selector: "span" })).toBeInTheDocument();
+        expect(fetchDocumentReviewQueue).toHaveBeenLastCalledWith("clinic-b");
+        resetClinicFilter();
     });
 
     it("renders pending queue items and approve action", async () => {

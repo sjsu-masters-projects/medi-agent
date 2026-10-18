@@ -3,7 +3,7 @@
 Uses FastAPI dependency overrides for proper authentication mocking.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -21,6 +21,7 @@ from app.main import app
 from app.middleware.rate_limit import RateLimitResult
 from app.models.auth import CurrentUser
 from app.routers.clinicians import _clinician_dep, _get_medwatch_service, _get_service
+from app.services.clinic_link_scope import ClinicLinkScope
 from app.services.medwatch_3500.pdf import Form3500RenderError
 from app.services.medwatch_3500.template import TemplateMismatchError
 from app.services.medwatch_service import MedWatchService
@@ -168,8 +169,13 @@ class TestGetMyPatients:
         mock_supabase_db.table().select().eq().eq().execute.return_value = MagicMock(
             data=care_team_data
         )
+        scope = ClinicLinkScope({str(patient_id): ("clinic-1", "Synthetic clinic")})
 
-        response = client.get("/api/v1/clinicians/me/patients")
+        with patch(
+            "app.services.clinic_membership_service.ClinicMembershipService.link_scope",
+            new=AsyncMock(return_value=scope),
+        ):
+            response = client.get("/api/v1/clinicians/me/patients")
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -211,57 +217,22 @@ class TestUpdateMyProfile:
 
         response = client.put(
             "/api/v1/clinicians/me",
-            json={"specialty": "Internal Medicine", "clinic_name": "City Health"},
+            json={"specialty": "Internal Medicine"},
         )
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["specialty"] == "Internal Medicine"
-        assert data["clinic_name"] == "City Health"
 
-    def test_success_with_clinic_code_resolution(
-        self, client, override_auth, override_db, mock_supabase_db, clinician_id
+    @pytest.mark.parametrize("field", ["clinic_code", "clinic_name"])
+    def test_profile_update_never_changes_clinics(
+        self, client, override_auth, override_db, mock_supabase_db, field
     ):
-        updated_data = {
-            "id": str(clinician_id),
-            "email": "clinician@test.com",
-            "first_name": "Dr. Sarah",
-            "last_name": "Smith",
-            "specialty": "Internal Medicine",
-            "clinic_name": "City Health",
-            "npi_number": "1234567890",
-            "role": "provider",
-            "avatar_url": None,
-            "created_at": "2025-01-01T00:00:00Z",
-            "updated_at": "2025-01-15T00:00:00Z",
-        }
-        mock_supabase_db.table().execute.side_effect = [
-            MagicMock(
-                data=[
-                    {
-                        "id": "clinic-1",
-                        "code": "ABC123",
-                        "display_name": "City Health",
-                        "status": "active",
-                    }
-                ]
-            ),
-            MagicMock(data=[updated_data]),
-        ]
+        response = client.put("/api/v1/clinicians/me", json={field: "ABC123"})
 
-        response = client.put(
-            "/api/v1/clinicians/me",
-            json={
-                "specialty": "Internal Medicine",
-                "clinic_code": "ABC123",
-                "type1_npi": "1234567890",
-            },
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert data["specialty"] == "Internal Medicine"
-        assert data["clinic_name"] == "City Health"
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.json()["error"]["code"] == "CLINIC_CHANGE_NOT_SUPPORTED"
+        mock_supabase_db.table().update.assert_not_called()
 
 
 class TestGetPatientDetail:
@@ -551,19 +522,34 @@ class TestGenerateInviteCode:
     def test_success(self, client, override_auth, override_db, mock_supabase_db, clinician_id):
         """Successfully generate invite code."""
         care_team_id = uuid4()
+        clinic_id = str(uuid4())
         invite_code = "A1B2C3D4"
 
-        mock_supabase_db.table().insert().execute.return_value = MagicMock(
-            data=[
-                {
-                    "id": str(care_team_id),
-                    "clinician_id": str(clinician_id),
-                    "invite_code": invite_code,
-                    "status": "pending",
-                    "role": "provider",
-                }
-            ]
-        )
+        mock_supabase_db.table().execute.side_effect = [
+            # The clinician's one active clinic membership tags the code.
+            MagicMock(
+                data=[
+                    {
+                        "clinician_id": str(clinician_id),
+                        "clinic_id": clinic_id,
+                        "role": "provider",
+                        "status": "active",
+                    }
+                ]
+            ),
+            MagicMock(
+                data=[
+                    {
+                        "id": str(care_team_id),
+                        "clinician_id": str(clinician_id),
+                        "invite_code": invite_code,
+                        "status": "pending",
+                        "role": "provider",
+                        "clinic_id": clinic_id,
+                    }
+                ]
+            ),
+        ]
 
         response = client.post("/api/v1/clinicians/me/invite-code")
 
@@ -572,8 +558,29 @@ class TestGenerateInviteCode:
         assert "invite_code" in data
         assert "care_team_id" in data
         assert len(data["invite_code"]) == 8
+        assert mock_supabase_db.table().insert.call_args.args[0]["clinic_id"] == clinic_id
 
 
+MEMBER_CLINIC = "00000000-0000-0000-0000-0000000000c1"
+
+
+@pytest.fixture
+def member(clinician_id):
+    """The signed-in clinician holds an active provider membership at one clinic."""
+    from app.models.clinic_membership import ClinicMembership
+
+    membership = ClinicMembership(
+        clinician_id=clinician_id, clinic_id=MEMBER_CLINIC, role="provider", status="active"
+    )
+    base = "app.services.clinic_membership_service.ClinicMembershipService"
+    with (
+        patch(f"{base}.acting_membership", new=AsyncMock(return_value=membership)),
+        patch(f"{base}.active_memberships", new=AsyncMock(return_value=[membership])),
+    ):
+        yield membership
+
+
+@pytest.mark.usefixtures("member")
 class TestGetCurrentInviteCode:
     """GET /api/v1/clinicians/me/invite-code - Read latest pending patient invite code."""
 
@@ -585,6 +592,7 @@ class TestGetCurrentInviteCode:
             data=[
                 {
                     "id": str(care_team_id),
+                    "clinic_id": MEMBER_CLINIC,
                     "invite_code": "QWERTY12",
                     "created_at": "2026-04-10T00:00:00Z",
                 }
@@ -615,20 +623,17 @@ class TestGetCurrentInviteCode:
 class TestListInviteCodes:
     """GET /api/v1/clinicians/me/invite-codes - Read invite lifecycle list."""
 
-    def test_success(self, client, override_auth, override_db, mock_supabase_db):
+    def test_success(self, client, override_auth, override_db, mock_supabase_db, clinician_id):
+        clinic_id = str(uuid4())
+        membership = {"clinician_id": str(clinician_id), "clinic_id": clinic_id, "role": "admin"}
         mock_supabase_db.table().execute.side_effect = [
-            MagicMock(
-                data={
-                    "id": str(uuid4()),
-                    "clinic_id": "clinic-1",
-                    "clinic_name": "City Health",
-                    "role": "provider",
-                }
-            ),
+            MagicMock(data=[{**membership, "status": "active"}]),
+            MagicMock(data=[membership]),
             MagicMock(
                 data=[
                     {
                         "id": str(uuid4()),
+                        "clinic_id": clinic_id,
                         "invite_code": "ACTIVE123",
                         "status": "pending",
                         "patient_id": None,
@@ -646,6 +651,7 @@ class TestListInviteCodes:
                     },
                     {
                         "id": str(uuid4()),
+                        "clinic_id": clinic_id,
                         "invite_code": "USED1234",
                         "status": "active",
                         "patient_id": str(uuid4()),
@@ -680,7 +686,53 @@ class TestListInviteCodes:
         assert data["counts"]["claimed"] == 1
         assert data["invites"][0]["created_by"]["email"] == "taylor@example.com"
 
+    def test_other_clinic_is_refused_for_an_admin_elsewhere(
+        self, client, override_auth, override_db, mock_supabase_db, clinician_id
+    ):
+        home = str(uuid4())
+        mock_supabase_db.table().execute.side_effect = [
+            MagicMock(
+                data=[
+                    {
+                        "clinician_id": str(clinician_id),
+                        "clinic_id": home,
+                        "role": "admin",
+                        "status": "active",
+                    }
+                ]
+            ),
+        ]
 
+        response = client.get(f"/api/v1/clinicians/me/invite-codes?clinic_id={uuid4()}")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_clinician_without_membership_is_refused(
+        self, client, override_auth, override_db, mock_supabase_db, clinician_id
+    ):
+        other_clinician = str(uuid4())
+        mock_supabase_db.table().execute.side_effect = [
+            MagicMock(data=[]),
+            MagicMock(
+                data=[
+                    {
+                        "id": str(uuid4()),
+                        "clinician_id": other_clinician,
+                        "clinic_id": str(uuid4()),
+                        "invite_code": "OTHER123",
+                        "status": "pending",
+                        "invite_expires_at": "2099-01-01T00:00:00+00:00",
+                    }
+                ]
+            ),
+        ]
+
+        response = client.get("/api/v1/clinicians/me/invite-codes")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.usefixtures("member")
 class TestRevokeInviteCode:
     """POST /api/v1/clinicians/me/invite-codes/{care_team_id}/revoke"""
 
@@ -824,8 +876,39 @@ class TestADRReviewQueueRoutes:
         override_service.list_adr_review_queue.assert_awaited_once_with(
             clinician_id,
             status_filter="draft",
+            patient_id=None,
             limit=25,
+            clinic_id=None,
         )
+
+    def test_list_accepts_all_statuses_and_a_patient_filter(
+        self, client, override_auth, override_service, clinician_id
+    ):
+        patient_id = uuid4()
+        override_service.list_adr_review_queue = AsyncMock(return_value={"items": [], "total": 0})
+
+        response = client.get(
+            "/api/v1/clinicians/me/adr-assessments",
+            params={"status": "all", "patient_id": str(patient_id)},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        override_service.list_adr_review_queue.assert_awaited_once_with(
+            clinician_id, status_filter="all", patient_id=patient_id, limit=100, clinic_id=None
+        )
+
+    def test_single_assessment_unknown_and_unassigned_share_one_404(
+        self, client, override_auth, override_service
+    ):
+        override_service.get_adr_review_item = AsyncMock(
+            side_effect=NotFoundError("ADR assessment", "x")
+        )
+
+        first = client.get(f"/api/v1/clinicians/me/adr-assessments/{uuid4()}")
+        second = client.get(f"/api/v1/clinicians/me/adr-assessments/{uuid4()}")
+
+        assert first.status_code == second.status_code == status.HTTP_404_NOT_FOUND
+        assert first.json()["error"]["code"] == second.json()["error"]["code"] == "NOT_FOUND"
 
     def test_review_action_is_passed_to_the_clinician_service(
         self, client, override_auth, override_service, clinician_id
@@ -1296,6 +1379,40 @@ class TestMedWatchDraftRoutes:
         assert response.headers["cache-control"] == "no-store"
         assert response.content == b"%PDF-synthetic"
 
+    def test_preview_pdf_is_inline_uncached_and_not_an_export(
+        self, client, override_auth, override_medwatch_service
+    ):
+        draft_id = uuid4()
+        override_medwatch_service.preview_pdf = AsyncMock(
+            return_value={
+                "filename": "fda-3500-draft-preview.pdf",
+                "media_type": "application/pdf",
+                "content": b"%PDF-synthetic",
+            }
+        )
+
+        response = client.get(f"{_DRAFTS}/{draft_id}/preview.pdf")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.headers["content-type"] == "application/pdf"
+        assert response.headers["content-disposition"].startswith("inline;")
+        assert response.headers["cache-control"] == "no-store"
+        override_medwatch_service.export_pdf.assert_not_called()
+
+    def test_single_draft_read_and_unknown_draft_404(
+        self, client, override_auth, override_medwatch_service
+    ):
+        override_medwatch_service.get_draft = AsyncMock(
+            side_effect=NotFoundError("MedWatch draft", "x")
+        )
+        for path in ("", "/preview.pdf"):
+            override_medwatch_service.preview_pdf = AsyncMock(
+                side_effect=NotFoundError("MedWatch draft", "x")
+            )
+            response = client.get(f"{_DRAFTS}/{uuid4()}{path}")
+            assert response.status_code == status.HTTP_404_NOT_FOUND
+            assert response.json()["error"]["code"] == "NOT_FOUND"
+
     @pytest.mark.parametrize(
         ("error", "expected_status", "code"),
         [
@@ -1511,3 +1628,138 @@ class TestAuthorization:
         )
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+class TestMyClinics:
+    """GET/POST /api/v1/clinicians/me/clinics - the clinics this account belongs to."""
+
+    def test_list_returns_memberships_without_caching(
+        self, client, override_auth, override_db, clinician_id
+    ):
+        clinic_id = str(uuid4())
+        payload = {
+            "default_clinic_id": clinic_id,
+            "clinics": [
+                {
+                    "clinic_id": clinic_id,
+                    "clinic_code": "ABC123",
+                    "clinic_name": "City Health",
+                    "status": "active",
+                    "role": "admin",
+                }
+            ],
+        }
+        with patch(
+            "app.services.clinic_membership_service.ClinicMembershipService.clinics",
+            new=AsyncMock(return_value=payload),
+        ):
+            response = client.get("/api/v1/clinicians/me/clinics")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.headers["Cache-Control"] == "private, no-store"
+        assert response.json()["clinics"][0]["role"] == "admin"
+
+    def test_join_adds_a_provider_membership_by_code(
+        self, client, override_auth, override_db, clinician_id
+    ):
+        clinic_id = str(uuid4())
+        joined = {
+            "status": "joined",
+            "clinic_id": clinic_id,
+            "clinic_code": "ABC123",
+            "clinic_name": "City Health",
+            "clinic_status": "active",
+            "role": "provider",
+        }
+        join = AsyncMock(return_value=joined)
+        with patch(
+            "app.services.clinic_membership_service.ClinicMembershipService.join_by_code", new=join
+        ):
+            response = client.post("/api/v1/clinicians/me/clinics", json={"clinic_code": "ABC123"})
+        assert response.status_code == status.HTTP_200_OK
+        join.assert_awaited_once_with(clinician_id, "ABC123", "provider")
+
+    def test_default_leave_and_rename_call_the_membership_service(
+        self, client, override_auth, override_db, clinician_id
+    ):
+        clinic_id = uuid4()
+        base = "app.services.clinic_membership_service.ClinicMembershipService"
+        default = AsyncMock(
+            return_value={
+                "default_clinic_id": str(clinic_id),
+                "clinic_id": str(clinic_id),
+                "role": "provider",
+            }
+        )
+        leave = AsyncMock(
+            return_value={"status": "left", "clinic_id": str(clinic_id), "links_ended": 2}
+        )
+        rename = AsyncMock(return_value={"clinic_id": str(clinic_id), "clinic_name": "New name"})
+        with (
+            patch(f"{base}.set_default", new=default),
+            patch(f"{base}.leave", new=leave),
+            patch(f"{base}.rename_clinic", new=rename),
+        ):
+            made = client.put(
+                "/api/v1/clinicians/me/default-clinic", json={"clinic_id": str(clinic_id)}
+            )
+            left = client.post(f"/api/v1/clinicians/me/clinics/{clinic_id}/leave")
+            renamed = client.put(
+                f"/api/v1/clinicians/me/clinics/{clinic_id}", json={"display_name": "New name"}
+            )
+        assert (made.status_code, left.status_code, renamed.status_code) == (200, 200, 200)
+        assert left.json()["links_ended"] == 2
+        default.assert_awaited_once_with(clinician_id, clinic_id)
+        leave.assert_awaited_once_with(clinician_id, clinic_id)
+        rename.assert_awaited_once_with(clinician_id, clinic_id, "New name")
+
+    def test_clinic_filter_reaches_every_clinician_list(
+        self, client, override_auth, override_db, clinician_id
+    ):
+        clinic_id = uuid4()
+        with patch(
+            "app.services.clinician_service.ClinicianService.get_patients",
+            new=AsyncMock(return_value=[]),
+        ) as patients:
+            client.get(f"/api/v1/clinicians/me/patients?clinic_id={clinic_id}")
+        patients.assert_awaited_once_with(clinician_id, clinic_id)
+        assert (
+            client.get("/api/v1/clinicians/me/patients?clinic_id=not-a-uuid").status_code
+            == status.HTTP_422_UNPROCESSABLE_ENTITY
+        )
+
+    def test_join_cannot_ask_for_admin(self, client, override_auth, override_db):
+        response = client.post(
+            "/api/v1/clinicians/me/clinics", json={"clinic_code": "ABC123", "role": "admin"}
+        )
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_invite_code_generation_passes_the_named_clinic(
+        self, client, override_auth, override_db, clinician_id
+    ):
+        clinic_id = uuid4()
+        generate = AsyncMock(return_value={"invite_code": "ABCD1234", "care_team_id": str(uuid4())})
+        with patch(
+            "app.services.clinician_service.ClinicianService.generate_invite_code", new=generate
+        ):
+            response = client.post(
+                "/api/v1/clinicians/me/invite-code", json={"clinic_id": str(clinic_id)}
+            )
+        assert response.status_code == status.HTTP_200_OK
+        generate.assert_awaited_once_with(clinician_id, clinic_id)
+
+    def test_invite_code_generation_for_several_clinics_requires_a_choice(
+        self, client, override_auth, override_db
+    ):
+        from app.core.exceptions import ValidationError
+
+        generate = AsyncMock(
+            side_effect=ValidationError(
+                "Choose the clinic for this action.", code="CLINIC_REQUIRED"
+            )
+        )
+        with patch(
+            "app.services.clinician_service.ClinicianService.generate_invite_code", new=generate
+        ):
+            response = client.post("/api/v1/clinicians/me/invite-code")
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.json()["error"]["code"] == "CLINIC_REQUIRED"

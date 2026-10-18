@@ -26,6 +26,7 @@ class CentreItem(BaseModel):
     can_acknowledge: bool = False
     patient_name: str | None = None
     clinic_name: str | None = None
+    clinic_id: UUID | None = None
 
 
 class CentrePage(BaseModel):

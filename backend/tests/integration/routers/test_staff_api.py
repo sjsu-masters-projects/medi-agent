@@ -132,3 +132,57 @@ class TestNoAuth:
         app.dependency_overrides.clear()
         response = client.get("/api/v1/staff/")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+class TestClinicScoping:
+    """The clinic comes from the request; the service checks the membership."""
+
+    def test_list_passes_the_named_clinic(self, client, mock_staff_service, admin_id):
+        clinic_id = uuid4()
+        mock_staff_service.list_staff.return_value = {
+            "staff": [],
+            "clinic_id": str(clinic_id),
+            "clinic_name": "City Health",
+            "clinic_code": "ABC123",
+        }
+        response = client.get(f"/api/v1/staff/?clinic_id={clinic_id}")
+        assert response.status_code == status.HTTP_200_OK
+        mock_staff_service.list_staff.assert_awaited_once_with(admin_id, clinic_id)
+
+    def test_invite_role_and_remove_pass_the_named_clinic(
+        self, client, mock_staff_service, admin_id
+    ):
+        clinic_id, target_id = uuid4(), uuid4()
+        mock_staff_service.invite_member.return_value = {"status": "queued"}
+        mock_staff_service.update_role.return_value = {"id": str(target_id), "role": "nurse"}
+        mock_staff_service.remove_member.return_value = {"status": "removed", "id": str(target_id)}
+
+        client.post(
+            "/api/v1/staff/invite",
+            json={"email": "new@test.com", "role": "nurse", "clinic_id": str(clinic_id)},
+        )
+        client.put(
+            f"/api/v1/staff/{target_id}/role",
+            json={"role": "nurse", "clinic_id": str(clinic_id)},
+        )
+        client.delete(f"/api/v1/staff/{target_id}?clinic_id={clinic_id}")
+
+        mock_staff_service.invite_member.assert_awaited_once_with(
+            admin_id, "new@test.com", "nurse", clinic_id
+        )
+        mock_staff_service.update_role.assert_awaited_once_with(
+            admin_id, target_id, "nurse", clinic_id
+        )
+        mock_staff_service.remove_member.assert_awaited_once_with(admin_id, target_id, clinic_id)
+
+    def test_refusals_reach_the_client(self, client, mock_staff_service):
+        from app.core.exceptions import AuthorizationError, ValidationError
+
+        mock_staff_service.list_staff.side_effect = AuthorizationError("not a member")
+        assert client.get("/api/v1/staff/").status_code == status.HTTP_403_FORBIDDEN
+        mock_staff_service.list_staff.side_effect = ValidationError(
+            "Choose the clinic for this action.", code="CLINIC_REQUIRED"
+        )
+        response = client.get("/api/v1/staff/")
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.json()["error"]["code"] == "CLINIC_REQUIRED"

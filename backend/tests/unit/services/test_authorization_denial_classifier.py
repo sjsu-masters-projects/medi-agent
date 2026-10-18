@@ -32,7 +32,7 @@ def _db(*, actor_clinic, patient_clinics, actor_has_other_assignment):
         getattr(table, method).return_value = table
 
     actor_rows = [{"clinic_id": actor_clinic}] if actor_clinic else []
-    patient_rows = [{"clinicians": {"clinic_id": c}} for c in patient_clinics]
+    patient_rows = [{"clinic_id": c} for c in patient_clinics]
     assignment_rows = [{"id": str(uuid4())}] if actor_has_other_assignment else []
 
     table.execute.side_effect = [
@@ -103,3 +103,22 @@ async def test_database_failure_degrades_to_generic_reason():
 
     # A coarse record beats losing the event.
     assert reason == NO_CARE_TEAM_ASSIGNMENT
+
+
+@pytest.mark.asyncio
+async def test_actor_in_several_clinics_is_same_clinic_when_one_matches():
+    db = MagicMock()
+    table = MagicMock()
+    db.table.return_value = table
+    for method in ("select", "eq", "limit"):
+        getattr(table, method).return_value = table
+    table.execute.side_effect = [
+        SimpleNamespace(data=[{"clinic_id": CLINIC_A}, {"clinic_id": CLINIC_B}]),
+        SimpleNamespace(data=[{"clinic_id": CLINIC_B}]),
+        SimpleNamespace(data=[]),
+    ]
+
+    reason = await classify_care_team_denial(db, str(uuid4()), str(uuid4()))
+
+    assert reason == SAME_CLINIC_BUT_NO_CARE_TEAM_ASSIGNMENT
+    assert [c.args[0] for c in db.table.call_args_list[:2]] == ["clinic_memberships", "care_teams"]

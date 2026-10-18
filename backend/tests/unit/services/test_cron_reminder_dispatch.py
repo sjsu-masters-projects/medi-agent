@@ -176,3 +176,13 @@ async def test_schedules_that_must_not_remind_are_counted_as_skipped(store: Stor
     assert summary["skipped_inactive_target"] == 2
     assert summary["skipped_frequency_mismatch"] == 1
     assert summary["medication_created"] == 1
+
+
+@pytest.mark.asyncio
+async def test_visit_reminders_name_the_visits_own_clinic(store: Store) -> None:
+    add_visit(store, status="confirmed", at=DAY + timedelta(days=1, hours=17))
+    await _dispatch(store, DAY + timedelta(hours=16, minutes=50))
+    [reminder] = store.notifications()
+    assert "Clinic: Synthetic Visit Clinic." in reminder["body"]
+    assert reminder["metadata"]["clinic_name"] == "Synthetic Visit Clinic"
+    assert reminder["metadata"]["clinic_id"] == "clinic-visit"

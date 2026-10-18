@@ -3,20 +3,48 @@
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
 from app.models.adr import ADRReviewAction, ADRReviewDecisionRequest
+from app.models.clinic_membership import ClinicMembership
 from app.models.dashboard import PatientRiskData
-from app.models.enums import DocumentReviewStatus
+from app.models.enums import ClinicianRole, ClinicMembershipStatus, DocumentReviewStatus
 from app.pharmacovigilance import NaranjoQuestion
+from app.services.clinic_link_scope import ClinicLinkScope
 from app.services.clinician_service import ClinicianService
 
 
 def _response(*, data=None, count=None):
     return SimpleNamespace(data=data, count=count)
+
+
+CLINIC_ID = "00000000-0000-0000-0000-0000000000c1"
+
+
+def _membership(clinician_id, role="provider"):
+    return ClinicMembership(
+        clinician_id=clinician_id,
+        clinic_id=CLINIC_ID,
+        role=ClinicianRole(role),
+        status=ClinicMembershipStatus.ACTIVE,
+    )
+
+
+def _as_member(service, clinician_id=None, role="provider"):
+    """Give the service an active membership for the clinician."""
+    membership = _membership(clinician_id or uuid4(), role)
+    service.memberships.acting_membership = AsyncMock(return_value=membership)
+    service.memberships.active_memberships = AsyncMock(return_value=[membership])
+
+
+def _link_scope(service, patient_ids, clinic_id=CLINIC_ID, clinic_name="Synthetic clinic"):
+    """Give the service active links to these patients, all at one clinic."""
+    service.memberships.link_scope = AsyncMock(
+        return_value=ClinicLinkScope({str(pid): (clinic_id, clinic_name) for pid in patient_ids})
+    )
 
 
 @pytest.fixture
@@ -32,7 +60,7 @@ def service(mock_db):
 @pytest.mark.asyncio
 async def test_get_dashboard_data_filters_sorts_and_paginates(service):
     patient_ids = [uuid4(), uuid4(), uuid4()]
-    service._get_assigned_patient_ids = AsyncMock(return_value=patient_ids)  # type: ignore[method-assign]
+    _link_scope(service, patient_ids)
     service._get_pending_adr_review_count = AsyncMock(return_value=4)  # type: ignore[method-assign]
     service._get_pending_medwatch_count = AsyncMock(return_value=1)  # type: ignore[method-assign]
 
@@ -187,7 +215,7 @@ async def test_list_adr_review_queue_returns_patient_grounded_evidence(service, 
     assessment_id = uuid4()
     symptom_report_id = uuid4()
     medication_id = uuid4()
-    service._get_assigned_patient_ids = AsyncMock(return_value=[patient_id])  # type: ignore[method-assign]
+    _link_scope(service, [patient_id])
     chain = MagicMock()
     for method in ("select", "in_", "eq", "order", "limit"):
         getattr(chain, method).return_value = chain
@@ -269,7 +297,7 @@ async def test_list_adr_review_queue_returns_patient_grounded_evidence(service, 
 
 @pytest.mark.asyncio
 async def test_list_adr_review_queue_returns_empty_without_assignments(service, mock_db):
-    service._get_assigned_patient_ids = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    _link_scope(service, [])
 
     result = await service.list_adr_review_queue(uuid4())
 
@@ -501,14 +529,22 @@ async def test_set_patient_obligation_propagates_care_plan_assignment_denial(ser
 
 @pytest.mark.asyncio
 async def test_get_current_invite_code_returns_latest_pending(service):
+    _as_member(service)
     clinician_id = uuid4()
     service.care_team_repo.list_pending_invites_for_clinician = AsyncMock(  # type: ignore[method-assign]
         return_value=[
             {
                 "id": str(uuid4()),
+                "clinic_id": CLINIC_ID,
                 "invite_code": "AB12CD34",
                 "created_at": "2026-04-10T20:00:00Z",
-            }
+            },
+            {
+                "id": str(uuid4()),
+                "clinic_id": "00000000-0000-0000-0000-0000000000c2",
+                "invite_code": "OTHERCLN",
+                "created_at": "2026-04-11T20:00:00Z",
+            },
         ]
     )
 
@@ -520,6 +556,7 @@ async def test_get_current_invite_code_returns_latest_pending(service):
 
 @pytest.mark.asyncio
 async def test_get_current_invite_code_returns_null_when_missing(service):
+    _as_member(service)
     service.care_team_repo.list_pending_invites_for_clinician = AsyncMock(  # type: ignore[method-assign]
         return_value=[]
     )
@@ -544,10 +581,15 @@ async def test_list_invite_codes_returns_lifecycle_buckets(service):
             "role": "provider",
         }
     )
+    service.memberships.acting_membership = AsyncMock(  # type: ignore[method-assign]
+        return_value=_membership(clinician_id)
+    )
     service.care_team_repo.list_invites_for_clinician_ids = AsyncMock(  # type: ignore[method-assign]
         return_value=[
             {
                 "id": active_id,
+                "clinic_id": CLINIC_ID,
+                "clinician_id": str(clinician_id),
                 "invite_code": "ACTIVE123",
                 "status": "pending",
                 "patient_id": None,
@@ -565,6 +607,8 @@ async def test_list_invite_codes_returns_lifecycle_buckets(service):
             },
             {
                 "id": claimed_id,
+                "clinic_id": CLINIC_ID,
+                "clinician_id": str(clinician_id),
                 "invite_code": "CLAIM123",
                 "status": "active",
                 "patient_id": str(uuid4()),
@@ -587,6 +631,8 @@ async def test_list_invite_codes_returns_lifecycle_buckets(service):
             },
             {
                 "id": expired_id,
+                "clinic_id": CLINIC_ID,
+                "clinician_id": str(clinician_id),
                 "invite_code": "OLD12345",
                 "status": "pending",
                 "patient_id": None,
@@ -631,16 +677,18 @@ async def test_list_invite_codes_uses_clinic_scope_for_admin(service):
             "role": "admin",
         }
     )
-    service.clinician_repo.list_ids_by_clinic_id_async = AsyncMock(  # type: ignore[method-assign]
-        return_value=[own_id, peer_id]
+    service.memberships.acting_membership = AsyncMock(  # type: ignore[method-assign]
+        return_value=_membership(admin_id, "admin")
     )
-    service.clinician_repo.list_ids_by_clinic_name_async = AsyncMock(  # type: ignore[method-assign]
-        return_value=[peer_id]
+    service.memberships.clinic_member_ids = AsyncMock(  # type: ignore[method-assign]
+        return_value=[own_id, peer_id]
     )
     service.care_team_repo.list_invites_for_clinician_ids = AsyncMock(  # type: ignore[method-assign]
         return_value=[
             {
                 "id": str(uuid4()),
+                "clinic_id": CLINIC_ID,
+                "clinician_id": peer_id,
                 "invite_code": "ADMIN001",
                 "status": "pending",
                 "patient_id": None,
@@ -667,10 +715,188 @@ async def test_list_invite_codes_uses_clinic_scope_for_admin(service):
     assert result["counts"] == {"active": 1, "claimed": 0, "inactive": 0}
     assert result["invites"][0]["created_by"]["id"] == peer_id
     assert result["invites"][0]["created_by"]["email"] == "taylor@example.com"
+    service.memberships.clinic_member_ids.assert_awaited_once()
+    assert str(service.memberships.clinic_member_ids.await_args.args[0]) == CLINIC_ID
+
+
+@pytest.mark.asyncio
+async def test_invite_scope_uses_the_membership_role_over_the_legacy_row(service):
+    clinician_id = uuid4()
+    service.clinician_repo.get_context_async = AsyncMock(  # type: ignore[method-assign]
+        return_value={"clinic_id": CLINIC_ID, "clinic_name": "City Health", "role": "admin"}
+    )
+    service.memberships.clinic_member_ids = AsyncMock()  # type: ignore[method-assign]
+
+    ids, admin_clinics = await service._get_invite_scope(_membership(clinician_id, "provider"))
+
+    assert ids == [str(clinician_id)]
+    assert admin_clinics == set()
+    service.memberships.clinic_member_ids.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_invite_scope_has_no_name_or_legacy_fallback(service):
+    """Without an active membership nothing is listed, even for a legacy admin row."""
+    admin_id = uuid4()
+    service.memberships.active_memberships = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    service.care_team_repo.list_invites_for_clinician_ids = AsyncMock()  # type: ignore[method-assign]
+
+    with pytest.raises(AuthorizationError) as raised:
+        await service.list_invite_codes(admin_id)
+
+    assert raised.value.reason_code == "CLINIC_MEMBERSHIP_REQUIRED"
+    service.care_team_repo.list_invites_for_clinician_ids.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_invite_codes_of_another_clinic_with_the_same_name_are_not_listed(service):
+    admin_id = uuid4()
+    peer_id = str(uuid4())
+    other_clinic = "00000000-0000-0000-0000-0000000000c2"
+    service.memberships.acting_membership = AsyncMock(  # type: ignore[method-assign]
+        return_value=_membership(admin_id, "admin")
+    )
+    service.memberships.clinic_member_ids = AsyncMock(  # type: ignore[method-assign]
+        return_value=[str(admin_id), peer_id]
+    )
+    service.care_team_repo.list_invites_for_clinician_ids = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            {
+                "id": str(uuid4()),
+                "clinic_id": other_clinic,
+                "clinician_id": peer_id,
+                "invite_code": "OTHERCLN",
+                "status": "pending",
+                "invite_expires_at": "2099-01-01T00:00:00+00:00",
+                "clinicians": {"id": peer_id},
+            }
+        ]
+    )
+
+    result = await service.list_invite_codes(admin_id, UUID(CLINIC_ID))
+
+    assert result["invites"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_provider_sees_only_their_own_codes_at_the_clinic(service):
+    provider_id = uuid4()
+    peer_id = str(uuid4())
+    service.memberships.acting_membership = AsyncMock(  # type: ignore[method-assign]
+        return_value=_membership(provider_id, "provider")
+    )
+    service.care_team_repo.list_invites_for_clinician_ids = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            {
+                "id": str(uuid4()),
+                "clinic_id": CLINIC_ID,
+                "clinician_id": peer_id,
+                "invite_code": "PEERCODE",
+                "status": "pending",
+                "invite_expires_at": "2099-01-01T00:00:00+00:00",
+                "clinicians": {"id": peer_id},
+            }
+        ]
+    )
+
+    result = await service.list_invite_codes(provider_id)
+
+    assert result["invites"] == []
+
+
+@pytest.mark.asyncio
+async def test_invite_codes_need_a_clinic_when_there_are_several(service):
+    clinician_id = uuid4()
+    service.memberships.active_memberships = AsyncMock(  # type: ignore[method-assign]
+        return_value=[_membership(clinician_id), _membership(clinician_id)]
+    )
+    service.memberships.active_memberships.return_value[1] = ClinicMembership(
+        clinician_id=clinician_id,
+        clinic_id="00000000-0000-0000-0000-0000000000c2",
+        role=ClinicianRole("admin"),
+        status=ClinicMembershipStatus.ACTIVE,
+    )
+
+    with pytest.raises(ValidationError) as raised:
+        await service.generate_invite_code(clinician_id)
+
+    assert raised.value.code == "CLINIC_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_invite_code_for_a_clinic_without_membership_is_refused(service, mock_db):
+    clinician_id = uuid4()
+    service.memberships.active_memberships = AsyncMock(  # type: ignore[method-assign]
+        return_value=[_membership(clinician_id, "admin")]
+    )
+
+    with pytest.raises(AuthorizationError):
+        await service.generate_invite_code(
+            clinician_id, UUID("00000000-0000-0000-0000-0000000000c9")
+        )
+
+    mock_db.table.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_generate_invite_code_records_the_issuing_clinic(service, mock_db):
+    clinician_id = uuid4()
+    service.memberships.acting_membership = AsyncMock(  # type: ignore[method-assign]
+        return_value=_membership(clinician_id)
+    )
+    mock_db.table.return_value.insert.return_value.execute.return_value = _response(
+        data=[{"id": "team-1"}]
+    )
+
+    result = await service.generate_invite_code(clinician_id)
+
+    payload = mock_db.table.return_value.insert.call_args.args[0]
+    mock_db.table.assert_called_with("care_teams")
+    assert payload["clinic_id"] == CLINIC_ID
+    assert payload["clinician_id"] == str(clinician_id)
+    assert payload["status"] == "pending"
+    assert result == {"invite_code": payload["invite_code"], "care_team_id": "team-1"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["nurse", "provider"])
+async def test_a_non_admin_member_can_still_generate_a_patient_invite_code(service, mock_db, role):
+    clinician_id = uuid4()
+    service.memberships.active_memberships = AsyncMock(  # type: ignore[method-assign]
+        return_value=[_membership(clinician_id, role)]
+    )
+    mock_db.table.return_value.insert.return_value.execute.return_value = _response(
+        data=[{"id": "team-1"}]
+    )
+    result = await service.generate_invite_code(clinician_id)
+    assert result["care_team_id"] == "team-1"
+
+
+@pytest.mark.asyncio
+async def test_generate_invite_code_without_a_membership_fails_closed(service, mock_db):
+    service.memberships.active_memberships = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
+    with pytest.raises(AuthorizationError):
+        await service.generate_invite_code(uuid4())
+
+    mock_db.table.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_generate_invite_code_needs_a_clinic_choice_with_several(service, mock_db):
+    service.memberships.acting_membership = AsyncMock(  # type: ignore[method-assign]
+        side_effect=ValidationError("Choose the clinic for this action")
+    )
+
+    with pytest.raises(ValidationError):
+        await service.generate_invite_code(uuid4())
+
+    mock_db.table.return_value.insert.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_revoke_invite_code_sets_pending_invite_to_inactive(service):
+    _as_member(service)
     clinician_id = uuid4()
     invite_id = uuid4()
 
@@ -695,6 +921,7 @@ async def test_revoke_invite_code_sets_pending_invite_to_inactive(service):
 
 @pytest.mark.asyncio
 async def test_revoke_invite_code_rejects_claimed_or_non_pending_invite(service):
+    _as_member(service)
     service.care_team_repo.find_invite_for_creator = AsyncMock(  # type: ignore[method-assign]
         return_value={
             "id": str(uuid4()),
@@ -710,6 +937,7 @@ async def test_revoke_invite_code_rejects_claimed_or_non_pending_invite(service)
 
 @pytest.mark.asyncio
 async def test_revoke_invite_code_raises_not_found_for_unknown_invite(service):
+    _as_member(service)
     service.care_team_repo.find_invite_for_creator = AsyncMock(  # type: ignore[method-assign]
         return_value=None
     )
@@ -841,6 +1069,7 @@ async def test_get_patient_deep_dive_includes_review_metadata(service):
 async def test_list_document_review_queue_scopes_to_assigned_patients(service):
     clinician_id = uuid4()
     assigned_patient_id = uuid4()
+    _link_scope(service, [assigned_patient_id])
     service.document_workflows.list_document_review_queue = AsyncMock(  # type: ignore[method-assign]
         return_value=[
             {
@@ -865,6 +1094,8 @@ async def test_list_document_review_queue_scopes_to_assigned_patients(service):
     assert len(result) == 1
     assert result[0]["patient_first_name"] == "Mia"
     assert result[0]["review_status"] == "pending"
+    assert result[0]["clinic_id"] == CLINIC_ID
+    assert result[0]["clinic_name"] == "Synthetic clinic"
 
 
 @pytest.mark.asyncio
@@ -1039,3 +1270,187 @@ def test_last_activity_age_days_parses_supported_units(service):
     assert service._last_activity_age_days("Logged medication 3h ago") == pytest.approx(3 / 24)
     assert service._last_activity_age_days("Logged medication 4d ago") == 4.0
     assert service._last_activity_age_days("No recent activity") is None
+
+
+@pytest.mark.asyncio
+async def test_list_adr_review_queue_all_statuses_for_one_patient(service, mock_db):
+    patient_id, other_id = uuid4(), uuid4()
+    _link_scope(service, [patient_id, other_id])
+    chain = MagicMock()
+    for method in ("select", "in_", "eq", "order", "limit"):
+        getattr(chain, method).return_value = chain
+    mock_db.table.return_value = chain
+    service._execute = AsyncMock(side_effect=[_response(data=[])])  # type: ignore[method-assign]
+
+    await service.list_adr_review_queue(uuid4(), status_filter="all", patient_id=patient_id)
+
+    chain.in_.assert_called_once_with("patient_id", [str(patient_id)])
+    chain.eq.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_list_adr_review_queue_unassigned_patient_filter_is_empty(service, mock_db):
+    _link_scope(service, [uuid4()])
+
+    result = await service.list_adr_review_queue(uuid4(), patient_id=uuid4())
+
+    assert result == {"items": [], "total": 0}
+    mock_db.table.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_get_adr_review_item_unknown_and_unassigned_raise_the_same_404(service, mock_db):
+    assessment_id, patient_id = uuid4(), uuid4()
+    row = {"id": str(assessment_id), "patient_id": str(patient_id), "status": "reviewed"}
+    service.care_team_repo = MagicMock()
+    service.care_team_repo.find_active_assignment = AsyncMock(return_value=[])
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[_response(data=[]), _response(data=[row])]
+    )
+
+    with pytest.raises(NotFoundError) as unknown:
+        await service.get_adr_review_item(uuid4(), assessment_id)
+    with pytest.raises(NotFoundError) as unassigned:
+        await service.get_adr_review_item(uuid4(), assessment_id)
+
+    assert unknown.value.code == unassigned.value.code == "NOT_FOUND"
+    assert unknown.value.message == unassigned.value.message
+    assert service._execute.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_get_adr_review_item_returns_any_status_for_an_assigned_clinician(service, mock_db):
+    assessment_id, patient_id = uuid4(), uuid4()
+    row = {
+        "id": str(assessment_id),
+        "patient_id": str(patient_id),
+        "status": "dismissed",
+        "patients": {"first_name": "Maya", "last_name": "Patel"},
+        "symptom_reports": {"symptom": "cough", "severity": 2},
+    }
+    service.care_team_repo = MagicMock()
+    service.care_team_repo.find_active_assignment = AsyncMock(return_value=[{"id": "x"}])
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[_response(data=[row]), _response(data=[])]
+    )
+
+    item = await service.get_adr_review_item(uuid4(), assessment_id)
+
+    assert item["status"] == "dismissed" and item["patient_first_name"] == "Maya"
+
+
+# ── Clinic chips and filters (CLN-003 slice C) ──────────────────────────────────────────
+
+
+def _care_team_rows(patients):
+    return [
+        {
+            "id": f"ct-{i}",
+            "role": "primary_care",
+            "patients": {"id": pid, "first_name": f"P{i}", "last_name": "Test"},
+        }
+        for i, pid in enumerate(patients)
+    ]
+
+
+def _real_scope(service, links, memberships):
+    """Run the real scope over fake link rows and memberships."""
+    from app.db.repositories.care_teams import CareTeamRepository
+
+    service.memberships.active_memberships = AsyncMock(
+        return_value=[
+            ClinicMembership(
+                clinician_id=uuid4(),
+                clinic_id=c,
+                role=ClinicianRole.PROVIDER,
+                status=ClinicMembershipStatus.ACTIVE,
+            )
+            for c in memberships
+        ]
+    )
+    return patch.object(CareTeamRepository, "list_active_links", AsyncMock(return_value=links))
+
+
+LINKS = [
+    {"patient_id": "p-a", "clinic_id": CLINIC_ID, "clinics": {"display_name": "Clinic A"}},
+    {
+        "patient_id": "p-b",
+        "clinic_id": "00000000-0000-0000-0000-0000000000c2",
+        "clinics": {"display_name": "Clinic B"},
+    },
+]
+CLINIC_B_ID = "00000000-0000-0000-0000-0000000000c2"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("clinic", "expected"),
+    [
+        (None, {"p-a": "Clinic A", "p-b": "Clinic B"}),
+        (UUID(CLINIC_ID), {"p-a": "Clinic A"}),
+        (UUID(CLINIC_B_ID), {"p-b": "Clinic B"}),
+        (uuid4(), {}),
+    ],
+)
+async def test_patient_roster_tags_filters_and_hides_other_clinics(
+    service, mock_db, clinic, expected
+):
+    mock_db.table.return_value.select.return_value.eq.return_value.eq.return_value = MagicMock()
+    service._execute = AsyncMock(return_value=_response(data=_care_team_rows(["p-a", "p-b"])))  # type: ignore[method-assign]
+    with _real_scope(service, LINKS, [CLINIC_ID, CLINIC_B_ID]):
+        rows = await service.get_patients(uuid4(), clinic)
+    assert {r["id"]: r["clinic_name"] for r in rows} == expected
+
+
+@pytest.mark.asyncio
+async def test_clinic_without_membership_returns_empty_even_when_links_exist(service):
+    service._execute = AsyncMock(return_value=_response(data=_care_team_rows(["p-b"])))  # type: ignore[method-assign]
+    with _real_scope(service, LINKS, [CLINIC_ID]):
+        assert await service.get_patients(uuid4(), UUID(CLINIC_B_ID)) == []
+        assert (await service.list_adr_review_queue(uuid4(), clinic_id=UUID(CLINIC_B_ID)))[
+            "items"
+        ] == []
+        assert await service.list_document_review_queue(uuid4(), UUID(CLINIC_B_ID)) == []
+
+
+@pytest.mark.asyncio
+async def test_sent_messages_are_tagged_and_filtered_by_the_patients_link(service):
+    rows = lambda: [  # noqa: E731
+        {"id": "m1", "patient_id": "p-a", "patients": {"first_name": "A", "last_name": "A"}},
+        {"id": "m2", "patient_id": "p-b", "patients": {"first_name": "B", "last_name": "B"}},
+    ]
+    service._execute = AsyncMock(side_effect=lambda *_a, **_k: _response(data=rows()))  # type: ignore[method-assign]
+    with _real_scope(service, LINKS, [CLINIC_ID, CLINIC_B_ID]):
+        everything = await service.list_all_sent_messages(uuid4())
+        own = await service.list_all_sent_messages(uuid4(), UUID(CLINIC_ID))
+        other = await service.list_all_sent_messages(uuid4(), uuid4())
+    assert [(m["id"], m["clinic_name"]) for m in everything] == [
+        ("m1", "Clinic A"),
+        ("m2", "Clinic B"),
+    ]
+    assert [m["id"] for m in own] == ["m1"]
+    assert other == []
+
+
+@pytest.mark.asyncio
+async def test_dashboard_rows_carry_the_clinic_and_the_filter_narrows_the_patients(service):
+    service._get_pending_adr_review_count = AsyncMock(return_value=0)  # type: ignore[method-assign]
+    service._get_pending_medwatch_count = AsyncMock(return_value=0)  # type: ignore[method-assign]
+    pid = uuid4()
+    links = [
+        {"patient_id": str(pid), "clinic_id": CLINIC_ID, "clinics": {"display_name": "Clinic A"}}
+    ]
+    risk = PatientRiskData(
+        patient_id=pid, first_name="A", last_name="B", risk_level="low", adherence_score=0.9
+    )
+    with (
+        _real_scope(service, links, [CLINIC_ID]),
+        patch(
+            "app.services.risk_score_service.RiskScoreService.get_patient_risk",
+            new=AsyncMock(return_value=risk),
+        ),
+    ):
+        result = await service.get_dashboard_data(uuid4())
+        none = await service.get_dashboard_data(uuid4(), clinic_id=uuid4())
+    assert result["patients"][0]["clinic_name"] == "Clinic A"
+    assert none["patients"] == [] and none["total"] == 0

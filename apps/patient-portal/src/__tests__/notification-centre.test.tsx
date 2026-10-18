@@ -209,4 +209,14 @@ describe("patient notification centre", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(); expect(bell).toHaveFocus();
   });
+  it.each([["en-US", "Care team one"], ["es-MX", "Care team one"]])("shows the clinic as wrapping secondary text under the title in %s", async (locale) => {
+    session.profile = { preferredLanguage: locale, timezone: "America/Los_Angeles" };
+    vi.mocked(notifications.list).mockResolvedValue(page([{ ...item(), clinic_name: "Harbor Clinic de la Costa Norte" }, item("two")]));
+    render(<NotificationProvider><NotificationCentre /></NotificationProvider>);
+    const clinic = await screen.findByText("Harbor Clinic de la Costa Norte");
+    expect(clinic.className).toContain("text-muted");
+    expect(clinic.className).toContain("break-words");
+    expect(clinic.previousElementSibling).toContainElement(screen.getByText("Care team one"));
+    expect(screen.queryByText("Harbor Clinic")).not.toBeInTheDocument();
+  });
 });

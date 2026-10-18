@@ -462,7 +462,8 @@ class CronService:
             lambda db: (
                 db.table("appointments")
                 .select(
-                    "id, patient_id, scheduled_at, clinician_name, location, appointment_type, reason"
+                    "id, patient_id, scheduled_at, clinician_name, location, appointment_type, "
+                    "reason, clinic_id, clinics(display_name)"
                 )
                 .in_("status", list(self.BOOKED_APPOINTMENT_STATUSES))
                 .gte("scheduled_at", self._iso(window_start))
@@ -686,16 +687,24 @@ class CronService:
         dedupe_key = f"appointment:{appointment_id}:{reminder_kind}:{visit_at}"
         location = appointment.get("location") or "your care team"
         clinician_name = appointment.get("clinician_name") or "your clinician"
+        # The appointment's own clinic, never the clinician's default one (CLN-003 slice F).
+        clinic_row = appointment.get("clinics")
+        clinic_name = (
+            " ".join(str(clinic_row.get("display_name") or "").split())
+            if isinstance(clinic_row, dict)
+            else ""
+        )
+        clinic_text = f" Clinic: {clinic_name}." if clinic_name else ""
 
         if reminder_kind == "24h":
             body = (
                 f"You have a {appointment.get('appointment_type', 'follow-up')} appointment "
-                f"with {clinician_name} at {scheduled_at}. Location: {location}."
+                f"with {clinician_name} at {scheduled_at}.{clinic_text} Location: {location}."
             )
         else:
             body = (
-                f"Your appointment with {clinician_name} starts at {scheduled_at}. "
-                f"Location: {location}."
+                f"Your appointment with {clinician_name} starts at {scheduled_at}."
+                f"{clinic_text} Location: {location}."
             )
 
         return {
@@ -711,6 +720,8 @@ class CronService:
             "dedupe_key": dedupe_key,
             "metadata": {
                 "appointment_id": appointment_id,
+                "clinic_id": appointment.get("clinic_id"),
+                "clinic_name": clinic_name or None,
                 "scheduled_at": scheduled_at,
                 "reminder_kind": reminder_kind,
                 "hours_before": hours_before,

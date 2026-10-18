@@ -479,13 +479,19 @@ class ChatService:
         result = await self._execute(
             self.db.table("care_teams")
             .select(
-                "id, clinician_id, role, specialty_context, clinic_name, clinicians(first_name, last_name)"
+                "id, clinician_id, role, specialty_context, clinic_id, "
+                "clinics(display_name), clinicians(first_name, last_name)"
             )
             .eq("patient_id", patient_id)
             .eq("status", "active")
             .limit(5)
         )
-        return [row for row in (result.data or []) if isinstance(row, dict)]
+        teams = [row for row in (result.data or []) if isinstance(row, dict)]
+        for team in teams:
+            # The clinic of each link, so Nora can tell a patient's clinics apart (CLN-003).
+            clinic = team.pop("clinics", None)
+            team["clinic_name"] = clinic.get("display_name") if isinstance(clinic, dict) else None
+        return teams
 
     async def _fetch_document_context(
         self,

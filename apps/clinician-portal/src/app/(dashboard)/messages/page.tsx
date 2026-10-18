@@ -3,11 +3,23 @@
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { CareConversations } from "@/components/features/care-conversations";
+import { ClinicFilterEmpty, ClinicFilterField } from "@/components/features/clinic-chip";
 import { EarlierMessages } from "@/components/features/operational-alerts";
+import { useClinicFilter } from "@/hooks/use-clinic-filter";
 
 function MessagesInbox() {
   const searchParams = useSearchParams();
-  return <CareConversations audience="clinician" conversationId={searchParams.get("conversation")} />;
+  const clinicFilter = useClinicFilter();
+  return <>
+    {clinicFilter.multi ? <div className="flex justify-end"><ClinicFilterField filter={clinicFilter} /></div> : null}
+    {clinicFilter.ready ? <CareConversations
+      audience="clinician"
+      clinicEmpty={clinicFilter.clinicId ? <ClinicFilterEmpty filter={clinicFilter} noun="conversations" /> : null}
+      clinicId={clinicFilter.clinicId}
+      conversationId={searchParams.get("conversation")}
+    /> : null}
+    <EarlierMessages clinicId={clinicFilter.clinicId} showClinic={clinicFilter.multi} />
+  </>;
 }
 
 export default function MessagesPage() {
@@ -19,6 +31,5 @@ export default function MessagesPage() {
       </div>
     </div>
     <Suspense fallback={<p role="status">Loading conversations…</p>}><MessagesInbox /></Suspense>
-    <EarlierMessages />
   </div>;
 }

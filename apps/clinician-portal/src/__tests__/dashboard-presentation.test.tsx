@@ -6,11 +6,13 @@ const mocks = vi.hoisted(() => ({ dispatch: vi.fn(), push: vi.fn(), state: {
     dashboard: { stats: [{ label: "ADR Reviews Pending", value: "2 Pending" }],
         patients: [] as PatientRiskData[], loading: false, error: null as string | null },
 } }));
+vi.mock("@/hooks/use-clinic-filter", async () => (await import("@/test/clinic-filter-mock")).clinicFilterModule);
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("react-redux", () => ({ useDispatch: () => mocks.dispatch,
     useSelector: (selector: (state: typeof mocks.state) => unknown) => selector(mocks.state) }));
 vi.mock("@/services/dashboard-realtime", () => ({ subscribeDashboardRealtime: () => () => undefined }));
 import DashboardPage from "@/app/(dashboard)/dashboard/page";
+import { clinicFilterState, resetClinicFilter } from "@/test/clinic-filter-mock";
 
 describe("Dashboard presentation", () => {
     beforeEach(() => {
@@ -19,6 +21,46 @@ describe("Dashboard presentation", () => {
         mocks.state.dashboard.patients = [{ patient_id: "ca40d4c5-a74d-458e-b58c-c0ba32a61095",
             first_name: "Synthetic", last_name: "Patient", risk_level: "unknown", adherence_score: 0,
             open_adr_count: 0, active_med_count: 0, recent_symptom_severity: 0, last_activity: "No activity" }];
+    });
+    it("tags rows with the link's clinic only for a multi-clinic clinician", () => {
+        mocks.state.dashboard.patients[0] = { ...mocks.state.dashboard.patients[0], clinic_id: "clinic-b", clinic_name: "Bay Clinic" };
+        resetClinicFilter();
+        const { unmount } = render(<DashboardPage />);
+        expect(screen.queryByText("Bay Clinic")).not.toBeInTheDocument();
+        expect(screen.queryByLabelText("Clinic")).not.toBeInTheDocument();
+        unmount();
+        clinicFilterState.clinics = [
+            { clinic_id: "clinic-a", clinic_code: "A", clinic_name: "City Health", role: "admin", status: "active" },
+            { clinic_id: "clinic-b", clinic_code: "B", clinic_name: "Bay Clinic", role: "provider", status: "active" },
+        ] as never;
+        render(<DashboardPage />);
+        const chip = screen.getByText("Bay Clinic", { selector: "span" });
+        expect(chip).toBeInTheDocument();
+        // The chip sits on its own line under the name at every width.
+        expect(chip.parentElement).toHaveClass("flex-col");
+        expect(chip.parentElement?.className).not.toContain("sm:flex-row");
+        expect(screen.getByLabelText("Clinic")).toBeInTheDocument();
+        resetClinicFilter();
+    });
+    it("names All clinics, the filtered clinic or the only clinic in the header", () => {
+        const two = [
+            { clinic_id: "clinic-a", clinic_code: "A", clinic_name: "City Health", role: "admin", status: "active" },
+            { clinic_id: "clinic-b", clinic_code: "B", clinic_name: "Bay Clinic", role: "provider", status: "active" },
+        ] as never;
+        resetClinicFilter();
+        clinicFilterState.clinics = two;
+        const first = render(<DashboardPage />);
+        expect(screen.getByText(/ · All clinics$/)).toBeInTheDocument();
+        first.unmount();
+        clinicFilterState.clinicId = "clinic-b";
+        const second = render(<DashboardPage />);
+        expect(screen.getByText(/ · Bay Clinic$/)).toBeInTheDocument();
+        second.unmount();
+        resetClinicFilter();
+        clinicFilterState.clinics = [two[0]] as never;
+        render(<DashboardPage />);
+        expect(screen.getByText(/ · City Health$/)).toBeInTheDocument();
+        resetClinicFilter();
     });
     it("keeps internal patient identity in navigation without displaying it or inferring missed doses", () => {
         render(<DashboardPage />);

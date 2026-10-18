@@ -102,6 +102,11 @@ function VisitCard({
           {label}
         </span>
       </div>
+      {visit.clinicName ? (
+        <p className="mt-1 break-words text-sm text-muted">
+          {copy.atClinic(visit.clinicName)}
+        </p>
+      ) : null}
       <p className="mt-2 text-sm text-muted">
         {copy.types[visit.appointmentType]} · {visit.durationMinutes}{" "}
         {copy.minutes}

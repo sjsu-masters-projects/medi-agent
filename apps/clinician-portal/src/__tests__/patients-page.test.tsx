@@ -25,6 +25,7 @@ const { dispatch, push, state } = vi.hoisted(() => ({
     },
 }));
 
+vi.mock("@/hooks/use-clinic-filter", async () => (await import("@/test/clinic-filter-mock")).clinicFilterModule);
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ push }),
 }));
@@ -35,6 +36,13 @@ vi.mock("react-redux", () => ({
 }));
 
 import PatientsPage from "@/app/(dashboard)/patients/page";
+import { clinicFilterState, resetClinicFilter } from "@/test/clinic-filter-mock";
+
+const twoClinics = [
+    { clinic_id: "clinic-a", clinic_code: "AAA111", clinic_name: "City Health", role: "admin", status: "active" },
+    { clinic_id: "clinic-b", clinic_code: "BBB222", clinic_name: "Bay Clinic", role: "provider", status: "active" },
+] as never;
+
 
 describe("PatientsPage", () => {
     beforeEach(() => {
@@ -42,6 +50,38 @@ describe("PatientsPage", () => {
         push.mockReset();
         state.dashboard.error = null;
         state.dashboard.loading = false;
+        state.dashboard.patients[0] = { ...state.dashboard.patients[0], clinic_id: "clinic-b", clinic_name: "Bay Clinic" } as never;
+        resetClinicFilter();
+    });
+
+    it("shows no clinic chip and no clinic filter for a single-clinic clinician", () => {
+        render(<PatientsPage />);
+        expect(screen.queryByText("Bay Clinic")).not.toBeInTheDocument();
+        expect(screen.queryByLabelText("Clinic")).not.toBeInTheDocument();
+        expect(dispatch).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows the clinic chip after the name and a Clinic filter with several clinics", () => {
+        clinicFilterState.clinics = twoClinics;
+        render(<PatientsPage />);
+        const row = screen.getByRole("button", { name: /maya patel/i });
+        expect(row).toHaveTextContent("Maya Patel");
+        expect(screen.getByText("Bay Clinic", { selector: "span" })).toHaveAttribute("title", "Bay Clinic");
+        expect(screen.getByLabelText("Clinic")).toHaveValue("");
+        fireEvent.change(screen.getByLabelText("Clinic"), { target: { value: "clinic-a" } });
+        expect(clinicFilterState.setClinicId).toHaveBeenCalledWith("clinic-a");
+    });
+
+    it("asks the server for the chosen clinic and explains an empty clinic", () => {
+        clinicFilterState.clinics = twoClinics;
+        clinicFilterState.clinicId = "clinic-b";
+        const loaded = state.dashboard.patients;
+        state.dashboard.patients = [];
+        render(<PatientsPage />);
+        state.dashboard.patients = loaded;
+        expect(screen.getByText(/No patients at Bay Clinic match/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Show all clinics" }));
+        expect(clinicFilterState.setClinicId).toHaveBeenCalledWith(null);
     });
 
     it("loads and opens the real authorized patient identifier", () => {

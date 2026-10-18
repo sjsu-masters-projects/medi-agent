@@ -3,11 +3,13 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSelector } from "react-redux";
+import { ClinicFilterEmpty, ClinicFilterField } from "@/components/features/clinic-chip";
 import { AppointmentOfferForm } from "@/components/features/appointment-offer-form";
 import { AppointmentOfferHistory } from "@/components/features/appointment-offer-history";
 import { Button, EmptyState, ErrorState, Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { useAppointmentScheduling } from "@/hooks/use-appointment-scheduling";
+import { useClinicFilter, type ClinicFilter } from "@/hooks/use-clinic-filter";
 import {
   fetchSchedulingProfile,
   type AssignedSchedulingPatient,
@@ -137,6 +139,7 @@ function PatientAppointments({
             </span>
           </div>
           <AppointmentOfferHistory
+            patientName={`${patient.first_name} ${patient.last_name}`}
             appointmentId={appointmentId}
             token={token}
             appointments={appointments}
@@ -155,8 +158,9 @@ function PatientAppointments({
 }
 
 function SchedulingWorkspace({ token, appointmentId }: { token: string; appointmentId: string | null }) {
+  const clinicFilter: ClinicFilter = useClinicFilter();
   const { patients, appointments, loading, error, refresh, addOffer } =
-    useAppointmentScheduling(token);
+    useAppointmentScheduling(token, clinicFilter.clinicId, clinicFilter.ready);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [previousTarget, setPreviousTarget] = useState(appointmentId);
   if (previousTarget !== appointmentId) {
@@ -217,7 +221,12 @@ function SchedulingWorkspace({ token, appointmentId }: { token: string; appointm
         </div>
       ) : (
         <>
-          {!patients.length && !error ? (
+          {!patients.length && !error && clinicFilter.clinicId ? (
+            <div className="space-y-3 rounded-2xl border border-line bg-surface px-5 py-6 text-sm text-ink-2 shadow-[var(--shadow-card)]">
+              <div className="flex justify-end"><ClinicFilterField filter={clinicFilter} /></div>
+              <p><ClinicFilterEmpty filter={clinicFilter} /></p>
+            </div>
+          ) : !patients.length && !error ? (
             <EmptyState
               icon={<Icon name="cal" />}
               title="No assigned patients"
@@ -225,7 +234,8 @@ function SchedulingWorkspace({ token, appointmentId }: { token: string; appointm
             />
           ) : (
             <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-line bg-surface px-5 py-4 shadow-[var(--shadow-card)]">
-              <label className="block w-full max-w-md">
+              <div className="w-full max-w-md">
+              <label className="block">
                 <span className="mb-1.5 block text-[13px] font-medium text-ink-2">
                   Patient
                 </span>
@@ -242,13 +252,23 @@ function SchedulingWorkspace({ token, appointmentId }: { token: string; appointm
                       value={patient.care_team_id}
                     >
                       {patient.first_name} {patient.last_name}
+                      {clinicFilter.multi && patient.clinic_name ? ` · ${patient.clinic_name}` : ""}
                     </option>
                   ))}
                 </select>
               </label>
+              {selected?.clinic_name && (
+                <p className="mt-1.5 text-[13px] text-muted">
+                  Clinic: {selected.clinic_name}
+                </p>
+              )}
+              </div>
               <p className="pb-2.5 text-[13px] text-muted">
                 <span className="font-mono">{patients.length}</span> assigned
               </p>
+              <div className="ml-auto pb-1">
+                <ClinicFilterField filter={clinicFilter} />
+              </div>
             </div>
           )}
           {selected && (
