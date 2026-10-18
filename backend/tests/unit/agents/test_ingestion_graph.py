@@ -63,7 +63,9 @@ async def test_extract_content_keeps_page_text_for_evidence() -> None:
         return_value=('{"medications": []}', MagicMock(model="gemini-3.8-flash"))
     )
     with patch("app.agents.ingestion.graph.get_router", return_value=router):
-        result = await extract_content(_state(raw_content="[Page 1] Aspirin 81 mg", page_texts=["Aspirin 81 mg"]))
+        result = await extract_content(
+            _state(raw_content="[Page 1] Aspirin 81 mg", page_texts=["Aspirin 81 mg"])
+        )
 
     assert result["extracted_data"] == {"medications": []}
     assert result["page_texts"] == ["Aspirin 81 mg"]

@@ -56,6 +56,7 @@ import {
     type Locale as ChatLocale,
 } from "@/types";
 
+const MAX_RECOVERY_POLLS = 60;
 const HANDS_FREE_STORAGE_KEY = "patient-portal.chat.handsFree";
 const FALLBACK_DOCUMENT_NAME = "medical record";
 
@@ -649,20 +650,32 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     });
     useEffect(() => { applyDocumentRoute(); }, [searchParams]);
 
-    // A new socket can recover a reply still being saved by the previous connection.
+    // A reply still being saved by another tab or connection is polled while it is in
+    // flight only, and never for more than MAX_RECOVERY_POLLS (the server deadline is shorter).
+    const turnInFlight = recovery.turns.some((turn) => turn.status === "processing" || turn.status === "unknown");
     useEffect(() => {
-        if (!recovery.turns.length) return;
+        if (!turnInFlight) return;
+        let polls = 0;
         const recover = () => {
-            if (document.visibilityState === "visible" && socketRef.current?.readyState === WebSocket.OPEN)
+            if (polls >= MAX_RECOVERY_POLLS) return;
+            if (document.visibilityState === "visible" && socketRef.current?.readyState === WebSocket.OPEN) {
+                polls += 1;
                 socketRef.current.send(JSON.stringify({ type: "recover_turns" }));
+            }
         };
         const timer = window.setInterval(recover, 5000);
         document.addEventListener("visibilitychange", recover);
         window.addEventListener("focus", recover);
         return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", recover); window.removeEventListener("focus", recover); };
-    }, [recovery.turns.length, sessionId]);
+    }, [turnInFlight, sessionId]);
 
+    // A silent token refresh replaces the token and user objects. The socket must not be
+    // rebuilt for that (it interrupted the live reply); it reads them once per connection.
+    const connectionUserId = user?.id ?? null;
+    const hasAccessToken = Boolean(accessToken);
+    const readSession = useEffectEvent(() => ({ accessToken, user }));
     useEffect(() => {
+        const { accessToken, user } = readSession();
         if (!accessToken || !user) {
             return;
         }
@@ -910,6 +923,8 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             }
 
             durableReadyRef.current = false;
+            // Chunks from a reply that may never be saved must not outlive its socket.
+            resetAssistantDraft();
             if (!durableReady) {
                 dispatch(setConnectionStatus("error"));
                 dispatch(setChatError("CHAT_STARTUP_UNAVAILABLE"));
@@ -936,7 +951,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             socketRef.current = null;
             socket.close();
         };
-    }, [accessToken, activeDocumentId, dispatch, documentDismissed, reconnectSignal, sessionId, user]);
+    }, [connectionUserId, hasAccessToken, activeDocumentId, dispatch, documentDismissed, reconnectSignal, sessionId]);
 
     useEffect(() => {
         return () => {

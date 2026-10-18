@@ -18,6 +18,8 @@ const COPY = {
         loadError: "Past conversations could not be loaded.",
         dayTitle: "Conversation from",
         todayTitle: "Today's conversation",
+        unfinished: "Reply unfinished",
+        replying: "Nora is replying…",
     },
     "es-MX": {
         heading: "Conversaciones anteriores con Nora",
@@ -26,6 +28,9 @@ const COPY = {
         loadError: "No se pudieron cargar las conversaciones anteriores.",
         dayTitle: "Conversación del",
         todayTitle: "Conversación de hoy",
+        // Draft wording pending LOC-001 bilingual review.
+        unfinished: "Respuesta incompleta",
+        replying: "Nora está respondiendo…",
     },
 } as const;
 
@@ -79,6 +84,7 @@ export function NoraConversations({
                             <span className="block truncate text-[15px] font-medium text-ink">{title}</span>
                             <span className="block text-xs text-muted">{when}</span>
                         </span>
+                        {row.needsAttention ? <span className="shrink-0 rounded-full bg-surface-2 px-2.5 py-1 text-xs font-semibold text-ink-2">{row.replyInProgress ? copy.replying : copy.unfinished}</span> : null}
                         <Icon name="chevron" className="h-4 w-4 shrink-0 text-muted" />
                     </button>
                 </li>;

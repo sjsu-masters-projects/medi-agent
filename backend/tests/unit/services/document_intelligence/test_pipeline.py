@@ -169,9 +169,7 @@ def test_empty_pdf_pages_are_blank_and_the_document_is_rejected() -> None:
 def test_encrypted_pdf_is_rejected_permanently_without_reading_pages() -> None:
     doc = pymupdf.open()
     doc.new_page().insert_text((48, 72), "Warfarin 5 mg", fontname="helv")
-    data = bytes(
-        doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_AES_256, user_pw="u", owner_pw="o")
-    )
+    data = bytes(doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_AES_256, user_pw="u", owner_pw="o"))
 
     extraction = _service(FakeOcrEngine()).extract(data, mime_type="application/pdf")
 

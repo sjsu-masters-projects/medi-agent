@@ -22,9 +22,7 @@ PROMPT = "Patient reports chest tightness after starting lisinopril."
 @pytest.fixture(autouse=True)
 def configured(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(nim_module.settings, "nvidia_nim_api_key", "test-key")
-    monkeypatch.setattr(
-        nim_module.settings, "nvidia_nim_base_url", "https://nim.example.test/v1"
-    )
+    monkeypatch.setattr(nim_module.settings, "nvidia_nim_base_url", "https://nim.example.test/v1")
     monkeypatch.setattr(nim_module.settings, "nvidia_nim_model", "vendor/model-1")
 
 
@@ -61,7 +59,9 @@ def test_requires_an_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_sends_an_openai_shaped_chat_request(monkeypatch: pytest.MonkeyPatch) -> None:
     seen = _stub_post(monkeypatch, _ok("answer"))
 
-    result = await _client().generate(PROMPT, system_instruction="Be brief", temperature=0.1, max_tokens=64)
+    result = await _client().generate(
+        PROMPT, system_instruction="Be brief", temperature=0.1, max_tokens=64
+    )
 
     assert result == "answer"
     assert seen["url"] == "https://nim.example.test/v1/chat/completions"

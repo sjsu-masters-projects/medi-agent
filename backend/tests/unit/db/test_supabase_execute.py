@@ -28,7 +28,9 @@ def _query(*, result=None, side_effect=None):
 def test_is_transient_supabase_error_classifies_transport_failures():
     assert is_transient_supabase_error(Exception("Resource temporarily unavailable"))
     assert is_transient_supabase_error(Exception("connection reset by peer"))
-    assert not is_transient_supabase_error(Exception("duplicate key value violates unique constraint"))
+    assert not is_transient_supabase_error(
+        Exception("duplicate key value violates unique constraint")
+    )
 
 
 def test_execute_sync_retries_transient_failure_and_refreshes_client():
@@ -38,7 +40,9 @@ def test_execute_sync_retries_transient_failure_and_refreshes_client():
     first_query = _query(side_effect=[Exception("Resource temporarily unavailable")])
     second_query = _query(result=SimpleNamespace(data=[{"id": "ok"}]))
 
-    with patch("app.db.supabase_execute.refresh_client", return_value=refreshed_db) as refresh_client:
+    with patch(
+        "app.db.supabase_execute.refresh_client", return_value=refreshed_db
+    ) as refresh_client:
         result = execute_sync(
             owner,
             lambda db: first_query if db is original_db else second_query,
@@ -76,7 +80,9 @@ async def test_execute_async_retries_transient_failure_and_refreshes_client():
     first_query = _query(side_effect=[Exception("ReadError")])
     second_query = _query(result=SimpleNamespace(data={"id": "ok"}))
 
-    with patch("app.db.supabase_execute.refresh_client", return_value=refreshed_db) as refresh_client:
+    with patch(
+        "app.db.supabase_execute.refresh_client", return_value=refreshed_db
+    ) as refresh_client:
         result = await execute_async(
             owner,
             lambda db: first_query if db is original_db else second_query,

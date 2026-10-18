@@ -12,6 +12,9 @@ import { getEffectiveSessionExpiresAt } from "../../../../packages/shared/src/ut
 
 const REFRESH_EARLY_WINDOW_SECONDS = 30 * 60;
 const REFRESH_CHECK_INTERVAL_MS = 60 * 1000;
+// A token issued with a short lifetime is always inside the early window; without a floor
+// each refresh re-triggered the next one at once and rebuilt every live connection.
+const MIN_REFRESH_GAP_MS = 5 * 60 * 1000;
 
 function shouldRefreshSoon(
     expiresAt: number,
@@ -25,7 +28,7 @@ export function useAuthSessionRefresh() {
     const { accessToken, expiresAt, refreshToken, isAuthenticated, loading } =
         useSelector((state: RootState) => state.auth);
 
-    const refreshState = useRef({ inFlight: false });
+    const refreshState = useRef({ inFlight: false, lastRefreshAt: 0 });
 
     const refreshContext = useMemo(
         () => ({
@@ -74,6 +77,16 @@ export function useAuthSessionRefresh() {
                 return;
             }
 
+            const expiresInSeconds = effectiveExpiresAt
+                ? effectiveExpiresAt - Math.floor(Date.now() / 1000)
+                : 0;
+            if (
+                expiresInSeconds > 60 &&
+                Date.now() - refreshState.current.lastRefreshAt < MIN_REFRESH_GAP_MS
+            ) {
+                return;
+            }
+
             refreshState.current.inFlight = true;
 
             try {
@@ -86,6 +99,7 @@ export function useAuthSessionRefresh() {
                 redirectToLogin({ reason: "session_expired" });
             } finally {
                 refreshState.current.inFlight = false;
+                refreshState.current.lastRefreshAt = Date.now();
             }
         }
 

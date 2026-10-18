@@ -257,12 +257,17 @@ export interface ChatConversationApi {
     turn_count: number;
     created_at: string;
     updated_at: string;
+    status?: "needs_attention" | null;
+    reply_in_progress?: boolean;
 }
 
 export interface ChatConversationSummary {
     sessionId: string;
     title: string;
     updatedAt: string;
+    /** The latest saved reply is unfinished; opening the conversation shows recovery. */
+    needsAttention: boolean;
+    replyInProgress: boolean;
 }
 
 /** The patient's conversations with Nora, most recent first. */
@@ -278,6 +283,8 @@ export async function fetchChatConversations(
         sessionId: row.session_id,
         title: row.title,
         updatedAt: row.updated_at,
+        needsAttention: row.status === "needs_attention",
+        replyInProgress: Boolean(row.reply_in_progress),
     }));
 }
 

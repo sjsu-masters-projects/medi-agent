@@ -116,6 +116,7 @@ export function getChatRecoveryCopy(locale: Locale) {
     busy: "Ya hay una respuesta en curso en esta conversación, posiblemente en otra pestaña. Estamos recuperándola. Tu nuevo mensaje sigue en el cuadro de texto.",
     unavailable: "Nora no está disponible en este momento. No se enviará ningún mensaje hasta que el chat vuelva a conectarse. Puedes reintentar la conexión.",
     reconnect: "Volver a conectar",
+    replyUnavailable: "La respuesta de esta conversación ya no está disponible. No la volveremos a ejecutar. Puedes continuar con una pregunta nueva.",
   } : {
     preparing: "Nora is preparing your reply",
     checking: "Checking your message status",
@@ -131,6 +132,7 @@ export function getChatRecoveryCopy(locale: Locale) {
     busy: "A reply is already in progress in this conversation, possibly in another tab. We are recovering it. Your new message is still in the composer.",
     unavailable: "Nora is temporarily unavailable. No message will be sent until chat reconnects. You can retry the connection.",
     reconnect: "Reconnect chat",
+    replyUnavailable: "The reply for this message is no longer available. We will not rerun it. You can continue with a new question.",
   };
 }
 
