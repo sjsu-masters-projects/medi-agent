@@ -9,6 +9,8 @@ import { ApiClientError } from "@/services/api";
 import type { CentreItem, CentrePage } from "@/types/notification-centre";
 
 const auth = vi.hoisted(() => ({ user: { id: "synthetic-clinician" } as { id: string } | null, accessToken: "token-one" as string | null }));
+const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: navigation.push }) }));
 vi.mock("@/hooks/use-clinic-filter", async () => (await import("@/test/clinic-filter-mock")).clinicFilterModule);
 vi.mock("react-redux", () => ({ useSelector: (select: (state: unknown) => unknown) => select({ auth }) }));
 vi.mock("@/services/notification-centre", () => ({
@@ -37,6 +39,21 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("clinician notification centre", () => {
+  it("confirms an unread receipt before following its destination", async () => {
+    let confirmRead!: (value: unknown) => void;
+    vi.mocked(notificationCentre.read).mockReturnValue(new Promise((resolve) => { confirmRead = resolve; }));
+    vi.mocked(notificationCentre.list).mockResolvedValue(page([item({
+      event_type: "message_received", category: "messages", title: "New message from Rajeev Chaurasia",
+      action_url: "/messages?conversation=private-thread", action_label: "Open conversation",
+    })]));
+    render(<NotificationProvider><NotificationList /></NotificationProvider>);
+    fireEvent.click(await screen.findByRole("link", { name: "Open conversation" }));
+    expect(notificationCentre.read).toHaveBeenCalledWith("token-one", "receipt-1");
+    expect(navigation.push).not.toHaveBeenCalled();
+    await act(async () => { confirmRead({}); });
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/messages?conversation=private-thread"));
+  });
+
   it("shares one cache between bell and Alerts, with no legacy archive on Alerts", async () => {
     render(<NotificationProvider><NotificationBell /><AlertsPage /></NotificationProvider>);
     await screen.findByText("Patient reported a barrier");

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -41,6 +42,7 @@ function shortTime(iso: string): { short: string; full: string } | null {
 
 function NotificationRows({ items, onNavigate, allowAcknowledge, allowRead, onAcknowledged }: { items: CentreItem[]; onNavigate?: () => void; allowAcknowledge: boolean; allowRead: boolean; onAcknowledged: () => void }) {
   const centre = useNotificationCentre();
+  const router = useRouter();
   const [acknowledging, setAcknowledging] = useState<CentreItem | null>(null);
   const [note, setNote] = useState("");
   const targetItem = acknowledging && centre.actions.data?.items.find((item) => item.id === acknowledging.id && item.can_acknowledge);
@@ -62,7 +64,13 @@ function NotificationRows({ items, onNavigate, allowAcknowledge, allowRead, onAc
             {context && <p className="mt-0.5 truncate text-xs text-muted">{context}</p>}
             {item.body && <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-[13px] leading-snug text-ink-2">{item.body}</p>}
             {(target || (allowRead && !item.is_read) || (allowAcknowledge && item.can_acknowledge)) && <div className="-ml-2 mt-1.5 flex flex-wrap items-center gap-1">
-              {target && <Link href={target} onClick={() => { if (!item.is_read) void centre.read(item.id); onNavigate?.(); }} className="inline-flex min-h-8 items-center gap-0.5 rounded-lg px-2 text-[13px] font-medium text-primary hover:bg-primary-tint">{item.action_label || "Open details"}<Icon name="chevron" className="h-3.5 w-3.5" /></Link>}
+              {target && <Link href={target} onClick={async (event) => {
+                if (item.is_read) { onNavigate?.(); return; }
+                event.preventDefault();
+                await centre.read(item.id);
+                onNavigate?.();
+                router.push(target);
+              }} className="inline-flex min-h-8 items-center gap-0.5 rounded-lg px-2 text-[13px] font-medium text-primary hover:bg-primary-tint">{item.action_label || "Open details"}<Icon name="chevron" className="h-3.5 w-3.5" /></Link>}
               {allowAcknowledge && item.can_acknowledge && <Button variant="secondary" disabled={centre.busy || !!centre.actions.error} onClick={() => { setNote(""); setAcknowledging(item); }}>Acknowledge</Button>}
               {allowRead && !item.is_read && <button type="button" disabled={centre.busy} onClick={() => void centre.read(item.id)} aria-label={`Mark read: ${item.title}`} title="Mark read" className="ma-press ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink disabled:opacity-50"><Icon name="check" className="h-4 w-4" /></button>}
             </div>}

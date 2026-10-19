@@ -184,9 +184,14 @@ class RiskScoreService:
             .gte("created_at", cutoff)
         )
         rows = cast(list[dict[str, Any]], result.data or [])
-        if not rows:
-            return 0
-        return max(int(row.get("severity", 0)) for row in rows)
+        # Legacy and partially completed symptom rows may not carry a severity yet.
+        # Absence is not severity zero on the source row, but it contributes no risk
+        # signal to this maximum. Keep valid recent values instead of failing the whole
+        # patient risk card when another row is null.
+        return max(
+            (int(value) for row in rows if (value := row.get("severity")) is not None),
+            default=0,
+        )
 
     async def _fetch_active_med_count(self, patient_id: UUID) -> int:
         """Count active medications."""
