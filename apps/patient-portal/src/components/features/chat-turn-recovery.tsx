@@ -2,14 +2,14 @@ import type { RecoverableTurn } from "@/hooks/use-chat-turn-recovery";
 import type { Locale } from "@/types";
 import { getChatRecoveryCopy } from "@/content/chat-copy";
 
-export function ChatTurnRecovery({ turns, locale, connected, onRetry, onDismiss }: {
-    turns: RecoverableTurn[]; locale: Locale; connected: boolean;
+export function ChatTurnRecovery({ turns, locale, connected, streaming = false, onRetry, onDismiss }: {
+    turns: RecoverableTurn[]; locale: Locale; connected: boolean; streaming?: boolean;
     onRetry: (id: string) => void; onDismiss: (id: string) => void;
 }) {
     const copy = getChatRecoveryCopy(locale);
     const processing = turns.some((turn) => turn.status === "processing");
     return <div className="space-y-2" aria-live="polite">
-        {turns.map((turn) => {
+        {turns.filter((turn) => !(streaming && (turn.status === "processing" || turn.status === "unknown"))).map((turn) => {
           const retryBlocked = processing || turns.some((other) => other.status === "unknown" && other.client_message_id !== turn.client_message_id);
           const reason = !connected ? copy.reconnectBeforeRetry : retryBlocked ? copy.waitBeforeRetry : null;
           const reasonId = `retry-reason-${turn.client_message_id}`;
