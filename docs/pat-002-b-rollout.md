@@ -91,3 +91,10 @@ rollout. The requester elected to keep physical speech verification pending.
 Candidate-2 remains inactive pending genuine review. The active candidate-1 can be
 verified now using the steps in the acceptance record; do not describe the revised
 candidate or physical microphone path as approved/verified.
+
+
+The tested continuation is draft PR #193 on `fix/confirmed-intake-integration`.
+Concurrent PR #159 now has overlapping ADR/MedWatch changes and a different 076
+handoff migration. Choose/reconcile one delivery path before rollout. The exact
+applied 071 contract in this document remains authoritative for this continuation;
+no 076 execution or applied-file rename is authorized by the earlier 071 approval.

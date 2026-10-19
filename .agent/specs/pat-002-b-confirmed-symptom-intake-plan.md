@@ -1183,3 +1183,10 @@ is still required. Requester explicitly left physical speech verification pendin
 Patient 768/focused 117 pass; other integrated checks are recorded in the acceptance
 record. Candidate-2, phone acceptance, current-head CI, peer review and authorized
 merge/deployment remain release gates.
+
+
+Delivery moved to isolated draft [#193](https://github.com/sjsu-masters-projects/medi-agent/pull/193)
+on `fix/confirmed-intake-integration` after #159 received concurrent ADR/MedWatch
+work and a differing 076 migration. #159 was preserved without force push. Select
+or reconcile the overlapping delivery path before merge; only the exact 071 was
+authorized/applied. See the acceptance record for the coordination evidence.

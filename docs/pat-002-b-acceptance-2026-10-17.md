@@ -244,3 +244,20 @@ override did not change the observed desktop size; physical phone acceptance,
 physical speech, candidate-2 approval/activation, peer review, merge and authorized
 deployed configuration remain pending. No additional migration, seed/reset,
 manual deployment or merge was performed.
+
+
+### Delivery coordination
+
+The first push was rejected without changing remote history: PR #159 had advanced
+to Ganesh's `67aadefa`, merging ADR/MedWatch follow-up work and replacing the handoff
+file with a different `076_confirmed_symptom_handoff.sql` checksum. That file is not
+the exact 071 authorized and applied above. It was not run here.
+
+To preserve the requested intake scope and the collaborator's work, the tested
+continuation is published separately on `fix/confirmed-intake-integration`, draft
+[PR #193](https://github.com/sjsu-masters-projects/medi-agent/pull/193). PR #159 is
+unchanged. These are alternative review candidates for overlapping feature work;
+maintainers must choose/reconcile the delivery path before merging. This is not
+permission to apply 076, drop/rename applied 071, or merge both feature copies.
+The working tree retains the unrelated task-board, scheduling, team, map and local
+script edits. Physical microphone verification remains pending by requester choice.
