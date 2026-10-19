@@ -394,7 +394,8 @@ describe("My schedule", () => {
       fireEvent.click(confirm);
       await waitFor(() => expect(mocks.cancel).toHaveBeenCalledWith("clinician-token", "v1", { reason_code: "other", reason: "Water leak" }));
       expect(await within(panel).findByRole("note")).toHaveTextContent("Cancelled by your team. Other — Water leak");
-      expect(mocks.schedule.mock.calls.length).toBeGreaterThan(1); // the agenda reloads
+      // The agenda reload runs after the cancel resolves; wait for it instead of racing it.
+      await waitFor(() => expect(mocks.schedule.mock.calls.length).toBeGreaterThan(1));
     });
 
     it("keeps the dialog and says so when the cancel fails or the visit changed", async () => {
