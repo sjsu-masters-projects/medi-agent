@@ -160,3 +160,16 @@ def test_middleware_sets_the_request_id_from_the_trace_header_or_generates_one(
     else:
         assert len(seen["request_id"]) == 32 and "logging.googleapis.com/trace" not in seen
     assert current_context() == {}
+
+
+def test_task_id_joins_the_correlation_fields_and_resets_with_the_request():
+    from app.core import structured_logging as sl
+
+    tokens = sl.start_request(None)
+    try:
+        sl.set_task_id("chat-turn-abc-a1")
+        assert sl.current_context()["task_id"] == "chat-turn-abc-a1"
+        assert sl.current_request_id() == sl.current_context()["request_id"]
+    finally:
+        sl.end_request(tokens)
+    assert "task_id" not in sl.current_context()

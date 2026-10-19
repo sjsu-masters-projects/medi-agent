@@ -191,7 +191,9 @@ class ChatTurnService:
             **fields,
         )
 
-    async def begin(self, request: dict[str, Any], timeout: int) -> dict[str, Any]:
+    async def begin(
+        self, request: dict[str, Any], timeout: int, *, queued: bool = False
+    ) -> dict[str, Any]:
         try:
             if "document_id" not in request:
                 raise ValueError("Explicit document selection required")
@@ -222,6 +224,9 @@ class ChatTurnService:
                 "client_message_id": key,
                 "request_hash": fingerprint,
                 "timeout_seconds": timeout,
+                # A queued turn is executed by the worker service; omitted keeps the
+                # in-process behaviour and the exact payload older functions expect.
+                **({"queued": True} if queued else {}),
             },
         )
         turn = result.get("turn") or {}

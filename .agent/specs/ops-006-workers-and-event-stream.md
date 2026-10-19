@@ -96,6 +96,68 @@ verified; the production check below is still required.
 
 ## Phase 2 — Worker service and turn events (large)
 
+**Status (branch `feature/ops-006-phase-2`, based on the phase 1 branch; not merged, not
+deployed, nothing external created):** implemented and locally verified behind
+`CHAT_TURNS_VIA_WORKER` (default false) and `WORKER_MODE`. Rollout needs the requester's
+authorization step by step: [docs/chat-worker-setup.md](../../docs/chat-worker-setup.md).
+
+As built:
+
+- **Migration `078_chat_turn_events.sql`** (apply after 077; inert without the flag):
+  - `chat_turn_events(turn_id, seq, type, payload, created_at)`, primary key `(turn_id, seq)`,
+    cascade delete, row level security on, no browser access, `UPDATE` not granted. Types:
+    `started`, `draft`, `notice`, `completed`, `failed`, `interrupted`.
+  - `chat_turns.status` allows `queued`; new columns `via_worker`, `run_count` (worker claims;
+    `attempt` stays the user-visible retry count of at most 3 because the task is named from the
+    turn id and `attempt`) and `dispatched_at` (the outbox marker). One active turn per
+    conversation now covers `processing` and `queued` (`chat_turns_one_active`).
+  - `chat_turn_operation` keeps everything 072 to 077 added and additionally: `begin` can create
+    the turn `queued` (`queued: true`; a retry re-queues with `attempt + 1`); a queued turn
+    reconciles to `interrupted` at its deadline; a worker turn writes its terminal event in the same
+    transaction as `complete`, `failed`, `interrupted` and the reconcile, and drops its drafts.
+  - `chat_turn_worker_operation(turn, action, payload)`: `claim` (queued, or processing with an
+    expired lease and no `actions_started`; new lease and deadline; `run_count + 1`; `started`
+    event; every refusal has a reason and only `lease_active` is retryable), `append_event`
+    (current lease only, unexpired, `draft`/`notice` only, seq gap guard, repeated seq is a no-op),
+    `requeue` (hand a claimed turn back before any clinical action), `prune_events`, and the
+    queue-side `undispatched` (outbox listing with `SKIP LOCKED`) and `dispatched`.
+  - Lock order (rule 7): lock-free existence check, then the conversation advisory lock (the same
+    key as `chat_turn_operation`), then the `chat_turns` row, then the `documents` row
+    (`KEY SHARE`), then event inserts. `append_event` takes only the turn row. Both functions set
+    `lock_timeout` 5 s and `statement_timeout` 8 s.
+- **API send** (flag on; websocket `user_message` and `POST /api/v1/chat/turns`): one `begin`
+  transaction writes the user message and the queued turn, then (after commit) a Cloud Tasks
+  HTTP task named `chat-turn-<turn id>-a<attempt>` is created (`ALREADY_EXISTS` counts as
+  created). A failed enqueue leaves `dispatched_at` NULL; the sweep
+  (`POST /api/v1/cron/chat-turns/dispatch`, and one supervised pass at API startup) creates it
+  again. The API never runs model work while the flag is on; a legacy socket without the durable
+  protocol is told to reload.
+- **Worker** (`WORKER_MODE=true`, same image; serves `/health` and
+  `POST /internal/tasks/chat-turn` only, absent on the API service): verifies the Cloud Tasks
+  OIDC token (Google signature and issuer, audience, expected service account, verified email;
+  401 or 403 otherwise, fail closed when unconfigured), claims the turn (patient, conversation and
+  text come from the database, not the task), runs the extracted pipeline
+  (`services/chat_turn_pipeline.execute_turn`: the same safety floors, tools, `actions` guard,
+  model fallback and budgets), checkpoints the draft at most once a second from a supervised
+  task, completes with the lease and prunes drafts.
+- **Retry semantics:** finished, stale, unknown, expired, over-budget (marked `interrupted`) or
+  `actions_started` turns answer 200 (no retry); anything transient (claim unreachable, live lease,
+  failure not recordable, context unreadable, saturated) answers 503 so the queue retries with
+  backoff; a stopping instance hands the turn back (`requeue`) unless a clinical action started.
+- **Viewing without the stream:** sockets and recover read `chat_turn_events` from the database
+  (`services/chat_turn_events.py`): the draft so far, notices, the final reply, resumable by seq,
+  from any instance. `GET /api/v1/chat/turns/{id}/events?after_seq=` returns the same log.
+  Phase 3 replaces the poll with one stream.
+- **Timeouts nest (rule 11):** Cloud Run request 300 s > task dispatch deadline 100 s (lease + 30)
+  > database lease 70 s > processing budget 40 s > model 30 s > database call 8 to 10 s.
+
+Not done in phase 2 (kept for the phase named): request-based CPU on the API
+(`--no-cpu-throttling` stays until phase 5), the SSE stream and websocket retirement (phase 3),
+moving translation, back-translation and SOAP drafts to the worker, and role-level timeouts for
+every other backend RPC.
+
+Original scope, for reference:
+
 - **Turn event table** `chat_turn_events(turn_id, seq, type, payload, created_at)`, backend
   only. Draft checkpoints are coalesced to about one per second and pruned after completion.
 - **The API `send`** validates, begins the turn (state `queued`), enqueues a Cloud Tasks task
@@ -148,19 +210,18 @@ verified; the production check below is still required.
 ## Known rule violations
 
 Phase 1 satisfies the rules for the chat turn path (see the rule-by-rule status in the pull
-request). These remain, each with the phase that removes it.
+request). Phase 2 satisfies them for the worker turn path, with the exceptions below (status after
+phase 2, branch `feature/ops-006-phase-2`; they apply once the flag is on and verified).
 
 | Rule | Violation | Removed by |
 | --- | --- | --- |
-| 1, 16 | The turn runs in an in-process task and registry; a stopped instance loses the running work until the deadline reconciles it | Phase 2 (worker and queue) |
-| 19 | Websocket events have no sequence numbers; a late socket gets a draft snapshot | Phase 2 (turn events), phase 3 (resume) |
-| 6 | Notifications are computed at read time, with no outbox | Phase 4 |
-| 10 | `lock_timeout` and `statement_timeout` are set only inside `chat_turn_operation`; the other RPCs, `notification_centre_operation` and the care-conversation and clinic RPCs, rely on the client budget | Phase 2 sets them for every backend role; phase 4 for notifications |
-| 9 | Authorization in `notification_centre_operation` runs inside the function after its per-user lock | Phase 4 |
-| 7 | The global lock order is not enforced by a test; sites are reviewed by hand | Phase 2 (lock-order checklist in review) |
-| 12 | Model-provider retries are the SDK's and are not capped by the remaining turn budget | Phase 2 (worker step budget) |
-| 13 | The default `asyncio.to_thread` pool is still shared by translation, back-translation, SOAP drafts, document and auth-refresh calls | Phase 2 (worker service) |
-| 14 | Model-call concurrency waits in `model_traffic` without a bound | Phase 2 (queue limits) |
-| 15 | Some services call the synchronous Supabase client from `async` code through the default pool | Phase 2 (named pools or worker) |
-| 24 | Background tasks (A2A retry worker, scheduled jobs) log without a `task_id` | Phase 2 |
+| 1, 16 | With the flag **off** the turn still runs in an in-process task and registry (the fallback); with it on, no state or work lives in an API process | Retire the fallback after verification |
+| 19 | Websocket messages carry no seq of their own; the event log is ordered by seq and viewers resume by it | Phase 3 (stream with `Last-Event-ID`) |
+| 6 | Notifications are computed at read time, with no outbox (the Nora turn path has one) | Phase 4 |
+| 10 | `lock_timeout` and `statement_timeout` are set inside `chat_turn_operation` and `chat_turn_worker_operation` only; `notification_centre_operation`, the care-conversation and clinic RPCs rely on the client budget. Claiming waits on the conversation lock up to the 5 s `lock_timeout` rather than using `NOWAIT` | Phase 4 for notifications; a role-level default is a separate, authorized database change |
+| 9 | Authorization in `notification_centre_operation` runs inside the function after its per-user lock (the worker function pre-checks without a lock) | Phase 4 |
+| 7 | The global lock order is documented for every new site and followed, but no automated test enforces it | Lock-order checklist in review; a test is a follow-up |
+| 13, 15 | Translation, back-translation, SOAP drafts, documents and auth refresh still use the default `asyncio.to_thread` pool in the API, and the pipeline's `ChatService` calls use it inside the worker; named pools exist for chat control, notifications, enqueue and event reads | Move those workloads to the worker or named pools (after phase 2 verification) |
+| 14 | Model-call concurrency waits in `model_traffic` without its own bound; the turn budget cancels the wait, and the queue limits bound how many turns run | Per-workload queue limits when more workloads move |
+| 24 | Background tasks (A2A retry worker, scheduled jobs) log without a `task_id`; worker turns and the sweep carry `task_id`, `turn_id` and `request_id` | Remaining background jobs |
 | 5 | Care-conversation panels poll every 15 s while open (inbox and open thread), paused when hidden | Phase 3 (stream) |

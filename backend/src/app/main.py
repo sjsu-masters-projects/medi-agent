@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -25,12 +26,14 @@ from app.routers import (
     care_conversations,
     care_plans,
     chat,
+    chat_turns,
     clinicians,
     clinics,
     cron,
     documents,
     email_preferences,
     feed,
+    internal_tasks,
     medications,
     mfa,
     notification_centre,
@@ -43,6 +46,8 @@ from app.routers import (
     voice,
 )
 from app.services.a2a_retry_worker import A2ARetryWorker
+from app.services.chat_turn_events import TurnWatchSet
+from app.services.chat_turn_queue import TurnDispatcher
 from app.services.chat_turn_runner import turn_runner
 
 logger = logging.getLogger(__name__)
@@ -64,6 +69,27 @@ def init_sentry() -> None:
 
 
 TURN_DRAIN_SECONDS = 8.0
+
+
+async def _startup_dispatch_sweep() -> None:
+    """One bounded pass over the outbox: queued turns whose task creation failed before a
+    restart. A single supervised task (cancelled at shutdown), not a loop; the cron endpoint
+    repeats it on a schedule."""
+    try:
+        await TurnDispatcher(get_admin_client()).sweep()
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.warning("Startup chat turn sweep failed: %s", type(exc).__name__)
+
+
+@asynccontextmanager
+async def worker_lifespan(app: FastAPI) -> AsyncGenerator[None]:
+    """The worker serves one task endpoint. A turn runs inside its request, so Cloud Run keeps
+    the instance alive for it; nothing runs between requests."""
+    logger.info("Starting MediAgent chat worker")
+    yield
+    logger.info("Shutting down MediAgent chat worker")
 
 
 @asynccontextmanager
@@ -90,7 +116,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         retry_worker.start()
         logger.info("A2A retry worker enabled")
 
+    sweep_task: asyncio.Task[None] | None = None
+    if settings.chat_turns_via_worker:
+        sweep_task = asyncio.get_running_loop().create_task(_startup_dispatch_sweep())
+
     yield  # app is running
+
+    if sweep_task is not None:
+        sweep_task.cancel()
+        await asyncio.gather(sweep_task, return_exceptions=True)
+    # Viewers of worker turns only read; they end with the process.
+    await TurnWatchSet.close_all()
 
     # Replies are owned by the server: let running Nora turns finish (Cloud Run allows
     # about 10 s after SIGTERM). Anything left is reconciled by its saved deadline.
@@ -102,8 +138,36 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     logger.info("Shutting down MediAgent backend")
 
 
+def create_worker_app() -> FastAPI:
+    """The worker service: the same image with ``WORKER_MODE=true``. It exposes ``/health`` and
+    the OIDC-protected task endpoint only: no user API, no websockets, no cron."""
+    install_credential_redaction()
+    configure_logging()
+    application = FastAPI(
+        title="MediAgent chat worker",
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+        lifespan=worker_lifespan,
+    )
+    application.add_middleware(SecurityHeadersMiddleware)
+    application.add_middleware(RequestContextMiddleware)
+    register_exception_handlers(application)
+    application.include_router(
+        internal_tasks.router, prefix="/internal/tasks", tags=["Internal tasks"]
+    )
+
+    @application.get("/health", tags=["Health"])
+    async def worker_health() -> Any:
+        return {"status": "healthy", "service": "mediagent-chat-worker"}
+
+    return application
+
+
 def create_app() -> FastAPI:
     """Build and configure the FastAPI application."""
+    if settings.worker_mode:
+        return create_worker_app()
 
     # Installed before anything can serve a request. The access log writes whole request
     # paths, so a credential that reaches a query string is published to the log the first
@@ -164,6 +228,7 @@ def create_app() -> FastAPI:
     )
     application.include_router(adherence.router, prefix=f"{api}/adherence", tags=["Adherence"])
     application.include_router(chat.router, prefix=f"{api}/chat", tags=["Chat"])
+    application.include_router(chat_turns.router, prefix=f"{api}/chat/turns", tags=["Chat"])
     application.include_router(
         care_conversations.router, prefix=f"{api}/care-conversations", tags=["Care conversations"]
     )

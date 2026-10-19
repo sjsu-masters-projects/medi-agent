@@ -11,6 +11,18 @@ OPS-006 phase 1 (branch, not deployed): completion payloads no longer let the re
 replace the turn id, refusals carry a `reason` (migration 077), and every turn transition is
 logged by `turn_id`; see [OPS-006](ops-006-workers-and-event-stream.md).
 
+OPS-006 phase 2 (branch `feature/ops-006-phase-2`, not deployed, behind `CHAT_TURNS_VIA_WORKER`): a
+turn can be `queued` (migration 078) and executed by a worker service instead of an API instance.
+The contract above is unchanged: the same client message id, request hash, lease, deadline,
+`actions_started` rule, three-attempt limit, document snapshot and completed-reply replay apply.
+What differs: the API saves the message and the queued turn in one transaction and enqueues a
+task after commit (a sweep re-enqueues a missed one); the worker claims the turn (a live lease or
+a started clinical action is never re-run), runs the same pipeline and completes with its lease;
+a queued turn nobody claims is interrupted at its deadline and offers the usual retry. Sockets and
+recovery show the draft and the final reply from `chat_turn_events` on any instance. Emergency and
+crisis guidance still comes from the deterministic safety floor, shown from the turn's own status
+event whether or not a worker is available. Setup and rollback: [chat-worker-setup](../../docs/chat-worker-setup.md).
+
 ## Scope
 
 One increment covers the saved chat-turn lifecycle and document focus. Human

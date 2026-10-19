@@ -453,6 +453,33 @@ It also sets `lock_timeout` 5 s and `statement_timeout` 8 s on `chat_turn_operat
 Database worker pools are bounded (`app/core/db_pools.py`): a full pool answers `503` with
 `Retry-After` instead of queueing.
 
+### Nora turn worker and turn events (OPS-006 phase 2)
+
+Off by default. `CHAT_TURNS_VIA_WORKER=true` on the API makes `send` queue a turn instead of
+running it; `WORKER_MODE=true` makes a process the worker (the same image). Setup, rollout order
+and rollback need per-step authorization: [docs/chat-worker-setup.md](../docs/chat-worker-setup.md).
+
+- **Migration 078** (after 077): `chat_turn_events`, status `queued`, `chat_turns.via_worker` /
+  `run_count` / `dispatched_at`, and `chat_turn_worker_operation` (`claim`, `append_event`,
+  `requeue`, `prune_events`, `dispatched`, `undispatched`). Tested by
+  `tests/integration/test_chat_turn_events_postgres.py` (Docker, hosted-style grants; run it with
+  `CHAT_TURN_TEST_POSTGRES_DOCKER=1`).
+- **Send:** `services/chat_turn_queue.submit_turn` begins the queued turn in one transaction and
+  then creates the Cloud Tasks task (`chat-turn-<turn id>-a<attempt>`). Entry points: the websocket
+  `user_message` and `POST /api/v1/chat/turns`; read with
+  `GET /api/v1/chat/turns/{id}/events?after_seq=`. The outbox sweep is
+  `POST /api/v1/cron/chat-turns/dispatch` (cron token) and one pass at API startup.
+- **Worker:** `routers/internal_tasks.py` (`POST /internal/tasks/chat-turn`, mounted only when
+  `WORKER_MODE`), `core/task_auth.py` (Cloud Tasks OIDC), `services/chat_turn_worker.py` (claim,
+  draft checkpoints, retry mapping), `services/chat_turn_pipeline.execute_turn` (the pipeline shared
+  with the in-process path). Response contract: 200 means do not retry; 503 means retry.
+- **Viewing:** `services/chat_turn_events.py` reads the event log for sockets and the HTTP read.
+- **Logs:** worker and queue lines add `task_id` (the Cloud Tasks name), `retry_count`, `queue`;
+  the API forwards its trace id so a turn keeps one `request_id` across both services. Events:
+  `chat_turn.dispatched` / `dispatch_failed` / `sweep`, `chat_turn.worker_task` / `worker_done` /
+  `worker_noop` / `worker_retry` / `worker_shed`, `chat_turn.queue_claim`, `task_auth.refused`,
+  `turn_watch.finished`.
+
 ## Database Migrations
 
 Migrations are plain SQL files in `src/app/db/migrations/`, currently `001`–`067`. Some
