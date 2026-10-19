@@ -2,7 +2,7 @@ import { createAsyncThunk, createSlice, type PayloadAction } from "@reduxjs/tool
 import { api } from "@/services/api";
 import { FeedTaskStatus, type FeedSummary, type FeedTask, type TodayFeedResponse } from "@/types";
 import type { Locale } from "@/types";
-import { ApiTransportError, getTransportErrorMessage } from "../../../../../packages/shared/src/utils/api-transport";
+import { ApiTransportError } from "../../../../../packages/shared/src/utils/api-transport";
 
 interface ApiFeedProvider {
     id: string;
@@ -136,8 +136,8 @@ export const fetchTodayFeed = createAsyncThunk<
         return mapTodayFeedResponse(response);
     } catch (error) {
         return rejectWithValue(error instanceof ApiTransportError
-            ? getTransportErrorMessage(error.outcomeUnknown, payload?.locale)
-            : (error as Error).message);
+            ? "offline"
+            : "load");
     }
 });
 
@@ -196,7 +196,7 @@ export const feedSlice = createSlice({
             })
             .addCase(fetchTodayFeed.rejected, (state, action) => {
                 state.loading = false;
-                state.error = action.payload ?? "Unable to load today feed.";
+                state.error = action.payload ?? "load";
             });
     },
 });

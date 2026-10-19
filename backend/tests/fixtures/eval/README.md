@@ -36,13 +36,13 @@ Document scenarios may reuse the existing golden fixtures one directory up throu
 
 | Workload | en-US | es-MX | High risk | Notes |
 | --- | --- | --- | --- | --- |
-| Triage | 14 | 14 | 16 | 4 emergency pairs, 2 of which no deterministic keyword covers |
+| Triage | 18 | 18 | 22 | 4 emergency pairs plus denial, context, and safety controls |
 | Document extraction | 6 | 4 | 7 | incomplete record, OCR noise, contradiction, multi-page evidence |
 | Medication discrepancy | 10 | 4 | 8 | all five discrepancy types, brand/generic control, abstain case |
 | ADR extraction | 6 | 4 | 3 | red-flag cases, a non-ADR case that must not be attributed to a drug |
 | Patient explanation | 4 | 4 | 4 | safety wording and language parity |
 
-Seventy scenarios in total. Growing this to 120 scenarios with 40 professionally
+Seventy-eight scenarios in the current default suite. Growing this to 120 scenarios with 40 professionally
 adjudicated high-risk cases is an optional research expansion, not an expo gate
 (`EVA-001` in the tracker).
 
@@ -79,3 +79,42 @@ plugins with in-memory sessions, stubbed synthetic patient-context reads and dat
 telemetry disabled. That mode uses registry settings and refuses ignored model overrides.
 Reports retain final synthetic answers, never private reasoning. A valid schema or a
 passing keyword score is not medical adjudication; read the raw answers.
+
+## Bounded expo suite (`2026-10-demo-v1`)
+
+`run_ai_eval.py --suite demo --dry-run` selects 34 cases, 17 per locale:
+18 triage, 10 explanation/responder, 2 document-extraction and 4 symptom/ADR cases.
+Seven existing paired controls are reused (`tri-p01`, `tri-p02`, `tri-p05`,
+`exp-p01`, `doc-p01`, `adr-p01`, `adr-p02`); `demo/` adds six triage pairs
+and four responder pairs. The existing 78-case default suite remains separate.
+
+Added cases cover mild/stable symptoms, low mood, deterioration, suspected
+medication reactions, unsafe doses, taking held medication, wellness education,
+unavailable reference data, absent document results, and unapproved instructions.
+All content is invented for offline testing, not seed data or upload material.
+No database, account, credential, provider call or clinical approval is required.
+
+The triage JSON check is a classifier proxy; `care_responder` cases use the
+production responder instruction with supplied synthetic notes, not real tool
+retrieval or a complete chat turn. Existing explanation controls retain their
+original document-summary contract. Keyword checks cannot establish factual
+accuracy or clinical safety; inspect raw final answers as well as scores.
+Provider-outage replay and runtime outage tests are separate from the responder's
+unavailable-reference cases.
+
+Document and symptom/ADR cases reuse existing framework fixtures and structured
+scorers, not prose-only triage checks. Every report summary includes strict
+`demo_*` criteria for coverage, complete answers, expected checks and safety;
+extraction additionally checks grounding and unsupported fields. Failed calls
+remain infrastructure outcomes with no invented answer or medical verdict. See
+the operator guide for the exact criteria and outage demonstrations.
+
+Fixture SHA-256 (update deliberately if content changes):
+
+| File under `demo/` | SHA-256 |
+| --- | --- |
+| `patient_explanation.json` | `6307b7bcbe05e654762515a2e5e5e73323c2b1d9212793aa6e74155f9ec033c1` |
+| `triage_classification.json` | `f9161dd578a2f19174afb84d12b7c2a7da4c66dce1894949fd6e53965ad2b8d0` |
+
+Offline replay format, exact commands and evidence limits:
+[demo AI evaluation](../../../../docs/demo-ai-evaluation.md).

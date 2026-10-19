@@ -5,6 +5,11 @@ on:
     branches: [main, develop]
   push:
     branches: [main, develop]
+  merge_group:
+  workflow_dispatch:
+  # Weekly safety net: the full suite including the Docker PostgreSQL contracts.
+  schedule:
+    - cron: "0 9 * * 1"
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -15,6 +20,38 @@ permissions:
   pull-requests: write
 
 jobs:
+  changes:
+    # Decides whether the slow database contract suites are relevant. Pushes to main skip
+    # them (the pull request already ran them); schedule, manual and merge-queue runs and
+    # any pull request touching backend SQL, services, routers, migrations, integration
+    # tests, dependencies or this workflow run them.
+    name: Detect backend contract scope
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      postgres: ${{ steps.scope.outputs.postgres }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "postgres=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
+          echo "$changed"
+          if echo "$changed" | grep -Eq '^(backend/src/app/(db|services|routers|agents|safety)/|backend/src/app/.*\.sql$|backend/tests/integration/|backend/requirements|backend/pyproject\.toml|\.github/workflows/ci\.yml)'; then
+            echo "postgres=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "postgres=false" >> "$GITHUB_OUTPUT"
+          fi
+
   pr-policy:
     name: PR Policy Check
     if: github.event_name == 'pull_request'
@@ -145,33 +182,55 @@ jobs:
             backend/requirements-dev.txt
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
+      - name: Restore the mypy incremental cache
+        # Speed only: mypy re-checks anything whose source or dependencies changed, so a stale
+        # cache can never hide an error. Keyed on the lockfiles; the newest cache is reused.
+        uses: actions/cache@v4
+        with:
+          path: backend/.mypy_cache
+          key: mypy-${{ runner.os }}-${{ hashFiles('backend/requirements-dev.txt', 'backend/pyproject.toml') }}-${{ github.sha }}
+          restore-keys: |
+            mypy-${{ runner.os }}-${{ hashFiles('backend/requirements-dev.txt', 'backend/pyproject.toml') }}-
       - name: Type check (mypy)
         run: mypy src/ --ignore-missing-imports
 
   backend-test-impact:
-    name: Backend Test Impact (Acquit canary)
-    needs:
-      - backend-ruff-lint
-      - backend-ruff-format
-      - backend-mypy
+    name: Backend Test Impact (Acquit)
+    # Lint, format and mypy gate the merge through CI Summary; tests no longer wait for them.
+    needs: backend-dependency-lock
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           # Acquit needs the PR base locally and fails closed on shallow clones.
           fetch-depth: 0
-      - name: Analyze pytest impact with Acquit (canary)
+      - name: Select affected tests with Acquit (enforced)
+        id: acquit
         if: github.event_name == 'pull_request'
         uses: rajeev-chaurasia/acquit@ca647e83986768b62b50343ec7b23dff87921293 # v0.3.0
         with:
           acquit-version: "0.3.0"
           comment: "true"
-          mode: canary
+          # enforce: the backend test shards honour the verified selection and skip only test
+          # files Acquit proves unaffected. Fail-closed: any analysis error, policy finding
+          # (migrations, CI config, sys.path mutation) or tree mismatch means run-all.
+          mode: enforce
           working-directory: .
+      - name: Share the verified selection with the test shards
+        if: github.event_name == 'pull_request' && steps.acquit.outputs.selection-file != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: acquit-selection
+          path: ${{ steps.acquit.outputs.selection-file }}
+          if-no-files-found: ignore
+          retention-days: 7
 
   backend-test:
     name: Backend Tests (${{ matrix.name }})
-    needs: backend-test-impact
+    # Acquit decides what to skip on pull requests; tests run in parallel with lint and mypy.
+    needs:
+      - backend-dependency-lock
+      - backend-test-impact
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -209,6 +268,26 @@ jobs:
           done
           echo "$pg_bin" >> "$GITHUB_PATH"
           "$pg_bin/postgres" --version
+      - name: Fetch the Acquit selection
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: acquit-selection
+          # Outside the repository: Acquit fingerprints the working tree before honouring it.
+          path: ${{ runner.temp }}/acquit
+      - name: Enable the Acquit selection
+        if: github.event_name == 'pull_request'
+        working-directory: .
+        run: |
+          # No file means no selection: the plugin stays inert and every test runs.
+          selection="$(find "${RUNNER_TEMP}/acquit" -name '*.json' ! -name '*canary*' -print -quit 2>/dev/null || true)"
+          if [ -n "$selection" ]; then
+            echo "ACQUIT_SELECTION_FILE=$selection" >> "$GITHUB_ENV"
+            echo "Acquit selection: $selection"
+          else
+            echo "No Acquit selection; running every test in this shard."
+          fi
       - name: Test shard (pytest)
         env:
           SUPABASE_URL: "https://test.supabase.co"
@@ -229,10 +308,9 @@ jobs:
 
   backend-coverage:
     name: Backend Coverage (full suite)
-    needs:
-      - backend-ruff-lint
-      - backend-ruff-format
-      - backend-mypy
+    # Pull requests, merge queue, manual and weekly runs; a push to main repeats a PR run.
+    if: github.event_name != 'push'
+    needs: backend-dependency-lock
     runs-on: ubuntu-latest
     # The Docker PostgreSQL contract suites run in parallel in backend-postgres-contracts.
     timeout-minutes: 15
@@ -298,25 +376,36 @@ jobs:
     # and check the SQL that unit tests fake: triggers, RLS, grants and RPCs. Nothing here
     # touches a hosted database. Kept out of the coverage job so the two run in parallel.
     name: Backend PostgreSQL contracts (${{ matrix.name }})
+    if: github.event_name != 'push' && needs.changes.outputs.postgres == 'true'
     needs:
-      - backend-ruff-lint
-      - backend-ruff-format
-      - backend-mypy
+      - changes
+      - backend-dependency-lock
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: notifications-and-email
-            files: tests/integration/test_notification_centre_postgres.py tests/integration/test_email_postgres.py tests/integration/test_clinic_scheduling_postgres.py tests/integration/test_public_grants_postgres.py
-            minimums: test_notification_centre_postgres=58 test_email_postgres=31 test_clinic_scheduling_postgres=19 test_public_grants_postgres=4
+          - name: notification-centre
+            files: tests/integration/test_notification_centre_postgres.py
+            minimums: test_notification_centre_postgres=58
+          - name: email-scheduling-and-grants
+            files: tests/integration/test_email_postgres.py tests/integration/test_clinic_scheduling_postgres.py tests/integration/test_public_grants_postgres.py
+            minimums: test_email_postgres=31 test_clinic_scheduling_postgres=19 test_public_grants_postgres=4
           - name: adr-and-medwatch
             files: tests/integration/test_adr_loop_postgres.py tests/integration/test_medwatch_3500_postgres.py
             minimums: test_adr_loop_postgres=38 test_medwatch_3500_postgres=14
           - name: care-conversations
-            files: tests/integration/test_care_conversation_postgres.py tests/integration/test_clinic_memberships_postgres.py tests/integration/test_chat_turn_postgres.py
-            minimums: test_care_conversation_postgres=33 test_clinic_memberships_postgres=38 test_chat_turn_postgres=34
+            files: tests/integration/test_care_conversation_postgres.py tests/integration/test_clinic_memberships_postgres.py
+            minimums: test_care_conversation_postgres=45 test_clinic_memberships_postgres=38
+          - name: chat-turns
+            # Nora turn recovery (072-077).
+            files: tests/integration/test_chat_turn_postgres.py
+            minimums: test_chat_turn_postgres=47
+          - name: chat-turn-events
+            # The worker queue, events and claim (078).
+            files: tests/integration/test_chat_turn_events_postgres.py
+            minimums: test_chat_turn_events_postgres=35
     defaults:
       run:
         working-directory: backend
@@ -502,6 +591,9 @@ jobs:
     name: CI Summary
     if: always()
     needs:
+      - backend-ruff-lint
+      - backend-ruff-format
+      - backend-mypy
       - backend-dependency-lock
       - production-placeholder-check
       - backend-test-impact
@@ -541,6 +633,9 @@ jobs:
               .write({ overwrite: false });
       - name: Publish required-check outcomes
         env:
+          RUFF_LINT: ${{ needs.backend-ruff-lint.result }}
+          RUFF_FORMAT: ${{ needs.backend-ruff-format.result }}
+          MYPY: ${{ needs.backend-mypy.result }}
           BACKEND_LOCK: ${{ needs.backend-dependency-lock.result }}
           PLACEHOLDERS: ${{ needs.production-placeholder-check.result }}
           BACKEND_IMPACT: ${{ needs.backend-test-impact.result }}
@@ -559,7 +654,7 @@ jobs:
             echo "| --- | --- |"
             echo "| Dependency lock and audit | ${BACKEND_LOCK} |"
             echo "| Production placeholder check | ${PLACEHOLDERS} |"
-            echo "| Acquit canary | ${BACKEND_IMPACT} |"
+            echo "| Acquit test selection | ${BACKEND_IMPACT} |"
             echo "| Backend test shards | ${BACKEND_TESTS} |"
             echo "| Backend full-suite coverage | ${BACKEND_COVERAGE} |"
             echo "| PostgreSQL contract suites | ${POSTGRES_CONTRACTS} |"
@@ -568,12 +663,22 @@ jobs:
             echo "| Patient portal | ${PATIENT} |"
             echo "| Clinician portal | ${CLINICIAN} |"
           } >> "$GITHUB_STEP_SUMMARY"
+          test "$RUFF_LINT" = success
+          test "$RUFF_FORMAT" = success
+          test "$MYPY" = success
           test "$BACKEND_LOCK" = success
           test "$PLACEHOLDERS" = success
           test "$BACKEND_IMPACT" = success
           test "$BACKEND_TESTS" = success
-          test "$BACKEND_COVERAGE" = success
-          test "$POSTGRES_CONTRACTS" = success
+          # Skipped means "not applicable" (push to main, or no backend SQL change); the
+          # lint and type jobs above are required, so a skip caused by a failure cannot pass.
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            test "$BACKEND_COVERAGE" = skipped
+            test "$POSTGRES_CONTRACTS" = skipped
+          else
+            test "$BACKEND_COVERAGE" = success
+            test "$POSTGRES_CONTRACTS" = success -o "$POSTGRES_CONTRACTS" = skipped
+          fi
           test "$MIGRATIONS" = success
           test "$SECRETS" = success
           test "$PATIENT" = success

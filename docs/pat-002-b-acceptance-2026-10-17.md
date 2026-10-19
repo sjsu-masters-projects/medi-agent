@@ -36,12 +36,14 @@ PAT-002-C and ADR follow-up lifecycle implementation remain outside this change.
 
 ## Target and approval facts
 
-Read-only preflight found exact 059/060/065 ledger matches and no symptom-handoff
-migration. The earlier requester authorization named the then-proposed migration 071;
-current main already owns that number, so this branch renumbers the final additive file
-to 076. No authorization for the exact final 076 identity and checksum is inferred, and
-no successful remote application is claimed until that authorization, result and ledger
-verification are recorded.
+The October 17 read-only preflight found exact 059/060/065 ledger matches and no
+symptom-handoff migration. A later read-only ledger check records the exact
+`071_confirmed_symptom_handoff.sql` identity as applied on October 18 with SHA-256
+`f690b788d5f29c3d7583f2fe8cc43b7a51a6af817c276d6839cc9c9ab2ded36b`.
+The migration directory also contains `071_clinician_visit_management.sql`; this exact
+historical pair is intentional because the ledger keys by filename and checksum, not only
+the numeric prefix. Preserve both applied identities and do not rename or replay either.
+This review did not itself apply remote SQL.
 The CLI has no database URL configured; the Supabase SQL editor requires sign-in.
 
 Approved candidate-1 and its recorded October 12 requester-reported approval remain
@@ -78,14 +80,15 @@ store; do not copy them into documentation. A fresh seed/reset is unnecessary.
    answer and verify consent resets. Review again, check consent and press
    **Confirm and share** once. Refresh: it recovers the same saved report.
 6. At `http://localhost:3001`, open the assigned patient's Symptoms and existing
-   ADR workspace. After migration 076 and the retry worker are active, verify the
+   ADR workspace. After the exact `071_confirmed_symptom_handoff.sql` identity and the
+   retry worker are active, verify the
    confirmed summary, one review notice and the eligible medication's ADR draft.
    A draft assessment is decision support awaiting clinician review, not causality.
 7. Cancel a separate draft. No symptom report or ordinary ADR task should be
    created. A high-severity answer can still generate a minimal safety notice;
    emergency wording must interrupt ordinary intake independently.
 8. Repeat with a Spanish source message and `es-MX` prompts. The source message's
-   locale governs new drafts after 076, even when the profile differs. Verify
+   locale governs new drafts after the 071 handoff, even when the profile differs. Verify
    mobile width, keyboard/controls, no raw database IDs/JSON, and refresh recovery.
 9. Verify another patient cannot read the draft/report and an inactive/unassigned
    clinician cannot read it. Interrupt connectivity and retry the same action;

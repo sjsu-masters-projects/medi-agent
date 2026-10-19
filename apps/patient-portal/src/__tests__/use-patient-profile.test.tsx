@@ -6,10 +6,11 @@ import {
 } from "@/hooks/use-patient-profile";
 const { get } = vi.hoisted(() => ({ get: vi.fn() }));
 let token: string | null;
+let userId: string | undefined;
 vi.mock("@/services/api", () => ({ api: { get } }));
 vi.mock("react-redux", () => ({
   useSelector: (selector: (state: unknown) => unknown) =>
-    selector({ auth: { accessToken: token } }),
+    selector({ auth: { accessToken: token, user: userId ? { id: userId } : null } }),
 }));
 const raw = {
   id: "synthetic-1",
@@ -29,9 +30,19 @@ function deferred<T>() {
 }
 beforeEach(() => {
   token = "session-a";
+  userId = undefined;
   get.mockReset();
 });
 describe("patient profile state", () => {
+  it("seeds the locale cookie from the saved profile preference", async () => {
+    document.cookie = "patient-portal.locale=; Path=/; Max-Age=0";
+    get.mockResolvedValueOnce(raw);
+    const { result } = renderHook(usePatientProfileState);
+    await waitFor(() => expect(result.current.profile).not.toBeNull());
+    expect(document.cookie).toContain("patient-portal.locale=es-MX");
+    expect(document.documentElement.lang).toBe("es-MX");
+  });
+
   it("keeps a saved preference when the refreshed GET arrives after the save", async () => {
     get.mockResolvedValueOnce(raw);
     const refresh = deferred<typeof raw>();
@@ -142,5 +153,30 @@ describe("patient profile state", () => {
     );
     expect(result.current.profile?.id).toBe("synthetic-2");
     expect(result.current.profile?.preferredLanguage).toBe("en-US");
+  });
+
+  it("keeps the profile on screen across a silent token refresh for the same patient", async () => {
+    userId = "synthetic-1";
+    get.mockResolvedValue(raw);
+    const { result, rerender } = renderHook(usePatientProfileState);
+    await waitFor(() => expect(result.current.profile).not.toBeNull());
+    token = "session-b";
+    rerender();
+    expect(result.current.loading).toBe(false);
+    expect(result.current.profile?.id).toBe("synthetic-1");
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+  });
+
+  it("clears the profile when a different patient signs in", async () => {
+    userId = "synthetic-1";
+    get.mockResolvedValue(raw);
+    const { result, rerender } = renderHook(usePatientProfileState);
+    await waitFor(() => expect(result.current.profile).not.toBeNull());
+    token = "session-c";
+    userId = "synthetic-2";
+    get.mockReturnValue(new Promise(() => {}));
+    rerender();
+    expect(result.current.profile).toBeNull();
+    expect(result.current.loading).toBe(true);
   });
 });

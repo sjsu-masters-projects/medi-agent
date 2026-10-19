@@ -5,29 +5,37 @@ proof of deployment. It changes no remote data until separately authorized.
 
 ## Exact additive change
 
-Apply only `076_confirmed_symptom_handoff.sql` after verifying the existing ledger.
-Its SHA-256 is `a5aa9136fe4191d12ef0d9c886db382ce53aee8ca72900135adfecaa139040e0`.
-Applied `059_chat_safety_alerts.sql` and `060_confirmed_symptom_intake.sql` must keep
-their filenames and checksums. Migration 065 clinic memberships is also required.
-Do not run a catch-all migration command that could apply unrelated pending SQL.
+The historical identity is `071_confirmed_symptom_handoff.sql`, SHA-256
+`f690b788d5f29c3d7583f2fe8cc43b7a51a6af817c276d6839cc9c9ab2ded36b`. A read-only
+hosted-ledger check records that exact file as applied on October 18. Preserve its
+filename and bytes; do not rename, replay or insert a second ledger identity for it.
+Applied `059_chat_safety_alerts.sql` and `060_confirmed_symptom_intake.sql` must likewise
+keep their filenames and checksums. Migration 065 clinic memberships is also required.
+In a fresh or explicitly authorized environment where the exact 071 handoff is missing,
+apply only that exact file after verifying the ledger. Do not run a catch-all migration
+command that could apply unrelated pending SQL.
 
-076 makes confirmation atomically queue the existing ADR screen, preserve a
+The 071 handoff makes confirmation atomically queue the existing ADR screen, preserve a
 patient-named product without adding medication, notify active assigned clinic
 members and retain independent urgent/emergency notices. It adds a service-only,
 read-only readiness probe. It does not backfill old reports, approve a library,
 reset/seed data or implement ADR follow-up.
 
 The October 17 read-only target probe found matching 059/060/065 entries and no
-matching 076 entry. The process flags passed only in the explicitly supplied
-preflight configuration; this does not attest to deployed service configuration.
+matching symptom-handoff entry. The later October 18 ledger evidence records the exact
+071 handoff as applied. The process flags passed only in the explicitly supplied
+preflight configuration; neither ledger result attests to deployed service
+configuration.
 
 ## Release order
 
-1. Obtain explicit authorization for the selected synthetic database and exact
-   076 file above. Use the team's ledger procedure, one transaction and advisory
-   lock; insert its filename/checksum only on successful commit. Never print the
-   connection string. Do not execute a locally modified migration runner that
-   embeds credentials. Inspect its committed source or use a clean checkout.
+1. Verify the selected synthetic database ledger against the exact 071 filename and
+   checksum above. If it already matches, run no SQL and do not rewrite the ledger. For a
+   fresh or missing environment, obtain explicit authorization before applying the exact
+   file. Use the team's ledger procedure, one transaction and advisory lock; insert its
+   filename/checksum only on successful commit. Never print the connection string. Do not
+   execute a locally modified migration runner that embeds credentials. Inspect its
+   committed source or use a clean checkout.
 2. Keep the existing approved `candidate-1` immutable. Review the exact paired
    `candidate-2` package and [review record](../backend/src/app/intake/question_library/candidate-2-review.md)
    before recording any approval or selecting it. New applicability and severity

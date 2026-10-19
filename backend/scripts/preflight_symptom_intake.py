@@ -14,7 +14,7 @@ REQUIRED = (
     "059_chat_safety_alerts.sql",
     "060_confirmed_symptom_intake.sql",
     "065_clinic_memberships.sql",
-    "076_confirmed_symptom_handoff.sql",
+    "071_confirmed_symptom_handoff.sql",
 )
 
 

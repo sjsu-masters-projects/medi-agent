@@ -12,6 +12,12 @@ vi.mock("@/services/api", () => ({
 }));
 
 describe("feedSlice", () => {
+    it("stores a stable load key rather than backend prose", async () => {
+        get.mockRejectedValue(new Error("Internal English server detail"));
+        const store = configureStore({ reducer: feedSlice.reducer });
+        await store.dispatch(fetchTodayFeed({ token: "synthetic-token", locale: "es-MX" }));
+        expect(store.getState().error).toBe("load");
+    });
     beforeEach(() => {
         get.mockReset();
     });

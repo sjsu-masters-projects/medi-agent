@@ -113,3 +113,13 @@ async def mark_read(
     service: CareConversationService = Depends(conversation_service),
 ) -> Any:
     return await service.mark_read(conversation_id, data)
+
+
+@router.post("/{conversation_id}/messages/{message_id}/activity-review")
+async def review_activity(
+    conversation_id: UUID,
+    message_id: UUID,
+    service: CareConversationService = Depends(conversation_service),
+) -> Any:
+    """Open the message's approved activity in a draft; publication is separate."""
+    return await service.review_activity(conversation_id, message_id)

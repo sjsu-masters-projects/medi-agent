@@ -48,6 +48,9 @@ describe("Portal language preference", () => {
     expect(screen.getByRole("link", { name: "Hoy" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Registros" })).toBeInTheDocument();
     expect(document.documentElement.lang).toBe("es-MX");
+    expect(document.cookie).toContain("patient-portal.locale=es-MX");
+    expect(screen.getByRole("option", { name: "English (US)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Español (México)" })).toBeInTheDocument();
     expect(put).toHaveBeenCalledWith("/api/v1/patients/me", { preferred_language: "es-MX" }, { token: "synthetic-token" });
   });
 
@@ -58,6 +61,7 @@ describe("Portal language preference", () => {
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "es-MX" } });
     expect(await screen.findByRole("alert")).toHaveTextContent("preference is unchanged");
     expect(screen.getByRole("combobox")).toHaveValue("en-US");
+    expect(document.cookie).toContain("patient-portal.locale=en-US");
     expect(screen.getByText(/approves them in English and Spanish. Earlier messages stay in the language they were written in/)).toBeInTheDocument();
     expect(put).toHaveBeenCalledTimes(1);
   });

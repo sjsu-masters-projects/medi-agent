@@ -10,7 +10,8 @@ import { Modal } from "@/components/ui/modal";
 import { ProcessingDots } from "@/components/ui/motion";
 import { PullToRefresh } from "@/components/ui/pull-to-refresh";
 import { ChatTextarea, chatButton, chatDisplayTime } from "./chat-presentation";
-import { normalizeLocale } from "@/types";
+import { normalizeLocale, type Locale } from "@/types";
+import { ConversationActivityAttachment, ConversationActivityContext } from "./conversation-activity";
 import type { CareConversation, CareConversationMessage, ConversationDraft, ConversationRecipient } from "@/types/care-conversations";
 import { applyTranslationResult, conversationAccessDenied, conversationRoleLabel, conversationSendFailure, getConversationCopy, mergeConversationMessages, requestPendingTranslations } from "../../../../../packages/shared/src/utils/care-conversations";
 
@@ -25,13 +26,13 @@ type Presentation = {
   onThreadPresentationChange?: (id: string | null) => void;
 };
 
-export function CareConversations({ locale = "en-US", audience = "patient", visible = true, ...presentation }: { locale?: string; audience?: "patient" | "clinician"; visible?: boolean } & Presentation) {
+export function CareConversations({ locale = "en-US", audience = "patient", visible = true, ...presentation }: { locale?: Locale; audience?: "patient" | "clinician"; visible?: boolean } & Presentation) {
   const { accessToken, user } = useSelector((state: RootState) => state.auth);
   if (!accessToken || !user) return null;
   return <ConversationInbox key={user.id} token={accessToken} locale={locale} audience={audience} visible={visible} {...presentation} />;
 }
 
-function ConversationInbox({ token, locale, audience, visible, compact = false, conversationId, recipientId, inboxLead, onThreadPresentationChange }: { token: string; locale: string; audience: "patient" | "clinician"; visible: boolean } & Presentation) {
+function ConversationInbox({ token, locale, audience, visible, compact = false, conversationId, recipientId, inboxLead, onThreadPresentationChange }: { token: string; locale: Locale; audience: "patient" | "clinician"; visible: boolean } & Presentation) {
   const copy = getConversationCopy(locale);
   const [recipients, setRecipients] = useState<ConversationRecipient[]>([]);
   const [threads, setThreads] = useState<CareConversation[]>([]);
@@ -120,7 +121,8 @@ function ConversationInbox({ token, locale, audience, visible, compact = false, 
     if (!visible || loading || opening || sending) return;
     const refresh = () => { void refreshInbox(); };
     refresh();
-    const timer = setInterval(refresh, 15000);
+    // Paused while the tab is hidden; it refreshes once when the tab shows again.
+    const timer = setInterval(() => { if (document.visibilityState !== "hidden") refresh(); }, 15000);
     document.addEventListener("visibilitychange", refresh);
     return () => {
       clearInterval(timer);
@@ -246,7 +248,7 @@ function ConversationInbox({ token, locale, audience, visible, compact = false, 
 }
 
 function ConversationThread({ token, thread, locale, visible, draft, onDraft, onSending, onRead, onSaved, focusOnOpen, audience, backAction }: {
-  token: string; thread: CareConversation; locale: string; visible: boolean; draft: ConversationDraft;
+  token: string; thread: CareConversation; locale: Locale; visible: boolean; draft: ConversationDraft;
   onDraft: (draft: ConversationDraft) => void; onSending: (sending: boolean) => void;
   onRead: (id: string) => void; onSaved: (message: CareConversationMessage) => void;
   focusOnOpen?: boolean;
@@ -355,14 +357,16 @@ function ConversationThread({ token, thread, locale, visible, draft, onDraft, on
     const body = draft.body.trim();
     if (!body || body.length > 4000 || busy.current || denied || !thread.writable || draft.failure === "mismatch") return;
     const clientMessageId = draft.clientMessageId ?? crypto.randomUUID();
-    onDraft({ body: draft.body, clientMessageId });
+    onDraft({ ...draft, body: draft.body, clientMessageId });
     busy.current = true;
     generation.current++;
     setSending(true);
     onSending(true);
     setConfirmNewKey(false);
     try {
-      const message = await careConversations.send(token, thread.id, body, clientMessageId);
+      const message = draft.carePlanItemId
+        ? await careConversations.send(token, thread.id, body, clientMessageId, draft.carePlanItemId)
+        : await careConversations.send(token, thread.id, body, clientMessageId);
       if (!alive.current) return;
       onDraft({ body: "" });
       if (deniedRef.current) return;
@@ -378,8 +382,9 @@ function ConversationThread({ token, thread, locale, visible, draft, onDraft, on
       else {
         const failureKind = conversationSendFailure(failure);
         onDraft({
+          carePlanItemId: draft.carePlanItemId,
           body: draft.body,
-          clientMessageId: failureKind === "invalid" ? undefined : clientMessageId,
+          clientMessageId: failureKind === "invalid" || failureKind === "activityUnavailable" ? undefined : clientMessageId,
           failure: failureKind,
         });
       }
@@ -422,6 +427,7 @@ function ConversationThread({ token, thread, locale, visible, draft, onDraft, on
         const displayBody = hasTranslation && !originalShown ? (message.translation ?? message.body) : message.body;
         const translatedLabel = message.translation_locale === "es-MX" ? copy.translatedFromEnglish : copy.translatedFromSpanish;
         return <li key={message.id} className={`ma-bubble flex flex-col gap-1 ${own ? "items-end" : "items-start"}`}>
+          {message.activity_context ? <ConversationActivityContext activity={message.activity_context} locale={locale} /> : null}
           <p className={`whitespace-pre-wrap break-words text-[15px] leading-[1.45] [overflow-wrap:anywhere] ${own ? "max-w-[82%] rounded-[20px_20px_6px_20px] bg-brand px-3.5 py-[11px] text-white" : "max-w-[88%] rounded-[20px_20px_20px_6px] bg-surface px-[15px] py-[13px] text-ink shadow-[0_1px_0_rgba(16,32,43,.04)]"}`}>{displayBody}</p>
           {message.translation_pending && !own ? <p role="status" className="max-w-[88%] px-1 text-[11px] text-muted">{copy.translating}</p> : null}
           {guardFailed ? <p className="max-w-[88%] px-1 text-[11px] text-muted">{copy.translationUnavailable}</p> : null}
@@ -438,17 +444,18 @@ function ConversationThread({ token, thread, locale, visible, draft, onDraft, on
       <button className={button} type="button" onClick={() => setConfirmNewKey(true)}>{copy.prepareNew}</button>
       <Modal open={confirmNewKey} onClose={() => setConfirmNewKey(false)} title={copy.prepareNew} closeLabel={`${copy.cancel}: ${copy.prepareNew}`}><div role="alertdialog" aria-label={copy.prepareNew} className="space-y-3 rounded-2xl bg-danger-tint p-4 text-danger-ink">
         <p>{copy.confirmWarning}</p>
-        <button className={button} type="button" onClick={() => { onDraft({ body: draft.body }); setConfirmNewKey(false); }}>{copy.confirmNew}</button>
+        <button className={button} type="button" onClick={() => { onDraft({ body: draft.body, carePlanItemId: draft.carePlanItemId }); setConfirmNewKey(false); }}>{copy.confirmNew}</button>
         <button className={button} type="button" onClick={() => setConfirmNewKey(false)}>{copy.cancel}</button>
       </div></Modal>
     </>}
     {!denied && thread.writable && <form onSubmit={(event) => { event.preventDefault(); void send(); }} className={`sticky bottom-0 mt-auto space-y-1.5 bg-background pt-2 ${compactThread ? "-mx-4 px-3 pb-[calc(env(safe-area-inset-bottom)+12px)]" : "pb-3"}`}>
+      <ConversationActivityAttachment token={token} patientId={thread.patient_id} locale={locale} value={draft.carePlanItemId} disabled={sending || Boolean(draft.clientMessageId)} onChange={(id) => onDraft({ ...draft, carePlanItemId: id, failure: undefined })} />
       <div className="flex items-end gap-2">
       <label className="block min-w-0 flex-1 font-medium">
         <span className={compactThread ? "sr-only" : "mb-1 block text-sm text-ink-2"}>{copy.message}</span>
         <ChatTextarea className="min-h-[52px] rounded-[26px] border border-line-strong bg-surface py-[14px] pl-[18px] transition focus:border-brand focus:ring-4 focus:ring-brand/12" maxLength={4000} value={draft.body} disabled={sending || Boolean(draft.clientMessageId)}
           placeholder={compactThread ? copy.message + "…" : undefined}
-          onChange={(event) => onDraft({ body: event.target.value })} />
+          onChange={(event) => onDraft({ body: event.target.value, carePlanItemId: draft.carePlanItemId })} />
       </label>
       <button aria-label={sendLabel} className="ma-press flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-brand text-white shadow-[var(--shadow-fab)] hover:bg-brand-hover disabled:opacity-40 disabled:shadow-none"
         disabled={sending || loading || draft.failure === "mismatch" || !draft.body.trim() || draft.body.trim().length > 4000} type="submit">{sending ? <ProcessingDots className="bg-white" /> : <Icon name="send" />}<span className="sr-only">{sendLabel}</span></button>

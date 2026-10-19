@@ -6,6 +6,7 @@ import { createSessionGuard } from "../../../../packages/shared/src/utils/sessio
 import { hydrateSession, logout } from "@/store/slices/auth-slice";
 import type { AppDispatch, RootState } from "@/store/store";
 import * as authSession from "@/services/auth-session";
+import { clearPatientLocale } from "@/content/patient-locale";
 import { redirectToLogin, type AuthRedirectReason } from "@/services/auth-redirect";
 
 /**
@@ -26,6 +27,8 @@ export function useSessionLifecycle() {
                 if (!isAuthenticated) {
                     return;
                 }
+                // A shared device must not keep the previous patient's language hint.
+                clearPatientLocale();
                 dispatch(logout());
                 redirectToLogin({ reason: (reason as AuthRedirectReason | null) ?? "logged_out" });
             },
@@ -43,6 +46,7 @@ export function useSessionLifecycle() {
         }
         const guard = createSessionGuard({
             onSignOut: (reason) => {
+                clearPatientLocale();
                 dispatch(logout());
                 redirectToLogin({ reason });
             },

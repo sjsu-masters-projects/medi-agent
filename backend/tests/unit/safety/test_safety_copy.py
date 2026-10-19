@@ -14,7 +14,11 @@ from app.safety import TRIAGE_COPY
 from app.utils.localization import resolve_locale_resource
 
 # The two a patient must never receive in the wrong language, or not at all.
-CRITICAL_KEYS = ("emergency_response", "mental_health_emergency_response")
+CRITICAL_KEYS = (
+    "emergency_response",
+    "mental_health_emergency_response",
+    "medication_error_response",
+)
 
 SUPPORTED_LOCALES = (Language.EN.value, Language.ES.value)
 
@@ -51,6 +55,15 @@ def test_the_emergency_response_names_the_emergency_number(locale: str) -> None:
 @pytest.mark.parametrize("locale", (*SUPPORTED_LOCALES, "default"))
 def test_the_self_harm_response_names_the_crisis_line(locale: str) -> None:
     assert "988" in TRIAGE_COPY[locale]["mental_health_emergency_response"]
+
+
+@pytest.mark.parametrize("locale", (*SUPPORTED_LOCALES, "default"))
+def test_the_medication_error_response_names_same_day_help(locale: str) -> None:
+    message = TRIAGE_COPY[locale]["medication_error_response"].lower()
+
+    assert "911" in message
+    assert "pharmacist" in message or "farmacéutico" in message
+    assert "today" in message or "hoy" in message
 
 
 def test_every_locale_offers_the_same_set_of_keys() -> None:

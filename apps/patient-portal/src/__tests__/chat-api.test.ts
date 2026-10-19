@@ -1,6 +1,7 @@
 import {
     buildChatWebSocketUrl,
     fetchChatHistory,
+    isChatSocketEvent,
     mapChatMessageFromApi,
     mapClinicianMessageFromApi,
 } from "@/services/chat-api";
@@ -214,5 +215,17 @@ describe("conversation ids", () => {
         expect(first).toMatch(/^chat-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
         expect(first.length).toBeLessThanOrEqual(64);
         expect(newConversationId()).not.toBe(first);
+    });
+});
+
+describe("isChatSocketEvent", () => {
+    it("accepts queued turns and unknown statuses, and rejects malformed turn events", () => {
+        const turn = { client_message_id: "a", status: "queued" };
+        expect(isChatSocketEvent({ type: "chat_turn", turn })).toBe(true);
+        expect(isChatSocketEvent({ type: "chat_turns", turns: [turn, { ...turn, status: "future" }] })).toBe(true);
+        expect(isChatSocketEvent({ type: "chat_turn", turn: {} })).toBe(false);
+        expect(isChatSocketEvent({ type: "chat_turns", turns: "x" })).toBe(false);
+        expect(isChatSocketEvent({ type: "pong" })).toBe(true);
+        expect(isChatSocketEvent(null)).toBe(false);
     });
 });

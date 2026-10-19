@@ -31,6 +31,15 @@ def test_every_workload_has_a_route() -> None:
         assert route_for(workload).workload is workload
 
 
+def test_soap_preserves_pro_with_configured_operational_budget() -> None:
+    route = route_for(Workload.SOAP)
+    assert route.primary.model_id == settings.gemini_pro_model
+    assert route.budget_seconds == settings.soap_generation_timeout_seconds
+    assert route.enabled_setting == "soap_ai_enabled"
+    assert route.fallback is None
+    assert "write no SOAP note" in route.deterministic
+
+
 def test_every_workload_has_a_deterministic_path() -> None:
     """A disabled, slow, or failing model must still produce an actionable answer."""
     for workload in Workload:

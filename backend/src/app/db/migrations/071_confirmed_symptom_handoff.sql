@@ -1,5 +1,4 @@
--- Additive intake review closure after the existing 071-075 migrations.
--- Applied 059/060 files remain immutable.
+-- Additive intake review closure. Applied 059/060 files remain immutable.
 -- Source locale and input provenance change only for newly captured answers/intakes.
 ALTER TABLE public.symptom_intake_safety_alerts ADD COLUMN urgency text NOT NULL DEFAULT 'emergency' CHECK (urgency IN ('urgent','emergency'));
 ALTER TABLE public.symptom_intake_safety_alerts DROP CONSTRAINT symptom_intake_safety_alerts_pkey;

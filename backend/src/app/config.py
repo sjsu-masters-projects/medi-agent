@@ -76,6 +76,9 @@ class Settings(BaseSettings):
     explanation_ai_enabled: bool = True
     care_plan_ai_enabled: bool = True
     care_plan_translation_ai_enabled: bool = True
+    soap_ai_enabled: bool = True
+    # Operational ceiling per SOAP attempt, not measured task performance.
+    soap_generation_timeout_seconds: float = Field(default=90.0, gt=0, le=300)
 
     # NVIDIA NIM (independent provider for evaluation comparison)
     nvidia_nim_api_key: str = ""
@@ -136,6 +139,23 @@ class Settings(BaseSettings):
     )
     smart_launch_ttl_seconds: int = 600
     smart_handoff_ttl_seconds: int = 300
+
+    # OPS-006 phase 2: Nora turns run in a separate worker service behind a Cloud Tasks queue.
+    # Both flags default to false, so a deploy changes nothing until they are set.
+    #   chat_turns_via_worker  the API queues a turn and never runs model work in-process.
+    #   worker_mode            this process IS the worker: it serves only the task endpoint.
+    chat_turns_via_worker: bool = False
+    worker_mode: bool = False
+    cloud_tasks_project: str = ""  # falls back to google_project_id
+    cloud_tasks_location: str = "us-central1"
+    cloud_tasks_queue: str = "nora-turns"
+    chat_worker_url: str = ""  # the worker service's https URL, no trailing slash
+    chat_worker_invoker_sa: str = ""  # service account the queue signs its OIDC token as
+    chat_worker_oidc_audience: str = ""  # defaults to chat_worker_url
+    # How long a queued turn may wait for a worker before it is reconciled to interrupted.
+    chat_turn_queue_seconds: int = Field(default=120, ge=10, le=120)
+    # Tasks one worker instance runs at once; more are refused with 503 so the queue retries.
+    chat_worker_max_concurrency: int = Field(default=4, ge=1, le=32)
 
     # Internal cron auth
     cron_auth_token: str = ""

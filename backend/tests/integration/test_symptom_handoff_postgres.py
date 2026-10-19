@@ -1,4 +1,4 @@
-"""Additive migration 076 on real disposable SQL; no shared environment writes."""
+"""Applied 071 symptom handoff on real disposable SQL; no shared environment writes."""
 
 # ruff: noqa: F811 -- imported pytest fixtures intentionally share fixture argument names
 
@@ -39,7 +39,7 @@ def handoff(sql):
     )
     sql((MIGRATIONS / "065_clinic_memberships.sql").read_text())
     sql((MIGRATIONS / "042_auditable_adr_assessments.sql").read_text())
-    sql((MIGRATIONS / "076_confirmed_symptom_handoff.sql").read_text())
+    sql((MIGRATIONS / "071_confirmed_symptom_handoff.sql").read_text())
     return sql
 
 

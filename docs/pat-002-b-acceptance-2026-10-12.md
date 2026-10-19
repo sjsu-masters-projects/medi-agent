@@ -81,8 +81,9 @@ The patient hook now clears the notice as part of every conversation switch and 
 late events from the disconnected socket. Confirmation reads the canonical owned report,
 recognizes only the patient's explicit product-concern answer, and submits an idempotent
 task keyed by the confirmed report UUID. Medication linkage comes only from the bounded
-active-medication context already shown in the confirmed preview. Migration 076 creates
-the submitted task in the report-confirmation transaction; the existing worker now claims
+active-medication context already shown in the confirmed preview. The subsequently applied
+`071_confirmed_symptom_handoff.sql` creates the submitted task in the
+report-confirmation transaction; the existing worker now claims
 never-started tasks as well as scheduled retries. Repeated/concurrent confirmation cannot
 reopen completed work or reset a clinician-reviewed assessment to `draft`.
 
@@ -551,5 +552,6 @@ Local verification in the isolated PR #159 worktree:
 - Patient TypeScript check passed.
 - ADR/MedWatch backend unit set passed **273/273**; confirmed-report handoff and
   retry-worker set passed **46/46**.
-- Migration validation passed for the pre-merge local set. Migration 076 remains local and
-  unapplied; no remote database, deployment or FDA submission was touched.
+- Migration validation passed for the pre-merge local set. This verification did not touch
+  a remote database, deployment or FDA submission. A later read-only ledger check records
+  the exact checksum-pinned `071_confirmed_symptom_handoff.sql` as applied on October 18.

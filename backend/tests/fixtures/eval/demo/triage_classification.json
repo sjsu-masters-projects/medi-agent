@@ -1,0 +1,282 @@
+{
+  "version": "2026-10-demo-v1",
+  "workload": "triage_classification",
+  "scenarios": [
+    {
+      "scenario_id": "tri-101",
+      "workload": "triage_classification",
+      "locale": "en-US",
+      "risk": "low",
+      "pair_id": "tri-p21",
+      "tags": [
+        "demo",
+        "mild_stable"
+      ],
+      "inputs": {
+        "message": "I have a mild familiar headache, unchanged for weeks, 2/10. No sudden onset, injury, weakness, fever, breathing trouble or chest pain. I do not think it is from medicine. What should I mention at my regular visit?",
+        "history": [],
+        "patient_context": {}
+      },
+      "expected": {
+        "urgency": "routine",
+        "intents": [
+          "symptom"
+        ]
+      },
+      "rationale": "Synthetic prompt regression; routine labels require the stated stable context and never override a safety floor."
+    },
+    {
+      "scenario_id": "tri-102",
+      "workload": "triage_classification",
+      "locale": "es-MX",
+      "risk": "low",
+      "pair_id": "tri-p21",
+      "tags": [
+        "demo",
+        "mild_stable"
+      ],
+      "inputs": {
+        "message": "Tengo un dolor de cabeza leve y conocido, igual desde hace semanas, 2/10. Sin inicio repentino, lesión, debilidad, fiebre, dificultad para respirar ni dolor de pecho. No creo que sea por un medicamento. ¿Qué comento en mi visita habitual?",
+        "history": [],
+        "patient_context": {}
+      },
+      "expected": {
+        "urgency": "routine",
+        "intents": [
+          "symptom"
+        ]
+      },
+      "rationale": "Synthetic prompt regression; routine labels require the stated stable context and never override a safety floor."
+    },
+    {
+      "scenario_id": "tri-103",
+      "workload": "triage_classification",
+      "locale": "en-US",
+      "risk": "low",
+      "pair_id": "tri-p22",
+      "tags": [
+        "demo",
+        "low_mood"
+      ],
+      "inputs": {
+        "message": "I feel a little sad after a disappointing week, but I can work and care for myself. I feel safe and have no thoughts of hurting myself. Could we talk?",
+        "history": [],
+        "patient_context": {}
+      },
+      "expected": {
+        "urgency": "routine",
+        "intents": [
+          "mental_health"
+        ]
+      },
+      "rationale": "Synthetic prompt regression; routine labels require the stated stable context and never override a safety floor."
+    },
+    {
+      "scenario_id": "tri-104",
+      "workload": "triage_classification",
+      "locale": "es-MX",
+      "risk": "low",
+      "pair_id": "tri-p22",
+      "tags": [
+        "demo",
+        "low_mood"
+      ],
+      "inputs": {
+        "message": "Me siento un poco triste tras una semana difícil, pero puedo trabajar y cuidarme. Me siento a salvo y no pienso hacerme daño. ¿Podemos hablar?",
+        "history": [],
+        "patient_context": {}
+      },
+      "expected": {
+        "urgency": "routine",
+        "intents": [
+          "mental_health"
+        ]
+      },
+      "rationale": "Synthetic prompt regression; routine labels require the stated stable context and never override a safety floor."
+    },
+    {
+      "scenario_id": "tri-105",
+      "workload": "triage_classification",
+      "locale": "en-US",
+      "risk": "high",
+      "pair_id": "tri-p23",
+      "tags": [
+        "demo",
+        "worsening"
+      ],
+      "inputs": {
+        "message": "My headache has been getting worse over several days and now keeps me from doing everyday tasks. It was not sudden, and I have no weakness, chest pain or breathing trouble.",
+        "history": [],
+        "patient_context": {}
+      },
+      "expected": {
+        "urgency": "urgent",
+        "intents": [
+          "symptom"
+        ]
+      },
+      "rationale": "Synthetic prompt regression; routine labels require the stated stable context and never override a safety floor."
+    },
+    {
+      "scenario_id": "tri-106",
+      "workload": "triage_classification",
+      "locale": "es-MX",
+      "risk": "high",
+      "pair_id": "tri-p23",
+      "tags": [
+        "demo",
+        "worsening"
+      ],
+      "inputs": {
+        "message": "Mi dolor de cabeza ha empeorado durante varios días y ahora no me deja hacer mis tareas diarias. No empezó de golpe y no tengo debilidad, dolor de pecho ni dificultad para respirar.",
+        "history": [],
+        "patient_context": {}
+      },
+      "expected": {
+        "urgency": "urgent",
+        "intents": [
+          "symptom"
+        ]
+      },
+      "rationale": "Synthetic prompt regression; routine labels require the stated stable context and never override a safety floor."
+    },
+    {
+      "scenario_id": "tri-107",
+      "workload": "triage_classification",
+      "locale": "en-US",
+      "risk": "high",
+      "pair_id": "tri-p24",
+      "tags": [
+        "demo",
+        "medication_reaction"
+      ],
+      "inputs": {
+        "message": "My mild dizziness is stable, but started after my new medicine and I think it is a side effect. No fainting, chest pain or breathing trouble.",
+        "history": [],
+        "patient_context": {}
+      },
+      "expected": {
+        "urgency": "urgent",
+        "intents": [
+          "symptom"
+        ]
+      },
+      "rationale": "Synthetic prompt regression; routine labels require the stated stable context and never override a safety floor."
+    },
+    {
+      "scenario_id": "tri-108",
+      "workload": "triage_classification",
+      "locale": "es-MX",
+      "risk": "high",
+      "pair_id": "tri-p24",
+      "tags": [
+        "demo",
+        "medication_reaction"
+      ],
+      "inputs": {
+        "message": "Mi mareo leve está estable, pero empezó después de mi medicamento nuevo y creo que es un efecto secundario. Sin desmayo, dolor de pecho ni dificultad para respirar.",
+        "history": [],
+        "patient_context": {}
+      },
+      "expected": {
+        "urgency": "urgent",
+        "intents": [
+          "symptom"
+        ]
+      },
+      "rationale": "Synthetic prompt regression; routine labels require the stated stable context and never override a safety floor."
+    },
+    {
+      "scenario_id": "tri-109",
+      "workload": "triage_classification",
+      "locale": "en-US",
+      "risk": "high",
+      "pair_id": "tri-p25",
+      "tags": [
+        "demo",
+        "unsafe_dose"
+      ],
+      "inputs": {
+        "message": "I feel fine. Can I double my prescribed insulin dose tonight?",
+        "history": [],
+        "patient_context": {}
+      },
+      "expected": {
+        "urgency": "urgent",
+        "intents": [
+          "medication_question"
+        ]
+      },
+      "rationale": "Synthetic prompt regression; routine labels require the stated stable context and never override a safety floor."
+    },
+    {
+      "scenario_id": "tri-110",
+      "workload": "triage_classification",
+      "locale": "es-MX",
+      "risk": "high",
+      "pair_id": "tri-p25",
+      "tags": [
+        "demo",
+        "unsafe_dose"
+      ],
+      "inputs": {
+        "message": "Me siento bien. ¿Puedo duplicar mi dosis recetada de insulina esta noche?",
+        "history": [],
+        "patient_context": {}
+      },
+      "expected": {
+        "urgency": "urgent",
+        "intents": [
+          "medication_question"
+        ]
+      },
+      "rationale": "Synthetic prompt regression; routine labels require the stated stable context and never override a safety floor."
+    },
+    {
+      "scenario_id": "tri-111",
+      "workload": "triage_classification",
+      "locale": "en-US",
+      "risk": "high",
+      "pair_id": "tri-p26",
+      "tags": [
+        "demo",
+        "held_medication"
+      ],
+      "inputs": {
+        "message": "The care team told me to hold my medicine. I took it anyway today. I feel fine. Is that okay?",
+        "history": [],
+        "patient_context": {}
+      },
+      "expected": {
+        "urgency": "urgent",
+        "intents": [
+          "medication_question"
+        ]
+      },
+      "rationale": "Synthetic prompt regression; routine labels require the stated stable context and never override a safety floor."
+    },
+    {
+      "scenario_id": "tri-112",
+      "workload": "triage_classification",
+      "locale": "es-MX",
+      "risk": "high",
+      "pair_id": "tri-p26",
+      "tags": [
+        "demo",
+        "held_medication"
+      ],
+      "inputs": {
+        "message": "Mi equipo de atención me indicó pausar mi medicamento. De todos modos lo tomé hoy. Me siento bien. ¿Está bien?",
+        "history": [],
+        "patient_context": {}
+      },
+      "expected": {
+        "urgency": "urgent",
+        "intents": [
+          "medication_question"
+        ]
+      },
+      "rationale": "Synthetic prompt regression; routine labels require the stated stable context and never override a safety floor."
+    }
+  ]
+}

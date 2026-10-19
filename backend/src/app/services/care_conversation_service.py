@@ -29,6 +29,21 @@ logger = logging.getLogger(__name__)
 # is open): reads mark what is missing, and the viewer asks for each one on its own request.
 _SOURCE_TABLE = "care_team_conversation_messages"
 
+_ACTIVITY_ERROR_HINTS: dict[str, tuple[str, str]] = {
+    "activity_context_unavailable": (
+        "ACTIVITY_CONTEXT_UNAVAILABLE",
+        "This activity cannot be opened from this message. Reload the conversation.",
+    ),
+    "activity_context_stale": (
+        "ACTIVITY_CONTEXT_STALE",
+        "This activity is no longer in the approved plan. Open the current care plan.",
+    ),
+    "care_plan_draft_exists": (
+        "CARE_PLAN_DRAFT_EXISTS",
+        "A current care-plan draft needs review before this activity can be opened.",
+    ),
+}
+
 
 class CareConversationService:
     def __init__(self, db: Client, actor: CurrentUser) -> None:
@@ -104,13 +119,30 @@ class CareConversationService:
             ),
         )
 
+    async def review_activity(self, conversation: UUID, message: UUID) -> dict[str, Any]:
+        """Explicit clinician action creates/reuses a draft, never publishes."""
+        if self.actor.role != "clinician":
+            raise self._denial()
+        return cast(
+            dict[str, Any],
+            await self._call(
+                "review",
+                {
+                    "conversation_id": str(conversation),
+                    "message_id": str(message),
+                },
+            ),
+        )
+
     async def _call(self, action: str, payload: dict[str, Any] | None = None) -> Any:
         if self.actor.role not in {"patient", "clinician"}:
             raise self._denial()
         try:
             result = await asyncio.to_thread(
                 self.db.rpc(
-                    "care_conversation_operation",
+                    "care_conversation_activity_operation"
+                    if action in {"send", "review"}
+                    else "care_conversation_operation",
                     {
                         "p_actor_id": str(self.actor.id),
                         "p_actor_role": self.actor.role,
@@ -122,8 +154,20 @@ class CareConversationService:
         except APIError as exc:
             if exc.code == "42501":
                 raise self._denial() from None
+            activity_error = _ACTIVITY_ERROR_HINTS.get(str(exc.hint or ""))
+            if activity_error is not None:
+                code, message = activity_error
+                raise ValidationError(message, code=code) from None
+            if action == "review" and exc.code in {"23505", "40001"}:
+                raise ValidationError(
+                    "The care-plan draft changed. Reload before opening this activity.",
+                    code="CARE_PLAN_REVIEW_CONFLICT",
+                ) from None
             if exc.code == "22023":
-                raise ValidationError("Invalid conversation request") from None
+                raise ValidationError(
+                    "Invalid conversation request",
+                    code="INVALID_CONVERSATION_REQUEST",
+                ) from None
             if exc.code == "23505":
                 raise ValidationError(
                     "Message retry does not match the original request",

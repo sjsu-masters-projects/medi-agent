@@ -27,6 +27,14 @@ On Node 26, if auth-session tests fail because localStorage is unavailable, run
 
 ## Behaviour notes
 
+- Sessions are shared across tabs (one refresh at a time, sign-out in any tab signs out all).
+  Defaults: 30 days idle and 90 days absolute, silent with a login notice; override with
+  `NEXT_PUBLIC_PATIENT_SESSION_IDLE_MINUTES` / `NEXT_PUBLIC_PATIENT_SESSION_MAX_HOURS`.
+- Language: the proxy resolves entry query, then the `patient-portal.locale` cookie, then
+  `Accept-Language`, so server rendering always knows en-US or es-MX (the root layout is
+  dynamic on purpose). The saved Profile preference seeds the cookie; any sign-out clears it.
+- Notification polling is throttled with backoff and keeps the last data when a read fails.
+
 Care-team roles are displayed as readable en-US/es-MX labels rather than raw stored
 codes; unknown roles use generic care-team copy. API transport recovery retries GET/HEAD
 once after 100–249 ms, honors cancellation, and never retries HTTP errors or writes.
@@ -59,6 +67,18 @@ approved in that language (LOC-001); it never machine-translates clinical instru
 historical messages. Failed saves
 retain the prior preference. Guest entry screens carry a separate language choice
 until a profile exists; chat has no competing persisted language setting.
+The locale-only `patient-portal.locale` cookie supplies the server document language.
+The request proxy accepts supported `lang` queries on entry routes and carries that
+locale into the same response, including `html lang`. Existing guest choices stored
+only in local storage resolve before translated content is shown and then populate
+the cookie. Authentication remains in local storage; authenticated screens wait for
+the saved patient profile before rendering. A loaded profile and successful language
+saves refresh the cookie; failed saves retain the existing preference. This cookie
+is a presentation hint, never an identity or authorization source. First visits
+without a hint briefly defer content until the browser locale is resolved.
+Today stores stable failure keys and resolves feedback in the current language,
+including after a language switch; backend error prose is not displayed. Notification
+load/write feedback already follows the same localized-key pattern.
 Today's symptom shortcut opens Nora directly, without an intermediate timeline.
 The existing Symptoms URL remains a compact mobile-friendly handoff and explicitly
 says that patient symptom history is not connected; it must not display invented
@@ -75,6 +95,13 @@ Enter-to-send and Shift+Enter for a new line; human conversation input retains i
 existing multiline behavior.
 
 ## Care team conversations
+
+**Ask about a plan activity** opens an optional approved-activity picker in the
+private composer. It does not choose a clinician or send automatically. The
+attachment stays bound to an uncertain-send retry; it clears after a confirmed
+send. Saved messages show the referenced approved wording separately from human
+text and label replaced activities as historical. Neither the question nor the
+clinician's reply changes the plan or reminder schedule (COM-002).
 
 In Chat, choose **Care team messages**, then explicitly select a linked clinician.
 Each clinician has a separate thread labelled with their clinic. Nora remains a
@@ -228,8 +255,9 @@ revision. Detailed fields remain available as a fallback. Read the preview, sele
 consent and press **Confirm and share**; spoken assent never submits it.
 
 Approved `candidate-1` remains active. Revised `candidate-2` wording/applicability is
-pending genuine review and cannot activate yet. Migration 076 adds durable ADR and
-review notices; the existing retry worker must run. Follow the
+pending genuine review and cannot activate yet. The checksum-pinned, applied
+`071_confirmed_symptom_handoff.sql` adds durable ADR and review notices; the existing
+retry worker must run. Follow the
 [October 17 verification record](../../docs/pat-002-b-acceptance-2026-10-17.md) and
 [coordinated rollout](../../docs/pat-002-b-rollout.md).
 The saved patient symptom timeline remains PAT-002-C.

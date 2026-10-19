@@ -1,4 +1,4 @@
-"""Answer an emergency deterministically, before any agent or model runs.
+"""Answer deterministic emergency and medication-error signals before a model runs.
 
 This is the runtime expression of the rule in `.agent/ARCHITECTURE.md`: anything that
 decides safety is code. When a message trips the keyword floor, the model is not consulted
@@ -20,12 +20,24 @@ from typing import Any
 from google.adk.plugins import BasePlugin
 from google.genai import types
 
-from app.safety.intake_gate import evaluate_intake_safety
+from app.safety import TRIAGE_COPY, SafetyVerdict, deterministic_safety_floor
+from app.utils.localization import resolve_locale_resource
 
 logger = logging.getLogger(__name__)
 
 LOCALE_STATE_KEY = "locale"
 """Session-state key holding the patient's locale, seeded when the run starts."""
+
+# Which reviewed response each floor rule earns. `deterministic_safety_floor` returns
+# these rules, and checks emergencies first so severe symptoms are never reduced to an
+# urgent medication-error response.
+_COPY_KEY_BY_RULE: dict[str, str] = {
+    "emergency_mental_health_keyword": "mental_health_emergency_response",
+    "emergency_symptom_keyword": "emergency_response",
+    "urgent_medication_error": "medication_error_response",
+}
+
+_FALLBACK_COPY_KEY = "emergency_response"
 
 
 def _message_text(content: types.Content | None) -> str:
@@ -33,6 +45,19 @@ def _message_text(content: types.Content | None) -> str:
     if content is None or not content.parts:
         return ""
     return " ".join(part.text for part in content.parts if part.text)
+
+
+def _copy_key_for(verdict: SafetyVerdict) -> str:
+    key = _COPY_KEY_BY_RULE.get(verdict.safety_rule)
+    if key is None:
+        # A rule added to the floor without copy to match. Falling back to the general
+        # emergency instruction is safe and still actionable; saying nothing is not.
+        logger.error(
+            "Safety rule %s has no patient copy; using the general emergency response",
+            verdict.safety_rule,
+        )
+        return _FALLBACK_COPY_KEY
+    return key
 
 
 class SafetyFloorPlugin(BasePlugin):
@@ -57,16 +82,20 @@ class SafetyFloorPlugin(BasePlugin):
         if not message.strip():
             return None
 
+        verdict = deterministic_safety_floor(message)
+        if verdict is None:
+            return None
+
         session = getattr(invocation_context, "session", None)
         state = getattr(session, "state", None) or {}
         locale = state.get(LOCALE_STATE_KEY)
-        decision = evaluate_intake_safety(message, locale)
-        if decision is None:
-            return None
+
+        localized = resolve_locale_resource(locale, TRIAGE_COPY)
+        text = localized[_copy_key_for(verdict)]
 
         logger.warning(
             "Safety floor halted the run before any agent: rule=%s urgency=%s",
-            decision.verdict.safety_rule,
-            decision.verdict.urgency,
+            verdict.safety_rule,
+            verdict.urgency,
         )
-        return types.Content(role="model", parts=[types.Part(text=decision.response_text)])
+        return types.Content(role="model", parts=[types.Part(text=text)])

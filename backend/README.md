@@ -21,7 +21,8 @@ uv pip compile requirements-dev.in --universal --python-version 3.12 --output-fi
 ```
 
 Security floors also cover [multidict's items-view reference leak](https://github.com/aio-libs/multidict/security/advisories/GHSA-54p9-h82j-f925)
-(`>=6.9.1`) and [LangGraph SDK resource authorization](https://github.com/langchain-ai/langgraph/security/advisories/GHSA-fvww-7h3r-vfhp)
+(`>=6.9.1`), [aiohttp request-processing advisories](https://github.com/advisories/GHSA-2g87-pp6c-29x5)
+(`>=3.14.4`) and [LangGraph SDK resource authorization](https://github.com/langchain-ai/langgraph/security/advisories/GHSA-fvww-7h3r-vfhp)
 (`>=0.4.4`), and [Vertex AI predictable bucket naming](https://github.com/advisories/GHSA-wh2j-26j7-9728)
 (`google-cloud-aiplatform>=1.133.0`). Both locks retain these patched versions. Run the
 CI audit with Python 3.12; system Python 3.14 cannot resolve all packages in this lock.
@@ -71,6 +72,38 @@ open backend/htmlcov/index.html
 See [tests/TESTING_GUIDE.md](tests/TESTING_GUIDE.md) for comprehensive testing documentation.
 
 ## Runtime configuration ownership
+
+### Demo follow-ups: activity review and evaluation
+
+COM-002 adds optional `care_plan_item_id` to private conversation sends. Only a
+patient may attach an item from their current approved plan. The backend stores
+the reference atomically with the message; retries compare body, thread and
+activity identity. Reads include `activity_context` with approved wording and a
+current/historical indicator. UUIDs remain link identities, not patient-facing copy.
+
+`POST /api/v1/care-conversations/{conversation_id}/messages/{message_id}/activity-review`
+is an explicit clinician action. It rechecks the exact private thread, active
+assignment and approved source, then creates/reuses a draft and returns
+`{patient_id, plan_id, item_id}` for the editor. It audits the message/source/target
+link. Ambiguous or removed matches in an existing draft are rejected; no duplicate
+activity is appended. Neither messaging nor opening review publishes or changes
+medications, reminders or adherence history. All existing publication and bilingual
+verification gates still apply. `ACTIVITY_CONTEXT_UNAVAILABLE` is a safe rejection,
+not raw database text.
+
+Apply reviewed `076_care_conversation_activity_review.sql` **before** deploying
+this backend; application needs separate requester authorization. The migration is
+rerunnable, retains prior data and verifies backend-only function access and RLS.
+No remote application is recorded by this PR. The existing generic conversation
+RPC remains compatible for older deployments during rollout.
+
+SOAP uses the registry with `SOAP_AI_ENABLED=true` and an optional
+`SOAP_GENERATION_TIMEOUT_SECONDS=90` operational ceiling. Defaults need no deployed
+environment change. Failure or disabled generation writes no invented note.
+Synthetic evaluation commands, paired cases and raw-final-response reporting are
+documented in [the demo evaluation guide](../docs/demo-ai-evaluation.md).
+
+### Environment ownership
 
 Nora connection initialization tolerates only the specifically missing
 `symptom_reports.confirmation_state` column during confirmed-intake rollout: it omits
@@ -223,6 +256,13 @@ limits do not coordinate across Cloud Run replicas or Jobs.
 
 ## Nora turn recovery (PAT-001-A / PAT-004)
 
+**Websocket lifetime.** The Cloud Run request `--timeout` of the API service bounds how long a
+websocket can stay open (at 300 s every chat socket closed at about 300 s with code 1005). The API
+service is deployed with `--timeout 3600`, the Cloud Run maximum; the worker keeps 300. The
+portal renews its socket quietly at about 3500 s and reconnects on any close, keeping the draft,
+and a tab the socket does not feed reads the draft from `GET /api/v1/chat/turns/{id}/events?after_seq=`
+about once a second while visible.
+
 The patient websocket opts into durable execution with `turn_protocol=1`.
 `user_message` includes a UUID `client_message_id`, the exact text/language/audio,
 and an explicit `document_id` (null for general questions). Retries reuse those
@@ -250,6 +290,31 @@ retain document identity/version, not summary text. A fresh authorized summary i
 returned only to execution and cleaned with `normalize_patient_summary`. A failed
 startup handshake stops at an unavailable state with manual reconnect; a busy claim
 recovers the existing turn without resending the new text.
+
+### Server-owned turns
+
+A Nora reply is owned by the server, not by the websocket that sent the message. When a turn
+begins, `app/services/chat_turn_runner.py` runs it as a strongly referenced `asyncio` task in a
+process-level registry keyed by turn id. The websocket handler never awaits, fails, interrupts
+or cancels it: a reload, phone lock, app switch, re-mount or network drop leaves the turn
+running to completion (saved with its lease) or to a real model or database error. Deadlines
+and leases (072-074) stay the safety net, and `actions` stays strictly lease-checked.
+
+Sockets are viewers. Each durable socket registers for its patient and session; the running
+turn's events (status, chunks, `assistant_complete`) are queued per viewer, so a slow or dead
+socket never delays the turn. A socket that connects mid-reply receives the status and the draft
+so far, then live chunks. A socket on another instance, or after a restart, finds an empty
+registry and reads the turn through `recover`, polling until the saved reply appears. The run
+leaves the registry when its task ends and a viewer when its socket closes or a send fails.
+The `document_focus` event attaches or dismisses a document over the open socket.
+
+Shutdown: the app lifespan waits up to 8 seconds for running turns; any left are marked
+interrupted best-effort and otherwise reconciled by the saved deadline.
+
+Cost: the main backend service deploys with `--no-cpu-throttling` (CPU always allocated), so a
+task keeps CPU after its socket closes. Cloud Run bills an instance for the whole time it exists
+while CPU is always allocated, not only during requests. `--min-instances 0` is unchanged, so
+an idle service still scales to zero, and the jobs are unchanged.
 
 ## Package Layout
 
@@ -389,6 +454,59 @@ links and unused invite codes at that clinic), and `PUT /clinicians/me/clinics/{
 display name, admin at that clinic only, `CLINIC_NAME_TAKEN`). Migration
 `067_clinic_lists_and_roles.sql` carries the SQL (applied October 17). See `.agent/specs/clin-003-multi-clinic-clinicians.md` for the design and decisions.
 
+### Structured logging and turn tracing (OPS-006 phase 1)
+
+`app/core/structured_logging.py` writes one JSON object per line on Cloud Run (`K_SERVICE` set,
+or `LOG_FORMAT=json`) and one readable line elsewhere (`LOG_FORMAT=text` forces it). Fields:
+`severity`, `message`, `request_id`, `turn_id`, `session_hash`, `actor_hash` (salted SHA-256
+prefix), `event`, `outcome`, `duration_ms`, `logging.googleapis.com/trace` (needs
+`GOOGLE_PROJECT_ID`), plus the fixed lifecycle vocabulary in `EVENT_FIELDS`. The request id is
+the `X-Cloud-Trace-Context` trace id or a generated one, set by `RequestContextMiddleware` for
+HTTP and websockets; uvicorn's access log is unchanged. No patient text and no exception
+message is logged: exceptions appear as type plus file and line frames.
+
+Turn lines, all with `turn_id`: `chat_turn.begin` / `retry` (`execute`, `attempt`),
+`chat_model.start` / `end` (`model`, `fallback_used`, `duration_ms`), `chat_turn.actions`,
+`chat_turn.complete` (`accepted`, `late`), `chat_turn.failed` / `interrupted` (`category`),
+`chat_turn.recover`, `chat_turn.dismiss`, `chat_turn.finished`. Every state change names its
+`trigger` (`execution`, `execution_error`, `processing_timeout`, `shutdown_cancel`,
+`socket_recover`, `socket_dismiss`, `socket_connect`, `failure_report`). A refused operation
+logs `reason` from migration 077 (`not_found`, `session_mismatch`, `lease_mismatch`,
+`deadline_passed`, `status:<status>`; `unknown` from an older function). Find a turn in Cloud
+Logging with `jsonPayload.turn_id="<id>"`.
+
+Apply order for **077**: after 074 and independent of the backend deploy (either order is safe).
+It also sets `lock_timeout` 5 s and `statement_timeout` 8 s on `chat_turn_operation` itself.
+Database worker pools are bounded (`app/core/db_pools.py`): a full pool answers `503` with
+`Retry-After` instead of queueing.
+
+### Nora turn worker and turn events (OPS-006 phase 2)
+
+Off by default. `CHAT_TURNS_VIA_WORKER=true` on the API makes `send` queue a turn instead of
+running it; `WORKER_MODE=true` makes a process the worker (the same image). Setup, rollout order
+and rollback need per-step authorization: [docs/chat-worker-setup.md](../docs/chat-worker-setup.md).
+
+- **Migration 078** (after 077): `chat_turn_events`, status `queued`, `chat_turns.via_worker` /
+  `run_count` / `dispatched_at`, and `chat_turn_worker_operation` (`claim`, `append_event`,
+  `requeue`, `prune_events`, `dispatched`, `undispatched`). Tested by
+  `tests/integration/test_chat_turn_events_postgres.py` (Docker, hosted-style grants; run it with
+  `CHAT_TURN_TEST_POSTGRES_DOCKER=1`).
+- **Send:** `services/chat_turn_queue.submit_turn` begins the queued turn in one transaction and
+  then creates the Cloud Tasks task (`chat-turn-<turn id>-a<attempt>`). Entry points: the websocket
+  `user_message` and `POST /api/v1/chat/turns`; read with
+  `GET /api/v1/chat/turns/{id}/events?after_seq=`. The outbox sweep is
+  `POST /api/v1/cron/chat-turns/dispatch` (cron token) and one pass at API startup.
+- **Worker:** `routers/internal_tasks.py` (`POST /internal/tasks/chat-turn`, mounted only when
+  `WORKER_MODE`), `core/task_auth.py` (Cloud Tasks OIDC), `services/chat_turn_worker.py` (claim,
+  draft checkpoints, retry mapping), `services/chat_turn_pipeline.execute_turn` (the pipeline shared
+  with the in-process path). Response contract: 200 means do not retry; 503 means retry.
+- **Viewing:** `services/chat_turn_events.py` reads the event log for sockets and the HTTP read.
+- **Logs:** worker and queue lines add `task_id` (the Cloud Tasks name), `retry_count`, `queue`;
+  the API forwards its trace id so a turn keeps one `request_id` across both services. Events:
+  `chat_turn.dispatched` / `dispatch_failed` / `sweep`, `chat_turn.worker_task` / `worker_done` /
+  `worker_noop` / `worker_retry` / `worker_shed`, `chat_turn.queue_claim`, `task_auth.refused`,
+  `turn_watch.finished`.
+
 ## Database Migrations
 
 Migrations are plain SQL files in `src/app/db/migrations/`, currently `001`–`067`. Some
@@ -504,13 +622,16 @@ locale and typed/voice text. It conservatively parses explicit values after the
 safety gate; it cannot consent or confirm. Answers are not ordinary chat messages.
 Source suggestions are quotes that require separate patient acceptance.
 
-Migration 076 keeps confirmation, audit, the existing `symptom_adr_screen` queue and
+The exact checksum-pinned `071_confirmed_symptom_handoff.sql` migration keeps
+confirmation, audit, the existing `symptom_adr_screen` queue and
 active assigned-clinician notices in one transaction. Only an exact unique active
 medication name supplies its FK; unlisted products stay unverified testimony. The
 existing worker creates an ADR draft for eligible products; retries preserve
 clinician review. High severity (the existing >=8 threshold) queues a separate
 minimal urgent notice even for cancelled drafts. Emergency alerts remain separate.
-Both require `A2A_RETRY_WORKER_ENABLED=true`; no new ADR follow-up is implemented.
+Both require `A2A_RETRY_WORKER_ENABLED=true`. Clinician-authored ADR information
+requests and patient replies stay in Care Team messages while Nora remains the AI chat.
+The applied 071 filename and bytes are immutable and must not be renamed or replayed.
 See [October 17 acceptance](../docs/pat-002-b-acceptance-2026-10-17.md) and the
 [read-only preflight/release procedure](../docs/pat-002-b-rollout.md).
 

@@ -1,6 +1,8 @@
 # UX-006 — Clinician schedule and multi-clinic consistency
 
-Status: built on `feature/clinician-schedule` (October 17, 2026), deployed check pending. Accepted design October 17, 2026. Owner: Rajeev. Builds on SCH-001 (appointment
+Status: **Verify deployed**. Merged in [#187](https://github.com/sjsu-masters-projects/medi-agent/pull/187);
+migration 071 applied per requester report. Deployed acceptance remains unrecorded.
+Accepted design October 17, 2026. Owner: Rajeev. Builds on SCH-001 (appointment
 offers), CLN-003 slices A–F (unified multi-clinic view) and UX-005 (queue + detail pattern).
 
 ## Problem
@@ -65,7 +67,7 @@ Terrace) showed the unified view works but reads as messy:
 - 390 px and 1280 px without horizontal scroll; tests for agenda, needs-action, side panel with
   busy times, patient tab and counts; deployed check with Elena Park.
 
-## Build notes (October 17)
+## Implemented behavior (October 17)
 
 - **Backend:** `GET /appointments/schedule?from&to&clinic_id` (own visits in [from, to), needs-action
   items grouped per offer, next visit; 45-day cap), `GET /appointments/busy?from&to` (own intervals and
@@ -75,17 +77,19 @@ Terrace) showed the unified view works but reads as messy:
   of the caller's clinics appeared twice (Appointments "5" against 4 distinct patients on the Roster), and
   a clinic filter still listed the other clinic's link. It now lists only in-scope links and tags each with
   its own clinic. The distinct-patient definition is the Roster's.
-- **Portal:** `/appointments` is "My schedule" (sidebar label too). Edit and cancel do not exist in the
-  clinician portal today; the visit detail offers the existing calendar export and "Offer new times".
+- **Portal:** `/appointments` is "My schedule" (sidebar label too). Visit detail offers
+  calendar export and status-aware offer/edit/cancel/complete/no-show actions as specified below.
 - **Consistency fixes:** the header scope text is "All clinics" or the filtered clinic for multi-clinic
   users and nothing otherwise (it no longer falls back to a stored or single clinic); every list header
   carries it; the filter sits in the list toolbar where there is one (dashboard, ADR, MedWatch) and at the
   top right of the header elsewhere (roster, upload queue, alerts, messages, schedule); the ADR and
   MedWatch headers use the same title size and subtitle tone as the other pages.
-- **Not done:** the Settings consolidation (duplicate clinic, default-clinic "Role", placement under
-  "Administration") from decision 5 is not part of this change.
+- **Settings:** current main has grouped settings, one Your clinics card, and shared
+  staff-action confirmation dialogs. The original duplicate-field/Administration gap
+  above describes the starting point, not new implementation work. Recheck the current
+  presentation in the deployed acceptance pass.
 
-## Visit management (added October 17, same pull request)
+## Visit management (merged in #187)
 
 The visit detail has an action row: one primary action that fits the status ("Offer new times" for an
 upcoming booked visit, "Mark completed" once it has ended) and a small "More actions" menu ("Edit
@@ -96,4 +100,20 @@ Decisions: no direct time change on a booked visit (time changes are offers); a 
 from a list (free text for "Other"), tells the patient in app and by email, and frees the slot; complete
 and no-show only after the visit ends and notify nobody. The agenda hides cancelled visits behind a
 "Show cancelled" toggle (off by default) and shows them muted with a "Cancelled" chip.
+
+## Pending wording and deployed acceptance
+
+The following es-MX wording remains **draft, not approved**; preserve it for LOC-001
+bilingual review rather than treating a successful deployment as language approval:
+
+- In-app cancellation title and email subject: `Cita cancelada`.
+- In-app explanation: `Tu profesional clínico canceló esta cita. Consulta el motivo en Citas.`
+- Patient Visits: `Tu equipo de atención canceló esta cita.`, `Motivo:`,
+  `Tu profesional clínico no está disponible`, `La clínica está cerrada`,
+  `Pediste cancelar la cita`, `La cita se programó por error`, `Otro motivo`.
+- Pending translation indicator: `Traduciendo…`.
+
+Still record the synthetic Elena/Morgan visit-management journey, cross-clinic
+conflict refusal, reload persistence and current schedule/settings presentation at
+390 px and 1280 px. Migration application and passing CI do not replace those checks.
 

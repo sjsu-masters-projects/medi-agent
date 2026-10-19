@@ -86,12 +86,21 @@ Apply every SQL file through the repository migration ledger against an empty de
 
 Copy the URI rather than assembling it: the pooler tenant, host, and password encoding are project-specific. The Session Pooler supports IPv4 clients and is required here because the migration command maintains a session while applying each SQL file.
 
-The checkout contains 91 SQL migration files, prefixes `001`–`076`. Some prefixes are
-shared by independent files (`011`, `038`–`043`, `047`, `048`, `051`) that came from parallel
-branches; they coexist because the ledger identifies migrations by full filename and
-checksum, not by prefix. Preserve applied names and bytes. The ledger in
+Migration filenames use an ordered `NNN_descriptive_name.sql` convention. Historical
+parallel branches produced a small set of already-applied shared prefixes (`011`,
+`038`–`043`, `047`, `048`, `051`, and `067`); they coexist because the ledger identifies
+migrations by complete filename and checksum. The migration validator preserves those
+known historical sequences plus the exact applied 059, 060 and 071 pairs. Those exact
+exceptions cover the confirmed-symptom files alongside the independently applied critical-result
+and clinician-visit migrations; the validator rejects any other new shared prefix. Preserve
+applied names and bytes. The ledger in
 `public.schema_migrations` is authoritative: a local file count does not establish remote
-application or authorize applying unrelated migrations.
+application or authorize applying unrelated migrations. Migrations through
+`075_notification_zone_lookup.sql` are recorded as applied by the requester (October 18,
+2026). A read-only October 19 check also recorded the exact 071 symptom handoff and
+`076_care_conversation_activity_review.sql`; application of 077/078 was not checked.
+Browser session limits (AUTH-002) are portal
+environment variables, not Supabase settings; no Auth configuration change is required.
 
 Migration `047_adr_patient_information_loop.sql` adds the patient-confirmed ADR information
 request, deterministic reassessment, notification closure, and patient-actor audit transaction.
@@ -126,9 +135,9 @@ applied. Rows written by that backend in the meantime are labelled `fda-3500-leg
 are upgraded on read. After applying, verify with the ledger and with the read-only checks the
 fail-closed block already performs (it raises and rolls the migration back on any gap).
 
-### Confirmed symptom ADR handoff (076, PAT-002-B) — written, not applied
+### Confirmed symptom ADR handoff (071, PAT-002-B) — recorded applied October 18
 
-`076_confirmed_symptom_handoff.sql` requires the already-applied confirmed-intake
+`071_confirmed_symptom_handoff.sql` requires the already-applied confirmed-intake
 migration 060 and migration 065 clinic memberships. It normalizes exact active-medication
 name matching, queues one report-keyed `retrying` ADR screen in the same confirmation
 transaction and sends minimal notices to active assigned clinic members. An unlisted
@@ -136,12 +145,13 @@ patient-named product remains testimony and never receives a fabricated medicati
 The trigger does not assign causality or create an FDA submission.
 `A2A_RETRY_WORKER_ENABLED=true` is required so interrupted work is recovered.
 
-Migration 076 has SHA-256
-`a5aa9136fe4191d12ef0d9c886db382ce53aee8ca72900135adfecaa139040e0` and is not applied
-to any hosted project. Apply it through the ledger only after explicit authorization and
-before deploying the backend that depends on its atomic-outbox guarantee. The hosted ledger
-already contains the migrations through 075 described below; 076 is the only new migration
-for this handoff. Do not apply it without explicit authorization.
+The exact file has SHA-256
+`f690b788d5f29c3d7583f2fe8cc43b7a51a6af817c276d6839cc9c9ab2ded36b`. A read-only
+October 19 ledger check recorded that identity as applied on October 18. Preserve the
+filename and bytes: do not rename or replay it because it shares prefix 071 with
+`071_clinician_visit_management.sql`. Only a fresh or explicitly verified missing
+environment may apply the exact file, and applying it still requires explicit authorization.
+Backend deployment and runtime feature activation remain separate gates.
 
 ### Clinic memberships (065, CLN-003 slice A) — applied October 16
 
@@ -403,7 +413,7 @@ The deployed backend setting and deployed acceptance remain separate.
 | --- | --- |
 | `059_chat_safety_alerts.sql` | `9ce875b7d1fca79f687f83e6ea02d7b4b56273d5aba064c665591dc8a2ac56f5` |
 | `060_confirmed_symptom_intake.sql` | `3f6c9591fe41dab5bd476096174c5d69770be38dbeae8d5db82841f2a0361d42` |
-| `076_confirmed_symptom_handoff.sql` | `a5aa9136fe4191d12ef0d9c886db382ce53aee8ca72900135adfecaa139040e0` |
+| `071_confirmed_symptom_handoff.sql` | `f690b788d5f29c3d7583f2fe8cc43b7a51a6af817c276d6839cc9c9ab2ded36b` |
 
 Before an authorized rollout, drain old direct symptom-report writers, including
 old demo/import tooling that inserts unconfirmed reports. Migration 060 removes direct
@@ -427,8 +437,9 @@ report insertion. See [the acceptance record](pat-002-b-acceptance-2026-10-12.md
 local SQL constraints, manual acceptance, dependency reproducibility and the C handoff.
 
 
-The October 17 handoff work is now the migration 076 described above because current
-main already owns migration 071. Keep applied 059/060 names and checksums unchanged.
+The October 17 handoff work uses the exact applied 071 identity described above. It
+intentionally coexists with the clinician-visit 071 file because the ledger keys on the
+full filename and checksum. Keep applied 059/060/071 names and checksums unchanged.
 The exact prerequisites, authorization state and read-only
 `preflight_symptom_intake.py` procedure are in the
 [PAT-002-B rollout](pat-002-b-rollout.md). Do not run unrelated pending migrations as

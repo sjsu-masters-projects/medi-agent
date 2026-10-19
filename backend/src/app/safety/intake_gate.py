@@ -14,6 +14,7 @@ SAFETY_RULE_VERSION = "triage-floor/1"
 _COPY_KEYS = {
     "emergency_mental_health_keyword": "mental_health_emergency_response",
     "emergency_symptom_keyword": "emergency_response",
+    "urgent_medication_error": "medication_error_response",
 }
 
 

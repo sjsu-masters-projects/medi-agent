@@ -6,6 +6,7 @@ import type { RootState } from "@/store/store";
 import { Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { careConversations } from "@/services/care-conversations";
+import { ConversationActivityReview } from "./conversation-activity";
 import type { CareConversation, CareConversationMessage, ConversationDraft, ConversationRecipient } from "@/types/care-conversations";
 import { applyTranslationResult, conversationAccessDenied, conversationRoleLabel, conversationSendFailure, getConversationCopy, mergeConversationMessages, requestPendingTranslations } from "../../../../../packages/shared/src/utils/care-conversations";
 
@@ -120,7 +121,8 @@ function ConversationInbox({ token, locale, audience, visible, conversationId, c
     if (!visible || loading || opening || sending) return;
     const refresh = () => { void refreshInbox(); };
     refresh();
-    const timer = setInterval(refresh, 15000);
+    // Paused while the tab is hidden; it refreshes once when the tab shows again.
+    const timer = setInterval(() => { if (document.visibilityState !== "hidden") refresh(); }, 15000);
     document.addEventListener("visibilitychange", refresh);
     return () => {
       clearInterval(timer);
@@ -347,7 +349,7 @@ function ConversationThread({ token, audience, thread, locale, visible, draft, o
         const failureKind = conversationSendFailure(failure);
         onDraft({
           body: draft.body,
-          clientMessageId: failureKind === "invalid" ? undefined : clientMessageId,
+          clientMessageId: failureKind === "invalid" || failureKind === "activityUnavailable" ? undefined : clientMessageId,
           failure: failureKind,
         });
       }
@@ -378,6 +380,7 @@ function ConversationThread({ token, audience, thread, locale, visible, draft, o
           return <li key={message.id} className={`ma-bubble flex max-w-[78%] flex-col gap-1 ${own ? "items-end self-end" : "items-start self-start"}`}>
             <p className="px-1 text-[11px] text-muted">{message.sender_name} · {conversationRoleLabel(message.sender_role, locale)} · {thread.clinic_name} · <time className="font-mono" dateTime={message.created_at}>{new Date(message.created_at).toLocaleString(locale)}</time></p>
             <p className={`whitespace-pre-wrap break-words px-3.5 py-2.5 text-sm ${own ? "rounded-[18px_18px_6px_18px] bg-primary text-white" : "rounded-[18px_18px_18px_6px] bg-surface-2 text-ink"}`}>{message.body}</p>
+            {message.activity_context ? <ConversationActivityReview activity={message.activity_context} token={token} conversationId={thread.id} messageId={message.id} patientId={thread.patient_id} /> : null}
             {message.translation_pending && !own ? <p role="status" className="px-1 text-[11px] text-muted">{copy.translating}</p> : null}
             {translation && sourceLabel && guardPassed === false ? <p className="px-1 text-[11px] text-muted">{copy.translationUnavailable}</p> : null}
             {translation && sourceLabel && guardPassed !== false ? <div className="mt-0.5 rounded-lg border border-line bg-surface px-3 py-2 text-xs text-ink-2">

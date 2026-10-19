@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { carePlanChanges, carePlanOverlaps } from "@/components/features/care-plan-changes";
 import { DocumentSourceViewer } from "@/components/features/document-source-viewer";
 import { CarePlanTodayPreviewPanel } from "@/components/features/care-plan-today-preview";
@@ -96,6 +96,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
     const [activeMedications, setActiveMedications] = useState<ActiveMedication[]>([]);
     const [generation, setGeneration] = useState<CarePlanGeneration | null>(null);
     const [items, setItems] = useState<EditableItem[]>([]);
+    const focusedReviewTarget = useRef("");
     const [backChecks, setBackChecks] = useState<Record<string, BackCheck>>({});
     const recordBackCheck = useCallback((itemId: string, check: BackCheck) => {
         setBackChecks((current) => {
@@ -116,7 +117,39 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
     const [sourceRetry, setSourceRetry] = useState(0);
     const [showRemoved, setShowRemoved] = useState(false);
     const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+    const [reviewTarget, setReviewTarget] = useState("");
     const [justApproved, setJustApproved] = useState(false);
+
+    useEffect(() => {
+        const syncTarget = () => setReviewTarget(window.location.hash.slice(1));
+        syncTarget();
+        window.addEventListener("hashchange", syncTarget);
+        return () => window.removeEventListener("hashchange", syncTarget);
+    }, [patientId]);
+
+    useEffect(() => {
+        if (!reviewTarget.startsWith("care-plan-item-")) return;
+        const itemId = reviewTarget.slice("care-plan-item-".length);
+        const targetItem = items.find((item) => item.id === itemId);
+        if (!targetItem) return;
+        if (targetItem.is_removed) setShowRemoved(true);
+        setSelectedItemId(itemId);
+    }, [items, reviewTarget]);
+
+    useEffect(() => {
+        if (focusedReviewTarget.current === reviewTarget || !reviewTarget.startsWith("care-plan-item-")) return;
+        const itemId = reviewTarget.slice("care-plan-item-".length);
+        if (selectedItemId !== itemId) return;
+        const frame = requestAnimationFrame(() => {
+            const target = document.getElementById(reviewTarget);
+            if (!target) return;
+            focusedReviewTarget.current = reviewTarget;
+            target.tabIndex = -1;
+            target.scrollIntoView?.({ block: "center" });
+            target.focus({ preventScroll: true });
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [items, reviewTarget, selectedItemId, showRemoved]);
 
     const load = useCallback(async () => {
         setLoading(true);

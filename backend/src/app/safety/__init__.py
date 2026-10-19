@@ -20,6 +20,7 @@ from app.safety.triage_floor import (
     SafetyVerdict,
     UrgencyType,
     contains_adverse_effect_signal,
+    contains_medication_error_signal,
     deterministic_safety_floor,
     matches_any,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "UrgencyType",
     "apply_safety_override",
     "contains_adverse_effect_signal",
+    "contains_medication_error_signal",
     "deterministic_safety_floor",
     "is_escalation",
     "matches_any",
