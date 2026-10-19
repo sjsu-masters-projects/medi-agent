@@ -123,7 +123,7 @@ See [Slice 6 verification and click-through](../../.agent/specs/sch-001-appointm
 
 Authenticated headers include a compact bell and an accessible notification sheet;
 `/notifications` provides the full All/Unread history. Notification copy and dates
-follow the saved language and timezone. Human messages are not translated and
+follow the saved language and timezone. A visit cancelled by the care team shows as Cancelled with the reason (draft Spanish wording pending review). Human messages are not translated and
 clinical instructions use only approved wording. Opening the sheet does not mark
 everything read or approve care. Exact-resource links open Records, Visits, Today
 or the addressed private care-team conversation.

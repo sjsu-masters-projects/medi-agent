@@ -72,7 +72,6 @@ def test_export_booked_visit(client, calendar, status, locale, title):
     [
         "proposed",
         "expired",
-        "cancelled",
         "withdrawn",
         "declined",
         "completed",
@@ -121,3 +120,11 @@ def test_missing_and_invalid_requests(client, calendar):
     assert client.get("/api/v1/appointments/not-a-uuid/calendar").status_code == 422
     chain.execute.return_value = SimpleNamespace(data=[])
     assert client.get(endpoint(row)).status_code == 404
+
+
+def test_a_cancelled_visit_still_exports_so_a_saved_copy_can_be_removed(client, calendar):
+    _, row, _, _ = calendar
+    row["status"] = "cancelled"
+    response = client.get(endpoint(row))
+    assert response.status_code == 200
+    assert "STATUS:CANCELLED" in response.json()["content"]

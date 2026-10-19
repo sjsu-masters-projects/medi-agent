@@ -5,7 +5,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { api } from "@/services/api";
 import { redirectToLogin } from "@/services/auth-redirect";
 import { refreshPatientSession } from "@/services/auth-refresh";
-import { writeStoredSession } from "@/services/auth-session";
+import { refreshSingleFlight } from "@/services/auth-session";
 import {
   inferDocumentType,
   type DocumentApiRecord,
@@ -212,19 +212,23 @@ export function useFeedData(locale: Locale = "en-US") {
       return null;
     }
 
-    try {
-      const session = await refreshPatientSession(refreshToken);
-      writeStoredSession(session);
-      dispatch(hydrateSession(session));
-      return session;
-    } catch {
+    // Single-flight across tabs; a session another tab already refreshed is adopted.
+    const outcome = await refreshSingleFlight({
+      current: { expiresAt: expiresAt ?? 0, refreshToken },
+      refreshSession: refreshPatientSession,
+    });
+    if (outcome.status === "ok") {
+      dispatch(hydrateSession(outcome.session));
+      return outcome.session;
+    }
+    if (outcome.status === "invalid") {
       dispatch(logout());
       redirectToLogin({ reason: "session_expired" });
-      setDocumentImportError(
-        "Your session expired. Please sign in again before importing a clinical document.",
-      );
-      return null;
     }
+    setDocumentImportError(
+      "Your session expired. Please sign in again before importing a clinical document.",
+    );
+    return null;
   }
 
   async function importDocumentFile(file: File) {

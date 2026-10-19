@@ -873,3 +873,22 @@ async def test_clinician_list_drops_visits_at_a_clinic_where_only_the_patient_is
         )
         rows = await service.list_for_user(user_id=uuid4(), role="clinician")
     assert [r["id"] for r in rows] == ["ok-1", "ok-2"]
+
+
+@pytest.mark.asyncio
+async def test_clinician_list_can_narrow_to_one_linked_patient(service, mock_db):
+    chain = _chain(mock_db, results=[[]])
+    mock_db.rpc.return_value.execute.return_value = SimpleNamespace(data={"expired_count": 0})
+    with _linked(["p-1", "p-2"]):
+        await service.list_for_user(user_id=uuid4(), role="clinician", patient_id="p-2")
+    chain.in_.assert_any_call("patient_id", ["p-2"])
+
+
+@pytest.mark.asyncio
+async def test_patient_filter_for_an_unlinked_patient_reads_nothing(service, mock_db):
+    chain = _chain(mock_db, results=[[{"id": "a", "patient_id": "p-9"}]])
+    mock_db.rpc.return_value.execute.return_value = SimpleNamespace(data={"expired_count": 0})
+    with _linked(["p-1"]):
+        rows = await service.list_for_user(user_id=uuid4(), role="clinician", patient_id="p-9")
+    assert rows == []
+    chain.execute.assert_not_called()

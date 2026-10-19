@@ -8,7 +8,10 @@ proof of deployment. It changes no remote data until separately authorized.
 Apply only `071_confirmed_symptom_handoff.sql` after verifying the existing ledger.
 Its SHA-256 is `f690b788d5f29c3d7583f2fe8cc43b7a51a6af817c276d6839cc9c9ab2ded36b`.
 Applied `059_chat_safety_alerts.sql` and `060_confirmed_symptom_intake.sql` must keep
-their filenames and checksums. Migration 065 clinic memberships is also required.
+their filenames and checksums. Migration 065 clinic memberships is also required. After main integration, 072,
+073 and 074 are required for the durable Nora protocol. Their existing target
+ledger checksums, main's independent 071 visit migration and 075 notification
+lookup were read-only verified on October 18; none was applied by this task.
 Do not run a catch-all migration command that could apply unrelated pending SQL.
 
 071 makes confirmation atomically queue the existing ADR screen, preserve a

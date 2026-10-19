@@ -6,7 +6,7 @@ import { formatSchedulingTime } from "@/utils/appointment-times";
 import { ClinicChip } from "./clinic-chip";
 import { CalendarExportButton } from "./calendar-export-button";
 
-const LABELS: Record<Appointment["status"], string> = {
+export const STATUS_LABELS: Record<Appointment["status"], string> = {
   scheduled: "Scheduled",
   proposed: "Awaiting patient response",
   confirmed: "Confirmed",
@@ -19,7 +19,7 @@ const LABELS: Record<Appointment["status"], string> = {
   no_show: "No-show",
 };
 
-const TONES: Record<
+export const STATUS_TONES: Record<
   Appointment["status"],
   "success" | "info" | "warning" | "danger" | "neutral"
 > = {
@@ -136,8 +136,8 @@ export function AppointmentOfferHistory({
                     : ""}
                 </p>
               </div>
-              <Badge variant={TONES[representative.status]} className="shrink-0">
-                {LABELS[representative.status]}
+              <Badge variant={STATUS_TONES[representative.status]} className="shrink-0">
+                {STATUS_LABELS[representative.status]}
               </Badge>
             </div>
             <ul className="mt-3 space-y-2 text-[13px] text-ink-2">
@@ -166,10 +166,10 @@ export function AppointmentOfferHistory({
                       </span>
                     )}
                     <Badge
-                      variant={TONES[row.status]}
+                      variant={STATUS_TONES[row.status]}
                       className="order-2 shrink-0 sm:order-3"
                     >
-                      {LABELS[row.status]}
+                      {STATUS_LABELS[row.status]}
                     </Badge>
                   </span>
                   {(row.status === AppointmentStatus.CONFIRMED ||

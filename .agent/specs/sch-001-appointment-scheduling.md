@@ -335,7 +335,7 @@ history but blocks new writes until a successful retry. Patient/session changes
 clear the corresponding draft/profile/history and ignore late responses. There is
 no automatic retry or polling. Cross-offer booking conflicts and expiry remain
 Slice 5; calendar export remains Slice 6. Clinician cancellation and completion/
-no-show controls are not delivered by this screen.
+no-show controls were not delivered by this screen; UX-006 adds them (see the end of this spec).
 
 ### Steps to see the changes
 
@@ -676,10 +676,10 @@ gate was weakened.
    control. If a visit changes after the page loads, another download rechecks its
    status and fails safely. Existing external calendar copies are unchanged.
 
-Remaining scheduling work: clinician cancellation/completion/no-show controls and
-clinician-wide availability/capacity rules are separate future scopes. In-app appointment
+Remaining scheduling work: clinician-wide availability/capacity rules are separate future scopes. In-app appointment
 notifications shipped in NOT-001/NOT-002; external (email/SMS/push) delivery remains
-future. Calendar export does not complete the full SCH-001 lifecycle.
+future. Calendar export does not complete the full SCH-001 lifecycle. (Clinician cancellation,
+completion and no-show shipped with UX-006; see "Clinician visit management".)
 
 ### Integration review safeguards — 2026-10-06
 
@@ -712,3 +712,40 @@ forwarding and Python 3.13.2. Final-head Ubuntu Python 3.12 CI remains the deliv
 gate. The Visits-to-chat shortcut is retained with localized general-guidance copy;
 it does not imply direct patient-to-care-team messaging. Original PR #97/#98 history
 is preserved without restoring the superseded response writer or Visits service.
+
+### Clinician visit management — 2026-10-17 (UX-006, migration 071)
+
+Delivers the "later clinician cancellation/completion" scope. Decisions:
+
+- **Who:** the appointment's own clinician, or one with an active link to the patient at the
+  appointment's clinic (the October 17 access rule). Checked in the service and again inside the RPC.
+  Patients cannot use any of these actions.
+- **Edit details** (type, location, reason, notes) is allowed on an offered, scheduled or confirmed
+  visit through `PUT /appointments/{id}`. The time is NOT editable on a confirmed or scheduled visit
+  (422 `APPOINTMENT_TIME_CHANGE_VIA_OFFER`): a different time is a new offer the patient answers
+  ("Offer new times"). Details of an open offer apply to every open slot of that offer. A grouped
+  offer's status and times stay with the offer workflow. The update path has no audit row of its own
+  (unchanged); a changed location still notifies the patient (`appointment_changed`).
+- **Cancel** (`POST /appointments/{id}/cancel`): confirmed or scheduled visits only, with a required
+  reason from a short list (`clinician_unavailable`, `clinic_closed`, `patient_request`,
+  `scheduling_error`, `other`) plus free text, which is required for `other`. Status `cancelled`
+  (already in the enum), `cancelled_by='clinician'`, reason and time stored. Both exclusion
+  constraints (043 patient, 069 clinician) cover only confirmed/scheduled, so the slot is free.
+  Cancelling a cancelled (or any other) visit is `APPOINTMENT_UNAVAILABLE`.
+- **Complete / no-show** (`POST .../complete`, `.../no-show`): confirmed or scheduled visits, only
+  after the visit's end (`APPOINTMENT_NOT_ENDED` before). Neither notifies the patient (there is no
+  existing no-show copy).
+- **Audit:** one `appointment_offer_events` row per transition (`clinician_cancel`, `complete`,
+  `no_show`) with actor, previous and new status, and the reason as `note`, written in the same
+  transaction by `manage_appointment`.
+- **Notification and email:** a clinician cancel is an `appointment_changed` event to the patient
+  (before 071 the trigger read every confirmed → cancelled as a patient response to the clinician).
+  The in-app item says "Appointment cancelled / Cita cancelada" and the existing email outbox sends
+  "Appointment cancelled / Cita cancelada" with no health detail and no reason text. The Spanish
+  is a draft for review.
+- **Reminders** are only created for confirmed/scheduled visits, so a cancelled visit gets none.
+  The calendar export of a cancelled visit is `STATUS:CANCELLED`; completed and no-show still have none.
+- **Patient portal:** a visit cancelled by the care team shows "Cancelled", "Your care team cancelled
+  this visit." and the reason (list label in the patient's language, free text as written).
+- **Not done:** withdrawing an open offer; patient-visible no-show copy.
+

@@ -159,3 +159,34 @@ Main advanced to `582c397` with merged Nora recovery/session/notification work.
 Integration and post-integration verification are in progress; earlier results
 remain evidence for their named commit. The already applied intake 071 file will
 not be renamed even though main independently added another 071 filename.
+
+
+### Post-main integration checks
+
+Main `582c397` is integrated with private composer routing, stable reconnect history
+and the verified durable handshake retained. Emergency direction bypasses ordinary
+turn work. A saved safety-outbox acknowledgement clears only its correlated
+in-memory client request; retries derive a stable patient/session-scoped safety
+identity, and uncertain persistence cannot acknowledge success. The symptom route
+checks the existing action fence before opening the owned draft; no direct symptom
+report writer or unconfirmed ADR delegation was restored.
+
+Checks: **175** backend chat/intake/ADR-service cases; **116** focused UI cases;
+**767** patient and **607** clinician tests; both portal lint/typecheck/builds;
+Ruff checks/format for 288 files, mypy for 268 source files, and **91** migration
+files parsed. The exact required SQL job passed **25** cases with XML-verified
+17/8 counts and zero skipped/failed/error cases. Applied 071 still hashes to its
+authorized checksum. Read-only readiness also passes existing Nora 072/073/074.
+
+Live Spanish-source check used the patient's unchanged English profile and showed
+the approved Spanish prompts. A Spanish private answer advanced while the chat
+socket was unavailable during a local restart, then explicit Reconnect restored
+Connected. The draft was cancelled, preserving chat and creating no report.
+
+That first integrated turn exposed an upstream completion identity collision:
+`TurnExecution.finish` allowed the staged assistant message's `id` to replace the
+claimed turn `id`, producing immediate `CHAT_TURN_EXPIRED` despite time remaining.
+The merge now preserves the claimed id/lease after merging the message payload.
+The regression asserts the actual RPC identity and separate message id. The failed
+attempt remains failed and was dismissed only through the normal UI; no row was
+rewritten to manufacture a successful result. A fresh live turn check follows.

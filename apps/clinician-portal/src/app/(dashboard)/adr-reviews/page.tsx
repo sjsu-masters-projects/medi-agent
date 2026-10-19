@@ -17,6 +17,7 @@ import {
     rowLinkClass,
     useListUrlState,
 } from "@/components/features/work-list";
+import { clinicScopeLabel } from "@/hooks/clinic-scope";
 import { ClinicChip, ClinicFilterEmpty, ClinicFilterField } from "@/components/features/clinic-chip";
 import { useResolvedClinicFilter } from "@/hooks/use-clinic-filter";
 import { missingCount, queueTabOf, type QueueTab } from "@/components/features/adr-queue";
@@ -165,6 +166,7 @@ function QueueContent() {
             <PageHeader
                 subtitle="Suspected adverse drug reactions awaiting clinician review. Scores are decision support, not a verdict."
                 title="ADR Reviews"
+                scope={clinicScopeLabel(clinicFilter)}
             />
             <StatusTabs
                 label="ADR review status"

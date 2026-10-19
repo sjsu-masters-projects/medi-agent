@@ -63,7 +63,14 @@ _BOOKING_ERRORS = {
     "expired": ("APPOINTMENT_EXPIRED", "This appointment offer has expired"),
     "stale": ("APPOINTMENT_UNAVAILABLE", "This appointment is no longer available"),
     "past": ("APPOINTMENT_PAST", "Choose a future appointment time"),
+    "too_early": ("APPOINTMENT_NOT_ENDED", "This visit has not ended yet"),
 }
+
+# Visit statuses a clinician may still edit the details of.
+_EDITABLE = {"proposed", "confirmed", "scheduled"}
+_BOOKED = {"confirmed", "scheduled"}
+_DETAIL_FIELDS = {"appointment_type", "location", "reason", "notes"}
+_TIME_FIELDS = {"scheduled_at", "duration_minutes"}
 
 
 def _booking_error(reason: str) -> ValidationError:
@@ -133,12 +140,18 @@ class AppointmentService:
     ) -> AppointmentCalendarExport:
         appointment = await self._get_appointment(str(appointment_id))
         await self._ensure_can_access(user_id=user_id, role=role, appointment=appointment)
-        if appointment.get("status") not in {"confirmed", "scheduled"}:
+        if appointment.get("status") not in {"confirmed", "scheduled", "cancelled"}:
             raise _booking_error("stale")
+        # A cancelled visit exports as STATUS:CANCELLED, so re-importing it removes the entry.
         return render_appointment_calendar(AppointmentRead.model_validate(appointment), locale)
 
     async def list_for_user(
-        self, *, user_id: UUID, role: str, clinic_id: UUID | None = None
+        self,
+        *,
+        user_id: UUID,
+        role: str,
+        clinic_id: UUID | None = None,
+        patient_id: UUID | None = None,
     ) -> list[dict[str, Any]]:
         if role not in {"patient", "clinician"}:
             raise AuthorizationError(
@@ -159,6 +172,9 @@ class AppointmentService:
         if role == "clinician":
             scope = await ClinicMembershipService(self).link_scope(user_id, clinic_id)
             assignments = scope.patient_ids
+            if patient_id is not None:
+                # One patient's record: only if the caller holds a link to them.
+                assignments = [pid for pid in assignments if pid == str(patient_id)]
             if not assignments:
                 return []
             result = await self._execute(
@@ -408,9 +424,11 @@ class AppointmentService:
     ) -> dict[str, Any]:
         existing = await self._get_appointment(str(appointment_id))
         await self._ensure_can_access(user_id=user_id, role=role, appointment=existing)
-        if existing.get("proposal_group_id"):
-            raise ValidationError("Use the appointment offer response workflow for grouped visits")
         payload = {key: value for key, value in data.items() if value is not None}
+        grouped = bool(existing.get("proposal_group_id"))
+        # A grouped offer's status and times belong to the offer workflow; its details do not.
+        if grouped and (set(payload) - _DETAIL_FIELDS):
+            raise ValidationError("Use the appointment offer response workflow for grouped visits")
         if not payload:
             return existing
         if role == "patient":
@@ -422,14 +440,66 @@ class AppointmentService:
         # Generic edits must not reopen a declined/cancelled visit or confirm it.
         if "status" in payload:
             raise _booking_error("stale")
-        result = await self._execute(
-            self.db.table("appointments").update(payload).eq("id", str(appointment_id))
-        )
+        status = str(existing.get("status"))
+        if status not in _EDITABLE:
+            raise _booking_error("stale")
+        if status in _BOOKED and (set(payload) & _TIME_FIELDS):
+            # The patient agreed to this time; a different one is a new offer they can answer.
+            raise ValidationError(
+                "Offer new times to change when a booked visit takes place",
+                code="APPOINTMENT_TIME_CHANGE_VIA_OFFER",
+            )
+        query = self.db.table("appointments").update(payload)
+        if grouped and status == "proposed":
+            # Every still-open slot of the offer shares its details.
+            query = query.eq("proposal_group_id", str(existing["proposal_group_id"])).eq(
+                "status", "proposed"
+            )
+        else:
+            query = query.eq("id", str(appointment_id))
+        result = await self._execute(query)
         rows = [row for row in (result.data or []) if isinstance(row, dict)]
         if not rows:
             raise ExternalServiceError("Supabase", "Failed to update appointment")
-        rows[0]["clinic_name"] = existing.get("clinic_name")
-        return rows[0]
+        row = next((item for item in rows if str(item.get("id")) == str(appointment_id)), rows[0])
+        row["clinic_name"] = existing.get("clinic_name")
+        return row
+
+    async def manage_for_user(
+        self,
+        *,
+        user_id: UUID,
+        role: str,
+        appointment_id: UUID,
+        action: str,
+        reason_code: str | None = None,
+        reason: str | None = None,
+    ) -> dict[str, Any]:
+        """A clinician cancels, completes or marks a booked visit no-show (one audited RPC).
+
+        Allowed for the appointment's own clinician or one with an active link to the patient at
+        the appointment's clinic; the RPC checks the same rule again inside the transaction.
+        """
+        if role != "clinician":
+            raise AuthorizationError(
+                "Only clinicians can manage a visit",
+                reason_code=reasons.ROLE_LACKS_CLINICAL_SCOPE,
+            )
+        existing = await self._get_appointment(str(appointment_id))
+        await self._ensure_can_access(user_id=user_id, role=role, appointment=existing)
+        result = await self._appointment_rpc(
+            "manage_appointment",
+            {
+                "p_actor_id": str(user_id),
+                "p_appointment_id": str(appointment_id),
+                "p_action": action,
+                "p_reason_code": reason_code,
+                "p_reason": reason,
+            },
+        )
+        row = dict(result["appointment"])
+        row["clinic_name"] = existing.get("clinic_name")
+        return row
 
     async def _ensure_can_access(
         self,

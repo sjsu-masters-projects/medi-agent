@@ -163,8 +163,8 @@ class TestChatWebSocketStability:
             error = socket.receive_json()
             assert error == {
                 "type": "error",
-                "code": "chat_initialization_failed",
-                "message": "Chat is temporarily unavailable. Please try again later.",
+                "code": "CHAT_STARTUP_UNAVAILABLE",
+                "message": "Chat is temporarily unavailable.",
             }
             with pytest.raises(WebSocketDisconnect) as closed:
                 socket.receive_json()

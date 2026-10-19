@@ -46,6 +46,7 @@ def conversation():
         "translation": None,
         "translation_locale": None,
         "translation_guard_passed": None,
+        "translation_pending": False,
     }
     db = MagicMock()
     db.rpc.return_value.execute.return_value = SimpleNamespace(data=thread)
@@ -215,3 +216,23 @@ def test_clinician_keeps_existing_mfa_guard(client, conversation, monkeypatch):
         == 403
     )
     db.rpc.assert_not_called()
+
+
+def test_translation_endpoint_refuses_an_outsider_without_a_model_call(
+    client, conversation, monkeypatch
+):
+    from unittest.mock import AsyncMock
+
+    from postgrest.exceptions import APIError
+
+    _, thread, message, db = conversation
+    db.rpc.return_value.execute.side_effect = APIError(
+        {"code": "42501", "message": "denied", "details": "", "hint": ""}
+    )
+    model = AsyncMock()
+    monkeypatch.setattr("app.services.message_translation.translate_message", model)
+    response = client.post(
+        f"/api/v1/care-conversations/{thread['id']}/messages/{message['id']}/translation"
+    )
+    assert response.status_code in {403, 404}
+    model.assert_not_awaited()

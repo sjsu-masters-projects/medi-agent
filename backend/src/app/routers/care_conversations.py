@@ -20,6 +20,7 @@ from app.models.care_conversation import (
     ConversationRecipient,
     ConversationSend,
     ConversationSummary,
+    MessageTranslationResult,
 )
 from app.services.care_conversation_service import CareConversationService
 
@@ -90,6 +91,19 @@ async def send_message(
     service: CareConversationService = Depends(conversation_service),
 ) -> Any:
     return await service.send(conversation_id, data)
+
+
+@router.post(
+    "/{conversation_id}/messages/{message_id}/translation",
+    response_model=MessageTranslationResult,
+)
+async def translate_message(
+    conversation_id: UUID,
+    message_id: UUID,
+    service: CareConversationService = Depends(conversation_service),
+) -> Any:
+    """Translate one message into the viewer's language (stored once, never on read or send)."""
+    return await service.translate_message(conversation_id, message_id)
 
 
 @router.post("/{conversation_id}/read", response_model=ConversationReadReceipt)

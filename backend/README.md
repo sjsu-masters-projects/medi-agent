@@ -221,6 +221,36 @@ clinical quality or availability under load. Offline tests simulate 429s;
 live checks do not deliberately overload providers. Per-process concurrency
 limits do not coordinate across Cloud Run replicas or Jobs.
 
+## Nora turn recovery (PAT-001-A / PAT-004)
+
+The patient websocket opts into durable execution with `turn_protocol=1`.
+`user_message` includes a UUID `client_message_id`, the exact text/language/audio,
+and an explicit `document_id` (null for general questions). Retries reuse those
+values. `chat_turn` and `chat_turns` carry processing/completed/failed/interrupted
+status and safe retry eligibility. `recover_turns` refreshes saved status/history;
+`dismiss_turn` hides only an interrupted/failed reply, never resolves clinical work.
+Client requests stay in memory; saved turns recover from the server after refresh.
+
+Migration `072_nora_turn_recovery.sql` is backend-only, with RLS and browser grants
+revoked. Apply it **only with separate operator authorization**, before backend
+and patient rollout. Older clients retain their existing contract, not durable
+retry guarantees. An unavailable durable store must fail closed, not rerun through
+the legacy path. Full contract and verification:
+[PAT-001-A](../.agent/specs/pat-001-a-nora-turn-recovery.md).
+
+Migration `074_nora_late_completion.sql` lets a finished reply be saved for its current lease
+even just after the deadline, and `075_notification_zone_lookup.sql` makes notification reads
+fast (see [NOT-001](../.agent/specs/not-001-notification-centre.md)). Both are re-runnable and
+need the same separate authorization; the backend is compatible with the database before and
+after (a missing `late` key means not late). Chat-turn and notification database calls use
+their own bounded thread pools (`app/core/db_pools.py`).
+
+072 is re-runnable and ends with RLS/table/function privilege assertions. Turn rows
+retain document identity/version, not summary text. A fresh authorized summary is
+returned only to execution and cleaned with `normalize_patient_summary`. A failed
+startup handshake stops at an unavailable state with manual reconnect; a busy claim
+recovers the existing turn without resending the new text.
+
 ## Package Layout
 
 PAT-002-B B2 checks the shared deterministic safety floor before turn-specific
@@ -487,7 +517,19 @@ See [October 17 acceptance](../docs/pat-002-b-acceptance-2026-10-17.md) and the
 ## Cross-clinic scheduling and clinic tags (CLN-003 slices E and F)
 
 Every appointment and offer group carries `clinic_id` (and `clinician_id`) copied from its care-team
-link by a database trigger, so it cannot disagree with the link. `GET /appointments/` rows and the
+link by a database trigger, so it cannot disagree with the link. UX-006 adds
+`GET /appointments/schedule?from&to[&clinic_id]` (the caller's own visits, open offers and change
+requests, next visit; 45-day cap), `GET /appointments/busy?from&to` (own booked intervals with clinic
+names, never patients; 48 h cap) and `GET /appointments/?patient_id=` (one linked patient's visits).
+Visit management (migration 071): `POST /appointments/{id}/cancel` (`reason_code`, `reason`),
+`/complete` and `/no-show`, all clinician-only for the appointment's own clinician or one linked at its
+clinic and audited in `appointment_offer_events`; `PUT /appointments/{id}` edits type, location, reason
+and notes but refuses a time change on a confirmed or scheduled visit (`APPOINTMENT_TIME_CHANGE_VIA_OFFER`);
+`GET /appointments/schedule?include_cancelled=true` adds cancelled visits.
+Message translation is never done on send or read: reads set `translation_pending` and
+`POST /care-conversations/{id}/messages/{message_id}/translation` translates one message (same
+authorization as reading the conversation, idempotent, honours a fresh failure marker).
+ `GET /appointments/` rows and the
 propose/respond/update responses carry `clinic_id` and `clinic_name` for both roles; a clinician's list
 shows only visits at clinics where they hold a link. A clinician cannot hold overlapping
 `confirmed`/`scheduled` visits across all their clinics (exclusion constraint

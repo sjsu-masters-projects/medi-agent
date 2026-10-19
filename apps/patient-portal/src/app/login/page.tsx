@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { FiEye, FiEyeOff } from "react-icons/fi";
 import { useDispatch } from "react-redux";
 import Image from "next/image";
 import { AuthEntryButton as Button, AuthEntryInput as Input } from "@/components/features/auth-entry-presentation";
 import { api } from "@/services/api";
-import { writeStoredSession } from "@/services/auth-session";
+import { consumeSignOutReason, writeStoredSession } from "@/services/auth-session";
 import { hydrateSession, type PatientAuthSession } from "@/store/slices/auth-slice";
 import type { AppDispatch } from "@/store/store";
 import { PortalUserRole } from "@/types";
@@ -42,8 +42,17 @@ function LoginPageContent() {
     const [errorKey, setErrorKey] = useState<"clinicianAccount" | "invalidLogin" | "failure" | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
+    // A sign-out recorded by the session limits or another tab can arrive without the query reason.
+    const [storedReason, setStoredReason] = useState<string | null>(null);
+    useEffect(() => {
+        setStoredReason(consumeSignOutReason());
+    }, []);
+
     const notice = (() => {
-        const reason = searchParams?.get("reason") ?? "";
+        const reason = searchParams?.get("reason") || storedReason || "";
+        if (reason === "inactivity" || reason === "session_limit") {
+            return copy.inactivity;
+        }
         if (reason === "session_expired") {
             return copy.expired;
         }
@@ -73,7 +82,7 @@ function LoginPageContent() {
                 refreshToken: response.tokens.refresh_token,
                 user: { ...response.user, role: PortalUserRole.PATIENT },
             };
-            writeStoredSession(session);
+            writeStoredSession(session, { signIn: true });
             dispatch(hydrateSession(session));
 
             // The login response carries this single onboarding decision so we do not

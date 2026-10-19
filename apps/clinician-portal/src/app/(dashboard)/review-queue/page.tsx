@@ -2,6 +2,7 @@
 
 import { ClinicChip, ClinicFilterEmpty, ClinicFilterField } from "@/components/features/clinic-chip";
 import { SourceFileIcon } from "@/components/features/source-file";
+import { clinicScopeLabel } from "@/hooks/clinic-scope";
 import { useClinicFilter } from "@/hooks/use-clinic-filter";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -125,7 +126,7 @@ export default function ReviewQueuePage() {
                         Patient Upload Review Queue
                     </h1>
                     <p className="mt-1 max-w-[80ch] text-sm text-muted">
-                        Review patient-uploaded sources before they can support a new care plan. Document approval does not publish instructions; the complete plan requires separate approval.
+                        Review patient-uploaded sources before they can support a new care plan. Document approval does not publish instructions; the complete plan requires separate approval.{clinicScopeLabel(clinicFilter) ? ` · ${clinicScopeLabel(clinicFilter)}` : ""}
                     </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">

@@ -22,6 +22,17 @@ export interface ChatMessageApi {
     attachments?: unknown[] | null;
 }
 
+export interface ChatTurnApi {
+    client_message_id: string;
+    status: "processing" | "completed" | "failed" | "interrupted";
+    retryable: boolean;
+    attempt: number;
+    failure_code?: string | null;
+    safety_guidance?: string;
+    document_id: string | null;
+    user_message?: ChatMessageApi;
+}
+
 export interface AssistantCompleteEvent {
     type: "assistant_complete";
     message: ChatMessageApi;
@@ -76,6 +87,7 @@ export interface ChatErrorEvent {
     type: "error";
     code?: string;
     message?: string;
+    client_message_id?: string;
 }
 
 export interface EscalationRecommendedEvent {
@@ -128,6 +140,9 @@ export interface AppointmentCreatedEvent {
 }
 
 export type ChatSocketEvent =
+    | { type: "safety_turn_saved"; client_message_id: string }
+    | { type: "chat_turn"; turn: ChatTurnApi }
+    | { type: "chat_turns"; turns: ChatTurnApi[] }
     | AppointmentCreatedEvent
     | AppointmentProposalEvent
     | AssistantChunkEvent
@@ -249,12 +264,17 @@ export interface ChatConversationApi {
     turn_count: number;
     created_at: string;
     updated_at: string;
+    status?: "needs_attention" | null;
+    reply_in_progress?: boolean;
 }
 
 export interface ChatConversationSummary {
     sessionId: string;
     title: string;
     updatedAt: string;
+    /** The latest saved reply is unfinished; opening the conversation shows recovery. */
+    needsAttention: boolean;
+    replyInProgress: boolean;
 }
 
 /** The patient's conversations with Nora, most recent first. */
@@ -270,6 +290,8 @@ export async function fetchChatConversations(
         sessionId: row.session_id,
         title: row.title,
         updatedAt: row.updated_at,
+        needsAttention: row.status === "needs_attention",
+        replyInProgress: Boolean(row.reply_in_progress),
     }));
 }
 
@@ -289,6 +311,7 @@ export function newConversationId(): string {
 }
 
 export interface ChatWebSocketOptions {
+    durableTurns?: boolean;
     documentId?: string | null;
     /** The patient dismissed this conversation's document; the server clears it. */
     documentDismissed?: boolean;
@@ -310,6 +333,7 @@ export function buildChatWebSocketUrl(
     parsed.protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
     parsed.pathname = `/ws/chat/${patientId}`;
     parsed.search = "";
+    if (options.durableTurns) parsed.searchParams.set("turn_protocol", "1");
 
     const documentId = options.documentId?.trim();
     if (documentId) {

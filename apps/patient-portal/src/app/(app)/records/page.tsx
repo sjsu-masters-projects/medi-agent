@@ -17,7 +17,7 @@ import { Button, EmptyState, ErrorState, Modal, Skeleton } from "@/components/ui
 import { api } from "@/services/api";
 import { redirectToLogin } from "@/services/auth-redirect";
 import { refreshPatientSession } from "@/services/auth-refresh";
-import { writeStoredSession } from "@/services/auth-session";
+import { refreshSingleFlight } from "@/services/auth-session";
 import {
   buildDocumentChatHref,
   buildSuggestedDocumentQuestion,
@@ -450,19 +450,23 @@ export default function RecordsPage() {
       return null;
     }
 
-    try {
-      const session = await refreshPatientSession(refreshToken);
-      writeStoredSession(session);
-      dispatch(hydrateSession(session));
-      return session;
-    } catch {
+    // Single-flight across tabs; a session another tab already refreshed is adopted.
+    const outcome = await refreshSingleFlight({
+      current: { expiresAt: expiresAt ?? 0, refreshToken },
+      refreshSession: refreshPatientSession,
+    });
+    if (outcome.status === "ok") {
+      dispatch(hydrateSession(outcome.session));
+      return outcome.session;
+    }
+    if (outcome.status === "invalid") {
       dispatch(logout());
       redirectToLogin({ reason: "session_expired" });
-      setPageError(
-        copy("Your session expired. Please sign in again before uploading."),
-      );
-      return null;
     }
+    setPageError(
+      copy("Your session expired. Please sign in again before uploading."),
+    );
+    return null;
   }
 
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {

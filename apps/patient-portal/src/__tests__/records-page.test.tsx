@@ -70,6 +70,15 @@ vi.mock("@/services/auth-refresh", () => ({
 }));
 
 vi.mock("@/services/auth-session", () => ({
+    refreshSingleFlight: async ({ current, refreshSession }: { current: { refreshToken: string }; refreshSession: (token: string) => Promise<unknown> }) => {
+        try {
+            const session = await refreshSession(current.refreshToken);
+            writeStoredSession(session);
+            return { adopted: false, session, status: "ok" };
+        } catch {
+            return { status: "invalid" };
+        }
+    },
   writeStoredSession,
 }));
 

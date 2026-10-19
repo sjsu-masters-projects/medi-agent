@@ -179,6 +179,21 @@ def _send_turn(websocket) -> None:
         pass
 
 
+def test_legacy_connection_against_new_code_does_not_use_durable_store(
+    connect, patient_id, monkeypatch
+):
+    store = _FakeChatStore(str(patient_id), {})
+    store.install(monkeypatch)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Legacy connections must not call the durable store")
+
+    monkeypatch.setattr("app.routers.chat.ChatTurnService", forbidden)
+    with connect() as socket:
+        assert "chat_turns" not in _types(_opening_events(socket))
+        _send_turn(socket)
+
+
 def test_dismissal_clears_the_saved_focus_and_it_is_not_restored(connect, patient_id, monkeypatch):
     document_id = str(uuid4())
     store = _FakeChatStore(str(patient_id), {document_id: _document(document_id)})

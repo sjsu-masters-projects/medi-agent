@@ -25,6 +25,34 @@ function handleUnauthorizedRequest(token: string | undefined) {
     });
 }
 
+/**
+ * After a 401: adopt a newer session another tab stored, or do one single-flight
+ * refresh. Returns the access token to retry with, or null when the user must sign in.
+ * Lazy imports avoid a cycle, because the refresh call itself goes through `api`.
+ */
+async function recoverAccessToken(failedAccessToken: string): Promise<string | null> {
+    if (typeof window === "undefined") {
+        return null;
+    }
+    try {
+        const [{ recoverFromUnauthorized }, { refreshPatientSession }] = await Promise.all([
+            import("@/services/auth-session"),
+            import("@/services/auth-refresh"),
+        ]);
+        const session = await recoverFromUnauthorized({
+            failedAccessToken,
+            refreshSession: refreshPatientSession,
+        });
+        if (session) {
+            // Other consumers of the Redux copy pick this up through the session event.
+            return session.accessToken;
+        }
+    } catch {
+        // Fall through to the sign-in redirect.
+    }
+    return null;
+}
+
 type JsonObject = Record<string, unknown>;
 
 interface ValidationErrorDetail {
@@ -145,7 +173,7 @@ class ApiClient {
         this.baseUrl = baseUrl;
     }
 
-    private async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+    private async request<T>(endpoint: string, options: RequestOptions = {}, retried = false): Promise<T> {
         const { token, headers: customHeaders, ...fetchOptions } = options;
 
         const headers: Record<string, string> = {
@@ -163,6 +191,12 @@ class ApiClient {
         });
 
         if (!response.ok) {
+            if (response.status === 401 && token && !retried && typeof window !== "undefined" && window.location.pathname !== "/login") {
+                const recoveredToken = await recoverAccessToken(token);
+                if (recoveredToken && recoveredToken !== token) {
+                    return this.request<T>(endpoint, { ...options, token: recoveredToken }, true);
+                }
+            }
             if (response.status === 401) {
                 handleUnauthorizedRequest(token);
             }

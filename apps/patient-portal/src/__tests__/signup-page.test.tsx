@@ -88,7 +88,7 @@ describe("Patient signup page", () => {
         expect(writeStoredSession).toHaveBeenCalledWith({
             accessToken: "synthetic-access", expiresAt: 1234567890, refreshToken: "synthetic-refresh",
             user: { email: "patient@example.com", id: "synthetic-patient", role: "patient" },
-        });
+        }, { signIn: true });
         expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
             type: "onboarding/setOnboardingProfile",
             payload: { dateOfBirth: "1990-01-01", firstName: "Synthetic", lastName: "Patient" },

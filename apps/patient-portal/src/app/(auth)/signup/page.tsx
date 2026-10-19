@@ -78,7 +78,7 @@ export default function SignupPage() {
                 refreshToken: response.tokens.refresh_token,
                 user: { ...response.user, role: PortalUserRole.PATIENT },
             };
-            writeStoredSession(session);
+            writeStoredSession(session, { signIn: true });
             dispatch(
                 setOnboardingProfile({
                     dateOfBirth: formData.dateOfBirth,

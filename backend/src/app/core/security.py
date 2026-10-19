@@ -45,6 +45,9 @@ logger = logging.getLogger(__name__)
 _LEGACY_ALGORITHM = "HS256"
 _ASYMMETRIC_ALGORITHMS = {"RS256", "ES256"}
 _JWKS_CACHE_TTL_SECONDS = 300
+# Seconds of clock skew tolerated on exp/nbf/iat, so a token a moment past its expiry
+# (or a client clock slightly ahead) is not rejected while a refresh is in flight.
+_JWT_LEEWAY_SECONDS = 30
 
 
 class JwksCacheState(TypedDict):
@@ -126,6 +129,7 @@ def _decode_supabase_token(token: str) -> dict[str, Any]:
             algorithms=[_LEGACY_ALGORITHM],
             audience="authenticated",
             issuer=_supabase_issuer(),
+            leeway=_JWT_LEEWAY_SECONDS,
         )
 
     if algorithm in _ASYMMETRIC_ALGORITHMS:
@@ -143,6 +147,7 @@ def _decode_supabase_token(token: str) -> dict[str, Any]:
             algorithms=[algorithm],
             audience="authenticated",
             issuer=_supabase_issuer(),
+            leeway=_JWT_LEEWAY_SECONDS,
         )
 
     raise JWTError("Unsupported token signing algorithm")

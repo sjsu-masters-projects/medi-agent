@@ -114,9 +114,9 @@ Both uses are labelled as such.
    provenance, not the patient's 50 most recent untranslated facts.
 7. **Message translation reads are bounded.** A read translates at most ten messages that have
    no stored translation, skips stored ones, logs failures without message text, and never
-   fails the read. Follow-ups, deliberately not done now: move on-the-fly translation to a
-   background job; detect the clinician's language (the existing locale helper assumes
-   clinician = en-US) so a Spanish-writing clinician is translated to English.
+   fails the read. **Superseded by decision 12:** the cap is gone because a read no longer calls
+   the model. Clinicians write English; translation runs only when a message's detected language
+   differs from the reader's language, so there is no "detect the clinician's language" follow-up.
 
 ## Decisions from the October 17 second review (branch `fix/loc-003-review`)
 
@@ -140,7 +140,7 @@ Both uses are labelled as such.
 10. **Stored translations are always attached; only new model calls are capped (ten per read).**
     A failed translation is stored as a marker (`guard_passed=false`, `guard_failure_code =
     model_error`), is never shown, and is retried after an hour. Store and read run off the event
-    loop. The send still waits for the translation (follow-up: a background job). `model_id` is
+    loop. The send used to wait for the translation; decision 12 removes that. `model_id` is
     stored when the provider reports it.
 11. **Shared guards** (`translation_guards.py`) for messages, care-plan wording and fact fields:
     numbers are compared with their units (mg, g, mcg/µg, mL, L, units/UI, %, tablets/tabletas and
@@ -166,3 +166,24 @@ Both uses are labelled as such.
 - The duplicate `067` migration prefix (the validator allows it).
 - Moving message translation on send and read to a background job; recording the guard outcome
   with the wording verification.
+
+## Decision from the October 17 UX-006 branch (`feature/clinician-schedule`)
+
+12. **Translation never runs in the send or read path (done).** Production Cloud Run gives CPU
+    only while a request is open, so no background task or thread is used.
+    - **Send** stores the message and returns; no model call.
+    - **A conversation read** returns originals plus any stored translations. A message the viewer
+      needs translated but which has none stored (or only a failure marker older than an hour)
+      carries `translation_pending: true`. A fresh failure marker is neither shown nor pending.
+    - **`POST /care-conversations/{id}/messages/{message_id}/translation`** translates ONE message
+      into the viewer's language with the same guards, stores it (idempotent upsert) and returns
+      `{message_id, translation, translation_locale, translation_guard_passed, translation_pending}`.
+      It is authorized like a read of that conversation (an outsider is refused; a message outside
+      the conversation is "not found"). A stored translation or a fresh failure marker is returned
+      without a model call, which is the simple rate limit.
+    - **Both portals** show the original first, then request the pending messages after the read,
+      at most three in parallel, with a subtle "Translating…" (es-MX `Traduciendo…` is a **draft
+      for LOC-001 review, not approved**). A failed guard or request leaves the original. Display
+      rules are unchanged: locale must match the viewer. Typing and sending are never blocked.
+    - Clinicians write English; translation runs only when a message's detected language differs
+      from the reader's language.

@@ -7,7 +7,6 @@ import { Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { useFlip } from "@/components/ui/motion";
 import { CompactField, SegmentedControl, compactSelectClass } from "@/components/ui/toolbar";
-import { readStoredClinicContext } from "@/services/clinic-context";
 import { ClinicChip, ClinicFilterEmpty, ClinicFilterField } from "@/components/features/clinic-chip";
 import { RiskBadge } from "@/components/features/risk-badge";
 import { clinicScopeLabel } from "@/hooks/clinic-scope";
@@ -106,10 +105,6 @@ function comparePatients(
 
 function noopSubscribe() {
     return () => undefined;
-}
-
-function storedClinicName() {
-    try { return readStoredClinicContext()?.clinicName ?? null; } catch { return null; }
 }
 
 function todayLabel() {
@@ -229,8 +224,7 @@ export default function DashboardPage() {
     }, [minMedCount, patients, query, riskFilter, sortBy, sortOrder]);
 
     const flip = useFlip(visiblePatients.map((patient) => patient.patient_id).join(","));
-    const storedClinic = useSyncExternalStore(noopSubscribe, storedClinicName, () => null);
-    const scopeLabel = clinicScopeLabel(clinicFilter, storedClinic);
+    const scopeLabel = clinicScopeLabel(clinicFilter);
     const today = useSyncExternalStore(noopSubscribe, todayLabel, () => "");
     const statTone = (label: string) => label.includes("Critical") ? "text-risk" : label.includes("ADR") || label.includes("MedWatch") ? "text-warn-ink" : "text-ink";
     const columns = "grid-cols-[minmax(200px,1.3fr)_112px_minmax(170px,1fr)_minmax(200px,1.4fr)_minmax(150px,1fr)_112px]";

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { HiStop } from "react-icons/hi2";
-import { CARE_ASSISTANT_NAME, getPatientChatCopy, getChatControlsCopy } from "@/content/chat-copy";
+import { CARE_ASSISTANT_NAME, getPatientChatCopy, getChatControlsCopy, getChatRecoveryCopy } from "@/content/chat-copy";
 import { CareConversations } from "@/components/features/care-conversations";
 import { NoraConversations } from "@/components/features/nora-conversations";
 import { NotificationBell } from "@/components/features/notification-centre";
@@ -15,6 +15,7 @@ import { todayConversationId } from "@/services/chat-api";
 import { ChatBubble } from "@/components/features";
 import { Icon } from "@/components/ui/icons";
 import { ChatTextarea } from "@/components/features/chat-presentation";
+import { ChatTurnRecovery } from "@/components/features/chat-turn-recovery";
 import { ProcessingDots } from "@/components/ui/motion";
 import { usePatientChatSession, type PrivateReplyHandler } from "@/hooks/use-patient-chat-session";
 import { usePatientProfile } from "@/hooks/use-patient-profile";
@@ -27,6 +28,7 @@ export default function ChatPage() {
     const locale = profile?.preferredLanguage ?? DEFAULT_LOCALE;
     const copy = getPatientChatCopy(locale);
     const controls = getChatControlsCopy(locale);
+    const recoveryCopy = getChatRecoveryCopy(locale);
     const [conversation, setConversation] = useState<"assistant" | "care-team">("assistant");
     const [careTeamOpened, setCareTeamOpened] = useState(false);
     const searchParams = useSearchParams();
@@ -39,9 +41,15 @@ export default function ChatPage() {
     const conversationId = careTeamDestination ? searchParams.get("conversation") : null;
     const recipientId = careTeamDestination ? searchParams.get("recipient") : null;
     // A document handoff from Records opens Nora directly (see usePatientChatSession).
-    const [inbox, setInbox] = useState(() => !conversationOpen && !searchParams.has("document"));
+    const [inbox, setInbox] = useState(() => !conversationOpen && !searchParams.has("document") && !searchParams.has("session"));
     const requestedDestination = careTeamDestination ? `${conversationId ?? ""}:${recipientId ?? ""}` : null;
     const [appliedDestination, setAppliedDestination] = useState<string | null>(null);
+    const documentDestination = searchParams.get("document");
+    const [appliedDocument, setAppliedDocument] = useState(documentDestination);
+    if (documentDestination !== appliedDocument) {
+        setAppliedDocument(documentDestination);
+        if (documentDestination) { setConversation("assistant"); setInbox(false); }
+    }
     if (requestedDestination !== appliedDestination) {
         setAppliedDestination(requestedDestination);
         if (requestedDestination !== null) { setConversation("care-team"); setCareTeamOpened(true); setInbox(true); }
@@ -66,10 +74,10 @@ export default function ChatPage() {
         dismissDocumentContext, dismissSafetyNotice, documentContext, documentUnavailable, error, handleHandsFreeToggle,
         handleMicClick, handlePlayAssistantMessage, handleSend, handsFreeMode, input,
         isTyping, loading, messages, openConversation, safetyNotice, sessionId, setInput,
-        startNewConversation, voiceError, voiceStatus } = usePatientChatSession(intakeComposer.active ? intakeComposer.locale ?? locale : locale, routePrivateReply, intakeComposer.active, Boolean(intakeComposer.accepting && !intakeComposer.busy), intakeComposer.revision);
+        startNewConversation, recoveryTurns, retryTurn, dismissTurn, reconnectChat, turnBusy, voiceError, voiceStatus } = usePatientChatSession(intakeComposer.active ? intakeComposer.locale ?? locale : locale, routePrivateReply, intakeComposer.active, Boolean(intakeComposer.accepting && !intakeComposer.busy), intakeComposer.revision);
     const newChat = locale === "es-MX" ? "Nueva conversación" : "New chat";
     const openNora = (conversationId: string = todayConversationId()) => {
-        if (conversationId !== sessionId) openConversation(conversationId);
+        openConversation(conversationId);
         setCareTeamOpened(true); setConversation("assistant"); setInbox(false);
     };
     const historicalMessages = messages.filter((message) => message.role === ChatRole.CLINICIAN);
@@ -201,8 +209,12 @@ export default function ChatPage() {
                 </div>
                 <button className="ma-press min-h-11 shrink-0 rounded-xl px-3 text-sm font-semibold text-brand-ink hover:bg-surface/70" onClick={dismissDocumentContext} type="button">{controls.dismiss}</button>
             </section>}
-            {!documentContext && documentUnavailable && <p className="flex items-start gap-2 rounded-2xl bg-surface px-3.5 py-2.5 text-[13px] leading-snug text-ink-2" role="status"><Icon name="note" className="mt-px h-4 w-4 shrink-0 text-muted" />{controls.documentUnavailable}</p>}
-            {error && <p className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">{controls.chatError}</p>}
+            {!documentContext && documentUnavailable && <div className="rounded-2xl bg-surface px-3.5 py-2.5 text-[13px] text-ink-2" role="status"><p>{controls.documentUnavailable}</p><button type="button" className="min-h-11 px-3 font-semibold text-brand-ink" onClick={dismissDocumentContext}>{controls.dismiss}</button></div>}
+            <ChatTurnRecovery turns={recoveryTurns} locale={locale} connected={connectionStatus === "connected"} onRetry={retryTurn} onDismiss={dismissTurn} />
+            {error && <div className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">
+                <p>{error === "CHAT_TURN_BUSY" ? recoveryCopy.busy : error === "CHAT_TURN_EXPIRED" ? recoveryCopy.expired : error === "CHAT_STARTUP_UNAVAILABLE" ? recoveryCopy.unavailable : controls.chatError}</p>
+                {error === "CHAT_STARTUP_UNAVAILABLE" && <button type="button" className="mt-2 min-h-11 rounded-xl bg-surface px-3 font-semibold" onClick={reconnectChat}>{recoveryCopy.reconnect}</button>}
+            </div>}
             {safetyNotice && <div className="flex items-start gap-3 rounded-2xl border border-danger-ink/20 bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">
                 <Icon name="alert" className="mt-px h-5 w-5 shrink-0" />
                 <p className="flex-1 font-medium">{safetyNotice}</p>
@@ -239,12 +251,12 @@ export default function ChatPage() {
                         }}
                         placeholder={voiceStatus === "listening" ? controls.listening : voiceStatus === "processing" ? controls.transcribing : copy.inputPlaceholder} value={input} />
                     <button className={`ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-full disabled:opacity-40 ${voiceStatus === "listening" ? "bg-danger-ink text-white" : "bg-surface-2 text-ink-2 hover:bg-line-strong"}`} aria-label={voiceStatus === "listening" ? controls.stopVoice : voiceStatus === "playing" ? controls.interrupt : controls.speak} aria-pressed={voiceStatus === "listening"}
-                        disabled={voiceStatus === "unsupported" || voiceStatus === "processing" || intakeComposer.busy || !profile} onClick={handleMicClick} type="button">
+                        disabled={(!intakeComposer.active && (turnBusy || documentUnavailable)) || voiceStatus === "unsupported" || voiceStatus === "processing" || intakeComposer.busy || !profile} onClick={handleMicClick} type="button">
                         {voiceStatus === "listening" ? <HiStop aria-hidden className="h-5 w-5" /> : voiceStatus === "processing" ? <ProcessingDots /> : <Icon name="mic" className="h-5 w-5" />}
                     </button>
                     </div>
                     <button className="ma-press flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-brand text-white shadow-[var(--shadow-fab)] hover:bg-brand-hover disabled:opacity-40 disabled:shadow-none"
-                        aria-label={controls.send} disabled={!input.trim() || (!intakeComposer.active && connectionStatus !== "connected") || intakeComposer.busy || !profile} type="submit"><Icon name="send" /></button>
+                        aria-label={controls.send} disabled={(!intakeComposer.active && (turnBusy || documentUnavailable)) || !input.trim() || (!intakeComposer.active && connectionStatus !== "connected") || intakeComposer.busy || !profile} type="submit"><Icon name="send" /></button>
                 </div>
                 {handsFreeMode && <p className="px-2 text-xs text-brand-ink">{controls.autoPlay}</p>}
                 {!profile && <p className="px-2 text-sm text-muted" role="status">{controls.profileRequired}</p>}
