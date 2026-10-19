@@ -106,16 +106,14 @@ describe("saved Nora turn recovery", () => {
         expect(screen.getByRole("button", { name: copy.retry })).toHaveAccessibleDescription(copy.waitBeforeRetry);
     });
 
-    it("treats queued like processing: busy, no retry, and one card only when progress cannot be shown", () => {
+    it("treats queued like processing: busy, no retry, and no card (the thread shows the typing bubble)", () => {
         const { result } = setup();
         act(() => { result.current.accept([{ ...row, status: "queued", retryable: false }], true); });
         expect(result.current.turnBusy).toBe(true);
         expect(result.current.turns[0].status).toBe("queued");
         const copy = getChatRecoveryCopy("en-US");
-        const view = render(<ChatTurnRecovery turns={result.current.turns} locale="en-US" connected progressVisible onRetry={vi.fn()} onDismiss={vi.fn()} />);
+        const view = render(<ChatTurnRecovery turns={result.current.turns} locale="en-US" connected onRetry={vi.fn()} onDismiss={vi.fn()} />);
         expect(view.container.querySelector("section")).toBeNull();
-        view.rerender(<ChatTurnRecovery turns={result.current.turns} locale="en-US" connected progressVisible={false} onRetry={vi.fn()} onDismiss={vi.fn()} />);
-        expect(screen.getByText(copy.preparing)).toBeInTheDocument();
         expect(screen.queryByText(copy.interrupted)).not.toBeInTheDocument();
     });
 

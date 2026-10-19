@@ -248,6 +248,13 @@ limits do not coordinate across Cloud Run replicas or Jobs.
 
 ## Nora turn recovery (PAT-001-A / PAT-004)
 
+**Websocket lifetime.** The Cloud Run request `--timeout` of the API service bounds how long a
+websocket can stay open (at 300 s every chat socket closed at about 300 s with code 1005). The API
+service is deployed with `--timeout 3600`, the Cloud Run maximum; the worker keeps 300. The
+portal renews its socket quietly at about 3500 s and reconnects on any close, keeping the draft,
+and a tab the socket does not feed reads the draft from `GET /api/v1/chat/turns/{id}/events?after_seq=`
+about once a second while visible.
+
 The patient websocket opts into durable execution with `turn_protocol=1`.
 `user_message` includes a UUID `client_message_id`, the exact text/language/audio,
 and an explicit `document_id` (null for general questions). Retries reuse those

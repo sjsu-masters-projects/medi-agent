@@ -118,7 +118,7 @@ jobs:
             --service-account ${RUNTIME_SERVICE_ACCOUNT} \
             --update-env-vars VERTEX_AI_LOCATION=global,GEMINI_VERTEX_AI_LOCATION=global,GEMINI_TRIAGE_MODEL=gemini-3.5-flash-lite,GEMINI_FLASH_MODEL=gemini-3.8-flash,GEMINI_FALLBACK_MODEL=gemini-3.5-flash,GEMINI_PRO_MODEL=gemini-3.1-pro-preview,CHAT_TURN_TIMEOUT_SECONDS=30,MODEL_CIRCUIT_BREAKER_COOLDOWN_SECONDS=60 \
             --port 8080 \
-            --timeout 300
+            --timeout 3600
 
       # OPS-006 phase 2. Creates and updates the Nora turn worker only when the repository
       # variable DEPLOY_CHAT_WORKER is "true", so merging this file creates nothing. The
