@@ -15,7 +15,9 @@ from app.clients.supabase import get_admin_client
 from app.config import settings
 from app.core.exception_handlers import register_exception_handlers
 from app.core.log_redaction import install_credential_redaction
+from app.core.request_context import RequestContextMiddleware
 from app.core.security_headers import SecurityHeadersMiddleware
+from app.core.structured_logging import configure_logging
 from app.routers import (
     adherence,
     appointments,
@@ -107,6 +109,7 @@ def create_app() -> FastAPI:
     # paths, so a credential that reaches a query string is published to the log the first
     # time it is used. Credentials belong in headers; this is the net under that rule.
     install_credential_redaction()
+    configure_logging()
 
     # The interactive docs enumerate every route and request shape, including the
     # clinician and SMART import surface. That is a map for anyone probing the API, and
@@ -136,6 +139,8 @@ def create_app() -> FastAPI:
         # File downloads (Form 3500 PDF) name themselves; the portal reads the filename.
         expose_headers=["Content-Disposition"],
     )
+    # Outermost, so every log line of a request or socket carries its request id.
+    application.add_middleware(RequestContextMiddleware)
 
     # ── Exception Handlers ──────────────────────────────
     register_exception_handlers(application)

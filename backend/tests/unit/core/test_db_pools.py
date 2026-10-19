@@ -100,3 +100,47 @@ async def test_a_failed_shared_read_fails_every_waiter_and_is_not_cached():
         data={"unread_count": 0, "action_item_count": 0}
     )
     assert (await service.summary()).unread_count == 0
+
+
+@pytest.mark.asyncio
+async def test_a_saturated_pool_refuses_fast_with_a_retryable_error_and_recovers():
+    from app.core import db_pools
+    from app.core.exceptions import PoolSaturatedError
+
+    release = threading.Event()
+    blockers = [
+        asyncio.ensure_future(run_notification_db(lambda: release.wait(5)))
+        for _ in range(db_pools.NOTIFICATION_MAX_PENDING)
+    ]
+    try:
+        await asyncio.sleep(0.05)
+        started = time.monotonic()
+        with pytest.raises(PoolSaturatedError) as raised:
+            await run_notification_db(lambda: "never queued")
+        assert time.monotonic() - started < 0.2 and raised.value.retry_after
+        assert await asyncio.wait_for(run_chat_turn_db(lambda: "other pool"), 1) == "other pool"
+    finally:
+        release.set()
+        await asyncio.gather(*blockers)
+    assert await run_notification_db(lambda: "recovered") == "recovered"
+    assert db_pools._pending == {"notification": 0, "chat_turn": 0}
+
+
+@pytest.mark.asyncio
+async def test_the_saturation_response_is_503_with_retry_after():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.core.exception_handlers import register_exception_handlers
+    from app.core.exceptions import PoolSaturatedError
+
+    app = FastAPI()
+    register_exception_handlers(app)
+
+    @app.get("/x")
+    async def x():
+        raise PoolSaturatedError("notification")
+
+    response = TestClient(app).get("/x")
+    assert response.status_code == 503 and response.headers["Retry-After"] == "2"
+    assert response.json()["error"]["code"] == "POOL_SATURATED"

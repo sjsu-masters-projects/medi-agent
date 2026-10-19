@@ -427,6 +427,32 @@ links and unused invite codes at that clinic), and `PUT /clinicians/me/clinics/{
 display name, admin at that clinic only, `CLINIC_NAME_TAKEN`). Migration
 `067_clinic_lists_and_roles.sql` carries the SQL (applied October 17). See `.agent/specs/clin-003-multi-clinic-clinicians.md` for the design and decisions.
 
+### Structured logging and turn tracing (OPS-006 phase 1)
+
+`app/core/structured_logging.py` writes one JSON object per line on Cloud Run (`K_SERVICE` set,
+or `LOG_FORMAT=json`) and one readable line elsewhere (`LOG_FORMAT=text` forces it). Fields:
+`severity`, `message`, `request_id`, `turn_id`, `session_hash`, `actor_hash` (salted SHA-256
+prefix), `event`, `outcome`, `duration_ms`, `logging.googleapis.com/trace` (needs
+`GOOGLE_PROJECT_ID`), plus the fixed lifecycle vocabulary in `EVENT_FIELDS`. The request id is
+the `X-Cloud-Trace-Context` trace id or a generated one, set by `RequestContextMiddleware` for
+HTTP and websockets; uvicorn's access log is unchanged. No patient text and no exception
+message is logged: exceptions appear as type plus file and line frames.
+
+Turn lines, all with `turn_id`: `chat_turn.begin` / `retry` (`execute`, `attempt`),
+`chat_model.start` / `end` (`model`, `fallback_used`, `duration_ms`), `chat_turn.actions`,
+`chat_turn.complete` (`accepted`, `late`), `chat_turn.failed` / `interrupted` (`category`),
+`chat_turn.recover`, `chat_turn.dismiss`, `chat_turn.finished`. Every state change names its
+`trigger` (`execution`, `execution_error`, `processing_timeout`, `shutdown_cancel`,
+`socket_recover`, `socket_dismiss`, `socket_connect`, `failure_report`). A refused operation
+logs `reason` from migration 077 (`not_found`, `session_mismatch`, `lease_mismatch`,
+`deadline_passed`, `status:<status>`; `unknown` from an older function). Find a turn in Cloud
+Logging with `jsonPayload.turn_id="<id>"`.
+
+Apply order for **077**: after 074 and independent of the backend deploy (either order is safe).
+It also sets `lock_timeout` 5 s and `statement_timeout` 8 s on `chat_turn_operation` itself.
+Database worker pools are bounded (`app/core/db_pools.py`): a full pool answers `503` with
+`Retry-After` instead of queueing.
+
 ## Database Migrations
 
 Migrations are plain SQL files in `src/app/db/migrations/`, currently `001`–`067`. Some

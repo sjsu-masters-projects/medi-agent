@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import time
 from typing import Any, cast
 from uuid import UUID
 
@@ -13,6 +14,7 @@ from supabase import Client
 
 from app.core.db_pools import run_chat_turn_db
 from app.core.exceptions import ExternalServiceError, ValidationError
+from app.core.structured_logging import log_event
 from app.models.chat import ChatMessage
 from app.models.enums import coerce_locale
 from app.safety import TRIAGE_COPY, deterministic_safety_floor
@@ -37,11 +39,26 @@ def turn_budget(model_timeout_seconds: float) -> tuple[int, int]:
     return processing, processing + SAVE_GRACE_SECONDS
 
 
+def _elapsed_ms(started: float) -> int:
+    return int((time.monotonic() - started) * 1000)
+
+
 class ChatTurnService:
     def __init__(self, db: Client, patient_id: str, session_id: str) -> None:
         self.db, self.patient_id, self.session_id = db, patient_id, session_id
 
-    async def call(self, action: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def call(
+        self,
+        action: str,
+        payload: dict[str, Any] | None = None,
+        *,
+        trigger: str = "service",
+        category: str | None = None,
+    ) -> dict[str, Any]:
+        """One database operation. ``trigger`` names the code path that asked for it, so the
+        actor that changes a running turn's status is visible in the logs."""
+        started = time.monotonic()
+        turn_id = (payload or {}).get("id")
         try:
             response = await asyncio.wait_for(
                 run_chat_turn_db(
@@ -58,7 +75,17 @@ class ChatTurnService:
                 timeout=10,
             )
         except TimeoutError:
-            logger.warning("Chat turn RPC %s timed out", action)
+            log_event(
+                logger,
+                "chat_turn.rpc_failed",
+                level=logging.WARNING,
+                message=f"Chat turn RPC {action} timed out",
+                operation=action,
+                trigger=trigger,
+                turn_id=turn_id,
+                outcome="timeout",
+                duration_ms=_elapsed_ms(started),
+            )
             # The underlying request may still commit: callers must retain its identity.
             raise ExternalServiceError(
                 "Chat", "Saved chat recovery is temporarily unavailable."
@@ -74,8 +101,16 @@ class ChatTurnService:
             code = str(exc.message)
             # Postgres code and RPC action only: enough to tell a missing column from a
             # permission error in plain-text logs, without row values.
-            logger.warning(
-                "Chat turn RPC %s failed: %s", action, getattr(exc, "code", None) or "unknown"
+            log_event(
+                logger,
+                "chat_turn.rpc_failed",
+                level=logging.WARNING,
+                message=f"Chat turn RPC {action} failed",
+                operation=action,
+                trigger=trigger,
+                turn_id=turn_id,
+                outcome=code if code in codes else (getattr(exc, "code", None) or "unknown"),
+                duration_ms=_elapsed_ms(started),
             )
             if code in codes:
                 raise ValidationError(code) from None
@@ -86,7 +121,75 @@ class ChatTurnService:
             raise ExternalServiceError(
                 "Chat", "Saved chat recovery is unavailable. Try again later."
             )
-        return cast(dict[str, Any], response.data)
+        data = cast(dict[str, Any], response.data)
+        self._log_outcome(action, data, trigger, turn_id, started, category)
+        return data
+
+    def _log_outcome(
+        self,
+        action: str,
+        data: dict[str, Any],
+        trigger: str,
+        turn_id: Any,
+        started: float,
+        category: str | None,
+    ) -> None:
+        """One line per state-changing or recovery operation; counts and codes only."""
+        fields: dict[str, Any] = {
+            "operation": action,
+            "trigger": trigger,
+            "turn_id": turn_id,
+            "duration_ms": _elapsed_ms(started),
+            "category": category,
+        }
+        if action == "begin":
+            return  # begin() logs its own line with what it learned
+        if action == "recover":
+            items = [row for row in data.get("items") or [] if isinstance(row, dict)]
+            log_event(
+                logger,
+                "chat_turn.recover",
+                message="Chat turns recovered",
+                outcome=f"{len(items)}_turns/"
+                f"{sum(1 for row in items if row.get('status') == 'processing')}_processing",
+                **fields,
+            )
+            return
+        accepted = bool(data.get("accepted"))
+        if accepted:
+            fields["late"] = bool(data.get("late"))
+            log_event(
+                logger,
+                f"chat_turn.{action}",
+                message=f"Chat turn {action} accepted",
+                accepted=True,
+                outcome="accepted",
+                **fields,
+            )
+            return
+        # An old database function returns no reason: say so rather than guess.
+        if action == "dismiss":
+            # Nothing to dismiss (already dismissed, or still running): not a refusal.
+            log_event(
+                logger,
+                "chat_turn.dismiss",
+                message="Chat turn dismiss matched no turn",
+                accepted=False,
+                outcome="none_dismissible",
+                **fields,
+            )
+            return
+        reason = str(data.get("reason") or "unknown")
+        log_event(
+            logger,
+            f"chat_turn.{action}",
+            level=logging.WARNING,
+            message=f"Chat turn {action} rejected: {reason}",
+            accepted=False,
+            outcome="rejected",
+            reason=reason,
+            **fields,
+        )
 
     async def begin(self, request: dict[str, Any], timeout: int) -> dict[str, Any]:
         try:
@@ -111,6 +214,7 @@ class ChatTurnService:
         fingerprint = hashlib.sha256(
             json.dumps(stable, sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest()
+        started = time.monotonic()
         result = await self.call(
             "begin",
             {
@@ -120,7 +224,23 @@ class ChatTurnService:
                 "timeout_seconds": timeout,
             },
         )
-        document = (result.get("turn") or {}).get("document_context")
+        turn = result.get("turn") or {}
+        attempt = int(turn.get("attempt") or 1)
+        log_event(
+            logger,
+            "chat_turn.retry" if result.get("execute") and attempt > 1 else "chat_turn.begin",
+            message="Chat turn retried"
+            if result.get("execute") and attempt > 1
+            else "Chat turn begun",
+            operation="begin",
+            turn_id=turn.get("id"),
+            execute=bool(result.get("execute")),
+            attempt=attempt,
+            status=turn.get("status"),
+            outcome="execute" if result.get("execute") else "replay",
+            duration_ms=_elapsed_ms(started),
+        )
+        document = (turn or {}).get("document_context")
         if isinstance(document, dict) and "summary" in document:
             document["summary"] = normalize_patient_summary(str(document["summary"]))
         return result
@@ -135,26 +255,48 @@ class TurnExecution:
         self.completed = False
 
     async def actions(self) -> None:
-        result = await self.service.call("actions", self.identity)
+        result = await self.service.call("actions", self.identity, trigger="execution")
         if not result.get("accepted"):
             raise ValidationError("CHAT_TURN_EXPIRED")
 
     async def finish(self, message: dict[str, Any]) -> dict[str, Any]:
-        result = await self.service.call("complete", {**self.identity, **message})
+        result = await self.service.call(
+            "complete",
+            # The turn's identity wins: the reply carries its own "id", which must never
+            # replace the turn id the database looks the lease up by.
+            {**message, **self.identity},
+            trigger="execution",
+        )
         if not result.get("accepted"):
             raise ValidationError("CHAT_TURN_EXPIRED")
         if result.get("late"):
             # The lease had lapsed but nothing replaced it: the finished reply is kept.
-            logger.warning(
-                "Accepted a finished Nora reply after its turn lease lapsed (turn %s)",
-                self.identity["id"],
+            log_event(
+                logger,
+                "chat_turn.late_completion",
+                level=logging.WARNING,
+                message="Accepted a finished Nora reply after its turn lease lapsed",
+                turn_id=self.identity["id"],
+                late=True,
             )
         self.completed = True
         return cast(dict[str, Any], result["message"])
 
-    async def fail(self, interrupted: bool = False) -> None:
+    async def fail(
+        self,
+        interrupted: bool = False,
+        *,
+        trigger: str = "execution_error",
+        category: str | None = None,
+    ) -> None:
+        """Mark the turn failed or interrupted. ``trigger`` says which code path did it."""
         if not self.completed:
-            await self.service.call("interrupted" if interrupted else "failed", self.identity)
+            await self.service.call(
+                "interrupted" if interrupted else "failed",
+                self.identity,
+                trigger=trigger,
+                category=category,
+            )
 
 
 _SAFE_MESSAGE_KEYS = ("id", "role", "content", "language", "session_id", "created_at")

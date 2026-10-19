@@ -7,6 +7,10 @@ statuses and main CI succeeded for the merge commit.
 Live acceptance and bilingual wording review below remain unrecorded. Current release
 status belongs in [TASKS.md](../TASKS.md), not a duplicate rollout log here.
 
+OPS-006 phase 1 (branch, not deployed): completion payloads no longer let the reply's `id`
+replace the turn id, refusals carry a `reason` (migration 077), and every turn transition is
+logged by `turn_id`; see [OPS-006](ops-006-workers-and-event-stream.md).
+
 ## Scope
 
 One increment covers the saved chat-turn lifecycle and document focus. Human

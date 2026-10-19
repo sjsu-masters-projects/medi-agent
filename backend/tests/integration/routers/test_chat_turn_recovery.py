@@ -48,7 +48,7 @@ def turn_runtime(monkeypatch):
     turns = MagicMock()
     turns.begin = AsyncMock(return_value={"execute": True, "turn": record, "user_message": user})
     turns.call = AsyncMock(
-        side_effect=lambda action, payload=None: {"items": []}
+        side_effect=lambda action, payload=None, **_: {"items": []}
         if action == "recover"
         else {"accepted": True, "message": saved}
     )
@@ -340,7 +340,7 @@ async def test_slow_save_after_a_finished_reply_is_not_cut_off(monkeypatch, turn
     monkeypatch.setattr(chat, "turn_budget", lambda _: (0.3, 5))
     base = turns.call.side_effect
 
-    async def slow_call(action, payload=None):
+    async def slow_call(action, payload=None, **_):
         if action == "complete":
             await asyncio.sleep(0.6)
         return base(action, payload)
@@ -383,7 +383,7 @@ async def test_expired_completion_reports_its_own_code_and_recovers(monkeypatch,
     turns, service, socket, context, _, _ = turn_runtime
     base = turns.call.side_effect
     turns.call = AsyncMock(
-        side_effect=lambda action, payload=None: {"accepted": False}
+        side_effect=lambda action, payload=None, **_: {"accepted": False}
         if action == "complete"
         else base(action, payload)
     )

@@ -169,12 +169,12 @@ describe("patient notification centre", () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
     expect(notifications.list).toHaveBeenCalledTimes(1);
-    await act(async () => vi.advanceTimersByTime(NOTIFICATION_MIN_GAP_MS + 1));
+    vi.setSystemTime(Date.now() + NOTIFICATION_MIN_GAP_MS + 1); // the clock moves; the poll timer does not fire
     let release!: (value: NotificationPage) => void;
     vi.mocked(notifications.list).mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
     await act(async () => { window.dispatchEvent(new Event("focus")); });
     expect(notifications.list).toHaveBeenCalledTimes(2);
-    await act(async () => vi.advanceTimersByTime(NOTIFICATION_MIN_GAP_MS + 1));
+    vi.setSystemTime(Date.now() + NOTIFICATION_MIN_GAP_MS + 1); // the clock moves; the poll timer does not fire
     await act(async () => { window.dispatchEvent(new Event("focus")); document.dispatchEvent(new Event("visibilitychange")); });
     expect(notifications.list).toHaveBeenCalledTimes(2);
     await act(async () => release(page()));

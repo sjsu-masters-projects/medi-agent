@@ -26,6 +26,7 @@ def turn_sql(sql):
         "072_nora_turn_recovery.sql",
         "073_nora_turn_begin_validation.sql",
         "074_nora_late_completion.sql",
+        "077_chat_turn_rejection_reason.sql",
     ):
         sql((MIGRATIONS / name).read_text())
     return sql
@@ -404,3 +405,153 @@ def test_074_is_re_runnable_and_keeps_grants(turn_sql):
     record = call(turn_sql, payload=request())["turn"]
     expire(turn_sql)
     assert call(turn_sql, "complete", finish(record))["late"]
+
+
+# -- 077: a refused operation says why -------------------------------------------------
+
+
+def reason(result):
+    assert result["accepted"] is False
+    return result["reason"]
+
+
+def test_a_refusal_for_an_unknown_turn_is_not_found(turn_sql):
+    record = call(turn_sql, payload=request())["turn"]
+    unknown = {**record, "id": str(uuid4())}
+    for action in ("actions", "complete", "failed", "interrupted"):
+        assert reason(call(turn_sql, action, finish(unknown))) == "not_found"
+
+
+def test_a_refusal_for_another_patients_turn_is_not_found_and_leaks_nothing(turn_sql):
+    record = call(turn_sql, payload=request())["turn"]
+    other = call(turn_sql, "actions", record, session="chat-test")  # own turn: accepted
+    assert other["accepted"]
+    body = json.dumps(record).replace("'", "''")
+    foreign = json.loads(
+        turn_sql(
+            f"SET ROLE service_role; SELECT chat_turn_operation('{FOREIGN}','chat-test','actions','{body}');"
+        )
+    )
+    assert reason(foreign) == "not_found"
+    assert set(foreign) == {"accepted", "reason"}
+
+
+def test_a_refusal_in_another_conversation_is_session_mismatch(turn_sql):
+    record = call(turn_sql, payload=request())["turn"]
+    result = call(turn_sql, "actions", record, session="a-different-conversation")
+    assert reason(result) == "session_mismatch"
+    assert turn_sql("SELECT status FROM chat_turns;") == "processing"
+
+
+def test_a_replaced_lease_is_lease_mismatch(turn_sql):
+    data = request()
+    original = call(turn_sql, payload=data)["turn"]
+    expire(turn_sql)
+    assert call(turn_sql, payload=data)["execute"]  # the retry takes a new lease
+    assert reason(call(turn_sql, "actions", original)) == "lease_mismatch"
+    assert reason(call(turn_sql, "complete", finish(original))) == "lease_mismatch"
+
+
+def test_a_lapsed_lease_is_deadline_passed(turn_sql):
+    record = call(turn_sql, payload=request())["turn"]
+    expire(turn_sql)
+    assert reason(call(turn_sql, "actions", record)) == "deadline_passed"
+
+
+def test_other_statuses_are_named(turn_sql):
+    failed = call(turn_sql, "begin", request(), session="s-failed")["turn"]
+    call(turn_sql, "failed", failed, session="s-failed")
+    assert reason(call(turn_sql, "actions", failed, session="s-failed")) == "status:failed"
+
+    done_data = request()
+    done = call(turn_sql, "begin", done_data, session="s-done")["turn"]
+    call(turn_sql, "complete", finish(done), session="s-done")
+    assert reason(call(turn_sql, "actions", done, session="s-done")) == "status:completed"
+    assert reason(call(turn_sql, "complete", finish(done), session="s-done")) == (
+        "status:completed"
+    )
+
+    interrupted = call(turn_sql, "begin", request(), session="s-int")["turn"]
+    call(turn_sql, "interrupted", interrupted, session="s-int")
+    assert reason(call(turn_sql, "actions", interrupted, session="s-int")) == ("status:interrupted")
+
+
+def test_a_refusal_changes_nothing(turn_sql):
+    record = call(turn_sql, payload=request())["turn"]
+    before = turn_sql("SELECT status||attempt||lease||updated_at FROM chat_turns;")
+    call(turn_sql, "actions", {**record, "id": str(uuid4())})
+    call(turn_sql, "actions", record, session="elsewhere")
+    assert turn_sql("SELECT status||attempt||lease||updated_at FROM chat_turns;") == before
+
+
+# -- candidate causes of CHAT_TURN_EXPIRED that must NOT refuse a live lease -------------
+
+
+def test_a_second_socket_recovering_or_dismissing_does_not_disturb_a_running_turn(turn_sql):
+    data = request()
+    record = call(turn_sql, payload=data)["turn"]
+    for _ in range(3):
+        assert call(turn_sql, "recover")["items"][0]["status"] == "processing"
+        assert not call(turn_sql, "dismiss", data)["accepted"]  # running work cannot be hidden
+    assert call(turn_sql, "actions", record)["accepted"]
+    assert call(turn_sql, "complete", finish(record))["accepted"]
+
+
+def test_a_second_begin_with_the_same_message_id_keeps_the_running_lease(turn_sql):
+    data = request()
+    record = call(turn_sql, payload=data)["turn"]
+    again = call(turn_sql, payload=data)
+    assert not again["execute"]
+    assert turn_sql("SELECT lease::text FROM chat_turns;") == record["lease"]
+    assert call(turn_sql, "actions", record)["accepted"]
+
+
+def test_a_begin_with_a_different_message_id_is_busy_and_keeps_the_lease(turn_sql):
+    record = call(turn_sql, payload=request())["turn"]
+    assert "CHAT_TURN_BUSY" in call(turn_sql, payload=request(), succeeds=False)
+    assert call(turn_sql, "complete", finish(record))["accepted"]
+
+
+def test_failing_then_completing_the_same_lease_is_the_only_refused_order(turn_sql):
+    # The model-fallback path: a failure marker followed by a finished reply on one lease.
+    record = call(turn_sql, payload=request())["turn"]
+    call(turn_sql, "interrupted", record)  # a timeout wrapper's interruption
+    assert call(turn_sql, "complete", finish(record))["accepted"]  # 074: the reply is kept
+    again = call(turn_sql, payload=request(), session="fresh")["turn"]
+    call(turn_sql, "failed", again, session="fresh")  # a hard failure is final
+    assert reason(call(turn_sql, "complete", finish(again), session="fresh")) == ("status:failed")
+
+
+def test_077_is_re_runnable_and_keeps_grants(turn_sql):
+    migration = (MIGRATIONS / "077_chat_turn_rejection_reason.sql").read_text()
+    turn_sql(migration)
+    turn_sql(migration)
+    for role in ("anon", "authenticated"):
+        assert (
+            turn_sql(
+                f"SELECT has_function_privilege('{role}','chat_turn_operation(uuid,text,text,jsonb)','EXECUTE');"
+            )
+            == "f"
+        )
+    record = call(turn_sql, payload=request())["turn"]
+    assert reason(call(turn_sql, "actions", {**record, "id": str(uuid4())})) == "not_found"
+
+
+def test_a_caller_never_waits_on_the_conversation_lock_without_bound(turn_sql):
+    """lock_timeout (5 s) is set by the function itself, below the backend's 10 s budget."""
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    holder_sql = (
+        "BEGIN; SELECT pg_advisory_xact_lock(hashtextextended('chat_turn:'||"
+        f"'{PATIENT}'||':chat-test',0)); SELECT pg_sleep(9); COMMIT;"
+    )
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        holder = pool.submit(turn_sql, holder_sql)
+        time.sleep(1.5)
+        started = time.monotonic()
+        output = call(turn_sql, "recover", succeeds=False)
+        waited = time.monotonic() - started
+        holder.result()
+    assert "lock timeout" in output and 4 <= waited < 8
+    assert call(turn_sql, "recover")["items"] == []  # and it works again afterwards
