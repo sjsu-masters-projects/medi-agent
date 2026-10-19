@@ -140,7 +140,7 @@ export function getChatRecoveryCopy(locale: Locale) {
 
 export function getChatControlsCopy(locale: Locale) {
   return locale === "es-MX" ? {
-    connection: { idle: "Sin conexión", connected: "Conectado", connecting: "Conectando…", disconnected: "Sin conexión", error: "Problema de conexión" },
+    connection: { idle: "Sin conexión", connected: "Conectado", connecting: "Conectando…", disconnected: "Sin conexión", error: "Problema de conexión", reconnecting: "Reconectando…" },
     caution: "Nora es una IA y puede equivocarse. No cambies tu tratamiento sin consultar a tu equipo clínico. Para una emergencia, llama al 911.",
     loading: "Cargando conversación…", recordContext: "Registro adjunto", dismiss: "Cerrar", message: "Mensaje para Nora", send: "Enviar mensaje",
     documentUnavailable: "Este documento no está disponible o cambió. Desvincúlalo antes de hacer una pregunta sobre el resto de tu expediente.",
@@ -151,7 +151,7 @@ export function getChatControlsCopy(locale: Locale) {
     humanOriginal: "Los mensajes se muestran tal como se escribieron, sin traducción automática.",
     profileRequired: "Necesitamos cargar tu idioma preferido antes de enviar. Si tarda demasiado, vuelve a abrir Chat.",
   } : {
-    connection: { idle: "Offline", connected: "Connected", connecting: "Connecting…", disconnected: "Offline", error: "Connection issue" },
+    connection: { idle: "Offline", connected: "Connected", connecting: "Connecting…", disconnected: "Offline", error: "Connection issue", reconnecting: "Reconnecting…" },
     caution: "Nora is AI and can make mistakes. Check with your care team before changing treatment. For an emergency, call 911.",
     loading: "Loading conversation…", recordContext: "Record context attached", dismiss: "Dismiss", message: "Message to Nora", send: "Send message",
     documentUnavailable: "This document is unavailable or has changed. Dismiss it before asking about the rest of your record.",

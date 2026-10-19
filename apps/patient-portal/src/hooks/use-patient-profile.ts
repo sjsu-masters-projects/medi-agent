@@ -47,10 +47,12 @@ interface ProfileResult {
   profile: PatientProfile | null;
   error: boolean;
   timezoneMissing: boolean;
+  userId?: string | null;
 }
 
 function useProfileState(enabled = true) {
   const accessToken = useSelector((state: RootState) => state.auth.accessToken);
+  const userId = useSelector((state: RootState) => state.auth.user?.id ?? null);
   const [sessionToken, setSessionToken] = useState(accessToken);
   const [attempt, setAttempt] = useState(0);
   const [result, setResult] = useState<ProfileResult | null>(null);
@@ -59,7 +61,10 @@ function useProfileState(enabled = true) {
   useLayoutEffect(() => { latest.current = { accessToken, attempt }; }, [accessToken, attempt]);
   if (sessionToken !== accessToken) {
     setSessionToken(accessToken);
-    setResult(null);
+    // A silent token refresh for the same patient keeps the profile on screen, so the page
+    // (and a live chat socket) is not replaced by a loading skeleton. A different patient,
+    // or a sign-out, still clears it.
+    setResult((previous) => (previous?.profile && accessToken && userId && previous.userId === userId ? previous : null));
   }
   const refresh = useCallback(() => setAttempt((current) => current + 1), []);
   const updateProfile = useCallback((update: PatientProfile | ((current: PatientProfile) => PatientProfile)) => {
@@ -70,9 +75,9 @@ function useProfileState(enabled = true) {
       if (typeof update === "function" && (!previous?.profile || previous.token !== accessToken)) return previous;
       const profile = typeof update === "function" ? update(previous!.profile!) : update;
       if (!profile) return previous;
-      return { token: accessToken, attempt: currentAttempt, profile, error: false, timezoneMissing: !profile.timezone.trim() };
+      return { token: accessToken, attempt: currentAttempt, profile, error: false, timezoneMissing: !profile.timezone.trim(), userId };
     });
-  }, [accessToken]);
+  }, [accessToken, userId]);
 
   useEffect(() => {
     if (!accessToken || !enabled) return;
@@ -90,6 +95,7 @@ function useProfileState(enabled = true) {
             profile: mapProfile(raw),
             error: false,
             timezoneMissing: !raw.timezone?.trim(),
+            userId,
           });
       })
       .catch(() => {
@@ -105,11 +111,12 @@ function useProfileState(enabled = true) {
     return () => {
       isCurrent = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the user id only labels the result
   }, [accessToken, attempt, enabled]);
 
   // Bind results to the session and retry so an old patient's settings never render.
   const current =
-    accessToken && result?.token === accessToken && result.attempt === attempt
+    accessToken && result?.attempt === attempt && (result.token === accessToken || (result.profile && userId && result.userId === userId))
       ? result
       : null;
   useEffect(() => {

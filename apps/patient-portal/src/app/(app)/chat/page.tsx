@@ -16,10 +16,13 @@ import { Icon } from "@/components/ui/icons";
 import { ChatTextarea } from "@/components/features/chat-presentation";
 import { ChatTurnRecovery } from "@/components/features/chat-turn-recovery";
 import { ProcessingDots } from "@/components/ui/motion";
+import { isTurnInProgress } from "@/hooks/use-chat-turn-recovery";
 import { usePatientChatSession } from "@/hooks/use-patient-chat-session";
 import { usePatientProfile } from "@/hooks/use-patient-profile";
 import { usePatientShell } from "@/contexts/patient-shell-context";
 import { ChatRole, DEFAULT_LOCALE } from "@/types";
+
+const RECONNECT_QUIET_MS = 3000;
 
 export default function ChatPage() {
     const profile = usePatientProfile();
@@ -64,7 +67,28 @@ export default function ChatPage() {
         dismissDocumentContext, dismissSafetyNotice, documentContext, documentUnavailable, error, handleHandsFreeToggle,
         handleMicClick, handlePlayAssistantMessage, handleSend, handsFreeMode, input,
         isTyping, loading, messages, openConversation, safetyNotice, sessionId, setInput,
-        startNewConversation, recoveryTurns, retryTurn, dismissTurn, reconnectChat, receivingStream, turnBusy, voiceError, voiceStatus } = usePatientChatSession(locale);
+        startNewConversation, recoveryTurns, retryTurn, dismissTurn, reconnectChat, reconnecting, receivingStream, isOwnTurn, turnBusy, voiceError, voiceStatus } = usePatientChatSession(locale);
+    // A drop shorter than RECONNECT_QUIET_MS is invisible: the header keeps saying Connected.
+    const [reconnectSlow, setReconnectSlow] = useState(false);
+    useEffect(() => {
+        if (!reconnecting) return;
+        const timer = window.setTimeout(() => setReconnectSlow(true), RECONNECT_QUIET_MS);
+        return () => { window.clearTimeout(timer); setReconnectSlow(false); };
+    }, [reconnecting]);
+    const connectionLabel = connectionStatus === "connected" || (reconnecting && !reconnectSlow)
+        ? controls.connection.connected : reconnecting ? controls.connection.reconnecting : controls.connection[connectionStatus];
+    const connectionTone = connectionStatus === "connected" || (reconnecting && !reconnectSlow) ? "connected"
+        : connectionStatus === "connecting" || reconnecting ? "connecting" : "offline";
+    // The stream is available while connected, or during a short drop. Then the typing
+    // indicator (or the draft) is the only progress element, and the card stays hidden.
+    const streamAvailable = connectionStatus === "connected" || (reconnecting && !reconnectSlow);
+    const pending = recoveryTurns.filter((turn) => isTurnInProgress(turn.status));
+    // This tab follows the reply (typing indicator, then the draft) when it sent the turn or
+    // is receiving its stream. A reloaded or second tab shows the "preparing" card instead,
+    // until draft events reach it. Never both for the same turn.
+    const ownsProgress = receivingStream || (pending.length > 0 && pending.every((turn) => isOwnTurn(turn.client_message_id)));
+    const showTyping = !assistantDraft && streamAvailable && ownsProgress && (isTyping || pending.length > 0);
+    const progressVisible = Boolean(assistantDraft) || (streamAvailable && ownsProgress);
     const newChat = locale === "es-MX" ? "Nueva conversación" : "New chat";
     const openNora = (conversationId: string = todayConversationId()) => {
         openConversation(conversationId);
@@ -125,7 +149,7 @@ export default function ChatPage() {
             <div className="min-w-0 flex-1">
             <h1 ref={headingRef} tabIndex={-1} className={inbox ? "break-words pt-0 text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] outline-none" : "break-words text-base font-semibold leading-tight outline-none"}>{inbox ? "Chat" : conversation === "assistant" ? CARE_ASSISTANT_NAME : copy.careTeamLabel}</h1>
             {!inbox && conversation === "assistant" && <>
-                <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted"><span>{copy.assistantDescription}</span><span aria-hidden="true">·</span><span role="status" className={`inline-flex items-center gap-1 ${connectionStatus === "connected" ? "text-brand-ink" : connectionStatus === "connecting" ? "text-muted" : "text-danger-ink"}`}><span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${connectionStatus === "connected" ? "bg-brand" : connectionStatus === "connecting" ? "bg-gold" : "bg-danger-seg"}`} />{controls.connection[connectionStatus]}</span></p>
+                <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted"><span>{copy.assistantDescription}</span><span aria-hidden="true">·</span><span role="status" className={`inline-flex items-center gap-1 ${connectionTone === "connected" ? "text-brand-ink" : connectionTone === "connecting" ? "text-muted" : "text-danger-ink"}`}><span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${connectionTone === "connected" ? "bg-brand" : connectionTone === "connecting" ? "bg-gold" : "bg-danger-seg"}`} />{connectionLabel}</span></p>
             </>}
             </div>
             {inbox && !humanThreadId && <NotificationBell />}
@@ -181,7 +205,7 @@ export default function ChatPage() {
                 <button className="ma-press min-h-11 shrink-0 rounded-xl px-3 text-sm font-semibold text-brand-ink hover:bg-surface/70" onClick={dismissDocumentContext} type="button">{controls.dismiss}</button>
             </section>}
             {!documentContext && documentUnavailable && <div className="rounded-2xl bg-surface px-3.5 py-2.5 text-[13px] text-ink-2" role="status"><p>{controls.documentUnavailable}</p><button type="button" className="min-h-11 px-3 font-semibold text-brand-ink" onClick={dismissDocumentContext}>{controls.dismiss}</button></div>}
-            <ChatTurnRecovery turns={recoveryTurns} locale={locale} connected={connectionStatus === "connected"} streaming={receivingStream} onRetry={retryTurn} onDismiss={dismissTurn} />
+            <ChatTurnRecovery turns={recoveryTurns} locale={locale} connected={connectionStatus === "connected"} progressVisible={progressVisible} onRetry={retryTurn} onDismiss={dismissTurn} />
             {error && <div className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">
                 <p>{error === "CHAT_TURN_BUSY" ? recoveryCopy.busy : error === "CHAT_TURN_EXPIRED" ? recoveryCopy.expired : error === "CHAT_STARTUP_UNAVAILABLE" ? recoveryCopy.unavailable : controls.chatError}</p>
                 {error === "CHAT_STARTUP_UNAVAILABLE" && <button type="button" className="mt-2 min-h-11 rounded-xl bg-surface px-3 font-semibold" onClick={reconnectChat}>{recoveryCopy.reconnect}</button>}
@@ -203,7 +227,7 @@ export default function ChatPage() {
                 </section>}
                 {assistantDraft && <ChatBubble content={assistantDraft} isStreaming language={locale} locale={locale}
                     role="assistant" timestamp={assistantDraftStartedAt ?? new Date().toISOString()} />}
-                {isTyping && !assistantDraft && <div className="ma-bubble flex items-center gap-2 self-start rounded-[20px_20px_20px_6px] bg-surface px-4 py-3" role="status"><ProcessingDots /><span className="text-[13px] text-muted">{copy.typingMessage}</span></div>}
+                {showTyping && <div className="ma-bubble flex items-center gap-2 self-start rounded-[20px_20px_20px_6px] bg-surface px-4 py-3" role="status"><ProcessingDots /><span className="text-[13px] text-muted">{copy.typingMessage}</span></div>}
                 <div ref={bottomRef} />
             </div>
             <form className="sticky bottom-0 z-10 -mx-4 mt-auto space-y-1.5 bg-background/95 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+12px)] backdrop-blur-md" onSubmit={handleSend}>

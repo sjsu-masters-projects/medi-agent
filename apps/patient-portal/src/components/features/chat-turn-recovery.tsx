@@ -1,21 +1,28 @@
-import type { RecoverableTurn } from "@/hooks/use-chat-turn-recovery";
+import { isTurnInProgress, type RecoverableTurn } from "@/hooks/use-chat-turn-recovery";
 import type { Locale } from "@/types";
 import { getChatRecoveryCopy } from "@/content/chat-copy";
 
-export function ChatTurnRecovery({ turns, locale, connected, streaming = false, onRetry, onDismiss }: {
-    turns: RecoverableTurn[]; locale: Locale; connected: boolean; streaming?: boolean;
+/**
+ * One status element per turn. A turn in progress (queued, processing, or not yet
+ * acknowledged) is shown by the typing indicator or the streaming draft whenever this tab can
+ * show progress (`progressVisible`); this card then stays out of the way. It appears for such
+ * a turn only when the tab cannot show progress. "Interrupted" is shown only for a turn the
+ * server saved as failed or interrupted, never because a socket closed.
+ */
+export function ChatTurnRecovery({ turns, locale, connected, progressVisible = false, onRetry, onDismiss }: {
+    turns: RecoverableTurn[]; locale: Locale; connected: boolean; progressVisible?: boolean;
     onRetry: (id: string) => void; onDismiss: (id: string) => void;
 }) {
     const copy = getChatRecoveryCopy(locale);
-    const processing = turns.some((turn) => turn.status === "processing");
+    const busy = turns.some((turn) => isTurnInProgress(turn.status));
     return <div className="space-y-2" aria-live="polite">
-        {turns.filter((turn) => !(streaming && (turn.status === "processing" || turn.status === "unknown"))).map((turn) => {
-          const retryBlocked = processing || turns.some((other) => other.status === "unknown" && other.client_message_id !== turn.client_message_id);
+        {turns.filter((turn) => !(progressVisible && isTurnInProgress(turn.status))).map((turn) => {
+          const retryBlocked = busy;
           const reason = !connected ? copy.reconnectBeforeRetry : retryBlocked ? copy.waitBeforeRetry : null;
           const reasonId = `retry-reason-${turn.client_message_id}`;
           return <section key={turn.client_message_id} className="rounded-2xl border border-line-strong bg-surface p-3.5 text-sm">
             {turn.safety_guidance && <p role="alert" className="mb-3 whitespace-pre-wrap rounded-xl bg-danger-tint p-3 font-medium text-danger-ink">{turn.safety_guidance}</p>}
-            <p className="font-semibold">{turn.status === "processing"
+            <p className="font-semibold">{turn.status === "queued" || turn.status === "processing"
                 ? copy.preparing
                 : turn.status === "unknown"
                     ? copy.checking : copy.interrupted}</p>
@@ -24,7 +31,7 @@ export function ChatTurnRecovery({ turns, locale, connected, streaming = false, 
                 ? copy.uncertain
                 : turn.failure_code === "reply_unavailable"
                     ? copy.replyUnavailable
-                : turn.status === "processing"
+                : turn.status === "queued" || turn.status === "processing"
                     ? copy.returnLater
                     : turn.retryable
                         ? copy.safeRetry : copy.noRetry}</p>

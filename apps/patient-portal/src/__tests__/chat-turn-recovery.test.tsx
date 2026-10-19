@@ -1,6 +1,6 @@
 import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { useChatTurnRecovery } from "@/hooks/use-chat-turn-recovery";
+import { isTurnInProgress, normalizeTurnStatus, useChatTurnRecovery } from "@/hooks/use-chat-turn-recovery";
 import { ChatTurnRecovery } from "@/components/features/chat-turn-recovery";
 import type { ChatTurnApi } from "@/services/chat-api";
 import { ChatRole } from "@/types";
@@ -104,5 +104,27 @@ describe("saved Nora turn recovery", () => {
         view.rerender(<ChatTurnRecovery turns={[row, { ...row, client_message_id: "another", status: "processing", retryable: false }]} locale={locale} connected onRetry={vi.fn()} onDismiss={vi.fn()} />);
         expect(screen.getByRole("button", { name: copy.retry })).toBeDisabled();
         expect(screen.getByRole("button", { name: copy.retry })).toHaveAccessibleDescription(copy.waitBeforeRetry);
+    });
+
+    it("treats queued like processing: busy, no retry, and one card only when progress cannot be shown", () => {
+        const { result } = setup();
+        act(() => { result.current.accept([{ ...row, status: "queued", retryable: false }], true); });
+        expect(result.current.turnBusy).toBe(true);
+        expect(result.current.turns[0].status).toBe("queued");
+        const copy = getChatRecoveryCopy("en-US");
+        const view = render(<ChatTurnRecovery turns={result.current.turns} locale="en-US" connected progressVisible onRetry={vi.fn()} onDismiss={vi.fn()} />);
+        expect(view.container.querySelector("section")).toBeNull();
+        view.rerender(<ChatTurnRecovery turns={result.current.turns} locale="en-US" connected progressVisible={false} onRetry={vi.fn()} onDismiss={vi.fn()} />);
+        expect(screen.getByText(copy.preparing)).toBeInTheDocument();
+        expect(screen.queryByText(copy.interrupted)).not.toBeInTheDocument();
+    });
+
+    it("maps an unrecognised status to in progress, never interrupted", () => {
+        const { result } = setup();
+        act(() => { result.current.accept([{ ...row, status: "paused" as ChatTurnApi["status"], retryable: false }], true); });
+        expect(result.current.turns[0].status).toBe("unknown");
+        expect(result.current.turnBusy).toBe(true);
+        expect(normalizeTurnStatus("queued")).toBe("queued");
+        expect(isTurnInProgress(normalizeTurnStatus("nonsense"))).toBe(true);
     });
 });
