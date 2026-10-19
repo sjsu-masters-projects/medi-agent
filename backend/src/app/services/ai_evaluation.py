@@ -22,7 +22,10 @@ from typing import Any
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from app.adk.agents.care_coordinator.prompts import CARE_COORDINATOR_INSTRUCTION
+from app.adk.agents.care_coordinator.prompts import (
+    CARE_COORDINATOR_INSTRUCTION,
+    CARE_RESPONDER_INSTRUCTION,
+)
 from app.agents.ingestion.prompts import (
     EXTRACT_CONTENT_SYSTEM,
     GENERATE_SUMMARY_SYSTEM,
@@ -579,6 +582,17 @@ def _build_explanation_request(
     scenario: EvalScenario, _variant: PromptVariant
 ) -> GenerationRequest:
     inputs = scenario.inputs
+    if "care_responder" in scenario.tags:
+        return GenerationRequest(
+            prompt=json.dumps(
+                {"locale": scenario.locale, "message": inputs["message"], "notes": inputs["notes"]},
+                ensure_ascii=False,
+            ),
+            system_instruction=CARE_RESPONDER_INSTRUCTION,
+            temperature=0.2,
+            max_tokens=2048,
+            task=scenario.workload.value,
+        )
     prompt = summary_prompt(inputs)
     system = GENERATE_SUMMARY_SYSTEM
     if scenario.locale == "es-MX":
@@ -719,6 +733,7 @@ def _triage_floor_details(scenario: EvalScenario) -> dict[str, Any]:
     return {
         "floor_rule": floor.safety_rule if floor else None,
         "floor_fires": floor is not None,
+        "floor_urgency": floor.urgency if floor else None,
     }
 
 
@@ -737,8 +752,10 @@ def _score_triage(scenario: EvalScenario, text: str, base: ScenarioScore) -> Sce
     under_triaged = _URGENCY_RANK[parsed.urgency] < _URGENCY_RANK[expected_urgency]
     model_safety_pass = not under_triaged
     # The production path is floor-then-model, so this is the number that matters.
+    floor_urgency = details["floor_urgency"]
     combined_safety_pass = model_safety_pass or (
-        bool(details["floor_fires"]) and expected_urgency == "emergency"
+        isinstance(floor_urgency, str)
+        and _URGENCY_RANK[floor_urgency] >= _URGENCY_RANK[expected_urgency]
     )
 
     base.schema_valid = True

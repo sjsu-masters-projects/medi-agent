@@ -86,12 +86,18 @@ Apply every SQL file through the repository migration ledger against an empty de
 
 Copy the URI rather than assembling it: the pooler tenant, host, and password encoding are project-specific. The Session Pooler supports IPv4 clients and is required here because the migration command maintains a session while applying each SQL file.
 
-The checkout contains 77 SQL migration files, prefixes `001`–`065`. Some prefixes are
-shared by independent files (`011`, `038`–`043`, `047`, `048`, `051`) that came from parallel
-branches; they coexist because the ledger identifies migrations by full filename and
-checksum, not by prefix. Preserve applied names and bytes. The ledger in
+Migration filenames use an ordered `NNN_descriptive_name.sql` convention. Historical
+parallel branches produced a small set of already-applied shared prefixes (`011`,
+`038`–`043`, `047`, `048`, `051`, and `067`); they coexist because the ledger identifies
+migrations by complete filename and checksum. The migration validator preserves those
+known historical names but rejects any new shared prefix, so an unapplied collision must
+be renumbered before review. Preserve applied names and bytes. The ledger in
 `public.schema_migrations` is authoritative: a local file count does not establish remote
-application or authorize applying unrelated migrations.
+application or authorize applying unrelated migrations. Migrations through
+`075_notification_zone_lookup.sql` are recorded as applied by the requester (October 18,
+2026); `076_care_conversation_activity_review.sql` is pending and must be applied before
+the activity-review backend deploys. Browser session limits (AUTH-002) are portal
+environment variables, not Supabase settings; no Auth configuration change is required.
 
 Migration `047_adr_patient_information_loop.sql` adds the patient-confirmed ADR information
 request, deterministic reassessment, notification closure, and patient-actor audit transaction.

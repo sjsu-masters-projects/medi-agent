@@ -40,7 +40,7 @@ async def test_send_uses_only_authenticated_actor_and_one_rpc(service, role):
         conversation, ConversationSend(body="  Synthetic reply\n", client_message_id=key)
     ) == {"saved": True}
     db.rpc.assert_called_once_with(
-        "care_conversation_operation",
+        "care_conversation_activity_operation",
         {
             "p_actor_id": str(svc.actor.id),
             "p_actor_role": role,
@@ -49,6 +49,7 @@ async def test_send_uses_only_authenticated_actor_and_one_rpc(service, role):
                 "conversation_id": str(conversation),
                 "body": "Synthetic reply",
                 "client_message_id": str(key),
+                "care_plan_item_id": None,
             },
         },
     )
@@ -358,3 +359,55 @@ async def test_translation_endpoint_refuses_an_outsider_and_a_foreign_message():
     svc._call = AsyncMock(side_effect=ValidationError("Invalid conversation request"))
     with pytest.raises(NotFoundError):
         await svc.translate_message(uuid4(), uuid4())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("code", ["23505", "40001"])
+async def test_activity_review_race_is_not_a_message_idempotency_error(service, code):
+    svc, db = service
+    svc.actor.role = "clinician"
+    db.rpc.return_value.execute.side_effect = APIError({"code": code, "message": "private detail"})
+    with pytest.raises(ValidationError) as error:
+        await svc.review_activity(uuid4(), uuid4())
+    assert error.value.code == "CARE_PLAN_REVIEW_CONFLICT"
+    assert "private detail" not in str(error.value)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "hint,expected_code",
+    [
+        ("activity_context_unavailable", "ACTIVITY_CONTEXT_UNAVAILABLE"),
+        ("activity_context_stale", "ACTIVITY_CONTEXT_STALE"),
+        ("care_plan_draft_exists", "CARE_PLAN_DRAFT_EXISTS"),
+    ],
+)
+async def test_activity_database_hints_map_to_stable_safe_codes(service, hint, expected_code):
+    svc, db = service
+    svc.actor.role = "clinician"
+    private = "private database detail"
+    db.rpc.return_value.execute.side_effect = APIError(
+        {"code": "22023", "message": private, "details": private, "hint": hint}
+    )
+    with pytest.raises(ValidationError) as error:
+        await svc.review_activity(uuid4(), uuid4())
+    assert error.value.code == expected_code
+    assert private not in str(error.value)
+
+
+@pytest.mark.asyncio
+async def test_invalid_attached_send_is_not_misreported_as_missing_activity(service):
+    svc, db = service
+    db.rpc.return_value.execute.side_effect = APIError(
+        {"code": "22023", "message": "private detail", "details": None, "hint": None}
+    )
+    with pytest.raises(ValidationError) as error:
+        await svc.send(
+            uuid4(),
+            ConversationSend(
+                body="Synthetic question",
+                client_message_id=uuid4(),
+                care_plan_item_id=uuid4(),
+            ),
+        )
+    assert error.value.code == "INVALID_CONVERSATION_REQUEST"

@@ -1,6 +1,11 @@
 # PAT-001-A / PAT-004 — Durable Nora turns and document focus
 
-Status: implemented and locally verified October 17, 2026; PR/CI and authorized rollout remain.
+Status: **Verify deployed**. [#188](https://github.com/sjsu-masters-projects/medi-agent/pull/188)
+merged as `6026647` on October 17, 2026 (Pacific); PR checks passed. The requester
+confirmed migrations **072**, **073** (#189) and **074** (#192) applied. Backend deployment and both Vercel deployment
+statuses and main CI succeeded for the merge commit.
+Live acceptance and bilingual wording review below remain unrecorded. Current release
+status belongs in [TASKS.md](../TASKS.md), not a duplicate rollout log here.
 
 ## Scope
 
@@ -49,9 +54,9 @@ Send once → interrupt/reload → recover saved turn → retry when safe → on
 answer and no duplicate action. Repeat with a document, then switch/dismiss it and
 confirm a later general question cannot inherit the previous document.
 
-## Local implementation and review checkpoint — October 17
+## Implementation and verification evidence — October 17
 
-Implemented on `codex/nora-turn-recovery`: server-owned turn claims, bounded leases,
+Implemented in #188: server-owned turn claims, bounded leases,
 safe duplicate replay, per-turn document snapshots, patient recovery controls and
 conversation URLs. An interrupted reply may be left unfinished; that dismissal does
 not complete clinical work. Recovery refreshes every five seconds while there is
@@ -67,7 +72,8 @@ work to an older backend. Legacy sockets
 keep their old behavior, without a durable-retry guarantee. New sockets do not fall
 back to legacy execution if the migration/store is unavailable. Rollout order is
 reviewed migration **072** → merge/backend → patient portal. 071 belongs to visit
-management. No remote step has been run.
+management. Application of 072 is requester-confirmed; no independent remote ledger
+audit was performed for this reconciliation.
 
 Local checks:
 
@@ -88,8 +94,9 @@ Local checks:
   environment. `SENTRY_AUTH_TOKEN='' npm run build -- --webpack`: passes, with no
   application configuration change or deployment.
 
-Still required before Done: PR review/CI, an authorized migration/rollout, and the
-synthetic deployed acceptance path above. Actual authenticated mobile screenshots,
+Still required before Done: the synthetic deployed acceptance path above, including
+two-tab busy recovery, plus bilingual review of the Spanish drafts below.
+Actual authenticated mobile screenshots,
 keyboard/reduced-motion review, and a browser-disconnect check have not been recorded
 locally. Human messaging, LOC-003 and PAT-002-B are untouched.
 
@@ -168,7 +175,7 @@ activity). A session whose latest, non-dismissed turn is processing, failed or i
 returns `status: "needs_attention"` (`reply_in_progress` while still within its deadline).
 The title falls back to the first user message and is also set at turn begin.
 
-## Production recovery fixes (branch `fix/nora-unfinished-conversations`)
+## Production recovery fixes (#189, merged)
 
 - Logs: the turn failure category (exception type, safe code, cause type) is in the message text,
   and every turn RPC failure logs its action and Postgres code; no patient text.
@@ -187,7 +194,7 @@ The title falls back to the first user message and is also set at turn begin.
 - Not a defect: the retry never re-feeds its failed attempt; the turn's own user message is
   excluded from history (covered by `test_disconnected_socket_does_not_discard_reply...`).
 
-## Production fix: expired turns and starved saves (branch `fix/chat-expiry-and-notification-latency`, migration 074)
+## Production fix: expired turns and starved saves (#192, merged; migrations 074 and 075 applied)
 
 Evidence (October 18, 06:40-06:46 UTC, one synthetic patient): every turn logged
 `ValidationError/CHAT_TURN_EXPIRED` one to four seconds after its socket opened, far inside the 45
@@ -223,3 +230,48 @@ same minutes held 2.5 to 8.6 second notification reads on a five-thread worker p
   after retry/dismissal/failure, actions stay strict, 074 re-run and grants), router tests with a
   slow model and a slow save, and pool-isolation unit tests.
 
+## Server-owned turns (branch `feature/server-owned-chat-turns`)
+
+Evidence (October 18, revision 00159-46c, which includes #192): four sockets for one session
+opened within 14 seconds, each after fresh history and profile reads; the model started at
+08:34:29.8 and `CHAT_TURN_EXPIRED` was logged 1 s after a new socket opened and again 12 s later.
+Cause: the turn lived inside the websocket handler, so a closed socket marked it interrupted and
+the next lease-checked step (`actions`) was refused.
+
+Decision (requester): a reply is owned by the server and can never be killed by the browser
+connection.
+
+Design:
+
+- `TurnRunner` (`app/services/chat_turn_runner.py`) holds each turn as an `asyncio` task keyed by
+  turn id. The handler begins the turn, starts the task and returns to its receive loop. It never
+  fails, interrupts or cancels the turn on close or error. The task completes with its lease, or
+  fails on a real model or database error. Deadlines and leases are the safety net if an instance dies;
+  reconciliation (072-074) and retry are unchanged. No SQL changed.
+- Sockets are viewers: per-viewer queues, the draft so far for a late subscriber, then live
+  events. Errors go to the requesting socket only; history and turn status go to every viewer.
+  Other instances or a restart use `recover` and the existing bounded poll.
+- Shutdown drains running turns for 8 seconds (lifespan). Leftovers are marked interrupted
+  best-effort, else reconciled by the deadline.
+- `deploy-backend.yml`: `--no-cpu-throttling` on the main service only (requester decision).
+  Cost: CPU is billed whenever an instance exists, not only while serving requests. Instances
+  still scale to zero (`--min-instances 0`); the jobs are untouched.
+- Client: the socket depends on patient and conversation (plus an explicit reconnect after a
+  real close). Document attach/dismiss and URL search-param changes no longer rebuild it; focus
+  changes use a `document_focus` event, and the focus is read once per connection. A reconnect
+  to the same conversation keeps the screen, never reports a closed socket as a failed reply,
+  and re-subscribes to the draft. The tab receiving the stream shows only "Nora is typing";
+  the "Nora is preparing your reply" card shows only in a tab not receiving the stream.
+
+Failure modes: instance death mid-turn (deadline reconciliation, then Retry); an instance stuck
+with CPU throttled (mitigated by the flag); a viewer more than 2000 events behind is dropped and
+recovers from the saved turn; a second message while a reply runs is refused as busy; a draft is
+provisional until `assistant_complete`. The exact production re-mount trigger is not proven: the
+socket effect rebuilt on document focus changes and on every reconnect (clearing state and
+refetching history), which matches the repeated history reads; neither can now stop a reply.
+
+Tests: `test_chat_server_owned_turns.py` (close mid-reply completes with no expiry, second viewer
+gets draft then rest, empty registry on another instance, registry cleanup, dead viewer dropped,
+shutdown drain and leftover, real model error fails, lapsed-lease actions already covered in
+`test_chat_turn_recovery.py`), and portal tests for one socket across search-param changes, the
+typing-only streaming tab, the recovery card in a non-receiving tab, and reconnect.

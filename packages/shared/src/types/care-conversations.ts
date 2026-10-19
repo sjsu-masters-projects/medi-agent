@@ -36,6 +36,16 @@ export interface CareConversationMessage {
   translation_guard_passed?: boolean | null;
   /** True while the viewer needs a translation that is not stored yet (a read never calls the model). */
   translation_pending?: boolean;
+  activity_context?: ConversationActivity | null;
+}
+
+export interface ConversationActivity {
+  item_id: string;
+  plan_id: string;
+  title: string;
+  frequency: string;
+  current: boolean;
+  wording?: Record<string, { title: string; frequency: string }>;
 }
 
 /** The answer of POST .../messages/{id}/translation. */
@@ -54,6 +64,7 @@ export interface ConversationMessagePage {
 
 export interface ConversationDraft {
   body: string;
+  carePlanItemId?: string;
   clientMessageId?: string;
-  failure?: "uncertain" | "mismatch" | "invalid";
+  failure?: "uncertain" | "mismatch" | "invalid" | "activityUnavailable";
 }

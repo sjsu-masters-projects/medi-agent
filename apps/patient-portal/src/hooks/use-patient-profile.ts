@@ -7,6 +7,7 @@ import { useSelector } from "react-redux";
 import { api } from "@/services/api";
 import type { RootState } from "@/store/store";
 import { normalizeLocale, type Locale } from "@/types";
+import { rememberPatientLocale } from "@/content/patient-locale";
 
 interface PatientProfileResponse {
   date_of_birth: string;
@@ -111,6 +112,9 @@ function useProfileState(enabled = true) {
     accessToken && result?.token === accessToken && result.attempt === attempt
       ? result
       : null;
+  useEffect(() => {
+    if (current?.profile) rememberPatientLocale(current.profile.preferredLanguage);
+  }, [current?.profile]);
   return {
     profile: current?.profile ?? null,
     loading: Boolean(accessToken && !current),

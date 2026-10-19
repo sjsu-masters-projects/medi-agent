@@ -393,8 +393,10 @@ describe("Patient profile page", () => {
         expect(
             await screen.findByRole("link", { name: "Manage reminders" }),
         ).toHaveAttribute("href", "/reminders");
+        document.cookie = "patient-portal.locale=es-MX; Path=/";
         fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
         expect(clearStoredSession).toHaveBeenCalledOnce();
+        expect(document.cookie).not.toContain("patient-portal.locale=");
         expect(dispatch).toHaveBeenCalledWith(
             expect.objectContaining({ type: "auth/logout" }),
         );

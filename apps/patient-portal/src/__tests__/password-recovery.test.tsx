@@ -20,6 +20,7 @@ vi.mock("@/services/api", () => ({ api: { post: mocks.post } }));
 vi.mock("@/services/password-recovery", () => ({ createRecoveryClient: mocks.create }));
 
 beforeEach(() => {
+  document.cookie = "patient-portal.locale=; Path=/; Max-Age=0";
     vi.resetAllMocks();
     window.history.replaceState(null, "", "/reset-password");
     mocks.create.mockReturnValue({ auth: mocks });

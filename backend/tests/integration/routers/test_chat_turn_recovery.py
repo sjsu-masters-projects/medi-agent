@@ -21,6 +21,7 @@ from app.services.chat_turn_service import (
     turn_budget,
 )
 from app.utils.localization import resolve_locale_resource
+from tests.integration.routers.chat_turn_helpers import run_turn
 
 
 @pytest.fixture
@@ -78,7 +79,7 @@ async def test_completed_retry_replays_without_running_the_pipeline(monkeypatch,
     record["status"] = "completed"
     pipeline = AsyncMock()
     monkeypatch.setattr(chat, "_process_chat_message", pipeline)
-    await chat._process_durable_message(socket, service, context, {})
+    await run_turn(socket, service, context, {})
     pipeline.assert_not_awaited()
     assert socket.send_json.call_args_list[-1].args[0]["message"]["id"] == saved["id"]
 
@@ -103,7 +104,7 @@ async def test_disconnected_socket_does_not_discard_reply_and_uses_turn_document
         return {}
 
     monkeypatch.setattr(chat, "_process_chat_message", process)
-    await chat._process_durable_message(socket, service, context, {})
+    await run_turn(socket, service, context, {})
     assert any(call.args[0] == "complete" for call in turns.call.call_args_list)
     assert not any(call.args[0] in {"failed", "interrupted"} for call in turns.call.call_args_list)
 
@@ -118,7 +119,7 @@ async def test_deadline_failure_is_persisted_and_recovers_without_exposing_provi
         "_process_chat_message",
         AsyncMock(side_effect=TimeoutError("private provider detail")),
     )
-    await chat._process_durable_message(socket, service, context, {})
+    await run_turn(socket, service, context, {})
     assert turns.call.call_args_list[0].args[0] == "interrupted"
     errors = [
         call.args[0] for call in socket.send_json.call_args_list if call.args[0]["type"] == "error"
@@ -168,9 +169,7 @@ async def test_busy_claim_explains_an_existing_reply_and_recovers_it(turn_runtim
     turns.call.return_value = {
         "items": [{**record, "user_message": {"content": "Earlier synthetic question"}}]
     }
-    await chat._process_durable_message(
-        socket, service, context, {"client_message_id": str(uuid4())}
-    )
+    await run_turn(socket, service, context, {"client_message_id": str(uuid4())})
     events = [call.args[0] for call in socket.send_json.call_args_list]
     assert events[0]["code"] == "CHAT_TURN_BUSY"
     assert "already in progress" in events[0]["message"]
@@ -224,9 +223,10 @@ async def test_expired_lease_cannot_start_a_clinical_write(monkeypatch, turn_run
     [
         ("I have crushing chest pain", "emergency_response"),
         ("I want to kill myself", "mental_health_emergency_response"),
+        ("I accidentally took my medicine twice", "medication_error_response"),
     ],
 )
-def test_reviewed_emergency_guidance_survives_deadline_and_reload(locale, status, text, key):
+def test_reviewed_safety_guidance_survives_deadline_and_reload(locale, status, text, key):
     record = {
         "status": status,
         "attempt": 1,
@@ -241,7 +241,7 @@ def test_reviewed_emergency_guidance_survives_deadline_and_reload(locale, status
 async def test_turn_start_labels_the_conversation_before_the_reply(monkeypatch, turn_runtime):
     turns, service, socket, context, record, saved = turn_runtime
     monkeypatch.setattr(chat, "_process_chat_message", AsyncMock(return_value={}))
-    await chat._process_durable_message(socket, service, context, {})
+    await run_turn(socket, service, context, {})
     service.set_conversation_title.assert_awaited_once_with(
         context["patient_id"], "chat-test", "Synthetic question"
     )
@@ -253,7 +253,7 @@ async def test_title_failure_does_not_fail_the_turn(monkeypatch, turn_runtime):
     service.set_conversation_title.side_effect = RuntimeError("down")
     pipeline = AsyncMock(return_value={})
     monkeypatch.setattr(chat, "_process_chat_message", pipeline)
-    await chat._process_durable_message(socket, service, context, {})
+    await run_turn(socket, service, context, {})
     pipeline.assert_awaited_once()
 
 
@@ -291,7 +291,7 @@ async def test_turn_failure_category_is_in_the_log_message(monkeypatch, turn_run
     turns, service, socket, context, _, _ = turn_runtime
     monkeypatch.setattr(chat, "_process_chat_message", AsyncMock(side_effect=KeyError("patient")))
     with caplog.at_level("WARNING"):
-        await chat._process_durable_message(socket, service, context, {})
+        await run_turn(socket, service, context, {})
     assert "Durable chat turn did not complete: KeyError" in caplog.text
     assert "patient" not in caplog.text.replace("patient_id", "")
 
@@ -328,7 +328,7 @@ def test_turn_budget_leaves_save_time_after_the_processing_budget():
 async def test_lease_outlasts_the_processing_budget(monkeypatch, turn_runtime):
     turns, service, socket, context, _, _ = turn_runtime
     monkeypatch.setattr(chat, "_process_chat_message", AsyncMock(side_effect=TimeoutError))
-    await chat._process_durable_message(socket, service, context, {})
+    await run_turn(socket, service, context, {})
     processing, lease = turn_budget(chat.settings.chat_turn_timeout_seconds)
     assert turns.begin.call_args.args[1] == lease > processing
 
@@ -356,7 +356,7 @@ async def test_slow_save_after_a_finished_reply_is_not_cut_off(monkeypatch, turn
         return {}
 
     monkeypatch.setattr(chat, "_process_chat_message", process)
-    await chat._process_durable_message(socket, service, context, {})
+    await run_turn(socket, service, context, {})
     actions = [call.args[0] for call in turns.call.call_args_list]
     assert "complete" in actions
     assert "interrupted" not in actions and "failed" not in actions
@@ -372,7 +372,7 @@ async def test_slow_model_interrupts_the_turn_so_it_can_be_retried(monkeypatch, 
         await asyncio.sleep(5)
 
     monkeypatch.setattr(chat, "_process_chat_message", never_answers)
-    await chat._process_durable_message(socket, service, context, {})
+    await run_turn(socket, service, context, {})
     assert turns.call.call_args_list[0].args[0] == "interrupted"
     sent = [call.args[0] for call in socket.send_json.call_args_list]
     assert any(event["type"] == "chat_turns" for event in sent)
@@ -396,7 +396,7 @@ async def test_expired_completion_reports_its_own_code_and_recovers(monkeypatch,
         return {}
 
     monkeypatch.setattr(chat, "_process_chat_message", process)
-    await chat._process_durable_message(socket, service, context, {})
+    await run_turn(socket, service, context, {})
     sent = [call.args[0] for call in socket.send_json.call_args_list]
     error = next(event for event in sent if event["type"] == "error")
     assert error["code"] == "CHAT_TURN_EXPIRED"

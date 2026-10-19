@@ -72,6 +72,38 @@ See [tests/TESTING_GUIDE.md](tests/TESTING_GUIDE.md) for comprehensive testing d
 
 ## Runtime configuration ownership
 
+### Demo follow-ups: activity review and evaluation
+
+COM-002 adds optional `care_plan_item_id` to private conversation sends. Only a
+patient may attach an item from their current approved plan. The backend stores
+the reference atomically with the message; retries compare body, thread and
+activity identity. Reads include `activity_context` with approved wording and a
+current/historical indicator. UUIDs remain link identities, not patient-facing copy.
+
+`POST /api/v1/care-conversations/{conversation_id}/messages/{message_id}/activity-review`
+is an explicit clinician action. It rechecks the exact private thread, active
+assignment and approved source, then creates/reuses a draft and returns
+`{patient_id, plan_id, item_id}` for the editor. It audits the message/source/target
+link. Ambiguous or removed matches in an existing draft are rejected; no duplicate
+activity is appended. Neither messaging nor opening review publishes or changes
+medications, reminders or adherence history. All existing publication and bilingual
+verification gates still apply. `ACTIVITY_CONTEXT_UNAVAILABLE` is a safe rejection,
+not raw database text.
+
+Apply reviewed `076_care_conversation_activity_review.sql` **before** deploying
+this backend; application needs separate requester authorization. The migration is
+rerunnable, retains prior data and verifies backend-only function access and RLS.
+No remote application is recorded by this PR. The existing generic conversation
+RPC remains compatible for older deployments during rollout.
+
+SOAP uses the registry with `SOAP_AI_ENABLED=true` and an optional
+`SOAP_GENERATION_TIMEOUT_SECONDS=90` operational ceiling. Defaults need no deployed
+environment change. Failure or disabled generation writes no invented note.
+Synthetic evaluation commands, paired cases and raw-final-response reporting are
+documented in [the demo evaluation guide](../docs/demo-ai-evaluation.md).
+
+### Environment ownership
+
 `app/config.py` supplies defaults; real process environment variables override
 those defaults. Local startup may also load the repository-root `.env` (or CWD
 `.env` if that file is absent). Never copy credentials into documentation or test
@@ -242,6 +274,31 @@ retain document identity/version, not summary text. A fresh authorized summary i
 returned only to execution and cleaned with `normalize_patient_summary`. A failed
 startup handshake stops at an unavailable state with manual reconnect; a busy claim
 recovers the existing turn without resending the new text.
+
+### Server-owned turns
+
+A Nora reply is owned by the server, not by the websocket that sent the message. When a turn
+begins, `app/services/chat_turn_runner.py` runs it as a strongly referenced `asyncio` task in a
+process-level registry keyed by turn id. The websocket handler never awaits, fails, interrupts
+or cancels it: a reload, phone lock, app switch, re-mount or network drop leaves the turn
+running to completion (saved with its lease) or to a real model or database error. Deadlines
+and leases (072-074) stay the safety net, and `actions` stays strictly lease-checked.
+
+Sockets are viewers. Each durable socket registers for its patient and session; the running
+turn's events (status, chunks, `assistant_complete`) are queued per viewer, so a slow or dead
+socket never delays the turn. A socket that connects mid-reply receives the status and the draft
+so far, then live chunks. A socket on another instance, or after a restart, finds an empty
+registry and reads the turn through `recover`, polling until the saved reply appears. The run
+leaves the registry when its task ends and a viewer when its socket closes or a send fails.
+The `document_focus` event attaches or dismisses a document over the open socket.
+
+Shutdown: the app lifespan waits up to 8 seconds for running turns; any left are marked
+interrupted best-effort and otherwise reconciled by the saved deadline.
+
+Cost: the main backend service deploys with `--no-cpu-throttling` (CPU always allocated), so a
+task keeps CPU after its socket closes. Cloud Run bills an instance for the whole time it exists
+while CPU is always allocated, not only during requests. `--min-instances 0` is unchanged, so
+an idle service still scales to zero, and the jobs are unchanged.
 
 ## Package Layout
 

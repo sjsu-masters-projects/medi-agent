@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { carePlanChanges, carePlanOverlaps } from "@/components/features/care-plan-changes";
 import { DocumentSourceViewer } from "@/components/features/document-source-viewer";
 import { CarePlanTodayPreviewPanel } from "@/components/features/care-plan-today-preview";
@@ -96,6 +96,20 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
     const [activeMedications, setActiveMedications] = useState<ActiveMedication[]>([]);
     const [generation, setGeneration] = useState<CarePlanGeneration | null>(null);
     const [items, setItems] = useState<EditableItem[]>([]);
+    const focusedReviewTarget = useRef("");
+    useEffect(() => {
+        const id = window.location.hash.slice(1);
+        if (focusedReviewTarget.current === id || !id.startsWith("care-plan-item-")) return;
+        const frame = requestAnimationFrame(() => {
+            const target = document.getElementById(id);
+            if (!target) return;
+            focusedReviewTarget.current = id;
+            target.tabIndex = -1;
+            target.scrollIntoView?.({ block: "center" });
+            target.focus({ preventScroll: true });
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [items]);
     const [backChecks, setBackChecks] = useState<Record<string, BackCheck>>({});
     const recordBackCheck = useCallback((itemId: string, check: BackCheck) => {
         setBackChecks((current) => {

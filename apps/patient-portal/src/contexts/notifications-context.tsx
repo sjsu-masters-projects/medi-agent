@@ -8,6 +8,7 @@ import { normalizeLocale, type Locale } from "@/types";
 import { ApiClientError } from "@/services/api";
 import { notifications } from "@/services/notifications";
 import type { NotificationPage, NotificationSummary } from "@/types/notifications";
+import { useInitialPatientLocale } from "@/contexts/patient-locale-context";
 
 /** Background refresh while the tab is visible. Every poll re-authorizes in the database,
  * so it stays slow; opening, focusing, reading or acting refreshes at once. */
@@ -40,7 +41,8 @@ const NotificationContext = createContext<NotificationState | null>(null);
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const { accessToken, user } = useSelector((state: RootState) => state.auth);
   const shared = useSharedPatientProfile();
-  const locale = normalizeLocale(shared?.profile?.preferredLanguage);
+  const initialLocale = useInitialPatientLocale();
+  const locale = normalizeLocale(shared?.profile?.preferredLanguage ?? initialLocale);
   // Only identity changes remount child workflows; token/locale updates clear this cache.
   return <NotificationSession key={user?.id ?? "guest"} token={accessToken} locale={locale} timezone={shared?.timezoneMissing ? null : shared?.profile?.timezone ?? null}>{children}</NotificationSession>;
 }

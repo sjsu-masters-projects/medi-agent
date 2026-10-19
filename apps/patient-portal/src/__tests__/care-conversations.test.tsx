@@ -2,9 +2,11 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CareConversations } from "@/components/features/care-conversations";
 import { careConversations } from "@/services/care-conversations";
+import { api } from "@/services/api";
 import type { CareConversation, CareConversationMessage } from "@/types/care-conversations";
 
 const auth = vi.hoisted(() => ({ accessToken: "synthetic-token", user: { id: "patient" } }));
+vi.mock("@/services/api", () => ({ api: { get: vi.fn() } }));
 vi.mock("react-redux", () => ({ useSelector: (select: (state: unknown) => unknown) => select({ auth }) }));
 vi.mock("@/services/care-conversations", () => ({
   careConversations: { recipients: vi.fn(), list: vi.fn(), open: vi.fn(), messages: vi.fn(), send: vi.fn(), read: vi.fn(), translate: vi.fn() },
@@ -35,6 +37,26 @@ beforeEach(() => {
   vi.mocked(careConversations.send).mockResolvedValue(message("sent", "My question", "2026-10-09T11:00:00Z"));
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
+
+it("preserves the explicitly attached activity and send key through an uncertain retry", async () => {
+  vi.mocked(api.get).mockResolvedValue({ items: [{ id: "approved-item", title: "Hydration", frequency: "daily", is_removed: false }] });
+  vi.mocked(careConversations.send).mockRejectedValueOnce(new TypeError("network interrupted"));
+  render(<CareConversations compact />);
+  await select();
+  fireEvent.click(screen.getByRole("button", { name: "Ask about a plan activity" }));
+  await screen.findByRole("option", { name: "Hydration" });
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "approved-item" } });
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "How often?" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled());
+  const first = vi.mocked(careConversations.send).mock.calls[0];
+  expect(first[4]).toBe("approved-item");
+  expect(screen.getByRole("combobox")).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await waitFor(() => expect(careConversations.send).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(careConversations.send).mock.calls[1]).toEqual(first);
+  await waitFor(() => expect(screen.getByRole("textbox")).toHaveValue(""));
+});
 
 describe("non-blocking message translation", () => {
   const pendingMessage = (id: string, body = "Take 5 mg daily") => ({ ...message(id, body), sender_role: "clinician", translation_pending: true });
@@ -95,7 +117,7 @@ describe("human conversations", () => {
   it.each([
     ["en-US", "Automatic translation unavailable for this message"],
     ["es-MX", "Traducción automática no disponible para este mensaje"],
-  ])("shows the original, not a translation whose safety check failed (%s)", async (locale, note) => {
+  ] as const)("shows the original, not a translation whose safety check failed (%s)", async (locale, note) => {
     vi.mocked(careConversations.messages).mockResolvedValue({
       items: [{ ...message("newest", "Take 5 mg daily"), translation: "Toma 50 mg al dia", translation_locale: "es-MX", translation_guard_passed: false }],
       next_cursor: null,
@@ -149,7 +171,7 @@ describe("human conversations", () => {
     await screen.findByText("This conversation is unavailable. Choose an authorized contact.");
     expect(careConversations.open).not.toHaveBeenCalled();
   });
-  it.each(["en-US", "es-MX"])("keeps emergency wording after the contacts and labels the compact thread actions (%s)", async (locale) => {
+  it.each(["en-US", "es-MX"] as const)("keeps emergency wording after the contacts and labels the compact thread actions (%s)", async (locale) => {
     const spanish = locale === "es-MX";
     const view = render(<CareConversations compact locale={locale} />);
     const notice = screen.getByRole("note");
@@ -496,7 +518,7 @@ describe("human conversations", () => {
     expect(screen.getByRole("button", { name: /Dr. One · Clinic One/ })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it.each(["en-US", "es-MX"])("requires explicit confirmation before preparing a new key after a definitive mismatch (%s)", async (locale) => {
+  it.each(["en-US", "es-MX"] as const)("requires explicit confirmation before preparing a new key after a definitive mismatch (%s)", async (locale) => {
     const spanish = locale === "es-MX";
     vi.mocked(careConversations.send).mockRejectedValueOnce({
       status: 422, details: { error: { code: "MESSAGE_IDEMPOTENCY_MISMATCH" } },

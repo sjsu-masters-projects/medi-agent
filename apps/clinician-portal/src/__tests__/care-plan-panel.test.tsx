@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CarePlanPanel } from "@/components/features/care-plan-panel";
 import {
@@ -39,6 +39,27 @@ vi.mock("@/components/features/document-source-viewer", () => ({
 }));
 
 describe("CarePlanPanel", () => {
+    it("focuses a message-linked activity once without stealing focus during edits", async () => {
+        const previous = window.location.href;
+        window.history.replaceState(null, "", "/patients/patient-1?tab=care-plan#care-plan-item-item-1");
+        vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({ latest: {
+            id: "plan-1", patient_id: "patient-1", version_number: 2, status: "draft", items: [{
+                id: "item-1", category: "hydration", title: "Drink water", instructions: "Approved source text", frequency: "daily",
+                schedule: {}, medication: {}, uncertainty: [], conflict: {}, is_removed: false,
+            }],
+        }, active: null, patient_locale: "en-US", active_medications: [] });
+        vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
+        try {
+            render(<CarePlanPanel patientId="patient-1" />);
+            const heading = await screen.findByRole("heading", { name: "Drink water" });
+            await waitFor(() => expect(heading).toHaveFocus());
+            const title = screen.getByRole("textbox", { name: /^Title$/ });
+            title.focus();
+            fireEvent.change(title, { target: { value: "Reviewed activity title" } });
+            await act(async () => { await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())); });
+            expect(title).toHaveFocus();
+        } finally { window.history.replaceState(null, "", previous); }
+    });
     it("asks for both languages when a draft item has wording in one language only", async () => {
         const instruction = "Caminar durante veinte minutos";
         const item = { id: "item", category: "movement", title: instruction, instructions: instruction,

@@ -1,4 +1,5 @@
 import { normalizeLocale, resolveLocaleResource, type Locale, type LocaleResourceMap } from "@/types";
+import { getTransportErrorMessage } from "../../../../packages/shared/src/utils/api-transport";
 
 const english = {
     locale: "en-US" as Locale,
@@ -16,6 +17,12 @@ const english = {
     planVersion: (version: number) => `Version ${version}`,
     categories: { medication: "medication", movement: "movement", nutrition: "nutrition", hydration: "hydration", monitoring: "monitoring", follow_up: "follow up", other: "other" },
     stale: "Schedule may be stale", loadError: "Could not load schedule", retry: "Try again",
+    loadErrorDetail: "Refresh your activities and try again.",
+    signInError: "Please sign in again. Your response has not been saved.",
+    saveError: "We couldn’t confirm that your response was saved. Refresh before retrying; your schedule has not been marked complete.",
+    documentImportSignIn: "Please sign in again before importing a clinical document.",
+    documentImportExpired: "Your session expired. Please sign in again before importing a clinical document.",
+    documentImportFailed: "The document could not be imported. Check your connection and try again.",
     empty: "Nothing scheduled", emptyDetail: "Your clinicians have not assigned anything for today.",
     symptom: "Report a symptom", symptomDetail: "Describe how you feel with Nora, your AI care assistant.",
     barrier: "I couldn't do this", barrierTitle: "I couldn’t do this",
@@ -46,6 +53,12 @@ const spanish: TodayCopy = {
     planVersion: (version) => `Versión ${version}`,
     categories: { medication: "medicamento", movement: "movimiento", nutrition: "nutrición", hydration: "hidratación", monitoring: "monitoreo", follow_up: "seguimiento", other: "otra actividad" },
     stale: "Las actividades pueden estar desactualizadas", loadError: "No se pudieron cargar las actividades", retry: "Intentar de nuevo",
+    loadErrorDetail: "Actualiza tus actividades e intenta de nuevo.",
+    signInError: "Vuelve a iniciar sesión. Tu respuesta no se ha guardado.",
+    saveError: "No pudimos confirmar que se guardó tu respuesta. Actualiza antes de volver a intentarlo; la actividad no se ha marcado como completada.",
+    documentImportSignIn: "Vuelve a iniciar sesión antes de importar un documento clínico.",
+    documentImportExpired: "Tu sesión expiró. Vuelve a iniciar sesión antes de importar un documento clínico.",
+    documentImportFailed: "No se pudo importar el documento. Revisa tu conexión e intenta de nuevo.",
     empty: "No hay actividades programadas", emptyDetail: "Tu equipo de atención no ha asignado actividades para hoy.",
     symptom: "Reportar un síntoma", symptomDetail: "Describe cómo te sientes con Nora, tu asistente de atención con IA.",
     barrier: "No pude hacer esto", barrierTitle: "No pude hacer esto",
@@ -71,4 +84,22 @@ export function getCarePlanCategoryLabel(category: string, copy: TodayCopy): str
     return Object.prototype.hasOwnProperty.call(copy.categories, category)
         ? copy.categories[category as keyof TodayCopy["categories"]]
         : copy.activity.custom;
+}
+
+export type TodayErrorCode = "load" | "signIn" | "save" | "offline" | "uncertain";
+export type TodayDocumentImportErrorCode = "signIn" | "expired" | "failed";
+
+export function getTodayErrorMessage(code: string, locale: Locale): string {
+    const copy = getTodayCopy(locale);
+    if (code === "signIn") return copy.signInError;
+    if (code === "save") return copy.saveError;
+    if (code === "offline" || code === "uncertain") return getTransportErrorMessage(code === "uncertain", locale);
+    return copy.loadErrorDetail;
+}
+
+export function getTodayDocumentImportErrorMessage(code: TodayDocumentImportErrorCode, locale: Locale): string {
+    const copy = getTodayCopy(locale);
+    if (code === "signIn") return copy.documentImportSignIn;
+    if (code === "expired") return copy.documentImportExpired;
+    return copy.documentImportFailed;
 }

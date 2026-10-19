@@ -42,6 +42,7 @@ class Workload(StrEnum):
     EXPLANATION = "explanation"
     CARE_PLAN_CLASSIFICATION = "care_plan_classification"
     CARE_PLAN_TRANSLATION = "care_plan_translation"
+    SOAP = "soap"
 
 
 class Transport(StrEnum):
@@ -116,6 +117,14 @@ BACKUP_FLASH: Final = ModelSpec(
     honours_response_schema=True,
 )
 
+# Preserve SOAP's configured model while centralizing its operational controls.
+SOAP_PRO: Final = ModelSpec(
+    key="soap_pro",
+    model_id=settings.gemini_pro_model,
+    transport=Transport.VERTEX_GENAI,
+    honours_response_schema=True,
+)
+
 
 THINKING_LEVELS: Final = frozenset({"LOW", "MEDIUM", "HIGH"})
 """Thinking ceilings this product may request.
@@ -161,6 +170,17 @@ class WorkloadRoute:
 
 
 _ROUTES: Final[dict[Workload, WorkloadRoute]] = {
+    Workload.SOAP: WorkloadRoute(
+        workload=Workload.SOAP,
+        primary=SOAP_PRO,
+        fallback=None,
+        budget_seconds=settings.soap_generation_timeout_seconds,
+        deterministic="return generation failure; write no SOAP note",
+        enabled_setting="soap_ai_enabled",
+        # Operational ceilings; no SOAP-specific latency or output study is claimed.
+        max_output_tokens=4096,
+        thinking_level="LOW",
+    ),
     # Flash-Lite is the inexpensive, GCP-native classifier. It uses the same Gen AI SDK,
     # ADC identity, global endpoint, function-calling surface, and telemetry path as the
     # stronger Flash model, avoiding the separate MaaS capacity pool that made chat

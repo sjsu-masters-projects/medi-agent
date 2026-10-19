@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { getTodayCopy, type TodayCopy } from "@/content/today-copy";
+import { getTodayCopy, getTodayErrorMessage, type TodayCopy } from "@/content/today-copy";
+import { useInitialPatientLocale } from "@/contexts/patient-locale-context";
 import { resolveVisitsTimezone } from "@/content/visits-copy";
 import { TodayTaskContent, TodayTaskRow } from "@/components/features/today-presentation";
 import { Icon } from "@/components/ui/icons";
@@ -72,7 +73,8 @@ export default function TodayPage() {
     useEffect(() => { setPlanOpen(planDestination); }, [planDestination]);
     const { setConversationOpen } = usePatientShell();
     const profile = usePatientProfile();
-    const locale = normalizeLocale(profile?.preferredLanguage);
+    const initialLocale = useInitialPatientLocale();
+    const locale = normalizeLocale(profile?.preferredLanguage ?? initialLocale);
     const copy = getTodayCopy(locale);
     const spanish = locale === "es-MX";
     const nextUpLabel = spanish ? "Siguiente actividad" : "Next up";
@@ -216,7 +218,7 @@ export default function TodayPage() {
                 {activityId && !loading && !error && !exactActivity && matchingActivities.length === 0 && <p role="alert" className="mx-4 rounded-2xl bg-danger-tint p-3 text-sm text-danger-ink">{spanish ? "Esta actividad no está disponible hoy. Actualiza tus actividades." : "This activity is unavailable today. Refresh your activities."}</p>}
                 {remainingTasks.length === 0 ? <h2 className="sr-only">{copy.schedule}</h2> : null}
                 {actionError && !barrierTask ? <p role="alert" className="mx-4 flex items-start gap-2.5 rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink"><Icon name="alert" className="h-5 w-5 shrink-0" />{actionError}</p> : null}
-                {error ? <div className="mx-4"><ErrorState description={error} action={<button className="ma-press min-h-11 rounded-[14px] bg-surface-2 px-4 py-2 text-sm font-semibold text-ink-2 hover:bg-line-strong" onClick={refreshFeed} type="button">{copy.retry}</button>} title={tasks.length > 0 ? copy.stale : copy.loadError} /></div> : null}
+                {error ? <div className="mx-4"><ErrorState description={getTodayErrorMessage(error, locale)} action={<button className="ma-press min-h-11 rounded-[14px] bg-surface-2 px-4 py-2 text-sm font-semibold text-ink-2 hover:bg-line-strong" onClick={refreshFeed} type="button">{copy.retry}</button>} title={tasks.length > 0 ? copy.stale : copy.loadError} /></div> : null}
                 {!error && tasks.length === 0 ? <div className="mx-4 rounded-[22px] bg-surface"><EmptyState description={copy.emptyDetail} icon={<Icon name="cal" />} title={copy.empty} /></div> : null}
                 {nextTask ? <article aria-label={nextUpLabel} data-completion-phase={completion?.phase ?? "idle"} className={`mx-4 rounded-[28px] bg-surface p-5 shadow-[var(--shadow-raised)] ${completion?.phase === "leaving" ? "ma-leave" : "ma-enter-spring"}`} key={nextTask.id}>
                     <TodayTaskContent task={nextTask} copy={copy} eyebrow={nextUpLabel} status={mapTaskStatus(nextTask, now)} timeLabel={formatTimeLabel(locale, copy, nextTask.scheduledTime, nextTask.requiresScheduleConfiguration)} disabled={disabled} onComplete={() => void complete(nextTask)} onBarrier={() => openBarrier(nextTask)} hero phase={completion?.phase} />

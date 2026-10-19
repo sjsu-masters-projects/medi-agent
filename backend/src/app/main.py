@@ -41,6 +41,7 @@ from app.routers import (
     voice,
 )
 from app.services.a2a_retry_worker import A2ARetryWorker
+from app.services.chat_turn_runner import turn_runner
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,9 @@ def init_sentry() -> None:
         send_default_pii=False,
         traces_sample_rate=1.0 if settings.environment == "development" else 0.0,
     )
+
+
+TURN_DRAIN_SECONDS = 8.0
 
 
 @asynccontextmanager
@@ -85,6 +89,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         logger.info("A2A retry worker enabled")
 
     yield  # app is running
+
+    # Replies are owned by the server: let running Nora turns finish (Cloud Run allows
+    # about 10 s after SIGTERM). Anything left is reconciled by its saved deadline.
+    await turn_runner.drain(TURN_DRAIN_SECONDS)
 
     if retry_worker:
         await retry_worker.stop()

@@ -296,6 +296,7 @@ The GitHub PR template and CI policy check reinforce required checklist items.
 ## Repository enforcement
 
 - CI: backend lint, typecheck, sharded tests and coverage, migration validation, secret scan, and portal lint/build (see `.github/workflows/ci.yml`); `.github/workflows/frontend.yml` also lints and builds the portals when `apps/**` or `packages/**` change  
+- CI scope: the slow backend jobs (full-suite coverage and the Docker PostgreSQL contract matrix) run on pull requests, the merge queue, manual dispatch and a weekly Monday schedule, not on pushes to main, which would repeat the pull request run. On a pull request the PostgreSQL contracts run only when backend SQL, migrations, services, routers, agents, safety code, `backend/tests/integration`, backend dependencies or `ci.yml` change; otherwise that job is skipped and CI Summary still passes. Lint, typecheck, unit-test shards and portal builds run on every event. CI Summary requires lint, format and mypy to succeed, so a skip caused by an upstream failure cannot pass.
 - PR policy job: required checklist items in PR body  
 - Husky + lint-staged: pre-commit on staged files  
 
