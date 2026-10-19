@@ -225,3 +225,5 @@ phase 2, branch `feature/ops-006-phase-2`; they apply once the flag is on and ve
 | 14 | Model-call concurrency waits in `model_traffic` without its own bound; the turn budget cancels the wait, and the queue limits bound how many turns run | Per-workload queue limits when more workloads move |
 | 24 | Background tasks (A2A retry worker, scheduled jobs) log without a `task_id`; worker turns and the sweep carry `task_id`, `turn_id` and `request_id` | Remaining background jobs |
 | 5 | Care-conversation panels poll every 15 s while open (inbox and open thread), paused when hidden | Phase 3 (stream) |
+
+**Worker-mode portal and socket close log (October 19):** the patient portal now treats `queued` as in progress (a queued turn had been drawn as interrupted); the chat socket logs `chat_ws.closed` with `initiator` (client or server), `close_code` and `reason` so the cause of any close is visible in Cloud Logging; the conversation list counts queued turns as a reply in progress.

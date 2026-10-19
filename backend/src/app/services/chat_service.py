@@ -271,10 +271,12 @@ class ChatService:
             activity = max(str(row.get("updated_at") or ""), str(latest.get("updated_at") or ""))
             row["updated_at"] = activity
             status = str(latest.get("status") or "")
-            if status in {"processing", "failed", "interrupted"} and not latest.get("dismissed_at"):
+            if status in {"queued", "processing", "failed", "interrupted"} and not latest.get(
+                "dismissed_at"
+            ):
                 row["status"] = "needs_attention"
                 expired = _is_past(latest.get("deadline_at"), now)
-                row["reply_in_progress"] = status == "processing" and not expired
+                row["reply_in_progress"] = status in {"queued", "processing"} and not expired
         for row in merged.values():
             row.setdefault("reply_in_progress", False)
         ordered = sorted(

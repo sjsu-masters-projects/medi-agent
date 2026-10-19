@@ -195,7 +195,7 @@ jobs:
         run: mypy src/ --ignore-missing-imports
 
   backend-test-impact:
-    name: Backend Test Impact (Acquit canary)
+    name: Backend Test Impact (Acquit)
     # Lint, format and mypy gate the merge through CI Summary; tests no longer wait for them.
     needs: backend-dependency-lock
     runs-on: ubuntu-latest
@@ -654,7 +654,7 @@ jobs:
             echo "| --- | --- |"
             echo "| Dependency lock and audit | ${BACKEND_LOCK} |"
             echo "| Production placeholder check | ${PLACEHOLDERS} |"
-            echo "| Acquit canary | ${BACKEND_IMPACT} |"
+            echo "| Acquit test selection | ${BACKEND_IMPACT} |"
             echo "| Backend test shards | ${BACKEND_TESTS} |"
             echo "| Backend full-suite coverage | ${BACKEND_COVERAGE} |"
             echo "| PostgreSQL contract suites | ${POSTGRES_CONTRACTS} |"

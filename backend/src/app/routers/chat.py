@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 from uuid import UUID
@@ -1169,10 +1170,52 @@ async def _process_chat_message(
     return cast(dict[str, Any], conversation_state)
 
 
+class SocketClosure:
+    """Who ended a chat socket, and with what code. Logged once per socket so a close with no
+    other trace (a client reload, a proxy, a server fault) can be told apart in the logs."""
+
+    def __init__(self) -> None:
+        self.initiator = "server"
+        self.code: int | None = None
+        self.reason: str | None = None
+        self.opened = time.monotonic()
+
+    def client_closed(self, exc: BaseException | None = None) -> None:
+        self.initiator = "client"
+        code = getattr(exc, "code", None)
+        self.code = code if isinstance(code, int) else self.code
+        reason = getattr(exc, "reason", None)
+        self.reason = reason[:80] if isinstance(reason, str) and reason else self.reason
+
+    def server_closed(self, code: int, reason: str | None = None) -> None:
+        self.initiator, self.code, self.reason = "server", code, reason
+
+    def log(self) -> None:
+        log_event(
+            logger,
+            "chat_ws.closed",
+            message="Chat websocket closed",
+            initiator=self.initiator,
+            close_code=self.code,
+            reason=self.reason,
+            duration_ms=int((time.monotonic() - self.opened) * 1000),
+        )
+
+
 async def chat_websocket_endpoint(
     websocket: WebSocket,
     patient_id: UUID,
     db: Client = Depends(get_db),
+) -> None:
+    closure = SocketClosure()
+    try:
+        await _serve_chat_socket(websocket, patient_id, db, closure)
+    finally:
+        closure.log()
+
+
+async def _serve_chat_socket(
+    websocket: WebSocket, patient_id: UUID, db: Client, closure: SocketClosure
 ) -> None:
     try:
         current_user = _authenticate_ws_patient(websocket, patient_id)
@@ -1256,12 +1299,14 @@ async def chat_websocket_endpoint(
                 {"type": "chat_context_unavailable", "context_type": "document"}
             )
         conversation_state = _conversation_state_from_record(state_record)
-    except WebSocketDisconnect:
+    except WebSocketDisconnect as exc:
+        closure.client_closed(exc)
         logger.info("Chat websocket disconnected during initialization")
         await watchers.close()
         return
     except Exception as exc:
         if _closed_websocket_error(exc):
+            closure.client_closed()
             logger.info("Chat websocket disconnected during initialization")
             await watchers.close()
             return
@@ -1275,6 +1320,7 @@ async def chat_websocket_endpoint(
                 "message": "Chat is temporarily unavailable.",
             },
         ):
+            closure.server_closed(status.WS_1011_INTERNAL_ERROR, "startup_failed")
             await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
         await watchers.close()
         return
@@ -1495,7 +1541,8 @@ async def chat_websocket_endpoint(
                     conversation_state = started
             else:
                 conversation_state = await _process_chat_message(websocket, service, turn_context)
-    except WebSocketDisconnect:
+    except WebSocketDisconnect as exc:
+        closure.client_closed(exc)
         logger.info("Chat websocket disconnected")
     except ValidationError as exc:
         await _send_terminal_event(
@@ -1508,6 +1555,7 @@ async def chat_websocket_endpoint(
         )
     except Exception as exc:
         if _closed_websocket_error(exc):
+            closure.client_closed()
             logger.info("Chat websocket disconnected before a response was delivered")
             return
         logger.exception("Chat websocket error: %s", _failure_label(exc))
@@ -1520,6 +1568,7 @@ async def chat_websocket_endpoint(
             },
         )
         if sent and websocket.application_state is WebSocketState.CONNECTED:
+            closure.server_closed(status.WS_1011_INTERNAL_ERROR, "server_error")
             await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
     finally:
         if viewer is not None:

@@ -291,3 +291,5 @@ gets draft then rest, empty registry on another instance, registry cleanup, dead
 shutdown drain and leftover, real model error fails, lapsed-lease actions already covered in
 `test_chat_turn_recovery.py`), and portal tests for one socket across search-param changes, the
 typing-only streaming tab, the recovery card in a non-receiving tab, and reconnect.
+
+**Queued turns and calm status (October 19):** `queued` is a first-class turn status (shared with processing as "in progress": send disabled, no retry; any unrecognised status is also treated as in progress, never as interrupted). Exactly one element shows a turn's progress: the typing indicator in the tab that sent it, the draft once streaming, or the "Nora is preparing your reply" card in a reloaded or second tab (and in any tab offline for more than 3 s); "interrupted" appears only for a turn saved as failed or interrupted. A socket drop keeps the screen, shows nothing for 3 s, then a subtle "Reconnecting…" (es-MX draft: "Reconectando…") beside the connection label; a token refresh no longer remounts the page.
