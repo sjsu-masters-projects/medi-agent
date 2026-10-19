@@ -53,6 +53,7 @@ caused the chat and notification failures.
      depth and age, and stream connections.
 6. **Staging load test before production** for chat plus notifications with many concurrent users
    and tabs, using the existing staging Supabase project.
+7. All phases follow the concurrency and distributed-systems rules in the OPS-006 specification.
 
 ## Alternatives considered
 

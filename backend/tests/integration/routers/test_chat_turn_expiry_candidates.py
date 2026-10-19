@@ -25,7 +25,7 @@ from app.models.chat import ChatMessageCreate
 from app.models.enums import ChatRole, Language
 from app.routers import chat
 from app.services.chat_service import normalize_session_id
-from app.services.chat_turn_runner import TurnRunner, TurnRun
+from app.services.chat_turn_runner import TurnRun, TurnRunner
 from app.services.chat_turn_service import ChatTurnService
 
 MARKER = "PRIVATE-MARKER-9f3c"
