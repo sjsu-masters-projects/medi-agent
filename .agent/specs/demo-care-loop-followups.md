@@ -1,8 +1,8 @@
 # Demo care-loop follow-ups — LOC-002, EVA-001, AI-006, COM-002
 
-Status: In review in [#191](https://github.com/sjsu-masters-projects/medi-agent/pull/191),
-merged with main through #192. One PR; separate behavior and test lanes. Migration
-`076` must be applied before the PR merges; deployed acceptance is listed at the end.
+Status: [#191](https://github.com/sjsu-masters-projects/medi-agent/pull/191) merged
+after #192; migration `076_care_conversation_activity_review.sql` is recorded in
+the hosted ledger. Deployed behavior still requires the acceptance checks below.
 
 ## Acceptance plan
 
@@ -113,9 +113,10 @@ No new cross-clinic sharing or implicit broadcast recipient behavior is introduc
   existing actions. The source plan stays approved until an authorized publication.
 - This uses today's patient-level approved-plan model. Per-team plan ownership is
   PLAN-002, not implicitly implemented by attaching an item to a private thread.
-- Apply 076 (requester action, before this PR merges and before this backend deploys).
-  Rerunning it is tested; existing conversation reads/legacy deployments remain
-  compatible. No remote migration, publication or live acceptance is claimed.
+- Migration 076 is recorded as applied in the hosted ledger. Rerunning it is
+  tested; existing conversation reads/legacy deployments remain compatible.
+  The October 19 live message-to-draft check did not publish a plan. Its
+  exact-item focus defect and remaining acceptance are in the deployed recheck.
 
 ## Pending es-MX interface drafts
 
@@ -159,8 +160,13 @@ All checks use synthetic fixtures and isolated data, not live patient accounts.
 Browser check: the locally built Spanish login and signup render Spanish labels,
 retain `lang=es-MX` navigation and `html lang=es-MX`; no horizontal overflow in the
 observed browser viewport. This is not authenticated mobile workflow acceptance.
-No current authenticated accounts were available in the browser for the two-portal
-handoff. Mobile 360/390/430 and clinician desktop screenshots, keyboard/reduced-motion
+At the time of this local check, authenticated accounts were not available for
+the two-portal handoff. Subsequently, #191 merged, migration 076 was recorded
+applied, and the October 19 Rajeev/Elena deployed message-to-draft path was
+exercised with an exact-item focus defect. The patient locale switch was also
+exercised and restored, with a transient mixed-language render after navigation.
+See the [deployed recheck](../../docs/deployed-recheck-2026-10-11.md#task-verdicts).
+Mobile 360/390/430 and clinician desktop screenshots, keyboard/reduced-motion
 journeys, approved-plan publication after handoff, actual provider responses and
-human bilingual review remain unrecorded. PR/CI/merge and separately authorized
-migration/deployment are still required; no task is marked Done from local checks.
+human bilingual review remain unrecorded; no task is marked Done from these
+partial checks.

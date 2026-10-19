@@ -143,7 +143,7 @@ function SessionCache({ token, children }: { token: string | null; children: Rea
     };
   }, [refresh, token]);
 
-  async function write(operation: () => Promise<unknown>) {
+  async function write(operation: () => Promise<unknown>, waitForRefresh = true) {
     if (!token || cacheToken !== token || lock.current || !alive.current) return false;
     lock.current = true; generation.current++; inFlight.current = 0; controller.current?.abort();
     const identity = session.current;
@@ -152,7 +152,9 @@ function SessionCache({ token, children }: { token: string | null; children: Rea
       await operation();
       if (!alive.current || identity !== session.current) return false;
       lock.current = false;
-      await refresh();
+      const refreshed = refresh();
+      if (waitForRefresh) await refreshed;
+      else void refreshed;
       return true;
     } catch {
       if (alive.current && identity === session.current) setWriteError("The change could not be confirmed. Refresh before trying again.");
@@ -201,7 +203,9 @@ function SessionCache({ token, children }: { token: string | null; children: Rea
       setCache((previous) => ({ ...previous, actions: { data: null, error: null } }));
       void refresh();
     },
-    read: (id) => write(() => notificationCentre.read(token!, id)),
+    // Destination links wait only for the authoritative read write. The follow-up
+    // refresh runs in the same provider but must not delay opening clinical details.
+    read: (id) => write(() => notificationCentre.read(token!, id), false),
     readAll: () => {
       const snapshots = cache.history.data?.read_snapshots ?? [];
       const identity = session.current;

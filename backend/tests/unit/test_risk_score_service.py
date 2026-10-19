@@ -237,6 +237,7 @@ class TestRiskSignalFetching:
                 data=[
                     {"severity": 4},
                     {"severity": "9"},
+                    {"severity": None},
                     {},
                 ]
             )
@@ -245,6 +246,18 @@ class TestRiskSignalFetching:
         severity = await service._fetch_recent_symptom_severity(uuid4())
 
         assert severity == 9
+
+    @pytest.mark.asyncio
+    async def test_fetch_recent_symptom_severity_returns_zero_when_all_values_are_null(
+        self, service
+    ):
+        service._execute = AsyncMock(  # type: ignore[method-assign]
+            return_value=_response(data=[{"severity": None}, {}])
+        )
+
+        severity = await service._fetch_recent_symptom_severity(uuid4())
+
+        assert severity == 0
 
     @pytest.mark.asyncio
     async def test_fetch_open_adr_count_queries_only_valid_draft_status(self, service):
