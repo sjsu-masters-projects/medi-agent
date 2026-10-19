@@ -357,7 +357,7 @@ jobs:
             minimums: test_adr_loop_postgres=38 test_medwatch_3500_postgres=14
           - name: care-conversations
             files: tests/integration/test_care_conversation_postgres.py tests/integration/test_clinic_memberships_postgres.py tests/integration/test_chat_turn_postgres.py
-            minimums: test_care_conversation_postgres=45 test_clinic_memberships_postgres=38 test_chat_turn_postgres=46
+            minimums: test_care_conversation_postgres=45 test_clinic_memberships_postgres=38 test_chat_turn_postgres=47
     defaults:
       run:
         working-directory: backend

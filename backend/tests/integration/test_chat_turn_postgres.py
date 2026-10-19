@@ -535,3 +535,23 @@ def test_077_is_re_runnable_and_keeps_grants(turn_sql):
         )
     record = call(turn_sql, payload=request())["turn"]
     assert reason(call(turn_sql, "actions", {**record, "id": str(uuid4())})) == "not_found"
+
+
+def test_a_caller_never_waits_on_the_conversation_lock_without_bound(turn_sql):
+    """lock_timeout (5 s) is set by the function itself, below the backend's 10 s budget."""
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    holder_sql = (
+        "BEGIN; SELECT pg_advisory_xact_lock(hashtextextended('chat_turn:'||"
+        f"'{PATIENT}'||':chat-test',0)); SELECT pg_sleep(9); COMMIT;"
+    )
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        holder = pool.submit(turn_sql, holder_sql)
+        time.sleep(1.5)
+        started = time.monotonic()
+        output = call(turn_sql, "recover", succeeds=False)
+        waited = time.monotonic() - started
+        holder.result()
+    assert "lock timeout" in output and 4 <= waited < 8
+    assert call(turn_sql, "recover")["items"] == []  # and it works again afterwards

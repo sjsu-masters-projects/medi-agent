@@ -134,3 +134,11 @@ class NormalizationError(AgentError):
     """Raised when data normalization fails."""
 
     pass
+
+
+class PoolSaturatedError(ServiceUnavailableError):
+    """A bounded worker pool is full: reject fast and let the caller retry (HTTP 503)."""
+
+    def __init__(self, pool: str, *, retry_after: int = 2):
+        super().__init__("The service is busy. Try again shortly.", code="POOL_SATURATED")
+        self.pool, self.retry_after = pool, retry_after

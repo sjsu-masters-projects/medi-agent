@@ -138,7 +138,13 @@ async def _external_service_handler(request: Request, exc: ExternalServiceError)
 
 async def _service_unavailable_handler(_: Request, exc: ServiceUnavailableError) -> JSONResponse:
     logger.warning("Service unavailable: [%s]", exc.code)
-    return _error_response(503, exc.code, exc.message)
+    retry_after = getattr(exc, "retry_after", None)
+    return _error_response(
+        503,
+        exc.code,
+        exc.message,
+        {"Retry-After": str(retry_after)} if retry_after else None,
+    )
 
 
 async def _pydantic_handler(_: Request, exc: PydanticValidationError) -> JSONResponse:

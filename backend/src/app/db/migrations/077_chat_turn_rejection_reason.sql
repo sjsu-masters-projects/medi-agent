@@ -8,9 +8,13 @@
 --   lease_mismatch    a retry or a second begin replaced the lease
 --   deadline_passed   the lease deadline lapsed (the turn was reconciled to interrupted)
 --   status:<status>   completed, failed, interrupted (not by deadline) or processing, e.g. dismissed
+-- The function also sets lock_timeout (5 s) and statement_timeout (8 s) for its own session, so a
+-- caller never waits on the per-conversation advisory lock without bound; both stay below the
+-- backend's 10 s call budget. Per-function settings, not a role or project change.
 -- The reason carries no ids, text or lease values. Behavior of every other operation is unchanged.
 CREATE OR REPLACE FUNCTION public.chat_turn_operation(p_patient uuid,p_session text,p_action text,p_payload jsonb DEFAULT '{}')
-RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
+RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path=''
+ SET lock_timeout='5s' SET statement_timeout='8s' AS $$
 DECLARE t public.chat_turns; u public.chat_messages; a public.chat_messages;
  d public.documents; snapshot jsonb; result jsonb; seconds integer;
 BEGIN
@@ -127,6 +131,10 @@ BEGIN
    OR def NOT LIKE '%''session_mismatch''%' OR def NOT LIKE '%''lease_mismatch''%'
    OR def NOT LIKE '%''deadline_passed''%' OR def NOT LIKE '%''not_found''%' THEN
   RAISE EXCEPTION 'chat_turn_operation does not carry the 073 validation, the 074 late completion and the 077 rejection reasons';
+ END IF;
+ IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_proc p WHERE p.oid='public.chat_turn_operation(uuid,text,text,jsonb)'::regprocedure
+   AND p.proconfig @> ARRAY['lock_timeout=5s'] AND p.proconfig @> ARRAY['statement_timeout=8s']) THEN
+  RAISE EXCEPTION 'chat_turn_operation must set lock_timeout and statement_timeout';
  END IF;
  IF pg_catalog.has_function_privilege('anon','public.chat_turn_operation(uuid,text,text,jsonb)','EXECUTE')
    OR pg_catalog.has_function_privilege('authenticated','public.chat_turn_operation(uuid,text,text,jsonb)','EXECUTE')
