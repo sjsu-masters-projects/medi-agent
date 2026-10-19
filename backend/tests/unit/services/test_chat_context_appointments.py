@@ -108,7 +108,7 @@ async def no_plan(self: ChatService, patient_id: str) -> list[dict[str, Any]]:
 async def test_context_includes_the_confirmed_visit_in_the_patients_time_zone() -> None:
     chat, _ = service({"appointments": [visit(PATIENT_A)]})
     with patch.object(ChatService, "_fetch_todays_plan_activities", no_plan):
-        context = await chat.get_context(PATIENT_A)
+        context = await chat.get_context(PATIENT_A, include_schedule=True)
     [appointment] = context["appointments"]
     assert appointment["status"] == "confirmed"
     assert appointment["time_local"] == "9:00 AM"
@@ -127,7 +127,7 @@ async def test_another_patients_visits_are_never_included_and_the_read_is_filter
         {"appointments": [visit(PATIENT_A), visit(PATIENT_B, clinician_name="Other")]}
     )
     with patch.object(ChatService, "_fetch_todays_plan_activities", no_plan):
-        context = await chat.get_context(PATIENT_A)
+        context = await chat.get_context(PATIENT_A, include_schedule=True)
     assert [a["clinician"] for a in context["appointments"]] == ["Elena Park"]
     reads = [filters for name, filters in db.reads if name == "appointments"]
     assert reads and ("eq", "patient_id", PATIENT_A) in reads[0]
@@ -154,7 +154,7 @@ async def test_offers_and_change_requests_are_labelled_and_expired_offers_are_dr
         }
     )
     with patch.object(ChatService, "_fetch_todays_plan_activities", no_plan):
-        context = await chat.get_context(PATIENT_A)
+        context = await chat.get_context(PATIENT_A, include_schedule=True)
     assert [a["status"] for a in context["appointments"]] == [
         "offer_awaiting_your_answer",
         "change_requested_awaiting_care_team",
@@ -167,7 +167,7 @@ async def test_the_count_is_capped() -> None:
     rows = [visit(PATIENT_A, f"2099-11-{day:02d}T16:00:00+00:00") for day in range(1, 20)]
     chat, _ = service({"appointments": rows})
     with patch.object(ChatService, "_fetch_todays_plan_activities", no_plan):
-        context = await chat.get_context(PATIENT_A)
+        context = await chat.get_context(PATIENT_A, include_schedule=True)
     assert len(context["appointments"]) == APPOINTMENT_CONTEXT_LIMIT
 
 
@@ -192,7 +192,7 @@ async def test_no_visits_is_an_empty_list_and_allergies_are_patient_scoped() -> 
         }
     )
     with patch.object(ChatService, "_fetch_todays_plan_activities", no_plan):
-        context = await chat.get_context(PATIENT_A)
+        context = await chat.get_context(PATIENT_A, include_schedule=True)
     assert context["appointments"] == []
     assert [a["allergen"] for a in context["allergies"]] == ["Penicillin"]
 
@@ -233,9 +233,17 @@ async def test_the_do_i_have_an_appointment_cases_are_satisfiable_from_the_conte
     assert asked[0]["message"] == "Do I have an appointment coming up?"
     chat, _ = service({"appointments": [visit(PATIENT_A)]})
     with patch.object(ChatService, "_fetch_todays_plan_activities", no_plan):
-        context = await chat.get_context(PATIENT_A)
+        context = await chat.get_context(PATIENT_A, include_schedule=True)
     rendered = json.dumps(context)
     for case in asked:
         # What the case demands in the answer is data the model is handed.
         assert any(token in rendered for token in case["must_include_any"][:2])
         assert case["must_not_include"], "a wrong 'no appointments' answer must fail the case"
+
+
+@pytest.mark.asyncio
+async def test_the_connection_handshake_context_does_not_read_the_schedule() -> None:
+    chat, db = service({"appointments": [visit(PATIENT_A)]})
+    context = await chat.get_context(PATIENT_A)
+    assert "appointments" not in context
+    assert not [name for name, _ in db.reads if name in {"appointments", "allergies"}]

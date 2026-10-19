@@ -279,3 +279,85 @@ def test_voice_websocket_returns_validation_errors(client, monkeypatch, patient_
         response = websocket.receive_json()
         assert response["type"] == "voice_error"
         assert response["code"] == "validation_error"
+
+
+# -- live voice mode over the websocket (fake Deepgram clients only) ------------------------------
+
+
+def _live_connection_factory(monkeypatch, live, speak):
+    from functools import partial
+
+    from app.config import settings
+    from app.routers import voice as voice_router
+    from app.services.voice_connection import VoiceConnection
+
+    monkeypatch.setattr(settings, "deepgram_api_key", "test-key")
+    monkeypatch.setattr(
+        voice_router,
+        "VoiceConnection",
+        partial(VoiceConnection, live_connector=live, speak_connector=speak),
+    )
+
+
+def _signed_in(monkeypatch, patient_id):
+    token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
+    monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
+
+
+def test_live_voice_relays_audio_and_returns_one_final_utterance(client, monkeypatch, patient_id):
+    from tests.unit.services.test_voice_live import FakeConnector, result
+
+    _signed_in(monkeypatch, patient_id)
+    live, speak = FakeConnector(), FakeConnector()
+    _live_connection_factory(monkeypatch, live, speak)
+
+    with client.websocket_connect(
+        f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]
+    ) as websocket:
+        ready = websocket.receive_json()
+        assert ready["live_stt_supported"] is True and ready["tts_stream_supported"] is True
+        websocket.send_json({"type": "voice_session_start", "language": "en-US"})
+        assert websocket.receive_json()["type"] == "voice_session_started"
+        websocket.send_bytes(b"\x00\x01" * 800)
+        live.connection.push(result("Do I have an appointment", is_final=False))
+        assert websocket.receive_json()["type"] == "transcript_partial"
+        live.connection.push(result("Do I have an appointment?", speech_final=True))
+        final = websocket.receive_json()
+        assert final["type"] == "utterance_final" and final["transcript"] == (
+            "Do I have an appointment?"
+        )
+        websocket.send_json({"type": "voice_session_stop"})
+        assert websocket.receive_json() == {"type": "voice_session_ended", "reason": "client"}
+    assert live.connection.media == [b"\x00\x01" * 800]
+    assert live.connection.exited
+
+
+def test_closing_the_socket_closes_the_deepgram_connections(client, monkeypatch, patient_id):
+    from tests.unit.services.test_voice_live import FakeConnector
+
+    _signed_in(monkeypatch, patient_id)
+    live, speak = FakeConnector(), FakeConnector()
+    _live_connection_factory(monkeypatch, live, speak)
+
+    with client.websocket_connect(
+        f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]
+    ) as websocket:
+        websocket.receive_json()
+        websocket.send_json({"type": "voice_session_start"})
+        assert websocket.receive_json()["type"] == "voice_session_started"
+        websocket.send_json({"type": "tts_stream_start", "speech_id": "reply-1"})
+        assert websocket.receive_json()["type"] == "tts_start"
+    assert live.connection.exited and speak.connection.exited
+
+
+def test_live_voice_is_refused_without_a_deepgram_key(client, monkeypatch, patient_id):
+    from app.config import settings
+
+    _signed_in(monkeypatch, patient_id)
+    monkeypatch.setattr(settings, "deepgram_api_key", "")
+    with client.websocket_connect(
+        f"/ws/voice/{patient_id}", subprotocols=["bearer", "test-token"]
+    ) as websocket:
+        assert websocket.receive_json()["live_stt_supported"] is False
+        websocket.send_json({"type": "voice_session_start"})
+        assert websocket.receive_json()["code"] == "voice_live_unavailable"

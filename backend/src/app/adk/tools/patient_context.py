@@ -46,7 +46,7 @@ async def get_patient_context(tool_context: Any) -> dict[str, Any]:
         logger.warning("Refused a patient-context read: %s", error)
         return {"error": "No patient record is available in this conversation."}
 
-    context = await _service().get_context(patient_id)
+    context = await _service().get_context(patient_id, include_schedule=True)
 
     # Deliberately reshaped rather than returned verbatim: `get_context` also carries a
     # pre-attached `document` blob for the chat route, which is not this tool's concern

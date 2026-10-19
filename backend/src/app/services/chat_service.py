@@ -328,7 +328,12 @@ class ChatService:
         self,
         patient_id: str,
         document_id: str | None = None,
+        *,
+        include_schedule: bool = False,
     ) -> dict[str, Any]:
+        """The patient's record for a turn. ``include_schedule`` adds visits, allergies and
+        today's plan activities: Nora's tool reads them fresh on each call, while the
+        connection handshake (which does not use them) stays light."""
         medications = await self._fetch_active_medications(patient_id)
         conditions = await self._fetch_active_conditions(patient_id)
         recent_symptoms = await self._fetch_recent_symptoms(patient_id)
@@ -338,23 +343,21 @@ class ChatService:
         if document_id:
             document_context = await self._fetch_document_context(patient_id, document_id)
 
-        timezone = await self._fetch_patient_timezone(patient_id)
-        appointments = await self._fetch_upcoming_appointments(patient_id, timezone)
-        allergies = await self._fetch_allergies(patient_id)
-        todays_plan_activities = await self._fetch_todays_plan_activities(patient_id)
-
-        return {
+        context: dict[str, Any] = {
             "medications": medications,
             "conditions": conditions,
             "recent_symptoms": recent_symptoms,
             "care_teams": care_teams,
             "document": document_context,
-            "timezone": timezone,
-            "appointments": appointments,
-            "allergies": allergies,
-            # None means "could not be read", which is different from "nothing today".
-            "todays_plan_activities": todays_plan_activities,
         }
+        if include_schedule:
+            timezone = await self._fetch_patient_timezone(patient_id)
+            context["timezone"] = timezone
+            context["appointments"] = await self._fetch_upcoming_appointments(patient_id, timezone)
+            context["allergies"] = await self._fetch_allergies(patient_id)
+            # None means "could not be read", which is different from "nothing today".
+            context["todays_plan_activities"] = await self._fetch_todays_plan_activities(patient_id)
+        return context
 
     async def get_document_catalog(self, patient_id: str, limit: int = 8) -> list[dict[str, Any]]:
         """Return safe portal document metadata for an already-authorized chat patient."""
