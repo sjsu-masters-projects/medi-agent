@@ -44,6 +44,9 @@ describe("CarePlanPanel", () => {
         window.history.replaceState(null, "", "/patients/patient-1?tab=care-plan#care-plan-item-item-1");
         vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({ latest: {
             id: "plan-1", patient_id: "patient-1", version_number: 2, status: "draft", items: [{
+                id: "item-first", category: "medication", title: "Atorvastatin", instructions: "Take one tablet", frequency: "daily",
+                schedule: {}, medication: {}, uncertainty: [], conflict: {}, is_removed: false,
+            }, {
                 id: "item-1", category: "hydration", title: "Drink water", instructions: "Approved source text", frequency: "daily",
                 schedule: {}, medication: {}, uncertainty: [], conflict: {}, is_removed: false,
             }],
@@ -54,6 +57,7 @@ describe("CarePlanPanel", () => {
             const heading = await screen.findByRole("heading", { name: "Drink water" });
             await waitFor(() => expect(heading).toHaveFocus());
             const title = screen.getByRole("textbox", { name: /^Title$/ });
+            expect(title).toHaveValue("Drink water");
             title.focus();
             fireEvent.change(title, { target: { value: "Reviewed activity title" } });
             await act(async () => { await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())); });
