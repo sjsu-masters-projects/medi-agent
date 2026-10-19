@@ -183,6 +183,19 @@ it("requires a separate acceptance of source suggestions", async () => {
     expect(mutate.mock.calls[0][3]).toMatchObject({ value: 5, state: "answered" });
 });
 
+it("does not carry an unsaved answer into another draft at the same revision", async () => {
+    const register = vi.fn();
+    mutate.mockRejectedValue(new Error("synthetic connection loss"));
+    render(<Provider store={store}><SymptomIntakePanel locale="en-US" registerReply={register} /></Provider>);
+    await screen.findByText("Type or speak your answer below. You can say “not sure” or “skip”.");
+    act(() => { register.mock.calls.at(-1)?.[0]("five", "typed"); });
+    await screen.findByText("Your answer — not yet verified as saved");
+    active.mockResolvedValue({ ...draft, intake_id: "another-synthetic-intake" });
+    act(() => window.dispatchEvent(new Event("symptom-intake-updated")));
+    await waitFor(() => expect(screen.queryByText("Your answer — not yet verified as saved")).not.toBeInTheDocument());
+    expect(screen.queryByText("five")).not.toBeInTheDocument();
+});
+
 it("preserves an uncertain mutation identity across a token refresh", async () => {
     mutate.mockRejectedValueOnce(new Error("synthetic response lost"));
     render(panel());

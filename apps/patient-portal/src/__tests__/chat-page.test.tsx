@@ -35,7 +35,7 @@ const {
     fetchChatConversations: vi.fn(),
     fetchChatHistory: vi.fn(),
     getVoiceCapabilities: vi.fn(() => ({ recording: false, recognition: false, synthesis: false })),
-    playAssistantVoiceResponse: vi.fn((_options: { onEnd?: () => void; onStart?: () => void }) => null),
+    playAssistantVoiceResponse: vi.fn<(options: { onEnd?: () => void; onStart?: () => void }) => null>(() => null),
     replace: vi.fn(),
     setConversationOpen: vi.fn(),
     shell: { conversationOpen: false },

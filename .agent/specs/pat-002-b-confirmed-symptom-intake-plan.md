@@ -1171,3 +1171,15 @@ Main advanced overnight to 582c397 (Nora recovery, session lifecycle and notific
 performance). Integrate that existing work without expanding PAT-002-B or renaming
 applied migration files, then rerun owning regressions and required checks. Add the
 25 intake SQL cases to required CI with zero-skips/minimum-count enforcement.
+
+
+October 18 final local continuation: fresh durable Spanish turn completed after the
+identity fix; Spanish confirmation reached the assigned clinician with null unknown
+severity and no medication row for the unlisted product. A cancelled draft has zero
+reports. A deliberate backend outage retained the answer and recovered by the normal
+reload/retry path. Same-revision draft replacement no longer shows an old unsaved
+answer. Microphone policy now permits the portal's own origin; browser permission
+is still required. Requester explicitly left physical speech verification pending.
+Patient 768/focused 117 pass; other integrated checks are recorded in the acceptance
+record. Candidate-2, phone acceptance, current-head CI, peer review and authorized
+merge/deployment remain release gates.

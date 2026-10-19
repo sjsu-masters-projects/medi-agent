@@ -37,7 +37,7 @@ export function SymptomIntakePanel({ locale: appLocale, sourceMessageId, session
     const [editing, setEditing] = useState<string | null>(null);
     const [consent, setConsent] = useState<string | null>(null);
     const [hint, setHint] = useState(false);
-    const [unsaved, setUnsaved] = useState<{ text: string; revision: number } | null>(null);
+    const [unsaved, setUnsaved] = useState<{ text: string; intakeId: string; questionId: string; revision: number } | null>(null);
     const reader = useRef(onReadAloud);
     useLayoutEffect(() => { reader.current = onReadAloud; }, [onReadAloud]);
     const lastSpoken = useRef("");
@@ -66,7 +66,7 @@ export function SymptomIntakePanel({ locale: appLocale, sourceMessageId, session
             } else if (["review", "review before sharing", "revisar", "revisar antes de compartir"].includes(command) && draft.can_review) {
                 setConsent(null); intake.mutate("preview", {});
             } else if (question) {
-                setUnsaved({ text, revision: draft.revision });
+                setUnsaved({ text, intakeId: draft.intake_id, questionId: question.id, revision: draft.revision });
                 if (suggestion !== undefined && ["use this answer", "use that", "usar esta respuesta", "usa esa respuesta"].includes(command)) {
                     save("answered", suggestion, String(suggestion), mode);
                 } else {
@@ -128,7 +128,7 @@ export function SymptomIntakePanel({ locale: appLocale, sourceMessageId, session
                     <button className={button} disabled={disabled} onClick={() => save("answered", suggestion, String(suggestion))}>{copy.useSuggestion}</button>
                 </div>}
             </>}
-            {active && unsaved?.revision === draft.revision && <div className="rounded-xl border border-line p-3">
+            {active && unsaved?.intakeId === draft.intake_id && unsaved.questionId === question?.id && unsaved.revision === draft.revision && <div className="rounded-xl border border-line p-3">
                 <p className="text-xs text-muted">{copy.pendingAnswer}</p><p>{unsaved.text}</p>
                 {intake.error && !intake.pending && <button className={button} onClick={() => onRestoreInput?.(unsaved.text)}>{copy.editReply}</button>}
             </div>}

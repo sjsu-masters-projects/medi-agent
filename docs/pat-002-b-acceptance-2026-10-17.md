@@ -189,4 +189,58 @@ claimed turn `id`, producing immediate `CHAT_TURN_EXPIRED` despite time remainin
 The merge now preserves the claimed id/lease after merging the message payload.
 The regression asserts the actual RPC identity and separate message id. The failed
 attempt remains failed and was dismissed only through the normal UI; no row was
-rewritten to manufacture a successful result. A fresh live turn check follows.
+rewritten to manufacture a successful result. The fresh live turn completed; see the authenticated checks below.
+
+
+### Final authenticated continuation — October 18
+
+A fresh Spanish-source turn `80cbeac0-48aa-4524-895d-3e50c3bf2f8a` completed normally
+with the identity fix. The patient's profile remained English; prompts, source
+suggestions, review and confirmation used Spanish. Typed private answers, unknown
+course/severity and declined history were preserved. During a deliberate local
+backend stop, the final answer remained visibly unverified. After restart, reload
+and **Retry the same action** saved it; explicit Reconnect restored Connected.
+Refresh recovered the exact preview with the consent checkbox cleared.
+
+The patient explicitly confirmed through the Spanish checkbox/button. Report
+`8c3310e8-1cf0-4c1f-be6d-1ff9297f5635` exists once, has null severity and null
+related-medication FK. Its one handoff task
+`f0dc00e9-bcc6-407a-9b5a-bdbcfbbd7811` completed; one same-transaction Elena notice
+exists (`17a53c16-2cca-4819-9258-e4559e5c92d7`). The unlisted tea has zero medication
+rows. Elena → Maya → Symptoms shows the new Patient-confirmed report, unknown
+severity and the full Spanish unverified-product summary. No clinical decision was
+submitted. The earlier cancelled Spanish draft
+`5e35cadc-5bd1-4c5d-8829-120aecddb216` has zero reports; its failed chat turn remains
+failed rather than being rewritten. Reads used the existing owned intake RPC;
+direct service-role table SELECT was denied as designed. No grants were changed.
+
+The browser found a second display issue: an unsaved answer from a previous draft
+could appear at the same revision in a new draft. Pending-answer display now checks
+draft identity, question identity and revision. A regression reproduces same-revision
+draft replacement and verifies the previous answer disappears.
+
+The patient portal's inherited Permissions-Policy disabled microphones entirely.
+It now permits `microphone=(self)` while retaining camera/geolocation denial and
+browser permission. The actual local `/chat` response was HTTP 200 with that header.
+A fresh English nausea draft is left at the location question for a human speech
+check. **The requester chose to keep physical microphone verification pending.**
+Automated audio events and the working HTTP policy are not actual speech evidence.
+The ordinary new-symptom urgency banner follows the existing coordinator policy;
+no clinical urgency downgrade was introduced by intake.
+
+Final patient suite: **768 passed**, 71 files; focused chat/intake/recovery/voice
+suite: **117 passed**. Patient lint/typecheck and production build pass. The first
+build hit a sandbox worker-port failure; after moving generated Turbopack cache
+aside, the build passed outside the sandbox. No source workaround was used.
+Backend **175**, clinician **607**, real SQL **25**, Python checks and migration
+parse results above remain applicable; only patient presentation/configuration and
+docs changed afterward. Current-head CI is recorded separately once returned.
+
+Screenshots under `output/verification/pat002b-oct17/`:
+`spanish-answer-outage.png`, `spanish-preview-recovered.png`,
+`spanish-confirmed.png`, `clinician-spanish-summary.png`, `voice-check-ready.png`.
+These are local, untracked synthetic verification artifacts. A requested viewport
+override did not change the observed desktop size; physical phone acceptance,
+physical speech, candidate-2 approval/activation, peer review, merge and authorized
+deployed configuration remain pending. No additional migration, seed/reset,
+manual deployment or merge was performed.

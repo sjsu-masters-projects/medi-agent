@@ -80,3 +80,14 @@ notice. No deployed service configuration or other remote migration changed.
 Candidate-2 approval/activation remains pending. See the October 18 continuation
 in the acceptance record for IDs and actual observations. New main's independent
 071 filename does not authorize renaming this already applied file.
+
+
+The October 18 Spanish browser journey also reached the assigned clinician with
+unknown severity and an unlisted product retained only as testimony; cancellation
+saved no report and a deliberate local backend outage recovered through reload/retry.
+The portal now sends `microphone=(self)` so user-granted dictation can work; camera
+and geolocation stay disabled. This needs the normal separately authorized portal
+rollout. The requester elected to keep physical speech verification pending.
+Candidate-2 remains inactive pending genuine review. The active candidate-1 can be
+verified now using the steps in the acceptance record; do not describe the revised
+candidate or physical microphone path as approved/verified.
