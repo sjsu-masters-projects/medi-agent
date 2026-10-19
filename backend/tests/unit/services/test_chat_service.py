@@ -1,7 +1,7 @@
 """Tests for ChatService persistence and history."""
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -133,9 +133,13 @@ async def test_get_context_returns_patient_and_document_context(mock_db):
         _response(symptom_rows),
         _response(care_team_rows),
         _response(document_rows),
+        _response([{"timezone": "America/Los_Angeles"}]),
+        _response([]),
+        _response([]),
     ]
 
     service = ChatService(mock_db)
+    service._fetch_todays_plan_activities = AsyncMock(return_value=[])  # type: ignore[method-assign]
     context = await service.get_context(patient_id=patient_id, document_id=document_id)
 
     assert context["medications"] == med_rows

@@ -28,10 +28,12 @@ def _service(db: Any | None = None) -> ChatService:
 
 
 async def get_patient_context(tool_context: Any) -> dict[str, Any]:
-    """Get this patient's active medications, conditions, recent symptoms and care team.
+    """Get this patient's medications, conditions, symptoms, care team, appointments,
+    allergies and today's care-plan activities.
 
-    Use this before answering anything that depends on what the patient is taking or
-    being treated for. It returns only this patient's own record.
+    Use this before answering anything that depends on what the patient is taking, being
+    treated for, or has scheduled (visits, offers to answer, change requests). It returns
+    only this patient's own record.
 
     Args:
         tool_context: Supplied by the runtime; not part of the model's request.
@@ -54,4 +56,8 @@ async def get_patient_context(tool_context: Any) -> dict[str, Any]:
         "conditions": context.get("conditions", []),
         "recent_symptoms": context.get("recent_symptoms", []),
         "care_teams": context.get("care_teams", []),
+        "timezone": context.get("timezone"),
+        "appointments": context.get("appointments"),
+        "allergies": context.get("allergies"),
+        "todays_plan_activities": context.get("todays_plan_activities"),
     }
