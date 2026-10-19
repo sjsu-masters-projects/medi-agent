@@ -13,6 +13,7 @@ env:
   PROJECT_ID: medi-agent-490106
   REGION: us-central1
   SERVICE_NAME: mediagent-backend
+  WORKER_SERVICE_NAME: mediagent-chat-worker
   INGESTION_JOB_NAME: mediagent-document-ingestion
   KNOWLEDGE_JOB_NAME: mediagent-health-knowledge-refresh
   RUNTIME_SERVICE_ACCOUNT: github-actions-deployer@medi-agent-490106.iam.gserviceaccount.com
@@ -118,6 +119,53 @@ jobs:
             --update-env-vars VERTEX_AI_LOCATION=global,GEMINI_VERTEX_AI_LOCATION=global,GEMINI_TRIAGE_MODEL=gemini-3.5-flash-lite,GEMINI_FLASH_MODEL=gemini-3.8-flash,GEMINI_FALLBACK_MODEL=gemini-3.5-flash,GEMINI_PRO_MODEL=gemini-3.1-pro-preview,CHAT_TURN_TIMEOUT_SECONDS=30,MODEL_CIRCUIT_BREAKER_COOLDOWN_SECONDS=60 \
             --port 8080 \
             --timeout 300
+
+      # OPS-006 phase 2. Creates and updates the Nora turn worker only when the repository
+      # variable DEPLOY_CHAT_WORKER is "true", so merging this file creates nothing. The
+      # worker is the same image started with WORKER_MODE=true: it serves /health and the
+      # OIDC-protected task endpoint only, and Cloud Run rejects unauthenticated callers
+      # before the application sees them. Request-based CPU (--cpu-throttling): a turn runs
+      # inside its task request, so no CPU is needed between requests. See
+      # docs/chat-worker-setup.md for the one-time resources this step expects (the invoker
+      # service account, the queue and the repository variable CHAT_WORKER_INVOKER_SA).
+      - name: Deploy chat worker service
+        if: ${{ vars.DEPLOY_CHAT_WORKER == 'true' }}
+        env:
+          CHAT_WORKER_INVOKER_SA: ${{ vars.CHAT_WORKER_INVOKER_SA }}
+        run: |
+          IMAGE_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${SERVICE_NAME}:latest"
+
+          if [ -z "${CHAT_WORKER_INVOKER_SA}" ]; then
+            echo "::error::Set the repository variable CHAT_WORKER_INVOKER_SA before enabling DEPLOY_CHAT_WORKER."
+            exit 1
+          fi
+
+          # Environment and secrets use the --update-* forms, as for the API: anything not
+          # named here is preserved. The worker needs the database and the model; it has no
+          # user-facing secrets (no Resend, Deepgram or SMART).
+          gcloud run deploy ${WORKER_SERVICE_NAME} \
+            --image $IMAGE_PATH \
+            --region ${REGION} \
+            --cpu 1 \
+            --cpu-throttling \
+            --memory 2Gi \
+            --min-instances 0 \
+            --max-instances 3 \
+            --concurrency 4 \
+            --timeout 300 \
+            --port 8080 \
+            --no-allow-unauthenticated \
+            --service-account ${RUNTIME_SERVICE_ACCOUNT} \
+            --update-env-vars WORKER_MODE=true,ENVIRONMENT=production,GOOGLE_PROJECT_ID=${PROJECT_ID},CHAT_WORKER_INVOKER_SA=${CHAT_WORKER_INVOKER_SA},VERTEX_AI_LOCATION=global,GEMINI_VERTEX_AI_LOCATION=global,GEMINI_TRIAGE_MODEL=gemini-3.5-flash-lite,GEMINI_FLASH_MODEL=gemini-3.8-flash,GEMINI_FALLBACK_MODEL=gemini-3.5-flash,GEMINI_PRO_MODEL=gemini-3.1-pro-preview,CHAT_TURN_TIMEOUT_SECONDS=30,MODEL_CIRCUIT_BREAKER_COOLDOWN_SECONDS=60,A2A_RETRY_WORKER_ENABLED=false \
+            --update-secrets SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest
+
+          # The OIDC audience is the service's own URL, known only after it exists. Setting
+          # it as an environment variable (not a secret) keeps the worker self-describing.
+          WORKER_URL="$(gcloud run services describe ${WORKER_SERVICE_NAME} --region ${REGION} --format='value(status.url)')"
+          gcloud run services update ${WORKER_SERVICE_NAME} \
+            --region ${REGION} \
+            --update-env-vars CHAT_WORKER_URL=${WORKER_URL},CHAT_WORKER_OIDC_AUDIENCE=${WORKER_URL}
+          echo "Worker URL (use it as CHAT_WORKER_URL on the API service): ${WORKER_URL}"
 
       - name: Deploy document-ingestion job
         run: |

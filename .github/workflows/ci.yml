@@ -356,8 +356,12 @@ jobs:
             files: tests/integration/test_adr_loop_postgres.py tests/integration/test_medwatch_3500_postgres.py
             minimums: test_adr_loop_postgres=38 test_medwatch_3500_postgres=14
           - name: care-conversations
-            files: tests/integration/test_care_conversation_postgres.py tests/integration/test_clinic_memberships_postgres.py tests/integration/test_chat_turn_postgres.py
-            minimums: test_care_conversation_postgres=45 test_clinic_memberships_postgres=38 test_chat_turn_postgres=47
+            files: tests/integration/test_care_conversation_postgres.py tests/integration/test_clinic_memberships_postgres.py
+            minimums: test_care_conversation_postgres=45 test_clinic_memberships_postgres=38
+          - name: chat-turns
+            # Nora turn recovery (072-077) and the worker queue, events and claim (078).
+            files: tests/integration/test_chat_turn_postgres.py tests/integration/test_chat_turn_events_postgres.py
+            minimums: test_chat_turn_postgres=47 test_chat_turn_events_postgres=35
     defaults:
       run:
         working-directory: backend
