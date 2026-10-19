@@ -1197,3 +1197,19 @@ The regression and all 769 patient cases, lint/typecheck/build pass. All 34 CI c
 passed on 0855608 before that patient-only follow-up (3,700 backend passes, 89.08%
 coverage and all SQL jobs, including the enforced 25 intake contracts). Keep the
 new head's result distinct; no backend/SQL code changed afterward.
+
+
+## 27. Requester manual acceptance and PR readiness — October 18
+
+The requester clarified that the app, microphone and phone flows are verified.
+Record requester-reported manual acceptance without inventing per-device details,
+audio traces, independent validation or peer approval. All 34 checks passed on
+ca12c39, including the final correction-selection regression, full backend coverage
+and all SQL matrix gates. Current main is already included and GitHub reports the
+PR mergeable with no conflicts. Prepare #193 for review; preserve #159.
+
+Candidate-2 remains inactive/pending: the requester did not report its wording
+approval. Do not change its status, active library or remote eligibility. The team
+contract still requires genuine peer/safety review, and merge/deployment need exact
+authorization. This step changes evidence/docs only; its current CI result belongs
+on the PR, separate from the already green implementation receipt.

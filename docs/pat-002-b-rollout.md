@@ -98,3 +98,14 @@ Concurrent PR #159 now has overlapping ADR/MedWatch changes and a different 076
 handoff migration. Choose/reconcile one delivery path before rollout. The exact
 applied 071 contract in this document remains authoritative for this continuation;
 no 076 execution or applied-file rename is authorized by the earlier 071 approval.
+
+
+## October 18 requester verification update
+
+The requester now reports the app, microphone and phone flows verified. Record
+those as requester-reported manual acceptance; earlier pending notes are historical.
+All 34 checks on implementation commit ca12c39 passed. PR #193 is being prepared
+for peer/safety review without changes to its implementation or active library.
+Candidate-2 remains inactive and pending genuine wording approval; no eligibility
+write or service deployment is authorized by this verification report. Peer/safety
+review and explicit merge/deployment authorization remain separate requirements.

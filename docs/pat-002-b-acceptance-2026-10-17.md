@@ -287,3 +287,34 @@ conversation (source and assistant acknowledgement); the tested private answers
 were absent from ordinary chat content. The requester explicitly chose separate
 intake delivery preserving #159, and elected to leave physical microphone
 verification pending. Existing release prerequisites above remain in force.
+
+
+### Requester-reported manual acceptance and review readiness — October 18
+
+Tushar reported, “I have verified the remaining things,” and clarified:
+“App, microphone and phone flows verified.” This closes those manual checks as
+**requester-reported verification**. No new device, browser, locale, audio-provider
+trace, screenshot or independent clinical validation is asserted. Earlier pending
+notes above describe the earlier checkpoints, not the current manual-check status.
+
+All **34 checks passed on final implementation commit
+`ca12c395d23344894386fca368137486d5db90e2`**:
+[CI run](https://github.com/sjsu-masters-projects/medi-agent/actions/runs/39182054190).
+The run reports 3,700 backend passes / 400 skips and 89.08% coverage. The separate
+required symptom SQL job passed 25 cases (17 intake / 8 handoff), zero skips.
+All four SQL matrix jobs, portal tests/builds, typechecks, migration syntax and
+security checks passed. `origin/main` is already an ancestor; no rebase, conflict
+resolution or implementation change is needed. GitHub reports MERGEABLE/CLEAN.
+
+The requester did **not** report candidate-2 wording approval. Its manifest entry
+remains pending, active_version stays candidate-1, and no remote eligibility write
+is authorized or performed. Candidate-2 requires Ganesh's genuine paired-wording
+review before activation. Manual verification is not a GitHub PR approval: only a
+code-quality bot comment is recorded at this checkpoint. The committed team
+contract still requires one peer approval plus safety review before merge.
+
+PR #193 is being moved from draft to ready for review; #159 is preserved, and its
+concurrent 076 migration remains outside this delivery. Do not merge both copies
+without reconciling their overlap. The documentation-only evidence update needs
+its own CI result, available on the PR. No source, dependency, migration, library
+selection, remote configuration, deployment or merge changes are part of this step.
