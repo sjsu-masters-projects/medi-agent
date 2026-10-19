@@ -204,19 +204,33 @@ jobs:
         with:
           # Acquit needs the PR base locally and fails closed on shallow clones.
           fetch-depth: 0
-      - name: Analyze pytest impact with Acquit (canary)
+      - name: Select affected tests with Acquit (enforced)
+        id: acquit
         if: github.event_name == 'pull_request'
         uses: rajeev-chaurasia/acquit@ca647e83986768b62b50343ec7b23dff87921293 # v0.3.0
         with:
           acquit-version: "0.3.0"
           comment: "true"
-          mode: canary
+          # enforce: the backend test shards honour the verified selection and skip only test
+          # files Acquit proves unaffected. Fail-closed: any analysis error, policy finding
+          # (migrations, CI config, sys.path mutation) or tree mismatch means run-all.
+          mode: enforce
           working-directory: .
+      - name: Share the verified selection with the test shards
+        if: github.event_name == 'pull_request' && steps.acquit.outputs.selection-file != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: acquit-selection
+          path: ${{ steps.acquit.outputs.selection-file }}
+          if-no-files-found: ignore
+          retention-days: 7
 
   backend-test:
     name: Backend Tests (${{ matrix.name }})
-    # The impact job is a non-gating canary; tests run in parallel with it and with lint/mypy.
-    needs: backend-dependency-lock
+    # Acquit decides what to skip on pull requests; tests run in parallel with lint and mypy.
+    needs:
+      - backend-dependency-lock
+      - backend-test-impact
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -254,6 +268,26 @@ jobs:
           done
           echo "$pg_bin" >> "$GITHUB_PATH"
           "$pg_bin/postgres" --version
+      - name: Fetch the Acquit selection
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: acquit-selection
+          # Outside the repository: Acquit fingerprints the working tree before honouring it.
+          path: ${{ runner.temp }}/acquit
+      - name: Enable the Acquit selection
+        if: github.event_name == 'pull_request'
+        working-directory: .
+        run: |
+          # No file means no selection: the plugin stays inert and every test runs.
+          selection="$(find "${RUNNER_TEMP}/acquit" -name '*.json' ! -name '*canary*' -print -quit 2>/dev/null || true)"
+          if [ -n "$selection" ]; then
+            echo "ACQUIT_SELECTION_FILE=$selection" >> "$GITHUB_ENV"
+            echo "Acquit selection: $selection"
+          else
+            echo "No Acquit selection; running every test in this shard."
+          fi
       - name: Test shard (pytest)
         env:
           SUPABASE_URL: "https://test.supabase.co"
