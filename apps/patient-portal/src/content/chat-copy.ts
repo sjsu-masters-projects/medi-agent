@@ -102,11 +102,10 @@ export function getPatientChatCopy(locale: Locale): PatientChatCopy {
 /** PAT-001-A interface wording; es-MX candidates are tracked for bilingual review. */
 export function getChatRecoveryCopy(locale: Locale) {
   return locale === "es-MX" ? {
-    preparing: "Nora está preparando tu respuesta",
-    checking: "Comprobando el estado de tu mensaje",
     interrupted: "La respuesta quedó incompleta",
     uncertain: "Es posible que se haya registrado una acción. No la repetiremos automáticamente. Si necesitas ayuda, contacta a tu equipo de atención.",
-    returnLater: "Puedes volver a esta conversación. La respuesta se mostrará cuando esté guardada.",
+    // DRAFT es-MX, pending bilingual review.
+    leaveAndReturn: "Puedes salir; la respuesta aparecerá aquí.",
     safeRetry: "Puedes reintentar el mismo mensaje sin enviarlo dos veces.",
     noRetry: "No volveremos a ejecutar este mensaje. Puedes continuar con una pregunta nueva.",
     retry: "Reintentar mensaje",
@@ -119,11 +118,9 @@ export function getChatRecoveryCopy(locale: Locale) {
     reconnect: "Volver a conectar",
     replyUnavailable: "La respuesta de esta conversación ya no está disponible. No la volveremos a ejecutar. Puedes continuar con una pregunta nueva.",
   } : {
-    preparing: "Nora is preparing your reply",
-    checking: "Checking your message status",
     interrupted: "The reply was interrupted",
     uncertain: "An action may already have been recorded. We will not repeat it automatically. Contact your care team if you need help.",
-    returnLater: "You can return to this conversation. The reply will appear when it is saved.",
+    leaveAndReturn: "You can leave; the reply will appear here.",
     safeRetry: "You can retry the same message without sending it twice.",
     noRetry: "We will not rerun this message. You can continue with a new question.",
     retry: "Retry message",

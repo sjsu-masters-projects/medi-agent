@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from "rea
 import { useRouter, useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { getPatientChatCopy } from "@/content/chat-copy";
+import { useTurnDraftPoll } from "@/hooks/use-turn-draft-poll";
 import { isTurnInProgress, normalizeTurnStatus, useChatTurnRecovery, type RecoverableTurn } from "@/hooks/use-chat-turn-recovery";
 import {
     createSpeechRecognitionController,
@@ -57,6 +58,8 @@ import {
 } from "@/types";
 
 const MAX_RECOVERY_POLLS = 60;
+/** The API service caps a websocket at 3600 s; reconnect quietly a little before that. */
+const SOCKET_RENEW_MS = 3_500_000;
 const HANDS_FREE_STORAGE_KEY = "patient-portal.chat.handsFree";
 const FALLBACK_DOCUMENT_NAME = "medical record";
 
@@ -288,6 +291,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         const content = recovery.reject(id);
         if (content) setInput((current) => !current || current === content ? content : `${content}\n\n${current}`);
     });
+    const socketDraftAtRef = useRef(0);
     const voiceSocketRef = useRef<WebSocket | null>(null);
     const reconnectRef = useRef<{
         attempts: number;
@@ -693,6 +697,24 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", recover); window.removeEventListener("focus", recover); };
     }, [turnInFlight, sessionId]);
 
+    // A reloaded or second tab may not be fed by the socket (another API instance, a slow relay):
+    // it reads the same durable event log by request, so the draft shows up either way.
+    const polledTurn = recovery.turns.find((turn) => isTurnInProgress(turn.status) && turn.id);
+    useTurnDraftPoll({
+        turnId: polledTurn?.id ?? null,
+        deadlineAt: polledTurn?.deadline_at,
+        token: accessToken,
+        lastSocketDraftAt: () => socketDraftAtRef.current,
+        onDraft: (content) => {
+            setAssistantDraft((current) => content.length >= current.length ? content : current);
+            setAssistantDraftStartedAt((current) => current ?? new Date().toISOString());
+            dispatch(setTyping(true));
+        },
+        onSettled: () => {
+            if (socketRef.current?.readyState === WebSocket.OPEN) socketRef.current.send(JSON.stringify({ type: "recover_turns" }));
+        },
+    });
+
     // A silent token refresh replaces the token and user objects. The socket must not be
     // rebuilt for that (it interrupted the live reply); it reads them once per connection.
     const connectionUserId = user?.id ?? null;
@@ -767,6 +789,8 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         socketRef.current = socket;
         durableReadyRef.current = false;
         let durableReady = false;
+        // Same conversation, so the screen, draft and typing state are kept; the server replays the draft.
+        const renewTimer = window.setTimeout(() => { if (isMounted) setReconnectSignal((current) => current + 1); }, SOCKET_RENEW_MS);
         const handshakeTimer = window.setTimeout(() => {
             if (isMounted && !durableReady) {
                 dispatch(setConnectionStatus("error"));
@@ -891,12 +915,14 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                     dispatch(addMessage(mapChatMessageFromApi(payload.message)));
                     return;
                 case "assistant_start":
+                    socketDraftAtRef.current = Date.now();
                     setReceivingStream(true);
                     resetAssistantDraft();
                     setAssistantDraftStartedAt(new Date().toISOString());
                     dispatch(setTyping(true));
                     return;
                 case "assistant_chunk":
+                    socketDraftAtRef.current = Date.now();
                     setReceivingStream(true);
                     setAssistantDraft((current) => `${current}${payload.content}`);
                     dispatch(setTyping(true));
@@ -998,6 +1024,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         return () => {
             isMounted = false;
             window.clearTimeout(handshakeTimer);
+            window.clearTimeout(renewTimer);
             durableReadyRef.current = false;
             stopSpeechRecognition();
             stopAssistantPlayback();

@@ -23,6 +23,9 @@ export interface ChatMessageApi {
 }
 
 export interface ChatTurnApi {
+    /** The server turn id; present on saved turns, absent on a turn this tab has not yet had acknowledged. */
+    id?: string;
+    deadline_at?: string | null;
     client_message_id: string;
     status: "queued" | "processing" | "completed" | "failed" | "interrupted";
     retryable: boolean;
@@ -249,6 +252,17 @@ export async function fetchChatHistory(
     });
 
     return response.map(mapChatMessageFromApi);
+}
+
+export interface TurnEventsApi {
+    turn: { status: string };
+    events: { seq: number; type: string; payload?: { content?: string } | null }[];
+    next_seq: number;
+}
+
+/** Reads a turn's ordered events (draft checkpoints and the terminal event), resumable by seq. */
+export async function fetchTurnEvents(turnId: string, afterSeq: number, token: string): Promise<TurnEventsApi> {
+    return api.get<TurnEventsApi>(`/api/v1/chat/turns/${encodeURIComponent(turnId)}/events?after_seq=${afterSeq}`, { token });
 }
 
 export interface ChatConversationApi {

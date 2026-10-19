@@ -23,6 +23,7 @@ import { usePatientShell } from "@/contexts/patient-shell-context";
 import { ChatRole, DEFAULT_LOCALE } from "@/types";
 
 const RECONNECT_QUIET_MS = 3000;
+const SLOW_TURN_MS = 15_000;
 
 export default function ChatPage() {
     const profile = usePatientProfile();
@@ -67,7 +68,7 @@ export default function ChatPage() {
         dismissDocumentContext, dismissSafetyNotice, documentContext, documentUnavailable, error, handleHandsFreeToggle,
         handleMicClick, handlePlayAssistantMessage, handleSend, handsFreeMode, input,
         isTyping, loading, messages, openConversation, safetyNotice, sessionId, setInput,
-        startNewConversation, recoveryTurns, retryTurn, dismissTurn, reconnectChat, reconnecting, receivingStream, isOwnTurn, turnBusy, voiceError, voiceStatus } = usePatientChatSession(locale);
+        startNewConversation, recoveryTurns, retryTurn, dismissTurn, reconnectChat, reconnecting, turnBusy, voiceError, voiceStatus } = usePatientChatSession(locale);
     // A drop shorter than RECONNECT_QUIET_MS is invisible: the header keeps saying Connected.
     const [reconnectSlow, setReconnectSlow] = useState(false);
     useEffect(() => {
@@ -83,12 +84,17 @@ export default function ChatPage() {
     // indicator (or the draft) is the only progress element, and the card stays hidden.
     const streamAvailable = connectionStatus === "connected" || (reconnecting && !reconnectSlow);
     const pending = recoveryTurns.filter((turn) => isTurnInProgress(turn.status));
-    // This tab follows the reply (typing indicator, then the draft) when it sent the turn or
-    // is receiving its stream. A reloaded or second tab shows the "preparing" card instead,
-    // until draft events reach it. Never both for the same turn.
-    const ownsProgress = receivingStream || (pending.length > 0 && pending.every((turn) => isOwnTurn(turn.client_message_id)));
-    const showTyping = !assistantDraft && streamAvailable && ownsProgress && (isTyping || pending.length > 0);
-    const progressVisible = Boolean(assistantDraft) || (streamAvailable && ownsProgress);
+    // Every tab shows a turn in progress the same way: one element, inline below the user message at
+    // the bottom of the thread, the typing bubble until a draft exists and then the draft.
+    const showTyping = !assistantDraft && (pending.length > 0 || (isTyping && streamAvailable));
+    const [slowTurnId, setSlowTurnId] = useState<string | null>(null);
+    const pendingId = pending[0]?.client_message_id ?? null;
+    useEffect(() => {
+        if (!pendingId || assistantDraft) return;
+        const timer = window.setTimeout(() => setSlowTurnId(pendingId), SLOW_TURN_MS);
+        return () => window.clearTimeout(timer);
+    }, [pendingId, assistantDraft]);
+    const showSlowNote = showTyping && pendingId !== null && slowTurnId === pendingId;
     const newChat = locale === "es-MX" ? "Nueva conversación" : "New chat";
     const openNora = (conversationId: string = todayConversationId()) => {
         openConversation(conversationId);
@@ -205,7 +211,6 @@ export default function ChatPage() {
                 <button className="ma-press min-h-11 shrink-0 rounded-xl px-3 text-sm font-semibold text-brand-ink hover:bg-surface/70" onClick={dismissDocumentContext} type="button">{controls.dismiss}</button>
             </section>}
             {!documentContext && documentUnavailable && <div className="rounded-2xl bg-surface px-3.5 py-2.5 text-[13px] text-ink-2" role="status"><p>{controls.documentUnavailable}</p><button type="button" className="min-h-11 px-3 font-semibold text-brand-ink" onClick={dismissDocumentContext}>{controls.dismiss}</button></div>}
-            <ChatTurnRecovery turns={recoveryTurns} locale={locale} connected={connectionStatus === "connected"} progressVisible={progressVisible} onRetry={retryTurn} onDismiss={dismissTurn} />
             {error && <div className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">
                 <p>{error === "CHAT_TURN_BUSY" ? recoveryCopy.busy : error === "CHAT_TURN_EXPIRED" ? recoveryCopy.expired : error === "CHAT_STARTUP_UNAVAILABLE" ? recoveryCopy.unavailable : controls.chatError}</p>
                 {error === "CHAT_STARTUP_UNAVAILABLE" && <button type="button" className="mt-2 min-h-11 rounded-xl bg-surface px-3 font-semibold" onClick={reconnectChat}>{recoveryCopy.reconnect}</button>}
@@ -228,6 +233,8 @@ export default function ChatPage() {
                 {assistantDraft && <ChatBubble content={assistantDraft} isStreaming language={locale} locale={locale}
                     role="assistant" timestamp={assistantDraftStartedAt ?? new Date().toISOString()} />}
                 {showTyping && <div className="ma-bubble flex items-center gap-2 self-start rounded-[20px_20px_20px_6px] bg-surface px-4 py-3" role="status"><ProcessingDots /><span className="text-[13px] text-muted">{copy.typingMessage}</span></div>}
+                {showSlowNote && <p className="-mt-1 self-start px-1 text-xs text-muted">{recoveryCopy.leaveAndReturn}</p>}
+                <ChatTurnRecovery turns={recoveryTurns} locale={locale} connected={connectionStatus === "connected"} onRetry={retryTurn} onDismiss={dismissTurn} />
                 <div ref={bottomRef} />
             </div>
             <form className="sticky bottom-0 z-10 -mx-4 mt-auto space-y-1.5 bg-background/95 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+12px)] backdrop-blur-md" onSubmit={handleSend}>
