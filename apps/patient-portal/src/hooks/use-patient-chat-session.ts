@@ -135,6 +135,7 @@ function mapLoadedDocumentContext(
 interface PatientChatSessionState {
     assistantDraft: string;
     assistantDraftStartedAt: string | null;
+    receivingStream: boolean;
     canPlayAssistantAudio: boolean;
     connectionStatus: RootState["chat"]["connectionStatus"];
     documentContext: PendingChatDocumentContext | null;
@@ -216,6 +217,13 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     const [documentUnavailable, setDocumentUnavailable] = useState(false);
     const [safetyNotice, setSafetyNotice] = useState<string | null>(null);
     const [reconnectSignal, setReconnectSignal] = useState(0);
+    // True while THIS tab receives the reply's stream (it sent the turn, or the server
+    // replayed the draft to it). Only then is "Nora is typing" the whole story: the
+    // recovery card is for tabs that are not receiving the stream.
+    const [receivingStream, setReceivingStream] = useState(false);
+    // What the socket was opened with; later focus changes are sent over the open socket.
+    const connectedFocusRef = useRef<{ documentId: string | null; dismissed: boolean } | null>(null);
+    const connectedScopeRef = useRef<string | null>(null);
 
     const voiceRefs = useRef<{
         finalTranscript: string;
@@ -260,6 +268,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             setAssistantDraftStartedAt(null);
             dispatch(setTyping(rows.some((row) => row.status === "processing")));
         }
+        if (!rows.some((row) => row.status === "processing")) setReceivingStream(false);
     });
     const rejectTurn = useEffectEvent((id: string) => {
         const content = recovery.reject(id);
@@ -324,6 +333,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         if (documentUnavailable || !recovery.send(trimmedContent,
             voiceRefs.current.selectedLanguage, activeDocumentId, audioUrl)) return;
 
+        setReceivingStream(true);
         // Feedback must begin when the user sends, not after the model has classified the turn.
         // `assistant_complete`, socket errors, and socket close all clear this state.
         dispatch(setTyping(true));
@@ -673,20 +683,34 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     // rebuilt for that (it interrupted the live reply); it reads them once per connection.
     const connectionUserId = user?.id ?? null;
     const hasAccessToken = Boolean(accessToken);
-    const readSession = useEffectEvent(() => ({ accessToken, user }));
+    // The socket's identity is the patient and the conversation (plus an explicit
+    // reconnect after a real close). Document focus is read once per connection and
+    // later changes travel over the open socket, so attaching, dismissing or a URL
+    // search-param change never closes a socket that is receiving a reply.
+    const readSession = useEffectEvent(() => ({ accessToken, user, activeDocumentId, documentDismissed }));
     useEffect(() => {
-        const { accessToken, user } = readSession();
+        const { accessToken, user, activeDocumentId, documentDismissed } = readSession();
         if (!accessToken || !user) {
             return;
         }
 
         let isMounted = true;
         let socketHistoryReceived = false;
-        dispatch(clearChatState());
-        dispatch(setLoading(true));
+        // A reconnect to the same conversation keeps what is on screen; only a different
+        // patient or conversation starts clean.
+        const scope = `${user.id}:${sessionId}`;
+        const sameScope = connectedScopeRef.current === scope;
+        connectedScopeRef.current = scope;
+        connectedFocusRef.current = { documentId: activeDocumentId, dismissed: documentDismissed };
+        if (!sameScope) {
+            dispatch(clearChatState());
+            dispatch(setLoading(true));
+        }
 
-        fetchChatHistory(user.id, accessToken, sessionId)
+        const historyRequest = sameScope ? Promise.resolve(null) : fetchChatHistory(user.id, accessToken, sessionId);
+        historyRequest
             .then((history) => {
+                if (history === null) return;
                 if (!isMounted || socketHistoryReceived) {
                     return;
                 }
@@ -708,7 +732,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                 dispatch(setChatError("Unable to load chat history. Live chat is still available."));
             })
             .finally(() => {
-                if (isMounted) {
+                if (isMounted && !sameScope) {
                     dispatch(setLoading(false));
                 }
             });
@@ -850,16 +874,19 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                     dispatch(addMessage(mapChatMessageFromApi(payload.message)));
                     return;
                 case "assistant_start":
+                    setReceivingStream(true);
                     resetAssistantDraft();
                     setAssistantDraftStartedAt(new Date().toISOString());
                     dispatch(setTyping(true));
                     return;
                 case "assistant_chunk":
+                    setReceivingStream(true);
                     setAssistantDraft((current) => `${current}${payload.content}`);
                     dispatch(setTyping(true));
                     return;
                 case "assistant_complete": {
                     const assistantMessage = mapChatMessageFromApi(payload.message);
+                    setReceivingStream(false);
                     resetAssistantDraft();
                     dispatch(setTyping(false));
                     dispatch(addMessage(assistantMessage));
@@ -886,6 +913,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                         rejectTurn(payload.client_message_id);
                     }
                     if (["CHAT_DOCUMENT_UNAVAILABLE", "CHAT_DOCUMENT_CHANGED"].includes(payload.code ?? "")) setDocumentUnavailable(true);
+                    setReceivingStream(false);
                     resetAssistantDraft();
                     dispatch(setTyping(false));
                     dispatch(setChatError(payload.code === "CHAT_TURN_BUSY" || payload.code === "CHAT_TURN_EXPIRED" ? payload.code : payload.message || "Chat request failed."));
@@ -910,10 +938,14 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                 return;
             }
 
+            // A broken connection is not a failed reply: the server keeps running the turn
+            // and this tab re-subscribes on reconnect. Only a socket that never became
+            // ready is reported as an error.
             resetAssistantDraft();
+            setReceivingStream(false);
             dispatch(setConnectionStatus("error"));
             dispatch(setTyping(false));
-            dispatch(setChatError("Live chat connection encountered an issue."));
+            if (!durableReady) dispatch(setChatError("Live chat connection encountered an issue."));
             voiceRefs.current.autoPlayNextAssistantMessage = false;
             setVoiceStatus((prev) => (prev === "processing" || prev === "playing" ? "idle" : prev));
         };
@@ -924,8 +956,9 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             }
 
             durableReadyRef.current = false;
-            // Chunks from a reply that may never be saved must not outlive its socket.
+            // The draft is replayed by the server when this tab re-subscribes.
             resetAssistantDraft();
+            setReceivingStream(false);
             if (!durableReady) {
                 dispatch(setConnectionStatus("error"));
                 dispatch(setChatError("CHAT_STARTUP_UNAVAILABLE"));
@@ -952,7 +985,18 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             socketRef.current = null;
             socket.close();
         };
-    }, [connectionUserId, hasAccessToken, activeDocumentId, dispatch, documentDismissed, reconnectSignal, sessionId]);
+    }, [connectionUserId, hasAccessToken, dispatch, reconnectSignal, sessionId]);
+
+    // Attach or dismiss a document without rebuilding the socket.
+    useEffect(() => {
+        const socket = socketRef.current;
+        const last = connectedFocusRef.current;
+        if (!socket || socket.readyState !== WebSocket.OPEN || !durableReadyRef.current || !last) return;
+        const dismissed = documentDismissed && !activeDocumentId;
+        if (last.documentId === activeDocumentId && last.dismissed === dismissed) return;
+        connectedFocusRef.current = { documentId: activeDocumentId, dismissed };
+        socket.send(JSON.stringify({ type: "document_focus", document_id: activeDocumentId }));
+    }, [activeDocumentId, documentDismissed]);
 
     useEffect(() => {
         return () => {
@@ -1192,10 +1236,11 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         reconnectChat: () => { clearChatReconnectTimer(); reconnectRef.current.attempts = 0; setReconnectSignal((current) => current + 1); },
         recoveryTurns: recovery.turns,
         turnBusy: recovery.turnBusy,
-        retryTurn: (id: string) => { if (durableReadyRef.current && recovery.retry(id)) { dispatch(setTyping(true)); dispatch(setChatError(null)); } },
+        retryTurn: (id: string) => { if (durableReadyRef.current && recovery.retry(id)) { setReceivingStream(true); dispatch(setTyping(true)); dispatch(setChatError(null)); } },
         dismissTurn: recovery.dismiss,
         assistantDraft,
         assistantDraftStartedAt,
+        receivingStream,
         canPlayAssistantAudio,
         connectionStatus,
         dismissDocumentContext,

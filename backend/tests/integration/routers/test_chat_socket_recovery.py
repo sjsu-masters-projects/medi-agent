@@ -10,6 +10,7 @@ from uuid import uuid4
 import pytest
 
 from app.core.exceptions import ExternalServiceError, ValidationError
+from tests.integration.routers.chat_turn_helpers import run_turn
 from tests.integration.routers.test_chat_document_focus import (  # noqa: F401
     _FakeChatStore,
     _opening_events,
@@ -230,7 +231,7 @@ async def test_lost_completion_confirmation_delivers_the_committed_reply(monkeyp
         "conversation_state": {},
         "incoming": chat.ChatMessageCreate(content="q", role=chat.ChatRole.USER, language="en-US"),
     }
-    await chat._process_durable_message(socket, service, context, {"client_message_id": request_id})
+    await run_turn(socket, service, context, {"client_message_id": request_id})
     sent = [call.args[0]["type"] for call in socket.send_json.call_args_list]
     assert sent.index("chat_history") < sent.index("chat_turns")
 
@@ -288,7 +289,7 @@ async def test_disconnect_mid_stream_then_retry_after_reconnect(monkeypatch):
     }
     request = {"client_message_id": request_id}
     monkeypatch.setattr(chat, "_process_chat_message", AsyncMock(side_effect=TimeoutError()))
-    await chat._process_durable_message(socket, service, context, request)
+    await run_turn(socket, service, context, request)
     actions = [call.args[0] for call in turns.call.call_args_list]
     assert actions.count("interrupted") == 1 and turns.begin.await_count == 1
 
@@ -300,6 +301,6 @@ async def test_disconnect_mid_stream_then_retry_after_reconnect(monkeypatch):
         return {}
 
     monkeypatch.setattr(chat, "_process_chat_message", finish)
-    await chat._process_durable_message(socket, service, context, request)
+    await run_turn(socket, service, context, request)
     actions = [call.args[0] for call in turns.call.call_args_list]
     assert actions.count("complete") == 1 and turns.begin.await_count == 2
