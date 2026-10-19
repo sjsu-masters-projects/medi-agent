@@ -1,8 +1,8 @@
 # Demo care-loop follow-ups — LOC-002, EVA-001, AI-006, COM-002
 
-Status: In review in [#191](https://github.com/sjsu-masters-projects/medi-agent/pull/191).
-One PR; separate behavior and test lanes. This increment
-includes the pending task-board/documentation reconciliation after #188.
+Status: In review in [#191](https://github.com/sjsu-masters-projects/medi-agent/pull/191),
+merged with main through #192. One PR; separate behavior and test lanes. Migration
+`076` must be applied before the PR merges; deployed acceptance is listed at the end.
 
 ## Acceptance plan
 
@@ -34,6 +34,41 @@ includes the pending task-board/documentation reconciliation after #188.
    clearly. Opening a thread, sending a message or replying never changes the
    approved plan, projections, reminders or completion history. Reuse existing
    clinician review, bilingual verification and publication gates.
+
+## Review follow-up decisions
+
+- **Locale first paint (LOC-002):** the proxy always sets a locale hint: query on entry
+  pages, then the cookie, then `Accept-Language` (`es*` maps to es-MX, anything else to
+  en-US). The root layout therefore renders dynamically on purpose. While a locale or
+  profile is unresolved the portal shows a locale-neutral skeleton, never an empty page.
+  The profile preference seeds the cookie when it loads; a user sign-out, a cross-tab
+  sign-out and an inactivity or absolute-limit sign-out clear the cookie and the guest
+  preference so the next person on a shared device does not inherit it. The cookie is a
+  presentation hint, never identity or authorization.
+- **Medication-error safety floor (AI-006):** deterministic and bilingual, not model-only.
+  Affirmed reports of a double, extra or repeat dose, taking too many or too much,
+  overdose, a self-directed dose change, stopping on one's own, or taking a medicine after
+  hold/stop advice answer "contact your care team or pharmacist today" (`urgent`,
+  rule `urgent_medication_error`). Severe symptoms in the same message take the existing
+  emergency rule first. Denials ("I didn't take it twice"), schedule wording ("twice a
+  day") and definitions ("what is an overdose?") do not trip it. A question about
+  changing a dose ("can I double my dose?") does, by design. Hopelessness phrases
+  ("I can't go on", "no puedo más") reach the crisis floor only when they end the
+  sentence, so "no puedo más café" does not. Low mood that persists or worsens is told to
+  contact the care team in the responder prompt (model-guided; the keyword crisis floor is
+  unchanged).
+- **SOAP:** one retry on a rate-limit, unavailable or truncated generation; invalid
+  content is never retried. A final failure writes no note.
+- **Activity errors:** distinct stable codes `ACTIVITY_CONTEXT_UNAVAILABLE` (missing,
+  foreign or unauthorized, deliberately neutral), `ACTIVITY_CONTEXT_STALE` (the source is
+  superseded or removed; the clinician is told to open the current plan),
+  `CARE_PLAN_DRAFT_EXISTS` and `INVALID_CONVERSATION_REQUEST`. Reviewing a question about
+  an item in a superseded plan fails with the stale code by design.
+- **Review path locking:** the clinician review checks the exact thread, its active
+  care-team link, clinic and membership without locks before taking the per-patient
+  evidence lock, so an outsider cannot queue behind a patient's evidence writers
+  (covered by a Docker test that holds the lock).
+- **Document import errors** use stable codes localized through the Today copy.
 
 ## Verification
 
@@ -78,7 +113,7 @@ No new cross-clinic sharing or implicit broadcast recipient behavior is introduc
   existing actions. The source plan stays approved until an authorized publication.
 - This uses today's patient-level approved-plan model. Per-team plan ownership is
   PLAN-002, not implicitly implemented by attaching an item to a private thread.
-- Apply 076 only with separate authorization, before deploying this backend.
+- Apply 076 (requester action, before this PR merges and before this backend deploys).
   Rerunning it is tested; existing conversation reads/legacy deployments remain
   compatible. No remote migration, publication or live acceptance is claimed.
 
@@ -90,7 +125,13 @@ New nonclinical activity-message copy remains **draft, awaiting bilingual review
 `No se pudieron cargar las actividades.`, `Reintentar actividades`,
 `Actividad del plan adjunta`, `Esta actividad ya no pertenece al plan actual.`, and
 `Tu mensaje no cambia el plan ni los recordatorios. Tu equipo debe revisar y aprobar cualquier cambio.`
+Also draft: `Actividad adjunta: {título}` and `La actividad no se puede cambiar mientras se confirma o reintenta este mensaje.`
 Stale attachment recovery: `La actividad adjunta ya no está disponible. Conservamos tu texto. Quita la actividad o vuelve a cargar las actividades antes de enviar.`
+Document-import errors remain draft: `Vuelve a iniciar sesión antes de importar un documento clínico.`,
+`Tu sesión expiró. Vuelve a iniciar sesión antes de importar un documento clínico.` and
+`No se pudo importar el documento. Revisa tu conexión e intenta de nuevo.`
+Medication-error safety reply (`medication_error_response`, es-MX) is a new clinical-safety
+draft pending LOC-001 and safety review: `Un posible error de dosis o al tomar un medicamento que debía pausarse o suspenderse requiere orientación hoy mismo. Contacta hoy a tu equipo de atención o a tu farmacéutico. Si tienes síntomas graves o repentinos, dificultad para respirar, dolor de pecho, desmayo o no te sientes a salvo, llama al 911 o acude al servicio de urgencias más cercano ahora.`
 Today recovery copy also remains draft: `Actualiza tus actividades e intenta de nuevo.`,
 `Vuelve a iniciar sesión. Tu respuesta no se ha guardado.`, and
 `No pudimos confirmar que se guardó tu respuesta. Actualiza antes de volver a intentarlo; la actividad no se ha marcado como completada.`

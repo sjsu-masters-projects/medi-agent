@@ -27,6 +27,14 @@ On Node 26, if auth-session tests fail because localStorage is unavailable, run
 
 ## Behaviour notes
 
+- Sessions are shared across tabs (one refresh at a time, sign-out in any tab signs out all).
+  Defaults: 30 days idle and 90 days absolute, silent with a login notice; override with
+  `NEXT_PUBLIC_PATIENT_SESSION_IDLE_MINUTES` / `NEXT_PUBLIC_PATIENT_SESSION_MAX_HOURS`.
+- Language: the proxy resolves entry query, then the `patient-portal.locale` cookie, then
+  `Accept-Language`, so server rendering always knows en-US or es-MX (the root layout is
+  dynamic on purpose). The saved Profile preference seeds the cookie; any sign-out clears it.
+- Notification polling is throttled with backoff and keeps the last data when a read fails.
+
 Care-team roles are displayed as readable en-US/es-MX labels rather than raw stored
 codes; unknown roles use generic care-team copy. API transport recovery retries GET/HEAD
 once after 100–249 ms, honors cancellation, and never retries HTTP errors or writes.

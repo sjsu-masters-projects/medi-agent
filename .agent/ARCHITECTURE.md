@@ -81,8 +81,12 @@ clinical fact without review.
 
 Demo follow-ups route SOAP through the existing workload registry (failure writes
 no note). The unused ingestion graph has been retired after its golden tests moved
-to the current extraction service. The patient locale cookie is a presentation
-hint only, never identity or authorization. COM-002 stores an approved activity
+to the current extraction service. Chat-turn and notification database calls use
+separate bounded connection pools so a slow notification read cannot expire a turn.
+Message translation is off the send and read paths. Browser sessions are shared across
+tabs with idle and absolute limits. The patient locale cookie (seeded from the profile,
+cleared on sign-out, falling back to `Accept-Language`) is a presentation hint only,
+never identity or authorization. COM-002 stores an approved activity
 reference in a private message; its explicit review transaction opens/reuses an
 audited draft under the existing evidence fence. Messages and replies do not
 publish or change reminders. Contract and rollout: [combined plan](specs/demo-care-loop-followups.md).

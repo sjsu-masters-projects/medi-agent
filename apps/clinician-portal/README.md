@@ -343,6 +343,12 @@ Clinician cancellation/completion controls remain subsequent work. Full syntheti
 verification evidence are in
 [the scheduling design](../../.agent/specs/sch-001-appointment-scheduling.md#13-slice-4--clinician-appointments-screen).
 
+Sessions are shared across tabs: one refresh at a time, a sign-out in any tab signs out all,
+and MFA state survives a second tab. Limits are enforced in the browser: 2 hours idle (a
+warning modal appears 2 minutes before, with "Stay signed in") and 12 hours absolute;
+override with the `NEXT_PUBLIC_CLINICIAN_SESSION_*` values in `.env.example`. Notification
+polling is throttled with backoff and keeps the last data when a read fails.
+
 On Node 26, if existing auth-session tests fail because localStorage is unavailable,
 run `NODE_OPTIONS=--no-experimental-webstorage npm run test` so jsdom supplies browser
 storage. This is a test-runtime setting, not a change to portal authentication.

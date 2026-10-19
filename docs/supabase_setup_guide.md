@@ -93,7 +93,11 @@ migrations by complete filename and checksum. The migration validator preserves 
 known historical names but rejects any new shared prefix, so an unapplied collision must
 be renumbered before review. Preserve applied names and bytes. The ledger in
 `public.schema_migrations` is authoritative: a local file count does not establish remote
-application or authorize applying unrelated migrations.
+application or authorize applying unrelated migrations. Migrations through
+`075_notification_zone_lookup.sql` are recorded as applied by the requester (October 18,
+2026); `076_care_conversation_activity_review.sql` is pending and must be applied before
+the activity-review backend deploys. Browser session limits (AUTH-002) are portal
+environment variables, not Supabase settings; no Auth configuration change is required.
 
 Migration `047_adr_patient_information_loop.sql` adds the patient-confirmed ADR information
 request, deterministic reassessment, notification closure, and patient-actor audit transaction.

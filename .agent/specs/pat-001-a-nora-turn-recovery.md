@@ -2,7 +2,7 @@
 
 Status: **Verify deployed**. [#188](https://github.com/sjsu-masters-projects/medi-agent/pull/188)
 merged as `6026647` on October 17, 2026 (Pacific); PR checks passed. The requester
-confirmed migration **072** applied. Backend deployment and both Vercel deployment
+confirmed migrations **072**, **073** (#189) and **074** (#192) applied. Backend deployment and both Vercel deployment
 statuses and main CI succeeded for the merge commit.
 Live acceptance and bilingual wording review below remain unrecorded. Current release
 status belongs in [TASKS.md](../TASKS.md), not a duplicate rollout log here.
@@ -175,7 +175,7 @@ activity). A session whose latest, non-dismissed turn is processing, failed or i
 returns `status: "needs_attention"` (`reply_in_progress` while still within its deadline).
 The title falls back to the first user message and is also set at turn begin.
 
-## Production recovery fixes (branch `fix/nora-unfinished-conversations`)
+## Production recovery fixes (#189, merged)
 
 - Logs: the turn failure category (exception type, safe code, cause type) is in the message text,
   and every turn RPC failure logs its action and Postgres code; no patient text.
@@ -194,7 +194,7 @@ The title falls back to the first user message and is also set at turn begin.
 - Not a defect: the retry never re-feeds its failed attempt; the turn's own user message is
   excluded from history (covered by `test_disconnected_socket_does_not_discard_reply...`).
 
-## Production fix: expired turns and starved saves (branch `fix/chat-expiry-and-notification-latency`, migration 074)
+## Production fix: expired turns and starved saves (#192, merged; migrations 074 and 075 applied)
 
 Evidence (October 18, 06:40-06:46 UTC, one synthetic patient): every turn logged
 `ValidationError/CHAT_TURN_EXPIRED` one to four seconds after its socket opened, far inside the 45
