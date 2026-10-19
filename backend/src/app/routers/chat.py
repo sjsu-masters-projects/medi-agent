@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 from uuid import UUID
@@ -22,6 +23,7 @@ from app.core.exceptions import AuthorizationError, ValidationError
 from app.core.llm_failures import categorize_llm_failure
 from app.core.observability import record_chat_fallback
 from app.core.security import decode_access_token, get_current_user
+from app.core.structured_logging import log_event, set_actor, set_turn_id
 from app.db.connection import get_db
 from app.followup import analyse_symptom
 from app.followup.service import EMERGENCY_THRESHOLD
@@ -637,10 +639,14 @@ async def _report_turn_failure(
 ) -> None:
     """Explicit error to the requesting socket, then the saved truth to every viewer."""
     code = exc.message if isinstance(exc, ValidationError) else "CHAT_TURN_UNAVAILABLE"
-    logger.warning(
-        "Durable chat turn did not complete: %s",
-        _failure_label(exc),
-        extra={"failure_category": type(exc).__name__},
+    log_event(
+        logger,
+        "chat_turn.not_completed",
+        level=logging.WARNING,
+        message=f"Durable chat turn did not complete: {_failure_label(exc)}",
+        category=type(exc).__name__,
+        failure_category=type(exc).__name__,
+        outcome=code,
     )
     await emit_error(
         {
@@ -651,7 +657,7 @@ async def _report_turn_failure(
         }
     )
     try:
-        recovered = await turns.call("recover")
+        recovered = await turns.call("recover", trigger="failure_report")
         finished = any(
             row.get("client_message_id") == request.get("client_message_id")
             and row.get("status") == "completed"
@@ -688,6 +694,8 @@ async def _execute_turn(
 ) -> dict[str, Any]:
     """The turn itself. Owned by the server: it never looks at, or waits for, a socket."""
     record = result["turn"]
+    set_turn_id(record["id"])  # this task's own context; the socket's is untouched
+    started_at = time.monotonic()
     execution = TurnExecution(turns, record)
     staged = TurnChatService(service, execution, result["user_message"])
 
@@ -736,11 +744,20 @@ async def _execute_turn(
         event = emitter.complete_event or {"type": "assistant_complete"}
         await send({**event, "message": _serialize_chat_message(saved)})
         await send({"type": "chat_turn", "turn": public_turn({**record, "status": "completed"})})
+        log_event(
+            logger,
+            "chat_turn.finished",
+            message="Chat turn finished",
+            outcome="completed",
+            duration_ms=int((time.monotonic() - started_at) * 1000),
+        )
         return state
     except asyncio.CancelledError:
         # Only server shutdown (after the drain window) cancels a turn, never a socket.
         try:
-            await asyncio.wait_for(asyncio.shield(execution.fail(interrupted=True)), 3)
+            await asyncio.wait_for(
+                asyncio.shield(execution.fail(interrupted=True, trigger="shutdown_cancel")), 3
+            )
         except BaseException as exc:
             logger.warning(
                 "Cancelled chat turn will reconcile from its saved deadline: %s",
@@ -749,7 +766,13 @@ async def _execute_turn(
         raise
     except Exception as exc:
         try:
-            await execution.fail(interrupted=isinstance(exc, TimeoutError))
+            await execution.fail(
+                interrupted=isinstance(exc, TimeoutError),
+                trigger="processing_timeout"
+                if isinstance(exc, TimeoutError)
+                else "execution_error",
+                category=type(exc).__name__,
+            )
         except Exception as fail_exc:
             logger.warning(
                 "Chat turn will reconcile from its saved deadline: %s", _failure_label(fail_exc)
@@ -992,7 +1015,7 @@ async def _process_chat_message(
         record_chat_fallback(layer="L3_outer", reason=fallback_reason)
         logger.warning(
             "Triage processing failed, using outer deterministic fallback: %s",
-            exc,
+            _failure_label(exc),
             extra={
                 "chat_fallback_layer": "L3_outer",
                 "chat_fallback_reason": fallback_reason,
@@ -1109,7 +1132,7 @@ async def _process_chat_message(
             record_chat_fallback(layer="symptom_agent", reason=fallback_reason)
             logger.warning(
                 "Symptom routing failed, continuing triage response: %s",
-                exc,
+                _failure_label(exc),
                 extra={
                     "chat_fallback_layer": "symptom_agent",
                     "chat_fallback_reason": fallback_reason,
@@ -1247,12 +1270,15 @@ async def chat_websocket_endpoint(
 
     try:
         session_id = _read_session_id(websocket)
+        set_actor(patient_id, session_id)
         durable_protocol = websocket.query_params.get("turn_protocol") == "1"
         history = await service.get_history(str(patient_id), limit=50, session_id=session_id)
         conversation_history = [_serialize_chat_message(item) for item in history]
         await websocket.send_json({"type": "chat_history", "messages": conversation_history})
         if durable_protocol:
-            recovered = await ChatTurnService(db, str(patient_id), session_id).call("recover")
+            recovered = await ChatTurnService(db, str(patient_id), session_id).call(
+                "recover", trigger="socket_connect"
+            )
             await websocket.send_json(
                 {"type": "chat_turns", "turns": [public_turn(row) for row in recovered["items"]]}
             )
@@ -1382,8 +1408,15 @@ async def chat_websocket_endpoint(
                         continue
                 try:
                     if event_type == "dismiss_turn":
-                        await turns.call("dismiss", {"client_message_id": key})
-                    recovered = await turns.call("recover")
+                        await turns.call(
+                            "dismiss", {"client_message_id": key}, trigger="socket_dismiss"
+                        )
+                    recovered = await turns.call(
+                        "recover",
+                        trigger="socket_dismiss"
+                        if event_type == "dismiss_turn"
+                        else "socket_recover",
+                    )
                     history = await service.get_history(str(patient_id), session_id=session_id)
                 except Exception as exc:
                     if _closed_websocket_error(exc):
@@ -1479,7 +1512,7 @@ async def chat_websocket_endpoint(
                     audio_url=payload.get("audio_url"),
                 )
             except Exception as exc:
-                logger.info("Rejected user_message payload: %s", exc)
+                logger.info("Rejected user_message payload: %s", _failure_label(exc))
                 await websocket.send_json(
                     {
                         "type": "error",
@@ -1531,7 +1564,7 @@ async def chat_websocket_endpoint(
         if _closed_websocket_error(exc):
             logger.info("Chat websocket disconnected before a response was delivered")
             return
-        logger.exception("Chat websocket error: %s", exc)
+        logger.exception("Chat websocket error: %s", _failure_label(exc))
         sent = await _send_terminal_event(
             websocket,
             {

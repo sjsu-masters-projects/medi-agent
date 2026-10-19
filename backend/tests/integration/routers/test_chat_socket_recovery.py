@@ -31,7 +31,7 @@ class _Turns:
     def factory(self, *_args: Any) -> MagicMock:
         turns = MagicMock()
 
-        async def call(action: str, payload: dict[str, Any] | None = None) -> Any:
+        async def call(action: str, payload: dict[str, Any] | None = None, **_: Any) -> Any:
             self.calls.append((action, payload))
             if action == "recover":
                 if isinstance(self.recover, Exception):
@@ -200,7 +200,7 @@ async def test_lost_completion_confirmation_delivers_the_committed_reply(monkeyp
         }
     )
     turns.call = AsyncMock(
-        side_effect=lambda action, payload=None: {"items": [committed]}
+        side_effect=lambda action, payload=None, **_: {"items": [committed]}
         if action == "recover"
         else {"accepted": True}
     )
@@ -269,7 +269,7 @@ async def test_disconnect_mid_stream_then_retry_after_reconnect(monkeypatch):
         ]
     )
     turns.call = AsyncMock(
-        side_effect=lambda action, payload=None: {"items": []}
+        side_effect=lambda action, payload=None, **_: {"items": []}
         if action == "recover"
         else {"accepted": True, "message": saved}
     )

@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -72,6 +73,7 @@ from app.adk.tools.turn_sources import DOCUMENT_SOURCE
 from app.config import settings
 from app.core.llm_failures import categorize_llm_failure
 from app.core.observability import record_chat_fallback
+from app.core.structured_logging import log_event
 from app.models.generation import GenerationErrorCode, GenerationProviderError
 from app.safety import TRIAGE_COPY, apply_safety_override, deterministic_safety_floor
 from app.utils.localization import resolve_locale_resource
@@ -214,6 +216,29 @@ class CareCoordinatorRuntime:
         sources: list[dict[str, Any]] = []
         tool_results: list[str] = []
 
+        model_started = time.monotonic()
+        model_seen: list[str] = []
+        log_event(
+            logger,
+            "chat_model.start",
+            message="Chat model stream starting",
+            model=settings.gemini_flash_model,
+        )
+
+        def model_end(outcome: str) -> None:
+            # The provider's own model id when events carry it; a name that differs from the
+            # configured primary means the model fallback answered.
+            used = model_seen[-1] if model_seen else settings.gemini_flash_model
+            log_event(
+                logger,
+                "chat_model.end",
+                message="Chat model stream ended",
+                model=used,
+                fallback_used=bool(model_seen) and not used.startswith(settings.gemini_flash_model),
+                outcome=outcome,
+                duration_ms=int((time.monotonic() - model_started) * 1000),
+            )
+
         try:
             stream = self.runner.run_async(
                 user_id=user_id,
@@ -224,6 +249,9 @@ class CareCoordinatorRuntime:
             )
             async with asyncio.timeout(settings.chat_turn_timeout_seconds):
                 async for event in stream:
+                    version = getattr(event, "model_version", None)
+                    if isinstance(version, str) and version:
+                        model_seen.append(version)
                     decision = _decision_from(event)
                     if decision is not None and not classified:
                         intent, urgency, reason, escalate = _apply_floor_rules(decision, text)
@@ -261,10 +289,11 @@ class CareCoordinatorRuntime:
                         answer = body
         except Exception as exc:
             reason = categorize_llm_failure(exc)
+            model_end(f"error:{reason}")
             record_chat_fallback(layer="adk_turn", reason=reason)
             logger.warning(
                 "Care Coordinator turn failed: %s",
-                exc,
+                type(exc).__name__,
                 extra={"chat_fallback_layer": "adk_turn", "chat_fallback_reason": reason},
             )
             if not classified:
@@ -277,6 +306,7 @@ class CareCoordinatorRuntime:
             yield {"type": "complete", "response_text": answer, "fallback_used": True}
             return
 
+        model_end("ok")
         if not classified:
             yield _classification("general", "routine", "Model unavailable", False)
 
