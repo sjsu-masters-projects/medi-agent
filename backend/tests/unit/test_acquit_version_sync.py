@@ -7,7 +7,7 @@ ACQUIT_VERSION = "0.3.0"
 ACQUIT_ACTION_SHA = "ca647e83986768b62b50343ec7b23dff87921293"
 
 
-def test_acquit_canary_uses_the_verified_release_everywhere() -> None:
+def test_acquit_enforces_the_verified_release_everywhere() -> None:
     requirements = (REPOSITORY_ROOT / "backend" / "requirements-dev.in").read_text()
     lock = (REPOSITORY_ROOT / "backend" / "requirements-dev.txt").read_text()
     workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml").read_text()
@@ -16,4 +16,8 @@ def test_acquit_canary_uses_the_verified_release_everywhere() -> None:
     assert f"acquit=={ACQUIT_VERSION}" in lock
     assert f"rajeev-chaurasia/acquit@{ACQUIT_ACTION_SHA} # v{ACQUIT_VERSION}" in workflow
     assert f'acquit-version: "{ACQUIT_VERSION}"' in workflow
-    assert "mode: canary" in workflow
+    # Acquit selection is mandatory on pull requests (enforce, fail-closed to run-all), and the
+    # backend test shards must actually consume the verified selection.
+    assert "mode: enforce" in workflow
+    assert "mode: canary" not in workflow
+    assert "ACQUIT_SELECTION_FILE=" in workflow
