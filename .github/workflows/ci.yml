@@ -182,15 +182,22 @@ jobs:
             backend/requirements-dev.txt
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
+      - name: Restore the mypy incremental cache
+        # Speed only: mypy re-checks anything whose source or dependencies changed, so a stale
+        # cache can never hide an error. Keyed on the lockfiles; the newest cache is reused.
+        uses: actions/cache@v4
+        with:
+          path: backend/.mypy_cache
+          key: mypy-${{ runner.os }}-${{ hashFiles('backend/requirements-dev.txt', 'backend/pyproject.toml') }}-${{ github.sha }}
+          restore-keys: |
+            mypy-${{ runner.os }}-${{ hashFiles('backend/requirements-dev.txt', 'backend/pyproject.toml') }}-
       - name: Type check (mypy)
         run: mypy src/ --ignore-missing-imports
 
   backend-test-impact:
     name: Backend Test Impact (Acquit canary)
-    needs:
-      - backend-ruff-lint
-      - backend-ruff-format
-      - backend-mypy
+    # Lint, format and mypy gate the merge through CI Summary; tests no longer wait for them.
+    needs: backend-dependency-lock
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -208,7 +215,8 @@ jobs:
 
   backend-test:
     name: Backend Tests (${{ matrix.name }})
-    needs: backend-test-impact
+    # The impact job is a non-gating canary; tests run in parallel with it and with lint/mypy.
+    needs: backend-dependency-lock
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -268,10 +276,7 @@ jobs:
     name: Backend Coverage (full suite)
     # Pull requests, merge queue, manual and weekly runs; a push to main repeats a PR run.
     if: github.event_name != 'push'
-    needs:
-      - backend-ruff-lint
-      - backend-ruff-format
-      - backend-mypy
+    needs: backend-dependency-lock
     runs-on: ubuntu-latest
     # The Docker PostgreSQL contract suites run in parallel in backend-postgres-contracts.
     timeout-minutes: 15
@@ -340,18 +345,19 @@ jobs:
     if: github.event_name != 'push' && needs.changes.outputs.postgres == 'true'
     needs:
       - changes
-      - backend-ruff-lint
-      - backend-ruff-format
-      - backend-mypy
+      - backend-dependency-lock
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: notifications-and-email
-            files: tests/integration/test_notification_centre_postgres.py tests/integration/test_email_postgres.py tests/integration/test_clinic_scheduling_postgres.py tests/integration/test_public_grants_postgres.py
-            minimums: test_notification_centre_postgres=58 test_email_postgres=31 test_clinic_scheduling_postgres=19 test_public_grants_postgres=4
+          - name: notification-centre
+            files: tests/integration/test_notification_centre_postgres.py
+            minimums: test_notification_centre_postgres=58
+          - name: email-scheduling-and-grants
+            files: tests/integration/test_email_postgres.py tests/integration/test_clinic_scheduling_postgres.py tests/integration/test_public_grants_postgres.py
+            minimums: test_email_postgres=31 test_clinic_scheduling_postgres=19 test_public_grants_postgres=4
           - name: adr-and-medwatch
             files: tests/integration/test_adr_loop_postgres.py tests/integration/test_medwatch_3500_postgres.py
             minimums: test_adr_loop_postgres=38 test_medwatch_3500_postgres=14
@@ -359,9 +365,13 @@ jobs:
             files: tests/integration/test_care_conversation_postgres.py tests/integration/test_clinic_memberships_postgres.py
             minimums: test_care_conversation_postgres=45 test_clinic_memberships_postgres=38
           - name: chat-turns
-            # Nora turn recovery (072-077) and the worker queue, events and claim (078).
-            files: tests/integration/test_chat_turn_postgres.py tests/integration/test_chat_turn_events_postgres.py
-            minimums: test_chat_turn_postgres=47 test_chat_turn_events_postgres=35
+            # Nora turn recovery (072-077).
+            files: tests/integration/test_chat_turn_postgres.py
+            minimums: test_chat_turn_postgres=47
+          - name: chat-turn-events
+            # The worker queue, events and claim (078).
+            files: tests/integration/test_chat_turn_events_postgres.py
+            minimums: test_chat_turn_events_postgres=35
     defaults:
       run:
         working-directory: backend
