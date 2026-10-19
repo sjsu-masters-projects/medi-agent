@@ -27,6 +27,7 @@ def turn_sql(sql):
         "073_nora_turn_begin_validation.sql",
         "074_nora_late_completion.sql",
         "077_chat_turn_rejection_reason.sql",
+        "078_chat_turn_events.sql",
     ):
         sql((MIGRATIONS / name).read_text())
     return sql
