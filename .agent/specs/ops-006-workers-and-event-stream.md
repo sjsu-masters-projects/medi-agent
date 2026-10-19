@@ -227,3 +227,5 @@ phase 2, branch `feature/ops-006-phase-2`; they apply once the flag is on and ve
 | 5 | Care-conversation panels poll every 15 s while open (inbox and open thread), paused when hidden | Phase 3 (stream) |
 
 **Worker-mode portal and socket close log (October 19):** the patient portal now treats `queued` as in progress (a queued turn had been drawn as interrupted); the chat socket logs `chat_ws.closed` with `initiator` (client or server), `close_code` and `reason` so the cause of any close is visible in Cloud Logging; the conversation list counts queued turns as a reply in progress.
+
+**Socket lifetime and draft in other tabs (October 19):** the API Cloud Run `--timeout` is 3600 (was 300, which closed every socket at about 300 s; code 1005); the worker stays at 300. The portal renews its socket at about 3500 s and polls `GET /chat/turns/{id}/events?after_seq=` about once a second (visible tab, only when no socket chunk arrived in 3 s), because that log is the one source every API instance can read; drafts are pruned only by the terminal event.
