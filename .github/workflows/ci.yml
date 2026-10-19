@@ -5,6 +5,11 @@ on:
     branches: [main, develop]
   push:
     branches: [main, develop]
+  merge_group:
+  workflow_dispatch:
+  # Weekly safety net: the full suite including the Docker PostgreSQL contracts.
+  schedule:
+    - cron: "0 9 * * 1"
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -15,6 +20,38 @@ permissions:
   pull-requests: write
 
 jobs:
+  changes:
+    # Decides whether the slow database contract suites are relevant. Pushes to main skip
+    # them (the pull request already ran them); schedule, manual and merge-queue runs and
+    # any pull request touching backend SQL, services, routers, migrations, integration
+    # tests, dependencies or this workflow run them.
+    name: Detect backend contract scope
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      postgres: ${{ steps.scope.outputs.postgres }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "postgres=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
+          echo "$changed"
+          if echo "$changed" | grep -Eq '^(backend/src/app/(db|services|routers|agents|safety)/|backend/src/app/.*\.sql$|backend/tests/integration/|backend/requirements|backend/pyproject\.toml|\.github/workflows/ci\.yml)'; then
+            echo "postgres=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "postgres=false" >> "$GITHUB_OUTPUT"
+          fi
+
   pr-policy:
     name: PR Policy Check
     if: github.event_name == 'pull_request'
@@ -229,6 +266,8 @@ jobs:
 
   backend-coverage:
     name: Backend Coverage (full suite)
+    # Pull requests, merge queue, manual and weekly runs; a push to main repeats a PR run.
+    if: github.event_name != 'push'
     needs:
       - backend-ruff-lint
       - backend-ruff-format
@@ -298,7 +337,9 @@ jobs:
     # and check the SQL that unit tests fake: triggers, RLS, grants and RPCs. Nothing here
     # touches a hosted database. Kept out of the coverage job so the two run in parallel.
     name: Backend PostgreSQL contracts (${{ matrix.name }})
+    if: github.event_name != 'push' && needs.changes.outputs.postgres == 'true'
     needs:
+      - changes
       - backend-ruff-lint
       - backend-ruff-format
       - backend-mypy
@@ -316,7 +357,7 @@ jobs:
             minimums: test_adr_loop_postgres=38 test_medwatch_3500_postgres=14
           - name: care-conversations
             files: tests/integration/test_care_conversation_postgres.py tests/integration/test_clinic_memberships_postgres.py tests/integration/test_chat_turn_postgres.py
-            minimums: test_care_conversation_postgres=43 test_clinic_memberships_postgres=38 test_chat_turn_postgres=34
+            minimums: test_care_conversation_postgres=45 test_clinic_memberships_postgres=38 test_chat_turn_postgres=34
     defaults:
       run:
         working-directory: backend
@@ -502,6 +543,9 @@ jobs:
     name: CI Summary
     if: always()
     needs:
+      - backend-ruff-lint
+      - backend-ruff-format
+      - backend-mypy
       - backend-dependency-lock
       - production-placeholder-check
       - backend-test-impact
@@ -541,6 +585,9 @@ jobs:
               .write({ overwrite: false });
       - name: Publish required-check outcomes
         env:
+          RUFF_LINT: ${{ needs.backend-ruff-lint.result }}
+          RUFF_FORMAT: ${{ needs.backend-ruff-format.result }}
+          MYPY: ${{ needs.backend-mypy.result }}
           BACKEND_LOCK: ${{ needs.backend-dependency-lock.result }}
           PLACEHOLDERS: ${{ needs.production-placeholder-check.result }}
           BACKEND_IMPACT: ${{ needs.backend-test-impact.result }}
@@ -568,12 +615,22 @@ jobs:
             echo "| Patient portal | ${PATIENT} |"
             echo "| Clinician portal | ${CLINICIAN} |"
           } >> "$GITHUB_STEP_SUMMARY"
+          test "$RUFF_LINT" = success
+          test "$RUFF_FORMAT" = success
+          test "$MYPY" = success
           test "$BACKEND_LOCK" = success
           test "$PLACEHOLDERS" = success
           test "$BACKEND_IMPACT" = success
           test "$BACKEND_TESTS" = success
-          test "$BACKEND_COVERAGE" = success
-          test "$POSTGRES_CONTRACTS" = success
+          # Skipped means "not applicable" (push to main, or no backend SQL change); the
+          # lint and type jobs above are required, so a skip caused by a failure cannot pass.
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            test "$BACKEND_COVERAGE" = skipped
+            test "$POSTGRES_CONTRACTS" = skipped
+          else
+            test "$BACKEND_COVERAGE" = success
+            test "$POSTGRES_CONTRACTS" = success -o "$POSTGRES_CONTRACTS" = skipped
+          fi
           test "$MIGRATIONS" = success
           test "$SECRETS" = success
           test "$PATIENT" = success
