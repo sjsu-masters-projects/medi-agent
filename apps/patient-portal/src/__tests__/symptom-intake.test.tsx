@@ -196,6 +196,21 @@ it("does not carry an unsaved answer into another draft at the same revision", a
     expect(screen.queryByText("five")).not.toBeInTheDocument();
 });
 
+it("does not carry a correction question into a new draft", async () => {
+    const register = vi.fn();
+    active.mockResolvedValue({ ...draft, current_question: null, can_review: true,
+        answers: { severity: { question_id: "severity", state: "unknown", value: null, wording: "", locale: "en-US" } } });
+    render(<Provider store={store}><SymptomIntakePanel locale="en-US" registerReply={register} /></Provider>);
+    await screen.findByText("What you reported");
+    fireEvent.click(screen.getByText("What you reported"));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit$/ }));
+    expect(screen.getByText("Type or speak your answer below. You can say “not sure” or “skip”.")).toBeInTheDocument();
+    const description = { id: "description", answer_type: "text" as const, wording: { "en-US": "Describe the new symptom", "es-MX": "Describe el nuevo síntoma" } };
+    active.mockResolvedValue({ ...draft, intake_id: "new-draft", current_question: description, questions: [description, question] });
+    act(() => window.dispatchEvent(new Event("symptom-intake-updated")));
+    expect(await screen.findByText("Describe the new symptom", { selector: "p" })).toBeInTheDocument();
+});
+
 it("preserves an uncertain mutation identity across a token refresh", async () => {
     mutate.mockRejectedValueOnce(new Error("synthetic response lost"));
     render(panel());

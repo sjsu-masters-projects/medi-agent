@@ -34,7 +34,11 @@ export function SymptomIntakePanel({ locale: appLocale, sourceMessageId, session
     const draft = intake.draft;
     const locale = draft?.locale ?? appLocale;
     const copy = getSymptomIntakeCopy(locale);
-    const [editing, setEditing] = useState<string | null>(null);
+    const [editSelection, setEditSelection] = useState<{ intakeId: string; questionId: string } | null>(null);
+    const editing = editSelection && editSelection.intakeId === draft?.intake_id ? editSelection.questionId : null;
+    function setEditing(questionId: string | null) {
+        setEditSelection(questionId && draft ? { intakeId: draft.intake_id, questionId } : null);
+    }
     const [consent, setConsent] = useState<string | null>(null);
     const [hint, setHint] = useState(false);
     const [unsaved, setUnsaved] = useState<{ text: string; intakeId: string; questionId: string; revision: number } | null>(null);

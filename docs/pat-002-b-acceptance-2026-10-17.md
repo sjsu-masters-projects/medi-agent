@@ -261,3 +261,29 @@ maintainers must choose/reconcile the delivery path before merging. This is not
 permission to apply 076, drop/rename applied 071, or merge both feature copies.
 The working tree retains the unrelated task-board, scheduling, team, map and local
 script edits. Physical microphone verification remains pending by requester choice.
+
+
+### Final correction-selection regression and CI receipt
+
+All **34 PR checks passed on `0855608fc678c59f4440e0662d21117fcdfd8466`**:
+[CI run](https://github.com/sjsu-masters-projects/medi-agent/actions/runs/39180537308).
+The full backend run reported **3,700 passed / 400 skipped**, **89.08% coverage**
+(80% required), and 31 real appointment transaction cases with zero skips. The
+separate required symptom SQL job reported **25 passed**, verified as 17 intake
+and 8 handoff cases with zero skips. All four PostgreSQL matrix jobs passed.
+Both portal builds/tests, migration syntax, secret scan and CodeQL passed.
+
+A final state inspection found correction-question selection also needed draft
+identity binding. Selection now belongs to its intake, so a new draft uses its
+own current question. The regression replaces an edited draft with a new one and
+asserts the new description question appears. After this patient-only change,
+**769 patient tests / 71 files**, the 21 intake cases, lint, typecheck and patient
+production build pass locally. This follow-up needs its own current-head CI result;
+the preceding 34 green checks are evidence for the named commit, not a fabricated
+result for a later head. No backend/SQL code changed after that green run.
+
+A final read-only privacy check found exactly two messages in the confirmed Spanish
+conversation (source and assistant acknowledgement); the tested private answers
+were absent from ordinary chat content. The requester explicitly chose separate
+intake delivery preserving #159, and elected to leave physical microphone
+verification pending. Existing release prerequisites above remain in force.

@@ -1190,3 +1190,10 @@ on `fix/confirmed-intake-integration` after #159 received concurrent ADR/MedWatc
 work and a differing 076 migration. #159 was preserved without force push. Select
 or reconcile the overlapping delivery path before merge; only the exact 071 was
 authorized/applied. See the acceptance record for the coordination evidence.
+
+
+Final correction selection is now draft-bound as well as pending-answer display.
+The regression and all 769 patient cases, lint/typecheck/build pass. All 34 CI checks
+passed on 0855608 before that patient-only follow-up (3,700 backend passes, 89.08%
+coverage and all SQL jobs, including the enforced 25 intake contracts). Keep the
+new head's result distinct; no backend/SQL code changed afterward.
