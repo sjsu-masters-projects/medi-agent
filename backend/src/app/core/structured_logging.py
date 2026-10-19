@@ -74,6 +74,8 @@ EVENT_FIELDS = (
     "failure_category",
     "queue",
     "retry_count",
+    "close_code",
+    "initiator",
 )
 
 _TRACE_HEADER = re.compile(r"^([0-9a-fA-F]{32})(?:/\d+)?(?:;o=\d)?$")

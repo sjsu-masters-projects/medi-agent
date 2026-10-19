@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -304,3 +305,31 @@ async def test_disconnect_mid_stream_then_retry_after_reconnect(monkeypatch):
     await run_turn(socket, service, context, request)
     actions = [call.args[0] for call in turns.call.call_args_list]
     assert actions.count("complete") == 1 and turns.begin.await_count == 2
+
+
+def _closure_records(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    return [r for r in caplog.records if getattr(r, "event", None) == "chat_ws.closed"]
+
+
+def test_a_client_close_is_logged_with_its_code_and_initiator(connect, turns, caplog):
+    caplog.set_level(logging.INFO, logger="app.routers.chat")
+    with connect("turn_protocol=1") as socket:
+        _opening_events(socket)
+        socket.close(code=1001, reason="going away")
+    records = _closure_records(caplog)
+    assert len(records) == 1
+    assert records[0].initiator == "client"
+    assert records[0].close_code == 1001
+    assert records[0].duration_ms >= 0
+
+
+def test_a_server_fault_close_is_logged_as_the_server(connect, turns, caplog):
+    caplog.set_level(logging.INFO, logger="app.routers.chat")
+    turns.recover = ExternalServiceError("Chat", "down")
+    with connect("turn_protocol=1") as socket:
+        while socket.receive_json()["type"] != "error":
+            pass
+    records = _closure_records(caplog)
+    assert len(records) == 1
+    assert (records[0].initiator, records[0].close_code) == ("server", 1011)
+    assert records[0].reason == "startup_failed"
