@@ -243,6 +243,31 @@ returned only to execution and cleaned with `normalize_patient_summary`. A faile
 startup handshake stops at an unavailable state with manual reconnect; a busy claim
 recovers the existing turn without resending the new text.
 
+### Server-owned turns
+
+A Nora reply is owned by the server, not by the websocket that sent the message. When a turn
+begins, `app/services/chat_turn_runner.py` runs it as a strongly referenced `asyncio` task in a
+process-level registry keyed by turn id. The websocket handler never awaits, fails, interrupts
+or cancels it: a reload, phone lock, app switch, re-mount or network drop leaves the turn
+running to completion (saved with its lease) or to a real model or database error. Deadlines
+and leases (072-074) stay the safety net, and `actions` stays strictly lease-checked.
+
+Sockets are viewers. Each durable socket registers for its patient and session; the running
+turn's events (status, chunks, `assistant_complete`) are queued per viewer, so a slow or dead
+socket never delays the turn. A socket that connects mid-reply receives the status and the draft
+so far, then live chunks. A socket on another instance, or after a restart, finds an empty
+registry and reads the turn through `recover`, polling until the saved reply appears. The run
+leaves the registry when its task ends and a viewer when its socket closes or a send fails.
+The `document_focus` event attaches or dismisses a document over the open socket.
+
+Shutdown: the app lifespan waits up to 8 seconds for running turns; any left are marked
+interrupted best-effort and otherwise reconciled by the saved deadline.
+
+Cost: the main backend service deploys with `--no-cpu-throttling` (CPU always allocated), so a
+task keeps CPU after its socket closes. Cloud Run bills an instance for the whole time it exists
+while CPU is always allocated, not only during requests. `--min-instances 0` is unchanged, so
+an idle service still scales to zero, and the jobs are unchanged.
+
 ## Package Layout
 
 ```

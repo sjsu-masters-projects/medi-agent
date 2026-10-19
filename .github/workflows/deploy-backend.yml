@@ -101,10 +101,15 @@ jobs:
           # SMART, Deepgram, Resend, cron) that are configured out of band; --set-env-vars
           # and --set-secrets REPLACE the whole set and would wipe them on the next push.
           # --update-* merges, so anything not named here is preserved.
+          #
+          # --no-cpu-throttling keeps CPU allocated outside requests. A Nora reply is a
+          # server-owned task that keeps running after its websocket closes, and a
+          # throttled instance would stall it. Main service only; the jobs are unchanged.
           gcloud run deploy ${SERVICE_NAME} \
             --image $IMAGE_PATH \
             --region ${REGION} \
             --cpu 1 \
+            --no-cpu-throttling \
             --memory 2Gi \
             --min-instances 0 \
             --max-instances 2 \

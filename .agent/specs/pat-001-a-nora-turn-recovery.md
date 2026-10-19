@@ -223,3 +223,48 @@ same minutes held 2.5 to 8.6 second notification reads on a five-thread worker p
   after retry/dismissal/failure, actions stay strict, 074 re-run and grants), router tests with a
   slow model and a slow save, and pool-isolation unit tests.
 
+## Server-owned turns (branch `feature/server-owned-chat-turns`)
+
+Evidence (October 18, revision 00159-46c, which includes #192): four sockets for one session
+opened within 14 seconds, each after fresh history and profile reads; the model started at
+08:34:29.8 and `CHAT_TURN_EXPIRED` was logged 1 s after a new socket opened and again 12 s later.
+Cause: the turn lived inside the websocket handler, so a closed socket marked it interrupted and
+the next lease-checked step (`actions`) was refused.
+
+Decision (requester): a reply is owned by the server and can never be killed by the browser
+connection.
+
+Design:
+
+- `TurnRunner` (`app/services/chat_turn_runner.py`) holds each turn as an `asyncio` task keyed by
+  turn id. The handler begins the turn, starts the task and returns to its receive loop. It never
+  fails, interrupts or cancels the turn on close or error. The task completes with its lease, or
+  fails on a real model or database error. Deadlines and leases are the safety net if an instance dies;
+  reconciliation (072-074) and retry are unchanged. No SQL changed.
+- Sockets are viewers: per-viewer queues, the draft so far for a late subscriber, then live
+  events. Errors go to the requesting socket only; history and turn status go to every viewer.
+  Other instances or a restart use `recover` and the existing bounded poll.
+- Shutdown drains running turns for 8 seconds (lifespan). Leftovers are marked interrupted
+  best-effort, else reconciled by the deadline.
+- `deploy-backend.yml`: `--no-cpu-throttling` on the main service only (requester decision).
+  Cost: CPU is billed whenever an instance exists, not only while serving requests. Instances
+  still scale to zero (`--min-instances 0`); the jobs are untouched.
+- Client: the socket depends on patient and conversation (plus an explicit reconnect after a
+  real close). Document attach/dismiss and URL search-param changes no longer rebuild it; focus
+  changes use a `document_focus` event, and the focus is read once per connection. A reconnect
+  to the same conversation keeps the screen, never reports a closed socket as a failed reply,
+  and re-subscribes to the draft. The tab receiving the stream shows only "Nora is typing";
+  the "Nora is preparing your reply" card shows only in a tab not receiving the stream.
+
+Failure modes: instance death mid-turn (deadline reconciliation, then Retry); an instance stuck
+with CPU throttled (mitigated by the flag); a viewer more than 2000 events behind is dropped and
+recovers from the saved turn; a second message while a reply runs is refused as busy; a draft is
+provisional until `assistant_complete`. The exact production re-mount trigger is not proven: the
+socket effect rebuilt on document focus changes and on every reconnect (clearing state and
+refetching history), which matches the repeated history reads; neither can now stop a reply.
+
+Tests: `test_chat_server_owned_turns.py` (close mid-reply completes with no expiry, second viewer
+gets draft then rest, empty registry on another instance, registry cleanup, dead viewer dropped,
+shutdown drain and leftover, real model error fails, lapsed-lease actions already covered in
+`test_chat_turn_recovery.py`), and portal tests for one socket across search-param changes, the
+typing-only streaming tab, the recovery card in a non-receiving tab, and reconnect.
