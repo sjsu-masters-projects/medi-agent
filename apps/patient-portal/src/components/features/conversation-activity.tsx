@@ -43,7 +43,6 @@ export function ConversationActivityPicker({ token, patientId, locale, value, di
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
-    setStatus("loading");
     api.get<{ items: Item[] } | null>(`/api/v1/care-plans/patients/${encodeURIComponent(patientId)}`, { token, signal: controller.signal })
       .then((plan) => {
         if (controller.signal.aborted) return;
