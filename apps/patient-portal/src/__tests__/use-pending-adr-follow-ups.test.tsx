@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { usePendingADRFollowUps } from "@/hooks/use-pending-adr-follow-ups";
+import { ADR_REQUESTS_POLL_MS, usePendingADRFollowUps } from "@/hooks/use-pending-adr-follow-ups";
 import type { ADRInformationRequest } from "@/services/adr-follow-up";
 const { fetchADRInformationRequests } = vi.hoisted(() => ({ fetchADRInformationRequests: vi.fn() }));
 let token: string | null;
@@ -29,34 +29,51 @@ describe("usePendingADRFollowUps", () => {
     vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibility);
   });
   afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
-  it("fetches once on mount with the session token and never polls", async () => {
+  it("fetches once on mount with the session token", async () => {
     fetchADRInformationRequests.mockResolvedValue(requests(2));
     const { result } = renderHook(usePendingADRFollowUps);
     expect(result.current).toEqual({ count: 0, loaded: false });
     await flush();
     expect(result.current).toEqual({ count: 2, loaded: true });
-    vi.setSystemTime(Date.now() + 10 * 60_000);
-    await flush();
     expect(fetchADRInformationRequests).toHaveBeenCalledOnce();
     expect(fetchADRInformationRequests).toHaveBeenCalledWith("session-a");
   });
-  it("refetches on focus and on becoming visible, throttled to once per five seconds", async () => {
+  it("shares one request between every row in the tab", async () => {
+    fetchADRInformationRequests.mockResolvedValue(requests(3));
+    const first = renderHook(usePendingADRFollowUps);
+    const second = renderHook(usePendingADRFollowUps);
+    await flush();
+    expect(fetchADRInformationRequests).toHaveBeenCalledOnce();
+    expect(first.result.current).toEqual({ count: 3, loaded: true });
+    expect(second.result.current).toEqual({ count: 3, loaded: true });
+  });
+  it("polls at most once a minute: focus and visibility inside the minute reuse the result", async () => {
     fetchADRInformationRequests.mockResolvedValueOnce(requests(1)).mockResolvedValue(requests(0));
     const { result } = renderHook(usePendingADRFollowUps);
     await flush();
     await focus();
     await becomeVisible();
-    expect(fetchADRInformationRequests).toHaveBeenCalledTimes(1);
-    vi.setSystemTime(Date.now() + 4_999);
+    vi.setSystemTime(Date.now() + ADR_REQUESTS_POLL_MS - 1);
     await focus();
     expect(fetchADRInformationRequests).toHaveBeenCalledTimes(1);
     vi.setSystemTime(Date.now() + 1);
     await focus();
-    expect(fetchADRInformationRequests).toHaveBeenCalledTimes(2);
-    expect(result.current).toEqual({ count: 0, loaded: true });
     await becomeVisible();
     expect(fetchADRInformationRequests).toHaveBeenCalledTimes(2);
-    vi.setSystemTime(Date.now() + 5_000);
+    expect(result.current).toEqual({ count: 0, loaded: true });
+  });
+  it("refreshes on the minute while visible and never while hidden", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
+    fetchADRInformationRequests.mockResolvedValue(requests(1));
+    renderHook(usePendingADRFollowUps);
+    await flush();
+    await act(async () => { await vi.advanceTimersByTimeAsync(ADR_REQUESTS_POLL_MS); });
+    expect(fetchADRInformationRequests).toHaveBeenCalledTimes(2);
+    visibility = "hidden";
+    await act(async () => { await vi.advanceTimersByTimeAsync(ADR_REQUESTS_POLL_MS * 5); });
+    expect(fetchADRInformationRequests).toHaveBeenCalledTimes(2);
+    visibility = "visible";
     await becomeVisible();
     expect(fetchADRInformationRequests).toHaveBeenCalledTimes(3);
   });
@@ -64,7 +81,7 @@ describe("usePendingADRFollowUps", () => {
     fetchADRInformationRequests.mockResolvedValue(requests(1));
     renderHook(usePendingADRFollowUps);
     await flush();
-    vi.setSystemTime(Date.now() + 60_000);
+    vi.setSystemTime(Date.now() + ADR_REQUESTS_POLL_MS);
     visibility = "hidden";
     await focus();
     await becomeVisible();
@@ -78,7 +95,7 @@ describe("usePendingADRFollowUps", () => {
     const second = deferred<ADRInformationRequest[]>();
     fetchADRInformationRequests.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     const { result } = renderHook(usePendingADRFollowUps);
-    vi.setSystemTime(Date.now() + 5_000);
+    vi.setSystemTime(Date.now() + ADR_REQUESTS_POLL_MS);
     await focus();
     expect(fetchADRInformationRequests).toHaveBeenCalledTimes(2);
     await act(async () => second.resolve(requests(2)));

@@ -121,7 +121,8 @@ function ConversationInbox({ token, locale, audience, visible, conversationId, c
     if (!visible || loading || opening || sending) return;
     const refresh = () => { void refreshInbox(); };
     refresh();
-    const timer = setInterval(refresh, 15000);
+    // Paused while the tab is hidden; it refreshes once when the tab shows again.
+    const timer = setInterval(() => { if (document.visibilityState !== "hidden") refresh(); }, 15000);
     document.addEventListener("visibilitychange", refresh);
     return () => {
       clearInterval(timer);

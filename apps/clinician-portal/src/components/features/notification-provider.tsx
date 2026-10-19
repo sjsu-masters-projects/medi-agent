@@ -12,8 +12,9 @@ import type { CentreItem, CentrePage, CentreSummary, NotificationCategory } from
 export const NOTIFICATION_POLL_MS = 60_000;
 /** After failures the poll backs off (60 s, 2 min, 4 min, then 5 min) and resets on success. */
 export const NOTIFICATION_MAX_BACKOFF_MS = 300_000;
-/** Focus and visibility events arrive together; one refresh serves them. */
-export const NOTIFICATION_MIN_GAP_MS = 10_000;
+/** Focus and visibility events never refresh sooner than one poll period after the last
+ * refresh; opening the centre or acting on an item still refreshes at once. */
+export const NOTIFICATION_MIN_GAP_MS = 60_000;
 
 type Feed = "history" | "actions";
 type Resource<T> = { data: T | null; error: string | null };
