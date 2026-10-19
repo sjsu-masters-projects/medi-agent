@@ -736,16 +736,27 @@ async def _queue_durable_message(
                 outcome="not_configured",
             )
             raise ExternalServiceError("Chat", "Chat is temporarily unavailable.")
+        replayed = False
+
+        async def announce_saved(saved: dict[str, Any]) -> None:
+            # Right after the begin commit and before the enqueue: the saved message and the
+            # turn snapshot reach the patient without waiting for Cloud Tasks.
+            nonlocal replayed
+            await _send_replay(direct, saved["turn"], saved)
+            replayed = True
+
         result = await submit_turn(
             service.db,
             patient_id=str(context["patient_id"]),
             session_id=context["session_id"],
             request=request,
             language=incoming.language.value,
+            on_saved=announce_saved,
         )
         record = result["turn"]
-        # Both a new and a repeated send start from the saved state (and reply, if finished).
-        await _send_replay(direct, record, result)
+        if not replayed:
+            # Both a new and a repeated send start from the saved state (and reply, if finished).
+            await _send_replay(direct, record, result)
         if record.get("status") in {"queued", "processing"} and record.get("via_worker"):
             _watch_worker_turn(
                 watchers,

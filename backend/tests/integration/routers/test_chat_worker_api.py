@@ -364,6 +364,28 @@ async def test_with_the_flag_on_a_socket_send_queues_and_the_api_never_calls_the
 
 
 @pytest.mark.asyncio
+async def test_the_user_message_reaches_the_socket_before_the_task_is_enqueued(
+    worker_flag, monkeypatch
+):
+    websocket, service, context = socket_and_context()
+    order: list[str] = []
+    websocket.send_json = AsyncMock(side_effect=lambda p: order.append(p["type"]))
+
+    async def submit(*args, on_saved=None, **kwargs):
+        result = queued()
+        await on_saved(result)
+        order.append("enqueue")
+        return result
+
+    monkeypatch.setattr(chat, "submit_turn", submit)
+    await chat._queue_durable_message(
+        websocket, service, context, {"client_message_id": "c"}, MagicMock()
+    )
+    # Saved state once, ahead of the slow enqueue, never duplicated afterwards.
+    assert order == ["chat_turn", "user_message_saved", "enqueue"]
+
+
+@pytest.mark.asyncio
 async def test_a_repeated_socket_send_does_not_enqueue_again_but_watches_the_running_turn(
     worker_flag, monkeypatch
 ):

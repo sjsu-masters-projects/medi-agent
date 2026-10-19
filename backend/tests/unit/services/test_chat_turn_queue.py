@@ -213,3 +213,56 @@ async def test_queue_ops_surface_a_database_failure_as_an_external_error():
     db.rpc.return_value.execute.side_effect = APIError({"message": "boom", "code": "57014"})
     with pytest.raises(ExternalServiceError):
         await TurnQueueOps(db).call(str(uuid4()), "claim", {})
+
+
+@pytest.mark.asyncio
+async def test_the_saved_message_is_announced_after_the_commit_and_before_the_enqueue(monkeypatch):
+    order: list[str] = []
+
+    async def begin(self, request, timeout, *, queued=False):
+        order.append("begin")
+        return _begin_result(True)
+
+    async def dispatch(self, turn_id, attempt):
+        order.append("dispatch")
+        return True
+
+    async def saved(result):
+        order.append("saved")
+
+    monkeypatch.setattr("app.services.chat_turn_service.ChatTurnService.begin", begin)
+    monkeypatch.setattr(TurnDispatcher, "dispatch", dispatch)
+    monkeypatch.setattr("app.services.chat_service.ChatService.set_conversation_title", AsyncMock())
+    await submit_turn(
+        MagicMock(),
+        patient_id="p",
+        session_id="s",
+        request={"client_message_id": str(uuid4()), "content": "x", "document_id": None},
+        language="en-US",
+        on_saved=saved,
+    )
+    assert order == ["begin", "saved", "dispatch"]
+
+
+@pytest.mark.asyncio
+async def test_a_failing_saved_notice_never_blocks_the_enqueue(monkeypatch):
+    async def begin(self, request, timeout, *, queued=False):
+        return _begin_result(True)
+
+    async def broken(result):
+        raise RuntimeError("socket closed")
+
+    dispatch = AsyncMock(return_value=True)
+    monkeypatch.setattr("app.services.chat_turn_service.ChatTurnService.begin", begin)
+    monkeypatch.setattr(TurnDispatcher, "dispatch", dispatch)
+    monkeypatch.setattr("app.services.chat_service.ChatService.set_conversation_title", AsyncMock())
+    result = await submit_turn(
+        MagicMock(),
+        patient_id="p",
+        session_id="s",
+        request={"client_message_id": str(uuid4()), "content": "x", "document_id": None},
+        language="en-US",
+        on_saved=broken,
+    )
+    dispatch.assert_awaited_once()
+    assert result["dispatched"] is True
