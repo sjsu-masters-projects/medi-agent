@@ -45,6 +45,10 @@ export type { ChatAttachment, ChatDocumentResultsAttachment } from "./chat-attac
 export interface ChatMessage extends SharedChatMessage {
     /** Absent for messages that carry no card, including every older message. */
     attachments?: ChatAttachment[];
+    /** Set on a message this tab has sent but the server has not yet confirmed (see `delivery`). */
+    clientMessageId?: string;
+    /** `pending`: shown the instant it was sent; `failed`: the send was rejected, text kept for retry. */
+    delivery?: "pending" | "failed";
 }
 
 export {

@@ -146,6 +146,8 @@ export function getChatControlsCopy(locale: Locale) {
     chatError: "No se pudo cargar o completar la conversación. Revisa la conexión y vuelve a intentarlo.", voiceError: "No se pudo completar la función de voz. Puedes escribir tu mensaje.",
     original: "Idioma original", originalUnknown: "Mensaje original · idioma no registrado", live: "Respuesta en curso", listen: "Escuchar",
     humanOriginal: "Los mensajes se muestran tal como se escribieron, sin traducción automática.",
+    // DRAFT es-MX, pending bilingual review (LOC-001).
+    sending: "Enviando…", notSent: "No se envió", retrySend: "Reintentar", removeUnsent: "Quitar",
     profileRequired: "Necesitamos cargar tu idioma preferido antes de enviar. Si tarda demasiado, vuelve a abrir Chat.",
   } : {
     connection: { idle: "Offline", connected: "Connected", connecting: "Connecting…", disconnected: "Offline", error: "Connection issue", reconnecting: "Reconnecting…" },
@@ -157,6 +159,7 @@ export function getChatControlsCopy(locale: Locale) {
     chatError: "Could not load or complete the conversation. Check your connection and try again.", voiceError: "Could not complete the voice action. You can type your message.",
     original: "Original language", originalUnknown: "Original message · language not recorded", live: "Live response", listen: "Listen",
     humanOriginal: "Messages appear as written, without automatic translation.",
+    sending: "Sending…", notSent: "Not sent", retrySend: "Retry", removeUnsent: "Remove",
     profileRequired: "Your preferred language needs to load before sending. If this takes too long, reopen Chat.",
   };
 }

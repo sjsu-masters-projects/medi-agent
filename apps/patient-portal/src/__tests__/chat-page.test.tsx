@@ -1006,6 +1006,25 @@ describe("Patient chat page", () => {
         vi.useRealTimers();
     });
 
+    it.each([Language.EN, Language.ES])("shows the sent message at once and swaps it for the saved one without a duplicate (%s)", async (locale) => {
+        profile.preferredLanguage = locale;
+        renderPage();
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.emitOpen(); });
+        fireEvent.change(screen.getByRole("textbox", { name: getChatControlsCopy(locale).message }), { target: { value: "Do I have an appointment?" } });
+        fireEvent.click(screen.getByRole("button", { name: getChatControlsCopy(locale).send }));
+        const request = JSON.parse(socket.sent[0]);
+        // Before any server event: the message is on screen, marked as sending.
+        expect(screen.getAllByText("Do I have an appointment?")).toHaveLength(1);
+        expect(screen.getByText(getChatControlsCopy(locale).sending)).toBeInTheDocument();
+        await act(async () => {
+            socket.emitMessage({ type: "chat_turn", turn: { id: "turn-1", client_message_id: request.client_message_id, status: "queued", attempt: 1, retryable: false, document_id: null, user_message: { id: "saved-1", patient_id: "patient-1", content: "Do I have an appointment?", role: "user", language: locale, created_at: new Date().toISOString() } } });
+            socket.emitMessage({ type: "user_message_saved", client_message_id: request.client_message_id, message: { id: "saved-1", patient_id: "patient-1", content: "Do I have an appointment?", role: "user", language: locale, created_at: new Date().toISOString() } });
+        });
+        expect(screen.getAllByText("Do I have an appointment?")).toHaveLength(1);
+        expect(screen.queryByText(getChatControlsCopy(locale).sending)).not.toBeInTheDocument();
+    });
+
     it.each([Language.EN, Language.ES])("explains another tab's in-progress turn and recovers it without resending (%s)", async (locale) => {
         profile.preferredLanguage = locale;
         renderPage();

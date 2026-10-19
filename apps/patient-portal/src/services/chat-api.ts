@@ -83,6 +83,8 @@ export interface ChatContextUnavailableEvent {
 export interface UserMessageSavedEvent {
     type: "user_message_saved";
     message: ChatMessageApi;
+    /** The idempotency key of the send this message belongs to (worker mode). */
+    client_message_id?: string | null;
 }
 
 export interface ChatErrorEvent {

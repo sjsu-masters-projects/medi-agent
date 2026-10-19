@@ -72,9 +72,9 @@ export function useChatTurnRecovery(scope: string, socket: RefObject<WebSocket |
         write([...merged.values()]);
     }
 
-    function send(content: string, language: Locale, documentId: string | null, audioUrl?: string): boolean {
+    function send(content: string, language: Locale, documentId: string | null, audioUrl?: string, clientMessageId?: string): boolean {
         if (blocked.current.has(scope) || socket.current?.readyState !== WebSocket.OPEN) return false;
-        const request: TurnRequest = { type: "user_message", client_message_id: crypto.randomUUID(),
+        const request: TurnRequest = { type: "user_message", client_message_id: clientMessageId ?? crypto.randomUUID(),
             content, language, document_id: documentId, audio_url: audioUrl ?? null };
         requests.current.set(`${scope}:${request.client_message_id}`, request);
         sentHere.current.add(`${scope}:${request.client_message_id}`);

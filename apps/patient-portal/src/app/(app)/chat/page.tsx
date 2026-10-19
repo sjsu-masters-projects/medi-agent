@@ -68,7 +68,7 @@ export default function ChatPage() {
         dismissDocumentContext, dismissSafetyNotice, documentContext, documentUnavailable, error, handleHandsFreeToggle,
         handleMicClick, handlePlayAssistantMessage, handleSend, handsFreeMode, input,
         isTyping, loading, messages, openConversation, safetyNotice, sessionId, setInput,
-        startNewConversation, recoveryTurns, retryTurn, dismissTurn, reconnectChat, reconnecting, turnBusy, voiceError, voiceStatus } = usePatientChatSession(locale);
+        startNewConversation, retryUnsentMessage, removeUnsentMessage, recoveryTurns, retryTurn, dismissTurn, reconnectChat, reconnecting, turnBusy, voiceError, voiceStatus } = usePatientChatSession(locale);
     // A drop shorter than RECONNECT_QUIET_MS is invisible: the header keeps saying Connected.
     const [reconnectSlow, setReconnectSlow] = useState(false);
     useEffect(() => {
@@ -223,8 +223,10 @@ export default function ChatPage() {
             {voiceError && <p className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">{controls.voiceError}</p>}
             <div className="flex flex-1 flex-col gap-3 pt-1" aria-busy={loading}>
                 {loading && <p className="text-center text-sm text-muted" role="status">{controls.loading}</p>}
-                {visibleMessages.map((message) => <ChatBubble key={message.id} attachments={message.role === ChatRole.ASSISTANT ? message.attachments : undefined} content={message.content}
+                {visibleMessages.map((message) => <ChatBubble key={message.clientMessageId ?? message.id} attachments={message.role === ChatRole.ASSISTANT ? message.attachments : undefined} content={message.content}
                     language={message.language} locale={locale} role={message.role === ChatRole.USER ? "user" : "assistant"}
+                    delivery={message.delivery} onRetrySend={message.clientMessageId ? () => retryUnsentMessage(message.clientMessageId!) : undefined}
+                    onRemoveUnsent={message.clientMessageId ? () => removeUnsentMessage(message.clientMessageId!) : undefined}
                     timestamp={message.createdAt} onPlayAudio={message.role === ChatRole.ASSISTANT && (Boolean(message.audioUrl) || canPlayAssistantAudio) ? () => handlePlayAssistantMessage(message) : undefined} />)}
                 {!loading && !documentContext && !messages.some((message) => message.role === ChatRole.USER) && <section className="ma-enter space-y-2.5 pt-1">
                     <p className="px-1 text-[13px] text-muted">{copy.emptyStateIntro}</p>

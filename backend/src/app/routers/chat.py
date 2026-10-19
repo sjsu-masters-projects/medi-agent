@@ -600,6 +600,8 @@ async def _send_replay(
         {
             "type": "user_message_saved",
             "message": _serialize_chat_message(result["user_message"]),
+            # Lets the portal swap its pending copy of this message for the saved one.
+            "client_message_id": record.get("client_message_id"),
         }
     )
     if result.get("assistant_message"):

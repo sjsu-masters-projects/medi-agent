@@ -42,7 +42,12 @@ import {
 import { socketAuthProtocols } from "@/services/ws-auth";
 import {
     addMessage,
+    addPendingMessage,
     clearChatState,
+    failPendingMessages,
+    markMessagePending,
+    reconcileSavedMessage,
+    removeMessage,
     setChatError,
     setConnectionStatus,
     setLoading,
@@ -170,6 +175,8 @@ interface PatientChatSessionActions {
     dismissTurn: (id: string) => void;
     dismissDocumentContext: () => void;
     dismissSafetyNotice: () => void;
+    retryUnsentMessage: (clientMessageId: string) => void;
+    removeUnsentMessage: (clientMessageId: string) => void;
     handleHandsFreeToggle: () => void;
     handleMicClick: () => void;
     handlePlayAssistantMessage: (message: ChatMessage) => void;
@@ -274,6 +281,15 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     const recovery = useChatTurnRecovery(`${user?.id ?? ""}:${sessionId}`, socketRef);
     const receiveTurns = useEffectEvent((rows: ChatTurnApi[], snapshot = false) => {
         recovery.accept(rows, snapshot);
+        // The saved copy of a message this tab drew optimistically replaces it in place.
+        for (const row of rows) {
+            if (row.user_message && row.client_message_id) {
+                dispatch(reconcileSavedMessage({
+                    clientMessageId: row.client_message_id,
+                    message: mapChatMessageFromApi(row.user_message),
+                }));
+            }
+        }
         const inFlight = rows.some((row) => isTurnInProgress(normalizeTurnStatus(row.status)));
         if (error === "CHAT_TURN_BUSY" && !inFlight) dispatch(setChatError(null));
         // A snapshot or a new status never wipes a draft that is still being received: the
@@ -289,6 +305,9 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     });
     const rejectTurn = useEffectEvent((id: string) => {
         const content = recovery.reject(id);
+        // The server refused the claim and saved nothing: the bubble goes away and the text
+        // returns to the composer, where the reason is shown.
+        dispatch(removeMessage(id));
         if (content) setInput((current) => !current || current === content ? content : `${content}\n\n${current}`);
     });
     const socketDraftAtRef = useRef(0);
@@ -348,8 +367,20 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             return;
         }
 
+        const clientMessageId = crypto.randomUUID();
         if (documentUnavailable || !recovery.send(trimmedContent,
-            voiceRefs.current.selectedLanguage, activeDocumentId, audioUrl)) return;
+            voiceRefs.current.selectedLanguage, activeDocumentId, audioUrl, clientMessageId)) return;
+
+        // Instant feedback: the message is on screen now, not after the server round trip.
+        dispatch(addPendingMessage({
+            clientMessageId,
+            content: trimmedContent,
+            createdAt: new Date().toISOString(),
+            id: `pending-${clientMessageId}`,
+            language: voiceRefs.current.selectedLanguage,
+            patientId: user?.id ?? "",
+            role: ChatRole.USER,
+        }));
 
         setReceivingStream(true);
         // Feedback must begin when the user sends, not after the model has classified the turn.
@@ -912,7 +943,10 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                     );
                     return;
                 case "user_message_saved":
-                    dispatch(addMessage(mapChatMessageFromApi(payload.message)));
+                    dispatch(reconcileSavedMessage({
+                        clientMessageId: payload.client_message_id ?? null,
+                        message: mapChatMessageFromApi(payload.message),
+                    }));
                     return;
                 case "assistant_start":
                     socketDraftAtRef.current = Date.now();
@@ -992,6 +1026,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             } else {
                 dispatch(setConnectionStatus("disconnected"));
             }
+            dispatch(failPendingMessages());
             voiceRefs.current.autoPlayNextAssistantMessage = false;
             setVoiceStatus((prev) => (prev === "processing" || prev === "playing" ? "idle" : prev));
         };
@@ -1002,6 +1037,9 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             }
 
             durableReadyRef.current = false;
+            // Unconfirmed messages keep their text with a retry; a reconnect snapshot that
+            // holds them turns them into the saved message.
+            dispatch(failPendingMessages());
             // The server replays the draft when this tab re-subscribes, so what is on screen
             // stays until then: no flicker, and a closed socket is never an interrupted reply.
             if (!durableReady && !everReadyRef.current) {
@@ -1077,6 +1115,24 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     function startNewConversation(): void {
         openConversation(newConversationId());
         setInput("");
+    }
+
+    function retryUnsentMessage(clientMessageId: string): void {
+        const unsent = messages.find((message) => message.clientMessageId === clientMessageId);
+        if (!unsent || !durableReadyRef.current) return;
+        // The same request, same idempotency key: if the server did save it, nothing repeats.
+        if (recovery.retry(clientMessageId)) {
+            dispatch(markMessagePending(clientMessageId));
+            setReceivingStream(true);
+            dispatch(setTyping(true));
+            return;
+        }
+        dispatch(removeMessage(clientMessageId));
+        sendChatMessage(unsent.content);
+    }
+
+    function removeUnsentMessage(clientMessageId: string): void {
+        dispatch(removeMessage(clientMessageId));
     }
 
     function dismissSafetyNotice(): void {
@@ -1294,6 +1350,8 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         connectionStatus,
         dismissDocumentContext,
         dismissSafetyNotice,
+        retryUnsentMessage,
+        removeUnsentMessage,
         documentContext,
         documentUnavailable,
         error,
