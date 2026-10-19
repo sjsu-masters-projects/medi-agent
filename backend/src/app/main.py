@@ -43,6 +43,7 @@ from app.routers import (
     reminders,
     smart,
     staff,
+    symptom_intakes,
     voice,
 )
 from app.services.a2a_retry_worker import A2ARetryWorker
@@ -227,6 +228,9 @@ def create_app() -> FastAPI:
         obligations.router, prefix=f"{api}/obligations", tags=["Obligations"]
     )
     application.include_router(adherence.router, prefix=f"{api}/adherence", tags=["Adherence"])
+    application.include_router(
+        symptom_intakes.router, prefix=f"{api}/patients/me", tags=["Symptom intake"]
+    )
     application.include_router(chat.router, prefix=f"{api}/chat", tags=["Chat"])
     application.include_router(chat_turns.router, prefix=f"{api}/chat/turns", tags=["Chat"])
     application.include_router(

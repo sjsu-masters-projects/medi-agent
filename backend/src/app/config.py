@@ -163,6 +163,9 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "DEBUG"
 
+    # Requires an actually approved paired-locale bundle and schema 050.
+    symptom_intake_enabled: bool = False
+
     # A2A retry worker
     a2a_retry_worker_enabled: bool = True
     a2a_retry_poll_seconds: int = 15

@@ -32,6 +32,7 @@ from app.core.exceptions import (
 )
 from app.db.repositories import CareTeamRepository, ClinicianRepository, ClinicRepository
 from app.db.supabase_execute import execute_async
+from app.intake.preview import testimony_only
 from app.models.adr import ADRReviewDecisionRequest
 from app.models.clinic_membership import ClinicMembership
 from app.models.dashboard import DashboardSortBy, DashboardSortOrder, RiskLevel
@@ -854,7 +855,9 @@ class ClinicianService:
             .order("created_at", desc=True)
             .limit(50)
         )
-        symptom_reports = cast(list[dict[str, Any]], symptoms.data or [])
+        symptom_reports = [
+            testimony_only(row) for row in cast(list[dict[str, Any]], symptoms.data or [])
+        ]
 
         chats = await self._execute(
             self.db.table("chat_messages")

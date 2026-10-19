@@ -105,6 +105,14 @@ documented in [the demo evaluation guide](../docs/demo-ai-evaluation.md).
 
 ### Environment ownership
 
+Nora connection initialization tolerates only the specifically missing
+`symptom_reports.confirmation_state` column during confirmed-intake rollout: it omits
+symptom reports and exposes `recent_symptoms_available=false` to the patient-context
+tool. It never reads legacy reports as a substitute. Other initialization errors
+produce a generic `chat_initialization_failed` event and close with 1011; internal
+error details are not sent to the patient. This compatibility path does not replace
+authorized migration 060 rollout or enable intake.
+
 `app/config.py` supplies defaults; real process environment variables override
 those defaults. Local startup may also load the repository-root `.env` (or CWD
 `.env` if that file is absent). Never copy credentials into documentation or test
@@ -309,6 +317,17 @@ while CPU is always allocated, not only during requests. `--min-instances 0` is 
 an idle service still scales to zero, and the jobs are unchanged.
 
 ## Package Layout
+
+PAT-002-B B2 checks the shared deterministic safety floor before turn-specific
+retrieval/model/symptom work. Emergency turns stream reviewed direction and retain
+an independent pending care-team alert through migration 059's service-only RPCs.
+The existing retry worker re-drives pending delivery; it must remain enabled
+(`A2A_RETRY_WORKER_ENABLED=true`). No symptom report or ADR task is created for
+these turns. Non-emergency reports still use the old flow; private intake APIs
+and confirmation are not implemented. See the
+[B2 walkthrough and exact local test steps](../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md#18-b2--safety-takes-priority-october-10-2026)
+and [checkpoint evidence and limitations](../docs/pat-002-b-acceptance-2026-10-10.md).
+Migration 059 requires separate authorization before any remote application.
 
 ```
 src/app/
@@ -578,6 +597,43 @@ Triggers, auth, healthy-run signals and Cloud Logging queries:
 | [CODING_STANDARDS.md](../.agent/CODING_STANDARDS.md) | Code style rules |
 | [Supabase Setup Guide](../docs/supabase_setup_guide.md) | DB schema, migrations, RLS, auth hooks |
 | [workflows/new-agent.md](../.agent/workflows/new-agent.md) | How to add a new agent |
+
+### Patient-confirmed symptom intake
+
+PAT-002-B replaces automatic symptom-report insertion in Nora with a private draft,
+explicit preview and confirmation. Endpoints are under
+`/api/v1/patients/me/symptom-intakes`; the actor comes from authentication, not the body.
+`GET /active?session_id=default` returns the latest owned draft, including terminal
+state for reconnect recovery. There is no staff draft endpoint. Writes require
+revision plus stable mutation identity; confirm requires preview hash and explicit
+consent. `GET /api/v1/patients/me/symptom-reports/{id}` reads an owned confirmed report.
+
+`SYMPTOM_INTAKE_ENABLED=false` is the default. Migration 060 does not approve a library.
+The approved `candidate-1` is pinned in the manifest; revised `candidate-2` is pending
+genuine paired-locale review. Matching immutable database eligibility is required. Unavailability
+never restores automatic report insertion. Source binding requires a new backend-saved
+Nora user turn with a session ID; old unbound transcript rows remain readable.
+
+Run the [acceptance commands and synthetic journey](../docs/pat-002-b-acceptance-2026-10-12.md).
+No model is needed for question selection or preview. Exact patient-named product
+context is limited to 4 medications, 5 approved facts and 2 cited 500-character excerpts.
+`POST /{intake_id}/reply` accepts a current question, revision, mutation identity,
+locale and typed/voice text. It conservatively parses explicit values after the
+safety gate; it cannot consent or confirm. Answers are not ordinary chat messages.
+Source suggestions are quotes that require separate patient acceptance.
+
+The exact checksum-pinned `071_confirmed_symptom_handoff.sql` migration keeps
+confirmation, audit, the existing `symptom_adr_screen` queue and
+active assigned-clinician notices in one transaction. Only an exact unique active
+medication name supplies its FK; unlisted products stay unverified testimony. The
+existing worker creates an ADR draft for eligible products; retries preserve
+clinician review. High severity (the existing >=8 threshold) queues a separate
+minimal urgent notice even for cancelled drafts. Emergency alerts remain separate.
+Both require `A2A_RETRY_WORKER_ENABLED=true`. Clinician-authored ADR information
+requests and patient replies stay in Care Team messages while Nora remains the AI chat.
+The applied 071 filename and bytes are immutable and must not be renamed or replayed.
+See [October 17 acceptance](../docs/pat-002-b-acceptance-2026-10-17.md) and the
+[read-only preflight/release procedure](../docs/pat-002-b-rollout.md).
 
 ## Cross-clinic scheduling and clinic tags (CLN-003 slices E and F)
 

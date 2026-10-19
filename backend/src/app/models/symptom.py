@@ -1,5 +1,6 @@
 """Symptom report schemas."""
 
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -21,7 +22,7 @@ class SymptomReportRead(BaseModel):
     id: UUID
     patient_id: UUID
     symptom: str
-    severity: int
+    severity: int | None
     onset: str | None = None
     duration: str | None = None
     related_medication_id: UUID | None = None
@@ -30,4 +31,7 @@ class SymptomReportRead(BaseModel):
     ai_assessment: str | None = None  # Symptom Agent output
     flagged_for_adr: bool = False  # sent to Pharmacovigilance Agent?
     notes: str | None = None
+    confirmation_state: str = "legacy_unconfirmed"
+    confirmed_at: str | None = None
+    confirmed_content: dict[str, Any] | None = None
     created_at: str

@@ -1,0 +1,139 @@
+{
+  "schema_version": "symptom-questions/1",
+  "version": "candidate-2",
+  "budget": 12,
+  "questions": [
+    {
+      "id": "description",
+      "wording": {
+        "en-US": "Describe the symptom or event in your own words.",
+        "es-MX": "Describe el síntoma o evento con tus propias palabras."
+      },
+      "answer_type": "text",
+      "required": true,
+      "applies_if": null,
+      "positive_safety_rule": null
+    },
+    {
+      "id": "location",
+      "wording": {
+        "en-US": "Where do you feel it?",
+        "es-MX": "¿En qué parte del cuerpo lo sientes?"
+      },
+      "answer_type": "text",
+      "required": true,
+      "applies_if": null,
+      "positive_safety_rule": null
+    },
+    {
+      "id": "onset",
+      "wording": {
+        "en-US": "When did it start? Use your own words; an exact date is optional.",
+        "es-MX": "¿Cuándo empezó? Usa tus propias palabras; una fecha exacta es opcional."
+      },
+      "answer_type": "text",
+      "required": true,
+      "applies_if": null,
+      "positive_safety_rule": null
+    },
+    {
+      "id": "duration",
+      "wording": {
+        "en-US": "How long does it last, or is it ongoing?",
+        "es-MX": "¿Cuánto dura o sigue presente?"
+      },
+      "answer_type": "text",
+      "required": true,
+      "applies_if": null,
+      "positive_safety_rule": null
+    },
+    {
+      "id": "course",
+      "wording": {
+        "en-US": "How has it changed since it started?",
+        "es-MX": "¿Cómo ha cambiado desde que empezó?"
+      },
+      "answer_type": "text",
+      "required": true,
+      "applies_if": null,
+      "positive_safety_rule": null
+    },
+    {
+      "id": "severity",
+      "wording": {
+        "en-US": "How intense is it from 1 to 10, where 1 is mild and 10 is the worst you can imagine? You can say I don’t know or skip.",
+        "es-MX": "¿Qué intensidad tiene del 1 al 10, donde 1 es leve y 10 es lo peor que te puedas imaginar? Puedes decir no sé o prefiero no responder."
+      },
+      "answer_type": "rating",
+      "required": true,
+      "applies_if": null,
+      "positive_safety_rule": null
+    },
+    {
+      "id": "associated",
+      "wording": {
+        "en-US": "What other symptoms have you noticed?",
+        "es-MX": "¿Qué otros síntomas has notado?"
+      },
+      "answer_type": "text",
+      "required": true,
+      "applies_if": null,
+      "positive_safety_rule": null
+    },
+    {
+      "id": "red_flags",
+      "wording": {
+        "en-US": "Describe any symptom that concerns you right now.",
+        "es-MX": "Describe cualquier síntoma que te preocupe en este momento."
+      },
+      "answer_type": "text",
+      "required": true,
+      "applies_if": null,
+      "positive_safety_rule": null
+    },
+    {
+      "id": "product",
+      "wording": {
+        "en-US": "Are you concerned about a medicine or other product? If so, enter its name and the details you know.",
+        "es-MX": "¿Te preocupa algún medicamento u otro producto? Si es así, escribe su nombre y los detalles que sabes."
+      },
+      "answer_type": "product",
+      "required": true,
+      "applies_if": null,
+      "positive_safety_rule": null
+    },
+    {
+      "id": "concomitant",
+      "wording": {
+        "en-US": "What medicines or products have you taken around this symptom, including prescriptions from other clinicians, over-the-counter medicines and supplements? Include recent starts or changes, what you took for this symptom, and any names, doses, timing or reasons you know.",
+        "es-MX": "¿Qué medicamentos o productos has usado cuando apareció este síntoma, incluidas recetas de otros profesionales, medicamentos sin receta y suplementos? Incluye inicios o cambios recientes, lo que tomaste para este síntoma y los nombres, dosis, momentos o motivos que sepas."
+      },
+      "answer_type": "text",
+      "required": true,
+      "applies_if": null,
+      "positive_safety_rule": null
+    },
+    {
+      "id": "history",
+      "wording": {
+        "en-US": "What relevant history or test results would you like to report?",
+        "es-MX": "¿Qué antecedentes o resultados de pruebas relevantes quieres reportar?"
+      },
+      "answer_type": "text",
+      "required": true,
+      "applies_if": null,
+      "positive_safety_rule": null
+    },
+    {
+      "id": "outcome",
+      "wording": {
+        "en-US": "What happened afterward, or how are you feeling now?",
+        "es-MX": "¿Qué pasó después o cómo te sientes ahora?"
+      },
+      "answer_type": "text",
+      "required": true,
+      "applies_if": null,
+      "positive_safety_rule": null
+    }
+  ]
+}

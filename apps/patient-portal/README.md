@@ -178,16 +178,18 @@ three retrospective questions about a prior clinician-directed dose change, a pr
 similar prior reaction. The form says not to restart, stop, or change a medicine to answer, asks for
 a description of known yes/no answers, and requires a final confirmation before sending.
 
-**Route.** `/chat?view=follow-up` opens the follow-up view without a thread or recipient step. The
+**Route.** `/chat?view=follow-up` opens the structured Care Team follow-up view without a thread or recipient step. The
 optional `request` parameter opens one request in any state and wins over `assessment`, which opens
 the newest request for that assessment. With neither, the view lists every pending request.
 Notifications link here by assessment (or by request), and the entry rows link to the bare route.
-The view carries the same emergency and "not continuously monitored" caution as chat. Signed-out
+Back returns to **Care team messages**. The view carries the human-message emergency and "not
+continuously monitored" notice; it does not use Nora's AI warning. Signed-out
 visits follow the normal sign-in redirect and return to the same URL.
 
-**Entry rows.** A row appears in the chat inbox, in an open Nora thread and on Today, only while at
-least one request is pending. It is hidden while loading, on a load error, or when nothing is
-pending, because the view itself reports errors. The count refreshes on focus and does not poll.
+**Entry rows.** A row appears under **Care team messages** in the chat inbox and on Today, only while
+at least one request is pending. It is never rendered as Nora content. It is hidden while loading,
+on a load error, or when nothing is pending, because the view itself reports errors. The count
+refreshes on focus and does not poll.
 
 **Endpoints.**
 - `GET /api/v1/patients/me/adr-information-requests` lists pending requests (used by the entry rows).
@@ -215,5 +217,49 @@ visible focus ring on the label of each visually hidden radio and checkbox.
 
 - The browser never writes ADR assessment or audit tables directly; the backend owns the atomic
   response, reassessment, notification, and audit transaction.
+
+### Confirmed symptom draft panel
+
+Nora keeps its composer visible while the conversation and intake content scroll
+within the available height. The current portal hides bottom navigation while a
+conversation is open. Reconnects retain the visible conversation while history
+recovers. Streaming follows the latest reply without animated scrolling only
+when the reader is near the bottom; scrolling up pauses following, and returning
+to the bottom resumes it. Sending a typed message or selecting another conversation
+resumes following. Short-lived reconnects retain their retry count; the count resets
+only after a socket stays open for five seconds, so repeated initialization failures
+stop after five retries. A database without migration 060 omits saved symptom context
+and marks it unavailable to Nora's record tool; it never falls back to unconfirmed
+reports. This does not activate guided intake. Initial draft-read failures
+offer reload feedback; only an uncertain mutation uses the action/save recovery
+message. Loading a draft does not imply that a report was submitted.
+
+Nora places the private intake panel after the latest chat turn; human message threads do not mount it. The panel recovers
+the latest owned state for the selected Nora conversation by REST on authentication/reconnect signals, asks paired-locale
+library questions, and supports unknown/declined, corrections, cancellation, review
+and consent-based confirmation. It stores pending action identities only in memory;
+clinical draft content is never written to browser storage or mirrored into chat.
+A lost write response retains its exact identity for reload/retry. Account switches
+abort pending reads and reject stale responses. Controls use localized labels,
+44-pixel button targets and focus the next unanswered field without stealing chat focus.
+
+Answer the current question in Nora's main composer by typing or dictation. In
+hands-free mode prompts are read aloud and listening resumes after playback;
+local pause detection ends an answer after speech and 1.8 seconds of silence when
+Web Audio is available (15 seconds of initial silence; 60-second recording limit).
+The microphone button remains a manual stop. No analysis samples are stored;
+unknown/skip and explicitly accepting a source suggestion are supported. Ambiguous
+numbers need clarification. Private STT recordings are not stored as chat audio;
+private TTS has no chat message ID. Late recordings cannot answer a different
+revision. Detailed fields remain available as a fallback. Read the preview, select
+consent and press **Confirm and share**; spoken assent never submits it.
+
+Approved `candidate-1` remains active. Revised `candidate-2` wording/applicability is
+pending genuine review and cannot activate yet. The checksum-pinned, applied
+`071_confirmed_symptom_handoff.sql` adds durable ADR and review notices; the existing
+retry worker must run. Follow the
+[October 17 verification record](../../docs/pat-002-b-acceptance-2026-10-17.md) and
+[coordinated rollout](../../docs/pat-002-b-rollout.md).
+The saved patient symptom timeline remains PAT-002-C.
 
 Chat results card: an assistant message may carry `attachments` of type `document_results`, built by the server from the cited document's extracted results (never from the reply text). The chat shows them under the reply: critical results first with a contact-your-care-team line, out-of-range results with chips, the rest behind a toggle, and a link to the document in Records.

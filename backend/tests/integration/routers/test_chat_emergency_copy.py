@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -44,10 +44,36 @@ from app.followup import SymptomAnalysis
 from app.main import app
 from app.models.auth import CurrentUser
 from app.models.enums import Language
+from app.routers.chat import _send_safety_turn
 from app.safety import TRIAGE_COPY
+from app.safety.intake_gate import evaluate_intake_safety
 
 EN_COPY = TRIAGE_COPY[Language.EN.value]
 ES_COPY = TRIAGE_COPY[Language.ES.value]
+
+
+@pytest.mark.asyncio
+async def test_disconnect_during_direction_still_records_pending_alert():
+    from app.models.chat import ChatMessageCreate
+
+    socket = MagicMock()
+    socket.send_json = AsyncMock(side_effect=RuntimeError("websocket is not connected"))
+    service = MagicMock()
+    service.record_safely = AsyncMock(return_value={"delivery_state": "pending"})
+    service.deliver_safely = AsyncMock()
+    incoming = ChatMessageCreate(content="I have crushing chest pain", language=Language.EN)
+    with pytest.raises(RuntimeError, match="websocket is not connected"):
+        await _send_safety_turn(
+            socket,
+            service,
+            {
+                "patient_id": str(uuid4()),
+                "incoming": incoming,
+                "decision": evaluate_intake_safety(incoming.content, incoming.language.value),
+            },
+        )
+    service.record_safely.assert_awaited_once()
+    service.deliver_safely.assert_not_awaited()
 
 
 @pytest.fixture
@@ -83,8 +109,9 @@ def _stub_agent_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     The real one resolves Application Default Credentials and builds a Vertex client the
     moment it is first used. A test that reaches for those passes or fails on whether the
     machine running it happens to be logged in, which is not a property of this code. The
-    emergency plugin still runs for real; only the models behind it are stubs, and they
-    raise if anything reaches them.
+    router's shared safety gate runs for real and bypasses this runner on emergency
+    input. The plugin has separate focused coverage; stub models reject any accidental
+    runtime invocation here.
     """
     runner = build_runner(
         app_name=APP_NAME,
@@ -165,6 +192,38 @@ def _patch_chat_runtime(monkeypatch: pytest.MonkeyPatch, patient_id: Any) -> Non
         monkeypatch.setattr(f"app.routers.chat.ChatService.{name}", replacement)
     monkeypatch.setattr("app.services.chat_service.ChatService._fetch_active_care_teams", _teams)
 
+    async def _record_safety(_self, patient_id, payload):
+        user = await _save_message(
+            _self,
+            patient_id,
+            {
+                "content": payload["content"],
+                "role": "user",
+                "language": payload["language"],
+            },
+        )
+        assistant = await _save_message(
+            _self,
+            patient_id,
+            {
+                "content": payload["response_text"],
+                "role": "assistant",
+                "language": payload["language"],
+            },
+        )
+        return {
+            "alert_id": payload["turn_id"],
+            "user_message": user,
+            "assistant_message": assistant,
+            "delivery_state": "pending",
+        }
+
+    async def _deliver_safety(_self, options=None):
+        return [{"delivery_state": "delivered", "clinicians_notified": 1}]
+
+    monkeypatch.setattr("app.routers.chat.ChatSafetyService.record_turn", _record_safety)
+    monkeypatch.setattr("app.routers.chat.ChatSafetyService.deliver_pending", _deliver_safety)
+
 
 def _bland_symptom_worker(monkeypatch: pytest.MonkeyPatch) -> None:
     """A symptom worker that answers safely for a routine symptom and fatally for an emergency."""
@@ -177,7 +236,7 @@ def _bland_symptom_worker(monkeypatch: pytest.MonkeyPatch) -> None:
             flagged_for_adr=False,
         )
 
-    monkeypatch.setattr("app.routers.chat.analyse_symptom", _analyse)
+    monkeypatch.setattr("app.followup.analyse_symptom", _analyse)
 
 
 def _routine_symptom_classification(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -204,20 +263,34 @@ def _routine_symptom_classification(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(CareCoordinatorRuntime, "process_stream", _process_stream)
 
 
+def _urgent_symptom_classification(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _process_stream(_self, **_kwargs):
+        yield {
+            "type": "classification",
+            "intent": "symptom",
+            "urgency": "urgent",
+            "route": "symptom",
+            "escalation_required": True,
+            "classification_reason": "stubbed urgent classification",
+        }
+        yield {"type": "complete", "response_text": "", "fallback_used": False}
+
+    monkeypatch.setattr(CareCoordinatorRuntime, "process_stream", _process_stream)
+
+
 def _run_turn(client, patient_id, message: str, language: str = "en") -> dict[str, Any]:
     with client.websocket_connect(
         f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
     ) as websocket:
         assert websocket.receive_json()["type"] == "chat_history"
         websocket.send_json({"type": "user_message", "content": message, "language": language})
-        assert websocket.receive_json()["type"] == "user_message_saved"
-
-        start = websocket.receive_json()
-        assert start["type"] == "assistant_start"
-
+        start = None
         for _ in range(20):
             event = websocket.receive_json()
+            if event["type"] == "assistant_start":
+                start = event
             if event["type"] == "assistant_complete":
+                assert start is not None
                 return {"start": start, "complete": event}
 
     raise AssertionError("The turn never completed")
@@ -241,10 +314,100 @@ def test_a_medical_emergency_still_tells_the_patient_to_call_911(
     result = _run_turn(client, patient_id, message)
 
     assert result["start"]["urgency"] == "emergency"
-    # Asserted against the reviewed copy, not against "911" appearing somewhere. The
-    # service-unavailable message also contains "911", so the looser check passed for
-    # two weeks while the patient was actually being told to try again in a few minutes.
     assert result["complete"]["message"]["content"] == EN_COPY["emergency_response"]
+
+
+@pytest.mark.parametrize(
+    "message,locale",
+    [
+        ("I have crushing chest pain", "en-US"),
+        ("Tengo dolor de pecho", "es-MX"),
+        ("I want to kill myself", "en-US"),
+        ("quiero morir", "es-MX"),
+        ("List my documents, but I cannot breathe", "en-US"),
+        ("No chest pain yesterday, but chest pain now", "en-US"),
+    ],
+)
+def test_safety_interrupts_before_retrieval_models_reports_or_adr(
+    client,
+    override_db,
+    patient_id,
+    monkeypatch,
+    message,
+    locale,
+):
+    _patch_chat_runtime(monkeypatch, patient_id)
+    forbidden = [
+        "app.followup.analyse_symptom",
+        "app.routers.chat.ChatService.save_symptom_report",
+        "app.routers.chat.ChatService.get_document_catalog",
+        "app.services.a2a_task_service.A2ATaskService.run_symptom_to_pharmacovigilance",
+        "app.routers.chat.CareCoordinatorRuntime.process_stream",
+    ]
+    mocks = []
+    for name in forbidden:
+        mock = AsyncMock(side_effect=AssertionError("Ordinary intake must not run"))
+        monkeypatch.setattr(name, mock)
+        mocks.append(mock)
+    result = _run_turn(client, patient_id, message, locale)
+    assert result["complete"]["urgency"] == "emergency"
+    assert result["complete"]["safety_rule_version"] == "triage-floor/1"
+    for mock in mocks:
+        mock.assert_not_called()
+
+
+@pytest.mark.parametrize("failure", ["persistence", "delivery"])
+@pytest.mark.parametrize(
+    "locale,message,copy_key",
+    [
+        ("en-US", "I have chest pain", "emergency_response"),
+        ("es-MX", "quiero morir", "mental_health_emergency_response"),
+    ],
+)
+def test_direction_survives_persistence_and_alert_failures(
+    client,
+    override_db,
+    patient_id,
+    monkeypatch,
+    failure,
+    locale,
+    message,
+    copy_key,
+):
+    _patch_chat_runtime(monkeypatch, patient_id)
+    method = "record_turn" if failure == "persistence" else "deliver_pending"
+    failed = AsyncMock(side_effect=RuntimeError("Synthetic database outage"))
+    monkeypatch.setattr(f"app.routers.chat.ChatSafetyService.{method}", failed)
+    with client.websocket_connect(
+        f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
+    ) as socket:
+        assert socket.receive_json()["type"] == "chat_history"
+        socket.send_json({"type": "user_message", "content": message, "language": locale})
+        assert socket.receive_json()["type"] == "assistant_start"
+        chunks = []
+        complete = None
+        saved = False
+        while True:
+            event = socket.receive_json()
+            assert event["type"] != "error"
+            if event["type"] == "assistant_chunk":
+                chunks.append(event["content"])
+            elif event["type"] == "user_message_saved":
+                saved = True
+            elif event["type"] == "assistant_complete":
+                complete = event
+            elif event["type"] == "escalation_recommended":
+                break
+        assert "".join(chunks) == TRIAGE_COPY[locale][copy_key]
+        assert complete["message"]["content"] == TRIAGE_COPY[locale][copy_key]
+        assert event["clinicians_notified"] == 0
+        assert event["delivery_state"] == ("unavailable" if failure == "persistence" else "pending")
+        assert saved is (failure != "persistence")
+        assert complete["persistence_status"] == (
+            "uncertain" if failure == "persistence" else "saved"
+        )
+        socket.send_json({"type": "ping"})
+        assert socket.receive_json()["type"] == "pong"
 
 
 def test_the_symptom_worker_cannot_replace_an_emergency_answer(
@@ -281,10 +444,10 @@ def test_self_harm_keeps_the_crisis_line(client, override_db, patient_id, monkey
     assert result["complete"]["message"]["content"] == EN_COPY["mental_health_emergency_response"]
 
 
-def test_a_routine_symptom_is_still_answered_by_the_symptom_worker(
+def test_routine_symptom_cannot_auto_save_when_intake_unavailable(
     client, override_db, patient_id, monkeypatch
 ) -> None:
-    """The guard must be narrow: only an emergency withholds the worker's reply."""
+    """An unavailable intake never falls back to the retired direct save."""
     _patch_chat_runtime(monkeypatch, patient_id)
     _bland_symptom_worker(monkeypatch)
     _routine_symptom_classification(monkeypatch)
@@ -292,7 +455,7 @@ def test_a_routine_symptom_is_still_answered_by_the_symptom_worker(
     result = _run_turn(client, patient_id, "I have a mild headache today")
 
     assert result["start"]["urgency"] != "emergency"
-    assert "I logged your symptom" in result["complete"]["message"]["content"]
+    assert "No symptom report was saved" in result["complete"]["message"]["content"]
 
 
 @pytest.mark.parametrize(
@@ -352,3 +515,34 @@ def test_a_spanish_emergency_is_still_escalated_to_the_care_team(
     result = _run_turn(client, patient_id, "Creo que estoy teniendo un infarto", language="es-MX")
 
     assert result["start"]["urgency"] == "emergency"
+
+
+def test_non_emergency_starts_private_draft_without_report(
+    client, override_db, patient_id, monkeypatch
+):
+    _patch_chat_runtime(monkeypatch, patient_id)
+    _routine_symptom_classification(monkeypatch)
+    start = AsyncMock(return_value={"intake_id": str(uuid4()), "revision": 0})
+    save = AsyncMock(side_effect=AssertionError("No direct report save"))
+    monkeypatch.setattr("app.routers.chat.SymptomIntakeService.start", start)
+    monkeypatch.setattr("app.routers.chat.ChatService.save_symptom_report", save)
+    result = _run_turn(client, patient_id, "I have a mild headache today")
+    assert "private draft is open" in result["complete"]["message"]["content"]
+    start.assert_awaited_once()
+    save.assert_not_awaited()
+
+
+def test_urgent_symptom_keeps_care_team_escalation_when_draft_starts(
+    client, override_db, patient_id, monkeypatch
+) -> None:
+    _patch_chat_runtime(monkeypatch, patient_id)
+    _urgent_symptom_classification(monkeypatch)
+    monkeypatch.setattr(
+        "app.routers.chat.SymptomIntakeService.start",
+        AsyncMock(return_value={"intake_id": str(uuid4()), "revision": 0}),
+    )
+
+    result = _run_turn(client, patient_id, "I have severe dizziness")
+
+    assert result["start"]["urgency"] == "urgent"
+    assert result["complete"]["escalation_required"] is True

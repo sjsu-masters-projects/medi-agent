@@ -90,13 +90,16 @@ Migration filenames use an ordered `NNN_descriptive_name.sql` convention. Histor
 parallel branches produced a small set of already-applied shared prefixes (`011`,
 `038`–`043`, `047`, `048`, `051`, and `067`); they coexist because the ledger identifies
 migrations by complete filename and checksum. The migration validator preserves those
-known historical names but rejects any new shared prefix, so an unapplied collision must
-be renumbered before review. Preserve applied names and bytes. The ledger in
+known historical sequences plus the exact applied 059, 060 and 071 pairs. Those exact
+exceptions cover the confirmed-symptom files alongside the independently applied critical-result
+and clinician-visit migrations; the validator rejects any other new shared prefix. Preserve
+applied names and bytes. The ledger in
 `public.schema_migrations` is authoritative: a local file count does not establish remote
 application or authorize applying unrelated migrations. Migrations through
 `075_notification_zone_lookup.sql` are recorded as applied by the requester (October 18,
-2026); `076_care_conversation_activity_review.sql` is pending and must be applied before
-the activity-review backend deploys. Browser session limits (AUTH-002) are portal
+2026). A read-only October 19 check also recorded the exact 071 symptom handoff and
+`076_care_conversation_activity_review.sql`; application of 077/078 was not checked.
+Browser session limits (AUTH-002) are portal
 environment variables, not Supabase settings; no Auth configuration change is required.
 
 Migration `047_adr_patient_information_loop.sql` adds the patient-confirmed ADR information
@@ -131,6 +134,24 @@ function keeps its signature, so the currently deployed backend keeps working on
 applied. Rows written by that backend in the meantime are labelled `fda-3500-legacy-048` and
 are upgraded on read. After applying, verify with the ledger and with the read-only checks the
 fail-closed block already performs (it raises and rolls the migration back on any gap).
+
+### Confirmed symptom ADR handoff (071, PAT-002-B) — recorded applied October 18
+
+`071_confirmed_symptom_handoff.sql` requires the already-applied confirmed-intake
+migration 060 and migration 065 clinic memberships. It normalizes exact active-medication
+name matching, queues one report-keyed `retrying` ADR screen in the same confirmation
+transaction and sends minimal notices to active assigned clinic members. An unlisted
+patient-named product remains testimony and never receives a fabricated medication link.
+The trigger does not assign causality or create an FDA submission.
+`A2A_RETRY_WORKER_ENABLED=true` is required so interrupted work is recovered.
+
+The exact file has SHA-256
+`f690b788d5f29c3d7583f2fe8cc43b7a51a6af817c276d6839cc9c9ab2ded36b`. A read-only
+October 19 ledger check recorded that identity as applied on October 18. Preserve the
+filename and bytes: do not rename or replay it because it shares prefix 071 with
+`071_clinician_visit_management.sql`. Only a fresh or explicitly verified missing
+environment may apply the exact file, and applying it still requires explicit authorization.
+Backend deployment and runtime feature activation remain separate gates.
 
 ### Clinic memberships (065, CLN-003 slice A) — applied October 16
 
@@ -215,6 +236,33 @@ overlap pairs), apply `042_appointment_expired_status.sql` before
 `Slice 5 schema and function permissions verified`. Rollout order and the synthetic
 conflict/expiry journey are in
 [the scheduling design §14](../.agent/specs/sch-001-appointment-scheduling.md#14-slice-5--booking-conflicts-and-proposal-expiry).
+
+## PAT-002-B local safety checkpoint
+
+B2 adds local migration `059_chat_safety_alerts.sql` (SHA-256
+`9ce875b7d1fca79f687f83e6ea02d7b4b56273d5aba064c665591dc8a2ac56f5`).
+It creates server-only safety evidence and the narrowly granted service RPCs
+`record_chat_safety_turn` and `deliver_chat_safety_alerts`. Ordinary initial
+emergency chat rows retain existing transcript visibility; this is not private
+draft storage. Safety evidence and its source rows are immutable; pending alert
+delivery uses current active care-team assignments and existing operational alerts.
+No-recipient dispatch records that outcome without claiming a recipient was notified.
+
+After separate authorization, the target must have the preceding schema and
+private schema, migration 059 must precede this backend version, and
+`A2A_RETRY_WORKER_ENABLED=true` is required for background redelivery. A backend
+without 059 still shows direction but cannot guarantee saved evidence/delivery;
+that mismatch is not accepted rollout. Pending delivery notices are not pushed
+again when the worker later succeeds. Verify service-only RPC execution, browser
+denial, assignment changes, rollback/retry and operational alert deduplication
+on the authorized target. Disposable local SQL checks cover selected migrations
+and platform stubs, not that target's complete Supabase setup or grants. See
+[B2 evidence and reproduction commands](pat-002-b-acceptance-2026-10-10.md#b2-verification).
+
+Private drafts, explicit report confirmation and revoked browser report writes
+remain later work. Migration 027's service-role SELECT grant does not remove the
+old owner INSERT policy. No remote migration, seed/reset, deployment, review or
+PR #136 migration is authorized or claimed by this checkpoint.
 
 ## Configure SMART staging
 
@@ -340,3 +388,60 @@ The backend accepts access tokens up to 30 seconds past their `exp` (clock-skew 
 - [ ] An assigned clinician can retry a retryable failed document, while a concurrent retry and a fourth total attempt are denied.
 
 Use synthetic or deidentified sandbox records only. This project does not accept real patient data for this demo.
+
+## PAT-002-B confirmation rollout (local verification active)
+
+Migrations 059/060 are versioned implementation artifacts. Applying them, publishing
+question eligibility and changing deployed configuration are distinct rollout
+actions. No bundle is seeded or approved by migration 060. On October 12 the requester
+reported Ganesh approved the unchanged paired-locale candidate; the
+[approval record](../backend/src/app/intake/question_library/candidate-1-review.md#requester-reported-approval)
+states its provenance, date and canonical hash. This is not a formal PR approval.
+
+October 12 requester rollout recheck: the requester reported applying the migrations.
+Read-only `schema_migrations` queries confirmed both 059/060 ledger entries match the
+versioned file checksums below. The confirmation column is available and the intake
+RPC rejects an unknown patient with `42501`. After the dated approval report, the
+manifest selected `candidate-1`, matching eligibility metadata were published via
+`set_symptom_question_eligibility`, and the local backend was restarted with
+`SYMPTOM_INTAKE_ENABLED=true`. An authenticated fictional patient confirmation and
+assigned-clinician summary then passed locally, as recorded in the
+[acceptance evidence](pat-002-b-acceptance-2026-10-12.md#approved-library-local-acceptance--october-12).
+The deployed backend setting and deployed acceptance remain separate.
+
+| Migration | SHA-256 |
+| --- | --- |
+| `059_chat_safety_alerts.sql` | `9ce875b7d1fca79f687f83e6ea02d7b4b56273d5aba064c665591dc8a2ac56f5` |
+| `060_confirmed_symptom_intake.sql` | `3f6c9591fe41dab5bd476096174c5d69770be38dbeae8d5db82841f2a0361d42` |
+| `071_confirmed_symptom_handoff.sql` | `f690b788d5f29c3d7583f2fe8cc43b7a51a6af817c276d6839cc9c9ab2ded36b` |
+
+Before an authorized rollout, drain old direct symptom-report writers, including
+old demo/import tooling that inserts unconfirmed reports. Migration 060 removes direct
+browser report writes and requires new reports through confirmation. Historical rows
+stay legacy and are not converted into fabricated patient consent. Deploy compatible
+nullable-severity consumers with the schema before enabling new confirmation behavior.
+Verify owner read, browser stored-context column denial, staff/unassigned denial,
+service-RPC-only writes, append-only audit,
+source/session binding, exact confirmation/retry and independent safety alert delivery.
+
+Activation requires the reviewed immutable packaged version/hash, matching genuine
+`set_symptom_question_eligibility` metadata and `SYMPTOM_INTAKE_ENABLED=true`. That
+manifest RPC is deployment-only; runtime intake never calls it and browsers cannot.
+Changed content requires a new version. Revocation blocks progression/confirmation;
+owned recovery, cancellation and existing safety escalation remain available. Never
+substitute the disposable SQL fixtures' approval reference into a runtime manifest.
+
+Rollback disables intake and its ordinary writes while preserving drafts, confirmed
+reports and durable safety-alert retry. It must not restore automatic unconfirmed
+report insertion. See [the acceptance record](pat-002-b-acceptance-2026-10-12.md) for
+local SQL constraints, manual acceptance, dependency reproducibility and the C handoff.
+
+
+The October 17 handoff work uses the exact applied 071 identity described above. It
+intentionally coexists with the clinician-visit 071 file because the ledger keys on the
+full filename and checksum. Keep applied 059/060/071 names and checksums unchanged.
+The exact prerequisites, authorization state and read-only
+`preflight_symptom_intake.py` procedure are in the
+[PAT-002-B rollout](pat-002-b-rollout.md). Do not run unrelated pending migrations as
+part of this change. Candidate-2 remains pending genuine review; neither SQL nor a
+passing test approves a question bundle.

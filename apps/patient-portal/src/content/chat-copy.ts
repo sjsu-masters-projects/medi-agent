@@ -18,6 +18,9 @@ interface PatientChatCopy {
   documentContextSuffix: string;
   emptyStateIntro: string;
   escalationNotice: string;
+  safetySaveUncertain: string;
+  safetyAlertPending: string;
+  safetyAlertNoRecipients: string;
   inputPlaceholder: string;
   quickPrompts: string[];
   welcomeMessage: string;
@@ -25,6 +28,9 @@ interface PatientChatCopy {
 
 const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
   default: {
+    safetySaveUncertain: "We could not verify that your message or care-team alert was saved.",
+    safetyAlertPending: "The care-team alert is pending delivery.",
+    safetyAlertNoRecipients: "No care-team alert was saved because no linked recipient was available.",
     careTeamLabel: "Care team messages",
     careTeamIntro: "Choose a linked clinician to exchange messages, separate from your AI conversation.",
     careTeamEmpty: "No care-team messages yet.",
@@ -48,6 +54,9 @@ const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
       "Hi. I can help explain results, track symptoms, and prepare questions for your doctor.",
   },
   "en-US": {
+    safetySaveUncertain: "We could not verify that your message or care-team alert was saved.",
+    safetyAlertPending: "The care-team alert is pending delivery.",
+    safetyAlertNoRecipients: "No care-team alert was saved because no linked recipient was available.",
     careTeamLabel: "Care team messages",
     careTeamIntro: "Choose a linked clinician to exchange messages, separate from your AI conversation.",
     careTeamEmpty: "No care-team messages yet.",
@@ -71,6 +80,9 @@ const PATIENT_CHAT_COPY: LocaleResourceMap<PatientChatCopy> = {
       "Hi. I can help explain results, track symptoms, and prepare questions for your doctor.",
   },
   "es-MX": {
+    safetySaveUncertain: "No pudimos verificar que se guardara tu mensaje o la alerta para tu equipo clínico.",
+    safetyAlertPending: "La alerta para tu equipo clínico está pendiente de entrega.",
+    safetyAlertNoRecipients: "No se guardó una alerta para tu equipo clínico porque no había un destinatario vinculado disponible.",
     careTeamLabel: "Mensajes del equipo clínico",
     careTeamIntro: "Elige a un profesional clínico vinculado para intercambiar mensajes, separados de tu conversación con IA.",
     careTeamEmpty: "Todavía no hay mensajes de tu equipo clínico.",

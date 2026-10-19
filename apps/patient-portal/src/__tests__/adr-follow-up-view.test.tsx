@@ -273,14 +273,14 @@ describe("ADR follow-up view", () => {
             expect(onBack).toHaveBeenCalledTimes(1);
         });
 
-        it.each(LOCALES)("links back to /chat when there is no onBack in %s", async (locale) => {
+        it.each(LOCALES)("links back to Care team messages when there is no onBack in %s", async (locale) => {
             const text = STRINGS[locale];
             fetchOverview.mockRejectedValue(notFoundError());
 
             renderView({ locale });
 
             expect(await screen.findByText(text.notFoundTitle)).toBeInTheDocument();
-            expect(screen.getByRole("link", { name: text.back })).toHaveAttribute("href", "/chat");
+            expect(screen.getByRole("link", { name: text.back })).toHaveAttribute("href", "/chat?view=care-team");
             expect(screen.queryByRole("button")).not.toBeInTheDocument();
         });
     });
