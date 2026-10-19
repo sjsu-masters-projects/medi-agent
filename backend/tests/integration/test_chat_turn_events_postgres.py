@@ -46,7 +46,9 @@ def queue(db, **changes):
 
 
 def claim(db, turn, **extra):
-    return worker(db, turn["id"], "claim", {"attempt": turn["attempt"], "timeout_seconds": 60, **extra})
+    return worker(
+        db, turn["id"], "claim", {"attempt": turn["attempt"], "timeout_seconds": 60, **extra}
+    )
 
 
 def events(db, turn_id):
@@ -82,7 +84,10 @@ def test_events_are_backend_only_and_append_only(turn_sql):
     assert "permission denied" in turn_sql(
         "SET ROLE service_role; UPDATE chat_turn_events SET type='draft';", succeeds=False
     )
-    assert turn_sql("SELECT relrowsecurity FROM pg_class WHERE oid='chat_turn_events'::regclass;") == "t"
+    assert (
+        turn_sql("SELECT relrowsecurity FROM pg_class WHERE oid='chat_turn_events'::regclass;")
+        == "t"
+    )
 
 
 def test_functions_carry_timeouts_and_077_behaviour(turn_sql):
@@ -161,7 +166,11 @@ def test_retry_after_interruption_requeues_with_the_next_attempt(turn_sql):
     assert retry["turn"]["lease"] != claimed["turn"]["lease"]
     second = claim(turn_sql, retry["turn"])
     assert second["accepted"]
-    assert [e["type"] for e in events(turn_sql, turn["id"])] == ["started", "interrupted", "started"]
+    assert [e["type"] for e in events(turn_sql, turn["id"])] == [
+        "started",
+        "interrupted",
+        "started",
+    ]
 
 
 # -- claim ---------------------------------------------------------------------------------------
@@ -280,11 +289,24 @@ def test_append_event_orders_by_seq_for_the_current_lease_only(turn_sql):
     turn = result["turn"]
     lease = claim(turn_sql, turn)["turn"]["lease"]
     for index in range(3):
-        out = worker(turn_sql, turn["id"], "append_event",
-                     {"lease": lease, "type": "draft", "payload": {"content": "x" * index}, "seq": 2 + index})
+        out = worker(
+            turn_sql,
+            turn["id"],
+            "append_event",
+            {
+                "lease": lease,
+                "type": "draft",
+                "payload": {"content": "x" * index},
+                "seq": 2 + index,
+            },
+        )
         assert out["accepted"] and out["seq"] == 2 + index and out["next_seq"] == 3 + index
-    stale = worker(turn_sql, turn["id"], "append_event",
-                   {"lease": str(uuid4()), "type": "draft", "payload": {}})
+    stale = worker(
+        turn_sql,
+        turn["id"],
+        "append_event",
+        {"lease": str(uuid4()), "type": "draft", "payload": {}},
+    )
     assert reason(stale) == "lease_mismatch"
     assert [e["seq"] for e in events(turn_sql, turn["id"])] == [1, 2, 3, 4]
 
@@ -315,10 +337,17 @@ def test_concurrent_appends_get_distinct_ordered_seq_numbers(turn_sql):
     turn = result["turn"]
     lease = claim(turn_sql, turn)["turn"]["lease"]
     with ThreadPoolExecutor(max_workers=4) as pool:
-        out = list(pool.map(
-            lambda i: worker(turn_sql, turn["id"], "append_event",
-                             {"lease": lease, "type": "draft", "payload": {"i": i}}),
-            range(8)))
+        out = list(
+            pool.map(
+                lambda i: worker(
+                    turn_sql,
+                    turn["id"],
+                    "append_event",
+                    {"lease": lease, "type": "draft", "payload": {"i": i}},
+                ),
+                range(8),
+            )
+        )
     assert all(row["accepted"] for row in out)
     assert [e["seq"] for e in events(turn_sql, turn["id"])] == list(range(1, 10))
 
@@ -338,10 +367,18 @@ def test_terminal_events_commit_with_the_state_change_and_replace_drafts(turn_sq
     _, result = queue(turn_sql)
     turn = result["turn"]
     lease = claim(turn_sql, turn)["turn"]
-    worker(turn_sql, turn["id"], "append_event",
-           {"lease": lease["lease"], "type": "draft", "payload": {"content": "partial"}})
-    worker(turn_sql, turn["id"], "append_event",
-           {"lease": lease["lease"], "type": "notice", "payload": {"type": "appointment_proposal"}})
+    worker(
+        turn_sql,
+        turn["id"],
+        "append_event",
+        {"lease": lease["lease"], "type": "draft", "payload": {"content": "partial"}},
+    )
+    worker(
+        turn_sql,
+        turn["id"],
+        "append_event",
+        {"lease": lease["lease"], "type": "notice", "payload": {"type": "appointment_proposal"}},
+    )
     done = call(turn_sql, "complete", finish(lease))
     kinds = [e["type"] for e in events(turn_sql, turn["id"])]
     assert kinds == ["started", "notice", "completed"]
@@ -388,34 +425,46 @@ def test_requeue_hands_the_turn_back_only_before_any_action(turn_sql):
     _, result = queue(turn_sql)
     turn = result["turn"]
     lease = claim(turn_sql, turn)["turn"]
-    assert reason(worker(turn_sql, turn["id"], "requeue", {"lease": str(uuid4())})) == "lease_mismatch"
+    assert (
+        reason(worker(turn_sql, turn["id"], "requeue", {"lease": str(uuid4())})) == "lease_mismatch"
+    )
     assert worker(turn_sql, turn["id"], "requeue", {"lease": lease["lease"]})["accepted"]
-    assert turn_sql("SELECT status||':'||(dispatched_at IS NOT NULL) FROM chat_turns;") == "queued:true"
+    assert (
+        turn_sql("SELECT status||':'||(dispatched_at IS NOT NULL) FROM chat_turns;")
+        == "queued:true"
+    )
     again = claim(turn_sql, turn)
     assert again["accepted"] and again["turn"]["run_count"] == 2
     call(turn_sql, "actions", again["turn"])
-    assert reason(worker(turn_sql, turn["id"], "requeue", {"lease": again["turn"]["lease"]})) == "actions_started"
+    assert (
+        reason(worker(turn_sql, turn["id"], "requeue", {"lease": again["turn"]["lease"]}))
+        == "actions_started"
+    )
 
 
 def test_the_outbox_lists_only_undispatched_queued_turns(turn_sql):
     _, result = queue(turn_sql)
     turn = result["turn"]
-    young = worker(turn_sql, "00000000-0000-0000-0000-000000000000", "undispatched", {"min_age_seconds": 3600})
+    young = worker(
+        turn_sql, "00000000-0000-0000-0000-000000000000", "undispatched", {"min_age_seconds": 3600}
+    )
     assert young["items"] == []
-    listed = worker(turn_sql, "00000000-0000-0000-0000-000000000000", "undispatched", {"min_age_seconds": 0})
+    listed = worker(
+        turn_sql, "00000000-0000-0000-0000-000000000000", "undispatched", {"min_age_seconds": 0}
+    )
     assert listed["items"] == [{"id": turn["id"], "attempt": 1}]
     assert not worker(turn_sql, turn["id"], "dispatched", {"attempt": 2})["accepted"]
     assert worker(turn_sql, turn["id"], "dispatched", {"attempt": 1})["accepted"]
     assert not worker(turn_sql, turn["id"], "dispatched", {"attempt": 1})["accepted"]
-    listed = worker(turn_sql, "00000000-0000-0000-0000-000000000000", "undispatched", {"min_age_seconds": 0})
+    listed = worker(
+        turn_sql, "00000000-0000-0000-0000-000000000000", "undispatched", {"min_age_seconds": 0}
+    )
     assert listed["items"] == []
 
 
 def test_the_outbox_skips_rows_a_concurrent_sweep_holds(turn_sql):
     _, result = queue(turn_sql)
-    holder = (
-        "BEGIN; SELECT id FROM chat_turns WHERE status='queued' FOR UPDATE; SELECT pg_sleep(2); COMMIT;"
-    )
+    holder = "BEGIN; SELECT id FROM chat_turns WHERE status='queued' FOR UPDATE; SELECT pg_sleep(2); COMMIT;"
     import time
 
     with ThreadPoolExecutor(max_workers=1) as pool:
@@ -451,5 +500,7 @@ def test_other_patients_cannot_touch_a_worker_turn_through_the_patient_function(
 
 def call_as_foreign(db, body):
     return json.loads(
-        db(f"SET ROLE service_role; SELECT chat_turn_operation('{FOREIGN}','chat-test','complete','{body}');")
+        db(
+            f"SET ROLE service_role; SELECT chat_turn_operation('{FOREIGN}','chat-test','complete','{body}');"
+        )
     )

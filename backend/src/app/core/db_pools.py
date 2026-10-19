@@ -20,10 +20,14 @@ T = TypeVar("T")
 
 NOTIFICATION_POOL_SIZE = 3
 CHAT_TURN_POOL_SIZE = 4
+DISPATCH_POOL_SIZE = 2
+EVENTS_POOL_SIZE = 3
 # Running plus waiting calls allowed per pool. Beyond this the call is refused at once (HTTP
 # 503 with Retry-After) instead of queueing without bound behind a slow dependency.
 NOTIFICATION_MAX_PENDING = 12
 CHAT_TURN_MAX_PENDING = 32
+DISPATCH_MAX_PENDING = 16
+EVENTS_MAX_PENDING = 24
 
 _notification_pool = ThreadPoolExecutor(
     max_workers=NOTIFICATION_POOL_SIZE, thread_name_prefix="notification-db"
@@ -31,12 +35,18 @@ _notification_pool = ThreadPoolExecutor(
 _chat_turn_pool = ThreadPoolExecutor(
     max_workers=CHAT_TURN_POOL_SIZE, thread_name_prefix="chat-turn-db"
 )
+# Cloud Tasks enqueues and OIDC certificate fetches: blocking network calls with their own
+# bulkhead, so a slow queue API cannot hold the database pools.
+_dispatch_pool = ThreadPoolExecutor(max_workers=DISPATCH_POOL_SIZE, thread_name_prefix="dispatch")
 
+# Reads of chat_turn_events by viewers (sockets, later the stream): they poll, so they get their
+# own bulkhead and can never starve the turn control calls on the chat-turn pool.
+_events_pool = ThreadPoolExecutor(max_workers=EVENTS_POOL_SIZE, thread_name_prefix="turn-events")
 
 logger = logging.getLogger(__name__)
 # Counters are touched only on the event loop thread (before submit and in the awaiting
 # coroutine's finally), so they need no lock.
-_pending = {"notification": 0, "chat_turn": 0}
+_pending = {"notification": 0, "chat_turn": 0, "dispatch": 0, "events": 0}
 
 
 async def _run(name: str, pool: ThreadPoolExecutor, limit: int, call: Callable[[], T]) -> T:
@@ -63,3 +73,11 @@ async def run_notification_db(call: Callable[[], T]) -> T:
 
 async def run_chat_turn_db(call: Callable[[], T]) -> T:
     return await _run("chat_turn", _chat_turn_pool, CHAT_TURN_MAX_PENDING, call)
+
+
+async def run_dispatch(call: Callable[[], T]) -> T:
+    return await _run("dispatch", _dispatch_pool, DISPATCH_MAX_PENDING, call)
+
+
+async def run_events_db(call: Callable[[], T]) -> T:
+    return await _run("events", _events_pool, EVENTS_MAX_PENDING, call)

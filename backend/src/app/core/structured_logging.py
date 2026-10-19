@@ -44,6 +44,7 @@ _HASH_LENGTH = 12
 _request_id: ContextVar[str | None] = ContextVar("log_request_id", default=None)
 _trace: ContextVar[str | None] = ContextVar("log_trace", default=None)
 _turn_id: ContextVar[str | None] = ContextVar("log_turn_id", default=None)
+_task_id: ContextVar[str | None] = ContextVar("log_task_id", default=None)
 _session_hash: ContextVar[str | None] = ContextVar("log_session_hash", default=None)
 _actor_hash: ContextVar[str | None] = ContextVar("log_actor_hash", default=None)
 
@@ -71,6 +72,8 @@ EVENT_FIELDS = (
     "chat_fallback_layer",
     "chat_fallback_reason",
     "failure_category",
+    "queue",
+    "retry_count",
 )
 
 _TRACE_HEADER = re.compile(r"^([0-9a-fA-F]{32})(?:/\d+)?(?:;o=\d)?$")
@@ -114,12 +117,13 @@ def start_request(trace_header: str | None = None) -> tuple[Any, ...]:
         _turn_id.set(None),
         _session_hash.set(None),
         _actor_hash.set(None),
+        _task_id.set(None),
     )
 
 
 def end_request(tokens: tuple[Any, ...]) -> None:
     for var, token in zip(
-        (_request_id, _trace, _turn_id, _session_hash, _actor_hash), tokens, strict=True
+        (_request_id, _trace, _turn_id, _session_hash, _actor_hash, _task_id), tokens, strict=True
     ):
         # A token can only be reset in the context that made it; the middleware always is.
         with contextlib.suppress(ValueError):
@@ -131,6 +135,15 @@ def set_actor(actor_id: object | None = None, session_id: object | None = None) 
         _actor_hash.set(hash_identifier(actor_id))
     if session_id is not None:
         _session_hash.set(hash_identifier(session_id))
+
+
+def current_request_id() -> str | None:
+    return _request_id.get()
+
+
+def set_task_id(task_id: object | None) -> None:
+    """The queue task this request is running (rule 24); reset with the request."""
+    _task_id.set(str(task_id)[:200] if task_id else None)
 
 
 def set_turn_id(turn_id: object | None) -> None:
@@ -152,6 +165,7 @@ def current_context() -> dict[str, str]:
     values = {
         "request_id": _request_id.get(),
         "turn_id": _turn_id.get(),
+        "task_id": _task_id.get(),
         "session_hash": _session_hash.get(),
         "actor_hash": _actor_hash.get(),
         TRACE_FIELD: _trace.get(),

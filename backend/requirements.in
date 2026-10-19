@@ -23,6 +23,8 @@ google-genai
 # vulnerable 3.14-only pins. Security floor for GHSA-wh2j-26j7-9728 (bucket naming).
 google-generativeai ; python_version < "3.14"
 google-cloud-aiplatform>=1.133.0
+# OPS-006: enqueue Nora turns for the worker service (Cloud Tasks HTTP targets).
+google-cloud-tasks
 protobuf>=6.33.5 ; python_version >= "3.14"
 multidict>=6.9.1
 

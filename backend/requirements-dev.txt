@@ -141,6 +141,7 @@ google-api-core==2.33.0
     #   google-cloud-core
     #   google-cloud-resource-manager
     #   google-cloud-storage
+    #   google-cloud-tasks
     #   google-generativeai
 google-api-python-client==2.198.0 ; python_full_version < '3.14'
     # via google-generativeai
@@ -156,6 +157,7 @@ google-auth==2.56.3
     #   google-cloud-core
     #   google-cloud-resource-manager
     #   google-cloud-storage
+    #   google-cloud-tasks
     #   google-genai
     #   google-generativeai
 google-auth-httplib2==0.4.1 ; python_full_version < '3.14'
@@ -172,6 +174,10 @@ google-cloud-resource-manager==1.18.0
     # via google-cloud-aiplatform
 google-cloud-storage==3.13.1
     # via google-cloud-aiplatform
+google-cloud-tasks==2.23.0 ; python_full_version < '3.14'
+    # via -r requirements.in
+google-cloud-tasks==2.26.0 ; python_full_version >= '3.14'
+    # via -r requirements.in
 google-crc32c==1.8.0
     # via
     #   google-cloud-storage
@@ -195,11 +201,14 @@ googleapis-common-protos==1.75.0
 graphviz==0.21
     # via google-adk
 grpc-google-iam-v1==0.14.4
-    # via google-cloud-resource-manager
+    # via
+    #   google-cloud-resource-manager
+    #   google-cloud-tasks
 grpcio==1.83.0
     # via
     #   google-api-core
     #   google-cloud-resource-manager
+    #   google-cloud-tasks
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status
@@ -358,6 +367,7 @@ proto-plus==1.28.2
     #   google-api-core
     #   google-cloud-aiplatform
     #   google-cloud-resource-manager
+    #   google-cloud-tasks
 protobuf==5.29.6 ; python_full_version < '3.14'
     # via
     #   -r requirements.in
@@ -365,6 +375,7 @@ protobuf==5.29.6 ; python_full_version < '3.14'
     #   google-api-core
     #   google-cloud-aiplatform
     #   google-cloud-resource-manager
+    #   google-cloud-tasks
     #   google-generativeai
     #   googleapis-common-protos
     #   grpc-google-iam-v1
@@ -376,6 +387,7 @@ protobuf==6.33.6 ; python_full_version >= '3.14'
     #   google-api-core
     #   google-cloud-aiplatform
     #   google-cloud-resource-manager
+    #   google-cloud-tasks
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status

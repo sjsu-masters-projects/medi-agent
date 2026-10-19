@@ -8,6 +8,7 @@ from supabase import Client
 from app.core.security import require_cron_auth_token
 from app.db.connection import get_db
 from app.models.cron import CronJobRunResponse, EmailDispatchRequest, ReminderDispatchRequest
+from app.services.chat_turn_queue import TurnDispatcher
 from app.services.cron_service import CronService
 
 router = APIRouter(dependencies=[Depends(require_cron_auth_token)])
@@ -56,3 +57,16 @@ async def dispatch_reminders(
     if not request.dry_run:
         await service.dispatch_emails_isolated()
     return CronJobRunResponse(**result)
+
+
+@router.post(
+    "/chat-turns/dispatch",
+    summary="Re-enqueue queued Nora turns whose task was never created",
+    description=(
+        "Internal-only. The transactional-outbox sweep for CHAT_TURNS_VIA_WORKER: a bounded pass "
+        "over queued turns with no accepted task, safe to repeat (tasks are named from the turn "
+        "id and attempt). Intended for Cloud Scheduler about once a minute."
+    ),
+)
+async def dispatch_chat_turns(db: Client = Depends(get_db)) -> dict[str, int]:
+    return await TurnDispatcher(db).sweep()

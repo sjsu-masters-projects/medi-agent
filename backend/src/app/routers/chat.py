@@ -5,8 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
-import time
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 from uuid import UUID
@@ -19,11 +17,11 @@ from supabase import Client
 from app.adk.chat_runtime import CareCoordinatorRuntime
 from app.config import settings
 from app.core import authorization_reasons as reasons
-from app.core.exceptions import AuthorizationError, ValidationError
+from app.core.exceptions import AuthorizationError, ExternalServiceError, ValidationError
 from app.core.llm_failures import categorize_llm_failure
 from app.core.observability import record_chat_fallback
 from app.core.security import decode_access_token, get_current_user
-from app.core.structured_logging import log_event, set_actor, set_turn_id
+from app.core.structured_logging import log_event, set_actor
 from app.db.connection import get_db
 from app.followup import analyse_symptom
 from app.followup.service import EMERGENCY_THRESHOLD
@@ -43,11 +41,21 @@ from app.services.chat_service import (
     conversation_title,
     normalize_session_id,
 )
-from app.services.chat_turn_execution import TurnChatService, TurnEmitter
+from app.services.chat_turn_events import TurnEventReader, TurnWatchSet, watch_turn
+from app.services.chat_turn_pipeline import (
+    conversation_state_from_record as _conversation_state_from_record,
+)
+from app.services.chat_turn_pipeline import execute_turn
+from app.services.chat_turn_pipeline import failure_label as _failure_label
+from app.services.chat_turn_pipeline import (
+    refresh_conversation_state as _refresh_conversation_state,  # noqa: F401  (kept importable here)
+)
+from app.services.chat_turn_pipeline import report_turn_failure as _report_turn_failure
+from app.services.chat_turn_pipeline import serialize_chat_message as _serialize_chat_message
+from app.services.chat_turn_queue import TurnDispatcher, submit_turn
 from app.services.chat_turn_runner import TurnRun, TurnViewer, turn_runner
 from app.services.chat_turn_service import (
     ChatTurnService,
-    TurnExecution,
     public_turn,
     turn_budget,
 )
@@ -87,10 +95,6 @@ OUTER_FALLBACK_COPY: dict[str, dict[str, str]] = {
 
 def _get_service(db: Client = Depends(get_db)) -> ChatService:
     return ChatService(db)
-
-
-def _serialize_chat_message(message: dict[str, Any]) -> dict[str, Any]:
-    return ChatMessage.model_validate(message).model_dump(mode="json")
 
 
 def _chunk_text(text: str, chunk_size: int = 140) -> list[str]:
@@ -199,16 +203,6 @@ def _read_session_id(websocket: WebSocket) -> str:
     return normalize_session_id(websocket.query_params.get("session_id"))
 
 
-def _conversation_state_from_record(record: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "turn_count": int(record.get("turn_count") or 0),
-        "last_intent": str(record.get("last_intent") or "general"),
-        "last_urgency": str(record.get("last_urgency") or "routine"),
-        "last_route": str(record.get("last_route") or "triage"),
-        "summary": str(record.get("summary") or ""),
-    }
-
-
 def _build_appointment_proposal(
     *,
     patient_id: UUID,
@@ -258,63 +252,6 @@ def _closed_websocket_error(error: BaseException) -> bool:
         "close message has been sent" in str(error)
         or "websocket is not connected" in str(error).lower()
     )
-
-
-def _failure_label(exc: BaseException) -> str:
-    """Exception type plus a safe machine code, never message text that could hold PHI."""
-    code = getattr(exc, "code", None)
-    if isinstance(exc, ValidationError):
-        code = exc.message
-    cause = type(exc.__cause__).__name__ if exc.__cause__ else ""
-    parts = [type(exc).__name__]
-    if isinstance(code, str) and re.fullmatch(r"[A-Za-z0-9_]{1,40}", code):
-        parts.append(code)
-    if cause:
-        parts.append(f"cause={cause}")
-    return "/".join(parts)
-
-
-async def _refresh_conversation_state(
-    service: ChatService,
-    patient_id: str,
-    pending: dict[str, Any],
-    version: str | None,
-) -> bool:
-    """Persist turn_count/title/summary after a saved reply; the reply is never lost.
-
-    A concurrent writer (a second tab, a document dismissal) changes `updated_at`, which
-    used to skip this refresh silently. On conflict it re-reads the row and retries, never
-    lowering the turn count the other writer saved.
-    """
-    updates = dict(pending)
-    for _attempt in range(_STATE_REFRESH_ATTEMPTS):
-        try:
-            async with asyncio.timeout(5):
-                await service.update_conversation_state(
-                    patient_id, updates, expected_updated_at=version
-                )
-            return True
-        except ConversationStateConflictError:
-            try:
-                async with asyncio.timeout(5):
-                    fresh = await service.get_or_create_conversation_state(
-                        patient_id, {"session_id": updates.get("session_id")}
-                    )
-            except Exception as exc:
-                logger.warning("Conversation state re-read failed: %s", _failure_label(exc))
-                return False
-            version = str(fresh.get("updated_at") or "") or None
-            updates["turn_count"] = max(
-                int(updates.get("turn_count") or 0), int(fresh.get("turn_count") or 0) + 1
-            )
-        except Exception as exc:
-            logger.warning(
-                "Saved chat reply retained; conversation metadata refresh failed: %s",
-                "timeout" if isinstance(exc, TimeoutError) else _failure_label(exc),
-            )
-            return False
-    logger.warning("Saved chat reply retained; conversation metadata kept conflicting")
-    return False
 
 
 async def _send_terminal_event(websocket: WebSocket, payload: dict[str, Any]) -> bool:
@@ -618,70 +555,6 @@ async def list_chat_conversations(
     return [ChatConversation.model_validate(row) for row in rows]
 
 
-def _turn_error_message(code: str) -> str:
-    """Plain, fixed wording per turn failure code; never provider or exception text."""
-    if code == "CHAT_TURN_BUSY":
-        return "A reply is already in progress in this conversation. Recovering it now."
-    if code == "CHAT_TURN_EXPIRED":
-        return "This reply took too long and was not kept. Your message is saved: try again."
-    return "Chat recovery is required."
-
-
-async def _report_turn_failure(
-    exc: BaseException,
-    *,
-    service: ChatService,
-    turns: ChatTurnService,
-    context: dict[str, Any],
-    request: dict[str, Any],
-    emit_error: Callable[[dict[str, Any]], Awaitable[Any]],
-    emit_shared: Callable[[dict[str, Any]], Awaitable[Any]],
-) -> None:
-    """Explicit error to the requesting socket, then the saved truth to every viewer."""
-    code = exc.message if isinstance(exc, ValidationError) else "CHAT_TURN_UNAVAILABLE"
-    log_event(
-        logger,
-        "chat_turn.not_completed",
-        level=logging.WARNING,
-        message=f"Durable chat turn did not complete: {_failure_label(exc)}",
-        category=type(exc).__name__,
-        failure_category=type(exc).__name__,
-        outcome=code,
-    )
-    await emit_error(
-        {
-            "type": "error",
-            "code": code,
-            "client_message_id": request.get("client_message_id"),
-            "message": _turn_error_message(code),
-        }
-    )
-    try:
-        recovered = await turns.call("recover", trigger="failure_report")
-        finished = any(
-            row.get("client_message_id") == request.get("client_message_id")
-            and row.get("status") == "completed"
-            for row in recovered["items"]
-        )
-        if finished:
-            # The reply was committed although its confirmation was lost (for example a
-            # timed-out completion call): deliver it from the saved history.
-            history = await service.get_history(
-                str(context["patient_id"]), session_id=context["session_id"]
-            )
-            await emit_shared(
-                {
-                    "type": "chat_history",
-                    "messages": [_serialize_chat_message(row) for row in history],
-                }
-            )
-        await emit_shared(
-            {"type": "chat_turns", "turns": [public_turn(row) for row in recovered["items"]]}
-        )
-    except Exception as recover_exc:
-        logger.warning("Saved chat status temporarily unavailable: %s", _failure_label(recover_exc))
-
-
 async def _execute_turn(
     run: TurnRun,
     service: ChatService,
@@ -692,101 +565,65 @@ async def _execute_turn(
     result: dict[str, Any],
     timeout: int,
 ) -> dict[str, Any]:
-    """The turn itself. Owned by the server: it never looks at, or waits for, a socket."""
-    record = result["turn"]
-    set_turn_id(record["id"])  # this task's own context; the socket's is untouched
-    started_at = time.monotonic()
-    execution = TurnExecution(turns, record)
-    staged = TurnChatService(service, execution, result["user_message"])
+    """The in-process turn: the shared pipeline publishing to this process's viewers."""
 
-    async def send(event: dict[str, Any]) -> bool:
-        turn_runner.publish(run, event)
-        return True
+    def publish(event: dict[str, Any], *, origin_only: bool = False) -> None:
+        turn_runner.publish(run, event, origin_only=origin_only)
 
-    async def send_origin(event: dict[str, Any]) -> None:
-        turn_runner.publish(run, event, origin_only=True)
+    return await execute_turn(
+        publish=publish,
+        process_message=_process_chat_message,  # looked up per call (tests replace it)
+        service=service,
+        turns=turns,
+        context=context,
+        request=request,
+        incoming=incoming,
+        result=result,
+        timeout=timeout,
+    )
 
-    emitter = TurnEmitter(send)
-    try:
-        await send(
+
+async def _send_replay(
+    direct: Callable[[dict[str, Any]], Awaitable[Any]],
+    record: dict[str, Any],
+    result: dict[str, Any],
+) -> None:
+    """A repeated send of a known turn: its saved state and, when finished, its saved reply."""
+    await direct(
+        {
+            "type": "chat_turn",
+            "turn": public_turn({**record, "user_message": result["user_message"]}),
+        }
+    )
+    await direct(
+        {
+            "type": "user_message_saved",
+            "message": _serialize_chat_message(result["user_message"]),
+        }
+    )
+    if result.get("assistant_message"):
+        await direct(
             {
-                "type": "chat_turn",
-                "turn": public_turn({**record, "user_message": result["user_message"]}),
+                "type": "assistant_complete",
+                "message": _serialize_chat_message(result["assistant_message"]),
             }
         )
-        async with asyncio.timeout(timeout):
-            history = await service.get_history(
-                str(context["patient_id"]), session_id=context["session_id"]
-            )
-            history = [
-                row for row in history if str(row["id"]) != str(result["user_message"]["id"])
-            ]
-            state = await _process_chat_message(
-                emitter,
-                staged,
-                {
-                    **context,
-                    "incoming": incoming,
-                    "document_context": record.get("document_context"),
-                    "conversation_history": history,
-                },
-            )
-        # Saved outside the processing budget: a finished reply gets its own save call and the
-        # lease's save grace, so a slow model cannot leave no time to keep what it produced.
-        saved = await staged.complete()
-        if staged.pending_state:
-            await _refresh_conversation_state(
-                service,
-                str(context["patient_id"]),
-                staged.pending_state,
-                staged.pending_state_version,
-            )
-        event = emitter.complete_event or {"type": "assistant_complete"}
-        await send({**event, "message": _serialize_chat_message(saved)})
-        await send({"type": "chat_turn", "turn": public_turn({**record, "status": "completed"})})
-        log_event(
-            logger,
-            "chat_turn.finished",
-            message="Chat turn finished",
-            outcome="completed",
-            duration_ms=int((time.monotonic() - started_at) * 1000),
+    elif result.get("reply_unavailable"):
+        # Completed, but the saved reply no longer exists: say so, never replay nothing.
+        await direct(
+            {
+                "type": "chat_turn",
+                "turn": public_turn(
+                    {
+                        **record,
+                        "status": "failed",
+                        "actions_started": True,
+                        "failure_code": "reply_unavailable",
+                        "user_message": result["user_message"],
+                    }
+                ),
+            }
         )
-        return state
-    except asyncio.CancelledError:
-        # Only server shutdown (after the drain window) cancels a turn, never a socket.
-        try:
-            await asyncio.wait_for(
-                asyncio.shield(execution.fail(interrupted=True, trigger="shutdown_cancel")), 3
-            )
-        except BaseException as exc:
-            logger.warning(
-                "Cancelled chat turn will reconcile from its saved deadline: %s",
-                _failure_label(exc),
-            )
-        raise
-    except Exception as exc:
-        try:
-            await execution.fail(
-                interrupted=isinstance(exc, TimeoutError),
-                trigger="processing_timeout"
-                if isinstance(exc, TimeoutError)
-                else "execution_error",
-                category=type(exc).__name__,
-            )
-        except Exception as fail_exc:
-            logger.warning(
-                "Chat turn will reconcile from its saved deadline: %s", _failure_label(fail_exc)
-            )
-        await _report_turn_failure(
-            exc,
-            service=service,
-            turns=turns,
-            context=context,
-            request=request,
-            emit_error=send_origin,
-            emit_shared=send,
-        )
-        return cast(dict[str, Any], context["conversation_state"])
 
 
 async def _process_durable_message(
@@ -830,41 +667,7 @@ async def _process_durable_message(
                     type(exc).__name__,
                 )
         if not result.get("execute"):
-            await direct(
-                {
-                    "type": "chat_turn",
-                    "turn": public_turn({**record, "user_message": result["user_message"]}),
-                }
-            )
-            await direct(
-                {
-                    "type": "user_message_saved",
-                    "message": _serialize_chat_message(result["user_message"]),
-                }
-            )
-            if result.get("assistant_message"):
-                await direct(
-                    {
-                        "type": "assistant_complete",
-                        "message": _serialize_chat_message(result["assistant_message"]),
-                    }
-                )
-            elif result.get("reply_unavailable"):
-                # Completed, but the saved reply no longer exists: say so, never replay nothing.
-                await direct(
-                    {
-                        "type": "chat_turn",
-                        "turn": public_turn(
-                            {
-                                **record,
-                                "status": "failed",
-                                "actions_started": True,
-                                "failure_code": "reply_unavailable",
-                                "user_message": result["user_message"],
-                            }
-                        ),
-                    }
-                )
+            await _send_replay(direct, record, result)
             return cast(dict[str, Any], context["conversation_state"])
     except Exception as exc:
         await _report_turn_failure(
@@ -898,6 +701,124 @@ async def _process_durable_message(
                 viewer.close()
 
     return turn_runner.start(str(record["id"]), key, body, origin=viewer)
+
+
+async def _queue_durable_message(
+    websocket: WebSocket,
+    service: ChatService,
+    context: dict[str, Any],
+    request: dict[str, Any],
+    watchers: TurnWatchSet,
+) -> dict[str, Any]:
+    """CHAT_TURNS_VIA_WORKER: queue the turn for the worker service and watch its events.
+
+    The API never runs model work here. One transaction saves the message and the queued
+    turn; the task is created after that commit (and by the sweep if that fails). The socket
+    is a viewer of the turn's event log, so any instance serves it.
+    """
+    turns = ChatTurnService(service.db, str(context["patient_id"]), context["session_id"])
+
+    async def direct(event: dict[str, Any]) -> None:
+        await _send_terminal_event(websocket, event)
+
+    try:
+        incoming = context["incoming"]
+        incoming = incoming.model_copy(
+            update={"language": written_language(incoming.content, incoming.language)}
+        )
+        if not TurnDispatcher.configured():
+            log_event(
+                logger,
+                "chat_turn.worker_unconfigured",
+                level=logging.ERROR,
+                message="CHAT_TURNS_VIA_WORKER is on but the worker queue is not configured",
+                outcome="not_configured",
+            )
+            raise ExternalServiceError("Chat", "Chat is temporarily unavailable.")
+        result = await submit_turn(
+            service.db,
+            patient_id=str(context["patient_id"]),
+            session_id=context["session_id"],
+            request=request,
+            language=incoming.language.value,
+        )
+        record = result["turn"]
+        # Both a new and a repeated send start from the saved state (and reply, if finished).
+        await _send_replay(direct, record, result)
+        if record.get("status") in {"queued", "processing"} and record.get("via_worker"):
+            _watch_worker_turn(
+                watchers,
+                websocket,
+                service,
+                str(context["patient_id"]),
+                context["session_id"],
+                record,
+                result.get("user_message"),
+            )
+    except Exception as exc:
+        await _report_turn_failure(
+            exc,
+            service=service,
+            turns=turns,
+            context=context,
+            request=request,
+            emit_error=direct,
+            emit_shared=direct,
+        )
+    return cast(dict[str, Any], context["conversation_state"])
+
+
+def _watch_worker_turn(
+    watchers: TurnWatchSet,
+    websocket: WebSocket,
+    service: ChatService,
+    patient_id: str,
+    session_id: str,
+    record: dict[str, Any],
+    user_message: dict[str, Any] | None,
+) -> None:
+    """Start (once per socket) the viewer that reads a worker turn's events from the database."""
+    reader = TurnEventReader(service.db)
+
+    async def send(event: dict[str, Any]) -> bool:
+        return await _send_terminal_event(websocket, event)
+
+    async def on_terminal(status: str) -> None:
+        if status == "completed":
+            return
+        # Explicit saved truth for an unfinished reply, as the in-process path reports it.
+        recovered = await ChatTurnService(service.db, patient_id, session_id).call(
+            "recover", trigger="watch_terminal"
+        )
+        await send({"type": "chat_turns", "turns": [public_turn(r) for r in recovered["items"]]})
+
+    watchers.start(
+        str(record["id"]),
+        lambda: watch_turn(
+            reader,
+            patient_id=patient_id,
+            turn=record,
+            user_message=user_message,
+            send=send,
+            on_terminal=on_terminal,
+        ),
+    )
+
+
+def _watch_inflight_worker_turns(
+    watchers: TurnWatchSet,
+    websocket: WebSocket,
+    service: ChatService,
+    patient_id: str,
+    session_id: str,
+    items: list[dict[str, Any]],
+) -> None:
+    """A reloaded or second tab shows the running worker turn's draft from the event log."""
+    for row in items:
+        if row.get("via_worker") and row.get("status") in {"queued", "processing"}:
+            _watch_worker_turn(
+                watchers, websocket, service, patient_id, session_id, row, row.get("user_message")
+            )
 
 
 async def _process_chat_message(
@@ -1267,6 +1188,7 @@ async def chat_websocket_endpoint(
     service = ChatService(db)
     a2a_service = A2ATaskService(db)
     care_coordinator = CareCoordinatorRuntime()
+    watchers = TurnWatchSet()  # viewers of worker turns; cancelled when the socket closes
 
     try:
         session_id = _read_session_id(websocket)
@@ -1281,6 +1203,9 @@ async def chat_websocket_endpoint(
             )
             await websocket.send_json(
                 {"type": "chat_turns", "turns": [public_turn(row) for row in recovered["items"]]}
+            )
+            _watch_inflight_worker_turns(
+                watchers, websocket, service, str(patient_id), session_id, recovered["items"]
             )
         clinician_messages = await service.get_recent_clinician_messages(str(patient_id))
         for message in clinician_messages:
@@ -1333,10 +1258,12 @@ async def chat_websocket_endpoint(
         conversation_state = _conversation_state_from_record(state_record)
     except WebSocketDisconnect:
         logger.info("Chat websocket disconnected during initialization")
+        await watchers.close()
         return
     except Exception as exc:
         if _closed_websocket_error(exc):
             logger.info("Chat websocket disconnected during initialization")
+            await watchers.close()
             return
         # Never leave an accepted socket to die silently: the client needs an explicit state.
         logger.warning("Chat websocket initialization failed: %s", _failure_label(exc))
@@ -1349,6 +1276,7 @@ async def chat_websocket_endpoint(
             },
         ):
             await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        await watchers.close()
         return
 
     # This socket is a viewer of the patient's running turn, if any: it gets the draft so
@@ -1442,6 +1370,9 @@ async def chat_websocket_endpoint(
                         "turns": [public_turn(row) for row in recovered["items"]],
                     }
                 )
+                _watch_inflight_worker_turns(
+                    watchers, websocket, service, str(patient_id), session_id, recovered["items"]
+                )
                 continue
 
             if event_type == "document_focus":
@@ -1534,6 +1465,21 @@ async def chat_websocket_endpoint(
                 "care_coordinator": care_coordinator,
                 "a2a_service": a2a_service,
             }
+            if settings.chat_turns_via_worker:
+                # The API never runs model work in-process while the worker flag is on.
+                if not durable_protocol:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "code": "CHAT_PROTOCOL_UPDATE_REQUIRED",
+                            "message": "Please reload the app to keep chatting.",
+                        }
+                    )
+                    continue
+                conversation_state = await _queue_durable_message(
+                    websocket, service, turn_context, payload, watchers
+                )
+                continue
             if durable_protocol:
                 if pending_run is not None and pending_run.task and pending_run.task.done():
                     if isinstance(pending_run.result, dict):
@@ -1578,6 +1524,7 @@ async def chat_websocket_endpoint(
     finally:
         if viewer is not None:
             viewer.close()
+        await watchers.close()
 
 
 # WebSocket routes are mounted in main.py.

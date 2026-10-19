@@ -123,7 +123,7 @@ async def test_a_saturated_pool_refuses_fast_with_a_retryable_error_and_recovers
         release.set()
         await asyncio.gather(*blockers)
     assert await run_notification_db(lambda: "recovered") == "recovered"
-    assert db_pools._pending == {"notification": 0, "chat_turn": 0}
+    assert all(count == 0 for count in db_pools._pending.values())
 
 
 @pytest.mark.asyncio
@@ -144,3 +144,25 @@ async def test_the_saturation_response_is_503_with_retry_after():
     response = TestClient(app).get("/x")
     assert response.status_code == 503 and response.headers["Retry-After"] == "2"
     assert response.json()["error"]["code"] == "POOL_SATURATED"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_and_event_reads_have_their_own_bounded_pools():
+    from app.core.db_pools import DISPATCH_MAX_PENDING, run_dispatch, run_events_db
+    from app.core.exceptions import PoolSaturatedError
+
+    release = threading.Event()
+    blockers = [
+        asyncio.ensure_future(run_dispatch(lambda: release.wait(5)))
+        for _ in range(DISPATCH_MAX_PENDING)
+    ]
+    try:
+        await asyncio.sleep(0.05)
+        with pytest.raises(PoolSaturatedError):
+            await run_dispatch(lambda: "queued behind the others")
+        # A saturated enqueue pool never delays the turn's control calls or viewer reads.
+        assert await asyncio.wait_for(run_chat_turn_db(lambda: "saved"), 1) == "saved"
+        assert await asyncio.wait_for(run_events_db(lambda: "events"), 1) == "events"
+    finally:
+        release.set()
+        await asyncio.gather(*blockers)
