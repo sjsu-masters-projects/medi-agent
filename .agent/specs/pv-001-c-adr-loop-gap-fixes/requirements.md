@@ -1,5 +1,9 @@
 # Requirements Document
 
+> **Acceptance scope — October 20, 2026:** Disposable-account deletion is not a
+> required live expo test. Existing deletion behavior, privacy safeguards and
+> automated R12 regressions remain; do not delete an account to close this issue.
+
 > **Wording-review decision — October 19, 2026:** The requester replaces the
 > separate Spanish-fluent reviewer requirement with an explicitly labelled
 > LLM-assisted English/es-MX meaning-and-safety review for the synthetic expo.
