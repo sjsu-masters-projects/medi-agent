@@ -1,6 +1,6 @@
 # Requirements Document
 
-> **Status:** PR 1 and groundwork delivered in the PR that adds this folder; PR 2 and PR 3 are planned follow-ups.
+> **Status:** Implementation merged/deployed in #171, with migrations 063/064 recorded applied. Remaining acceptance is tracked under PV-001-C and PV-002, not a pending implementation sequence.
 > Requirements 1 to 14 (PR 1, PR 2) were approved by the requester on 2026-10-12; requirements 15 to 24 (PR 3) were
 > added the same day, and the requester decided D12 to D17 exactly as proposed. Design in `design.md`, tasks in
 > `tasks.md`.
@@ -11,11 +11,7 @@
 > (critical-result alerts and chat attachments), so PR 2 is `063_adr_information_loop_lifecycle.sql` and PR 3 is
 > `064_medwatch_form_3500.sql`. The contract-test fixture finds the PR 2 file by name
 > (`*_adr_information_loop_lifecycle.sql`).
-> **Worktree / branch:** `.worktrees/adr-loop-gaps`, `fix/adr-information-loop-gaps`, based on `origin/main` `87a466d`
-> (drafted at `62a1945`; the only later commit is the #157 email-branding change, re-checked: no ADR copy, category
-> or link impact; `email_service.py` keeps the `adr_information_requested` titles and links every notice to
-> `/notifications`).
-> **Scope tracker:** a scoped task entry (proposed ID `PV-001-C`) is created in `.agent/TASKS.md` before implementation (Requirement 2).
+> **Scope tracker:** `.agent/TASKS.md` → PV-001-C / PV-002. Historical implementation findings below describe their stated baseline, not current deployment status. October 19 Spanish answers and synthetic draft/export/discard evidence are in the [grouped acceptance checkpoint](../../../docs/deployed-recheck-2026-10-11.md#pr-202-grouped-acceptance-continuation--october-19).
 
 ## Introduction
 

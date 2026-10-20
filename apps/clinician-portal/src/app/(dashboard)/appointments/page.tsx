@@ -39,9 +39,10 @@ function ScheduleWorkspace({ token, appointmentId }: { token: string; appointmen
   const [mode, setMode] = useState<AgendaMode>("day");
   const [showCancelled, setShowCancelled] = useState(false);
   const [schedule, setSchedule] = useState<MySchedule | null>(null);
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
   const [roster, setRoster] = useState<AssignedSchedulingPatient[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [failedScope, setFailedScope] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [now, setNow] = useState(() => new Date(Date.now()));
   const [offerFor, setOfferFor] = useState<{ previous?: Appointment } | null>(null);
@@ -49,6 +50,10 @@ function ScheduleWorkspace({ token, appointmentId }: { token: string; appointmen
   const [fallback, setFallback] = useState<Appointment[] | null>(null);
 
   const { clinicId, ready } = clinicFilter;
+  const scopeKey = JSON.stringify([mode, clinicId, showCancelled]);
+  const matchesScope = loadedScope === scopeKey;
+  const error = failedScope === scopeKey;
+  const pendingScope = !matchesScope && !error;
   useEffect(() => {
     if (!ready) return;
     let live = true;
@@ -61,12 +66,13 @@ function ScheduleWorkspace({ token, appointmentId }: { token: string; appointmen
       .then(([result, people]) => {
         if (!live) return;
         setSchedule(result);
+        setLoadedScope(scopeKey);
         if (people) setRoster(people);
         setNow(current);
-        setError(false);
+        setFailedScope(null);
       })
       .catch(() => {
-        if (live) setError(true);
+        if (live) setFailedScope(scopeKey);
       })
       .finally(() => {
         if (live) setLoading(false);
@@ -74,11 +80,11 @@ function ScheduleWorkspace({ token, appointmentId }: { token: string; appointmen
     return () => {
       live = false;
     };
-  }, [token, mode, clinicId, ready, attempt, showCancelled]);
+  }, [token, mode, clinicId, ready, attempt, showCancelled, scopeKey]);
 
   function refresh() {
     setLoading(true);
-    setError(false);
+    setFailedScope(null);
     setAttempt((value) => value + 1);
   }
 
@@ -150,15 +156,15 @@ function ScheduleWorkspace({ token, appointmentId }: { token: string; appointmen
           <ClinicFilterField filter={clinicFilter} />
           <Button
             aria-label="Refresh schedule"
-            disabled={loading}
+            disabled={loading || pendingScope}
             onClick={refresh}
             variant="secondary"
           >
-            <Icon name="refresh" className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            <span className="hidden sm:inline">{loading ? "Refreshing…" : "Refresh"}</span>
+            <Icon name="refresh" className={`h-4 w-4 ${loading || pendingScope ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">{loading || pendingScope ? "Refreshing…" : "Refresh"}</span>
           </Button>
           <Button
-            disabled={!roster.length}
+            disabled={!roster.length || !matchesScope}
             onClick={() => {
               setSent(false);
               setOfferFor({});
@@ -192,7 +198,7 @@ function ScheduleWorkspace({ token, appointmentId }: { token: string; appointmen
         >
           <span className="flex min-w-0 flex-1 items-start gap-2.5">
             <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>Could not load your schedule.{schedule ? " Showing what was loaded before." : ""}</span>
+            <span>Could not load your schedule.{schedule && matchesScope ? " Showing what was loaded before." : ""}</span>
           </span>
           <Button variant="secondary" onClick={refresh} disabled={loading}>
             Retry
@@ -211,12 +217,12 @@ function ScheduleWorkspace({ token, appointmentId }: { token: string; appointmen
         error ? <ErrorState title="Your schedule is unavailable" description="Retry to load your visits." onRetry={refresh} /> : null
       ) : (
         <>
-          <ScheduleNeedsAction
+          {matchesScope && <ScheduleNeedsAction
             items={schedule.needsAction}
             now={now.getTime()}
             onOpen={(item) => openVisit(item.appointmentId)}
             showClinic={clinicFilter.multi}
-          />
+          />}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <SegmentedControl
               label="Schedule range"
@@ -237,7 +243,11 @@ function ScheduleWorkspace({ token, appointmentId }: { token: string; appointmen
               Show cancelled
             </label>
           </div>
-          {visits.length ? (
+          {!matchesScope ? (
+            error ? <ErrorState title="Your schedule is unavailable" description="Retry to load your visits." onRetry={refresh} /> : (
+              <p role="status" className="text-sm text-muted">Loading your schedule…</p>
+            )
+          ) : visits.length ? (
             <ScheduleAgenda
               now={now}
               onOpen={(visit) => openVisit(visit.id)}

@@ -436,3 +436,50 @@ original reproductions and the wider LOC-002/LOC-003 remaining requirements.
 
 These results extend the same PR #202. No case decision, new information request,
 patient medical answer, medication change or clinical publication was submitted.
+
+### PR #202 grouped acceptance continuation — October 19
+
+The preceding no-mutation statement applies only to that earlier checkpoint.
+The requester separately authorized the synthetic Hannah follow-up and MedWatch
+workflow below. No FDA transmission, patient deletion, remote SQL or runtime
+configuration change is authorized or performed by this continuation.
+
+| Area | Observed result | Remaining boundary |
+| --- | --- | --- |
+| PAT-001-A competing sends | Two Rajeev tabs sent distinct routine wellness questions against one conversation. The second received the explicit busy/recovery explanation, displayed the saved first message with one inline progress indicator, and retained its new Spanish message in the composer. Leaving the sending view closed its socket; the other tab received one completed English reply. Sending the retained Spanish question afterwards produced one Spanish reply. | This disconnect is navigation away from the sending view, not a simulated network outage. Retry exhaustion and legacy paths have automated coverage, not a newly forced deployed run. |
+| PAT-001-A logs | Bounded content-free logs recorded `begin` → `CHAT_TURN_BUSY` at 03:49:46 UTC and a client-initiated socket close, code 1005, at 03:50:15 UTC on October 20 (October 19 Pacific). The busy warning is expected arbitration, not proof of an outage. The recovered tab had no captured console errors. | The patient account switch ended the extra tab session; an uninterrupted 300-second socket run is **not** accepted. |
+| PAT-004 later unfocused answer | After the previously recorded dismissal, the fresh sleep-habit answer gave general guidance without lipid values, a document card or a report citation. The subsequent Spanish wellness answer also did not inherit the dismissed source. | Deleted/unavailable-source live acceptance and Spanish document-grounded answers remain. This does not assert per-message clickable citations. |
+| PAT-002-B activation | Read-only Cloud Run inspection found revision `mediagent-backend-00171-r7v` and no explicit `SYMPTOM_INTAKE_ENABLED` or `A2A_RETRY_WORKER_ENABLED` environment override. The committed intake default is false; retry-worker default is true. Starting a private draft returned the explicit guided-intake-unavailable error rather than a success. | Runtime activation and target/library readiness must be authorized and checked before patient confirmation/handoff. Candidate-1 remains the selected approved package in source; candidate-2 remains pending review. No new symptom report was confirmed. |
+| SCH-001-V Morgan | Elena's week agenda and exact visit detail loaded Morgan's October 22 09:00 Pacific visit. The clinician download `appointment-1fbcc232-3f71-41ca-af04-c14156d3cc39.ics` succeeded: `DTSTART:20261022T160000Z`, `DTEND:20261022T163000Z`, confirmed/private. | This narrows DV-003 but does not close the intermittent **patient-side** export/timezone/load failures; Morgan patient login still needed. |
+| DV-014 schedule range display | Switching Today → This week briefly relabelled the old empty day result as “No visits this week” before the week response arrived. PR #202 keys visible schedule data by range, clinic and cancelled filter. A mismatched result is hidden behind loading or retry; same-scope refresh retains its prior data. | Fixed locally, not deployed. Regression cases cover delayed week response and failed changed-range versus retained same-range refresh. No appointment write/API changed. |
+| PV-001-B/C Spanish answers | Hannah's saved preference changed from en-US to es-MX. Elena issued a new clearly labelled synthetic request for the same two retrospective questions. Hannah reviewed, attested and sent “No sé” for each. The exact request `3a55f7c9-b3a4-40f1-b686-2df8fdaae479` became Respondida in recent requests and re-opened read-only with both answers after reload. Elena's reloaded evidence showed the new patient-confirmed pair dated October 19 20:59 Pacific, with score 4 / Possible unchanged and unread count 37 → 38. | This is functional Spanish UI acceptance, not independent bilingual approval or a deployed audit-ledger inspection. DV-007/008 fixes still await PR deployment. |
+| PV-002 synthetic draft | Created Hannah's draft using an explicit synthetic/non-submission rationale. Initial approval readiness truthfully required event-date confirmation and reporter fields. Saved the synthetic narrative, month-only event date `2026-10` (exact day not established), and fictional reporter role. | Later state transitions are recorded below only if completed; no FDA submission is performed. |
+| Local checks | Clinician `npm run lint`, `npm run typecheck`, `npm exec vitest run` (**69 files / 620 tests**) and `npm run build -- --webpack` passed. Focused schedule suite: **28 passed**. Backend `PYTHONPATH=src .venv/bin/pytest tests/integration/routers/test_chat_socket_recovery.py tests/integration/routers/test_chat_document_focus.py tests/integration/routers/test_chat_worker_api.py -q --no-cov`: **52 passed**. | Existing Vite/Sentry/workspace-root and backend deprecation warnings remain. Patient code was unchanged since its previously recorded 814-test/build pass. |
+
+Browser access was temporarily disabled during this campaign and later restored.
+That interruption is not an application outage or evidence of portal failure.
+
+#### MedWatch lifecycle outcome
+
+Synthetic report `fe12cb1d-0a1f-4066-86df-75ada171f4c7` (HB-ZAFR) completed
+create → edit/save → reload → watermarked preview → revision-2 approval → approved
+PDF download → discard → reload/read-only retained report. The narrative and
+approval/discard notes explicitly identify a synthetic functional test with no
+actual FDA submission. The source ADR case returned to **Awaiting review**, score
+4 / Possible; its patient-confirmed evidence remained. Discard is retained history,
+not deletion. The exported filename was `fda-3500-fe12cb1d-not-submitted.pdf`.
+
+Poppler parsed the eight-page exports and rendered preview page 1 and approved
+page 2. Preview shows the diagonal “DRAFT not for submission” watermark and the
+month-only Oct-2026 event date. Approved page 2 shows the saved synthetic narrative
+without clipping. This is external-render evidence, **not** Chrome/iPhone embedded
+PDF compatibility. DV-005 remains open.
+
+The **Record FDA submission** dialog correctly required a date, method and
+attestation of an actual external submission; its save was disabled when empty.
+The dialog was cancelled without inventing a submission. Its complete state
+transition therefore remains automated-only acceptance, not a live pass.
+
+Additional automated command from `backend`:
+`PYTHONPATH=src .venv/bin/pytest tests/unit/services/test_medwatch_service.py tests/unit/services/test_medwatch_form_3500.py tests/unit/services/test_medwatch_form_3500_pdf.py tests/unit/services/test_medwatch_form_3500_legacy.py tests/unit/models/test_medwatch_approval_request.py -q --no-cov`
+— **285 passed**, three existing deprecation warnings. No backend source changed.

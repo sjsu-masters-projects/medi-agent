@@ -4,6 +4,10 @@ Next.js app for clinician and clinic-admin workflows in MediAgent.
 
 ## Local Development
 
+The schedule displays only results matching the selected range, clinic and
+cancelled filter. Scope changes show loading/retry rather than relabelling old
+visits or an old empty result; same-scope refresh failures retain prior data.
+
 From `apps/clinician-portal`, install dependencies and run the portal on port 3001
 (the patient portal uses the default 3000):
 
