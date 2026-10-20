@@ -488,3 +488,14 @@ Additional automated command from `backend`:
 
 Hannah's original en-US Profile preference was restored and the language sheet
 closed after the Spanish journey. The saved retrospective answers remain unchanged.
+
+#### Morgan patient scheduling recheck
+
+After the requester switched to Morgan, Profile showed Pacific Time / Los Angeles.
+Visits loaded the confirmed October 22 09:00 visit in `America/Los_Angeles`, with
+no UTC fallback. Add to calendar downloaded the exact confirmed visit's file:
+`DTSTART:20261022T160000Z`, `DTEND:20261022T163000Z`, confirmed/private. A full
+reload retained the correct local time and visit. Captured browser error logs were
+empty. No appointment was changed. DV-002/003 therefore have a successful repeated
+patient-side observation; the earlier intermittent failures and DV-006 remain
+unexplained, not retroactively disproved or assigned a guessed root cause.

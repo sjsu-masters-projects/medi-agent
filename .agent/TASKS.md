@@ -44,7 +44,9 @@ PAT-001-A competing-tab busy/recovery and navigation-disconnect completion pass;
 the later English and Spanish unfocused wellness replies did not inherit PAT-004's
 dismissed document. Uninterrupted 300-second sockets, forced network outage and
 unavailable/deleted-source live tests remain. Morgan's clinician calendar export
-passes, not her patient-side intermittent failure. PAT-002-B is **not activated**:
+passes; a later patient-side recheck also loaded Pacific time correctly, retained
+it after reload and exported the matching calendar file. The earlier intermittent
+failure's cause remains open. PAT-002-B is **not activated**:
 the deployed intake flag is absent (default false), and Start draft reports
 unavailable. No remote setting was changed. DV-014, stale-range schedule empty
 state, is fixed locally in #202 with regression tests; deployment remains pending.
