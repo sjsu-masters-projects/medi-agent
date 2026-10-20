@@ -98,6 +98,21 @@ vi.mock("@/hooks/use-patient-profile", () => ({
 }));
 
 describe("RecordsPage", () => {
+  it("does not announce an invented zero while records are loading", async () => {
+    let resolve!: (rows: unknown[]) => void;
+    get.mockReturnValue(new Promise((done) => { resolve = done; }));
+    render(<RecordsPage />);
+    expect(screen.queryByText("0 records · 0 processing")).not.toBeInTheDocument();
+    resolve([]);
+    expect(await screen.findByText("0 records · 0 processing")).toBeInTheDocument();
+  });
+
+  it("does not describe a failed records request as zero records", async () => {
+    get.mockRejectedValue(new Error("synthetic read failure"));
+    render(<RecordsPage />);
+    await screen.findByText("We could not load your documents. Please try again.");
+    expect(screen.queryByText("0 records · 0 processing")).not.toBeInTheDocument();
+  });
   it("opens only the requested authorized document, retaining the original filename", async () => {
     destination.params = new URLSearchParams("document=exact-record");
     get.mockResolvedValue([

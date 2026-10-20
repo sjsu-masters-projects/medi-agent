@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TodayPage from "@/app/(app)/today/page";
+import { TodayTaskRow } from "@/components/features/today-presentation";
+import { getTodayCopy } from "@/content/today-copy";
 import { FeedTaskStatus, FeedTaskType, type FeedTask } from "@/types";
 const destination = vi.hoisted(() => ({ params: new URLSearchParams() }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => destination.params }));
@@ -368,6 +370,16 @@ describe("TodayPage", () => {
         const setupLink = screen.getByRole("link", { name: /^set reminder time$/i });
         expect(setupLink).toHaveAttribute("href", "/reminders");
         expect(screen.getByText(/^Set reminder time$/i)).toBeInTheDocument();
+    });
+
+    it.each(["en-US", "es-MX"] as const)("keeps agenda reminder targets at least 44px in %s", (locale) => {
+        const task = { id: "synthetic", targetId: "synthetic", name: "Synthetic task", type: FeedTaskType.OBLIGATION,
+            status: FeedTaskStatus.PENDING, requiresScheduleConfiguration: true } as FeedTask;
+        const copy = getTodayCopy(locale);
+        render(<TodayTaskRow task={task} copy={copy} status="active" timeLabel="" disabled={false} onDetails={vi.fn()} onComplete={vi.fn()} />);
+        const link = screen.getByRole("link", { name: copy.setTime });
+        expect(link).toHaveAttribute("href", "/reminders");
+        expect(link).toHaveClass("min-h-11");
     });
 
     it("renders obligations without a frequency", () => {

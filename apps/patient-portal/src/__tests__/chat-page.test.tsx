@@ -120,6 +120,7 @@ class MockWebSocket {
     onopen: ((event?: Event) => void) | null = null;
     readyState = 1;
     sent: string[] = [];
+    respondToPings = true;
     url: string;
 
     constructor(url: string) {
@@ -145,6 +146,7 @@ class MockWebSocket {
 
     send(data: string) {
         this.sent.push(data);
+        if (this.respondToPings && JSON.parse(data).type === "ping") this.emitMessage({ type: "pong" });
     }
 }
 
@@ -1423,6 +1425,97 @@ describe("Patient chat page", () => {
         fireEvent.click(screen.getByRole("button", { name: "Mensajes del equipo clínico" }));
         expect(screen.getByRole("button", { name: "Mensajes históricos del equipo clínico (1)" })).toBeInTheDocument();
         expect(screen.getByText(/Mensajes anteriores de solo lectura/)).toBeInTheDocument();
+    });
+
+    it("pauses reconnects offline and restores the saved reply online without resending", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const first = MockWebSocket.instances[0];
+        await act(async () => { first.emitOpen(); });
+        fireEvent.change(screen.getByRole("textbox", { name: "Message to Nora" }), { target: { value: "Synthetic offline question" } });
+        fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+        const request = JSON.parse(first.sent[0]);
+        const ownTurn = (status: string) => turnRow(status, { client_message_id: request.client_message_id,
+            user_message: { ...turnRow(status).user_message, content: "Synthetic offline question" } });
+        await act(async () => {
+            first.emitMessage({ type: "user_message_saved", message: ownTurn("processing").user_message });
+            first.emitMessage({ type: "chat_turns", turns: [ownTurn("processing")] });
+        });
+        vi.useFakeTimers();
+        try {
+            await act(async () => { window.dispatchEvent(new Event("offline")); });
+            expect(store.getState().chat.connectionStatus).toBe("disconnected");
+            expect(first.readyState).toBe(3);
+            await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+            expect(MockWebSocket.instances).toHaveLength(1);
+            expect(screen.getByText("Synthetic offline question")).toBeInTheDocument();
+            await act(async () => { window.dispatchEvent(new Event("online")); });
+            expect(MockWebSocket.instances).toHaveLength(2);
+            const next = MockWebSocket.instances[1];
+            await act(async () => {
+                next.emitOpen();
+                next.emitMessage({ type: "chat_history", messages: [ownTurn("completed").user_message, savedReply] });
+                next.emitMessage({ type: "chat_turns", turns: [ownTurn("completed")] });
+            });
+            expect(screen.getAllByText("Your results are stable.")).toHaveLength(1);
+            expect(screen.queryByText("Nora is typing...")).not.toBeInTheDocument();
+            expect(next.sent.map((text) => JSON.parse(text).type)).not.toContain("user_message");
+        } finally { vi.useRealTimers(); }
+    });
+
+    it("keeps full-chat icon controls at 44px without changing their actions", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        for (const name of ["Back to messages", "Care team messages", "New chat", "Turn on hands-free mode", "Tap to speak"]) {
+            expect(screen.getByRole("button", { name })).toHaveClass("h-11", "w-11");
+        }
+    });
+
+    it("reconnects a silent OPEN socket when the heartbeat is not answered", async () => {
+        vi.useFakeTimers();
+        renderPage();
+        await act(async () => {});
+        const first = MockWebSocket.instances[0];
+        first.respondToPings = false;
+        await act(async () => { first.emitOpen(); });
+        try {
+            await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+            expect(first.readyState).toBe(3);
+            await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+            expect(MockWebSocket.instances).toHaveLength(2);
+            expect(first.sent.map((text) => JSON.parse(text).type)).toEqual(["ping"]);
+        } finally { vi.useRealTimers(); }
+    });
+
+    it("renews a healthy quiet socket at 3500 seconds without clearing history", async () => {
+        vi.useFakeTimers();
+        renderPage();
+        await act(async () => {});
+        const first = MockWebSocket.instances[0];
+        await act(async () => { first.emitOpen(); first.emitMessage({ type: "chat_history", messages: [savedReply] }); });
+        try {
+            await act(async () => { await vi.advanceTimersByTimeAsync(3_499_000); });
+            expect(MockWebSocket.instances).toHaveLength(1);
+            await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+            expect(MockWebSocket.instances).toHaveLength(2);
+            expect(screen.getByText("Your results are stable.")).toBeInTheDocument();
+            expect(first.readyState).toBe(3);
+        } finally { vi.useRealTimers(); }
+    });
+
+    it("does not mistake hidden-page timer throttling for a dead socket", async () => {
+        const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+        vi.useFakeTimers();
+        try {
+            renderPage();
+            await act(async () => {});
+            const first = MockWebSocket.instances[0];
+            first.respondToPings = false;
+            await act(async () => { first.emitOpen(); await vi.advanceTimersByTimeAsync(120_000); });
+            expect(first.readyState).toBe(1);
+            expect(first.sent).toEqual([]);
+            expect(MockWebSocket.instances).toHaveLength(1);
+        } finally { visibility.mockRestore(); vi.useRealTimers(); }
     });
 
     it("reconnects the chat websocket after a transient close", async () => {

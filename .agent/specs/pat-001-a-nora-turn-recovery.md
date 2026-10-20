@@ -31,6 +31,13 @@ unchanged. Use synthetic tests only; preserve existing conversations and sources
 
 ## Contract
 
+- Network loss closes the stale view, pauses reconnection attempts while offline
+  and preserves the saved turn. Connectivity restoration re-subscribes with the
+  current token; it never resends a user message automatically. A visible,
+  handshaken socket uses the existing ping/pong protocol every 15 seconds; a
+  missed response closes it for normal bounded recovery. Hidden tabs do not
+  fail heartbeat checks merely because their timers were throttled.
+
 - A client-generated UUID identifies one patient/session turn and its exact text,
   language and selected document. Reusing it with different content is rejected.
 - Save the user message once and persist processing/completed/failed/interrupted

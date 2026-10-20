@@ -708,5 +708,96 @@ the earlier intermittent DV-006 failures. No patient text or credentials logged.
 Local screenshots retained: `/private/tmp/pr202-spanish-intake-preview-390.png`
 and `/private/tmp/post202-spanish-report-saved-390.png`. Physical microphone,
 forced network outage, quiet 3500-second renewal, wider mobile/accessibility
-matrix and patient deletion remain distinct next steps. Hannah's label screenshot
+matrix remain distinct next steps. Disposable-account deletion was subsequently
+excluded by the requester October 20; existing safeguards remain. Hannah's label screenshot
 is `/private/tmp/post202-hannah-spanish-source-labels.png`.
+
+### October 20 — PR #205 outage, accessibility and RCA
+
+**Scope:** requester excludes disposable-account deletion from live acceptance.
+PV-001-C's answer/review/export slice is Done; keep existing privacy behavior and
+automated deletion regressions. No account was deleted.
+
+**Real outage / DV-017:** after specific requester approval, native System Settings
+showed Wi-Fi off at `20:17:45.120Z`, restored on by `20:18:10.849Z` (about 26s
+including UI observation). Only a clearly labelled synthetic nonclinical to-do-list
+question was sent to Hannah's Nora. Browser still showed Connected/typing during
+the outage, with a truthful symptom-draft load/retry error, and remained stalled
+after restoration. Reload restored the saved reply once, without another send.
+Read-only target-pinned evidence: turn `ce80f802-c124-494f-a0b0-4708dc9b7da2`,
+attempt 1, created `20:17:29.141011Z`, completed `20:17:55.364382Z`, no failure code;
+one user-message ID and one assistant-message ID. Server completed during outage.
+Socket log: `chat_ws.closed`, client, code 1005, at `20:18:23.616335Z`.
+
+**RCA and local fix:** the portal relied on socket close/error and OPEN readyState,
+without offline/online handlers or a liveness check. Recovery sends on that same
+socket could therefore leave a saved result invisible. #205 explicitly closes the
+view/pauses reconnects offline; online re-subscribes with the current token and
+never automatically resends. Existing ping/pong every 15s detects stale visible
+OPEN sockets (unanswered ping closes on the next 15s tick). Hidden tabs skip health
+failure checks so timer throttling does not create false disconnects. Preserve
+saved messages, clinical-side-effect safeguards and the bounded retry budget.
+Regression coverage includes own-message recovery/no resend, dead OPEN socket,
+healthy 3500-second renewal, hidden-page throttling and existing startup/retry cases.
+This fix is **local/in review, not deployed**; live outage did not pass automatic
+recovery, and no contrary success is claimed.
+
+**Intermittent-read investigation:** 20 current backend appointment/ADR/notification/
+chat request rows between `20:24:59Z` and `20:27:49Z` returned 200, with latency
+0.002–0.569s. Example trace `8d403880e138ef2cb755271a22c239e4` returned 200 at
+`20:27:49.976657Z`, 0.171s. Metadata-only output, no bodies/tokens. The controlled
+outage demonstrates why server success need not equal browser receipt. It does
+**not** prove the cause of all historical DV-006 scheduling/ADR errors; retain that
+distinction and the earlier notification 502 findings.
+
+**Broader accessibility sample:** actual patient Profile/Records/Visits/Today at
+360px had no horizontal overflow; all controls had accessible names (wrapped input
+labels verified manually), no positive tabindex. Today agenda reminder was 40px,
+and full-chat header/mic controls were 40×40: DV-019 local fix raises them to 44px,
+with paired-locale agenda and chat-control tests. Chat inbox at actual 390/430px
+had no overflow or undersized targets. Clinician schedule measured 819, 1024 and
+1280 CSS px, no overflow or interactive targets below 24px. Caller viewport requests
+were not blindly treated as actual CSS sizes. Language dialog (5 Tab steps),
+notifications (12) and unsaved clinician offer (5) retained keyboard focus; Escape
+closed each and returned focus to its trigger. No offer or notification read action
+was submitted.
+
+**DV-018:** Records initially announced zero while its request was loading, then
+showed two actual records. Count now waits for successful loading, never describing
+an unavailable read as zero. Pending and failed-read regression tests added.
+
+**DV-020:** secondary clinician text and small sidebar counts had contrast below
+4.5:1 on the relevant surfaces. Local token overrides use muted `#596980` and
+rail-faint `#8797B2`; seven tests read actual CSS tokens and verify workspace/track
+and rail surfaces. A sampled patient inbox text check found 36 readable text nodes
+with no contrast failures. Gradient/unsupported colour cases are not certified by
+that limited DOM probe; an initial CSS-lab background calculation was discarded,
+not asserted as a real failure. Reduced-motion global overrides were source-checked
+(`animation:none`, `transition:none`, `scroll-behavior:auto`); OS-setting emulation,
+screen-reader testing and actual 200% browser zoom are not claimed.
+
+**Live long-session check:** following reload recovery, original user-owned Hannah
+Nora tab was Connected at `20:20:29Z` / 13:20:29 Pacific and left untouched. A one-time
+thread follow-up (`verify-nora-quiet-socket-renewal`) is scheduled 14:25 Pacific,
+after the 3500-second renewal boundary. Separate temporary tabs were used for
+accessibility; no account switch or reload of the watched tab. The follow-up must
+inspect state/logs before any action, then verify one harmless saved reply and note
+visibility/session interruptions. Status remains **pending real elapsed-time check**,
+distinct from the passing simulated timer test.
+
+Screenshots: `/private/tmp/pr205-outage-stalled-chat.png` and
+`/private/tmp/pr205-after-wifi-restored.png`. Wi-Fi restored; no other system,
+service configuration, database schema or clinical decision was changed.
+
+**Final local verification:** clean `npm ci --no-audit --no-fund` in each portal,
+then `npm run lint`, `npm run typecheck`, `npm run test`, and
+`npm run build -- --webpack` — patient **75 files / 825 tests**, clinician
+**70 files / 627 tests**, both production builds pass with the committed
+**Next.js 16.3.8**. Focused chat suite: 102; Today/Records: 62; contrast/brand: 9.
+One existing patient `_options` unused-variable warning remains; existing Sentry
+and workspace-root warnings remain. Initial sandbox build could not resolve
+Google Fonts; retry with network access passed. An older local Next 16.3.4 install
+was detected and replaced by clean lockfile installation before final checks.
+No package/lockfile change was needed. `git diff --check` passes. No new backend
+code or database change in this increment; prior backend evidence is not described
+as a fresh rerun. DV-017–020 fixes require #205 merge/deployment and live recheck.

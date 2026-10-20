@@ -6,6 +6,12 @@ Visits, Reminders and Profile, in en-US and es-MX.
 Symptom-intake region labels reflect the saved state (private draft, confirmed,
 cancelled or safety-interrupted), matching the visible localized heading.
 
+Chat preserves saved turns through offline/online reconnection without automatic
+resends. Visible healthy sockets use the existing ping/pong protocol to detect
+stale OPEN connections; hidden-page timer throttling is not treated as failure.
+Records counts appear only after a successful read, not as an invented zero while
+loading or unavailable. Agenda reminder links retain 44px touch height.
+
 ## Local development
 
 From `apps/patient-portal`, install dependencies and run the portal on the default port
