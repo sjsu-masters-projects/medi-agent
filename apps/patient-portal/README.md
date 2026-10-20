@@ -79,6 +79,12 @@ without a hint briefly defer content until the browser locale is resolved.
 Today stores stable failure keys and resolves feedback in the current language,
 including after a language switch; backend error prose is not displayed. Notification
 load/write feedback already follows the same localized-key pattern.
+Today associates loaded feed data with the requested saved locale. A language change
+holds activity content until that locale's response arrives; an older response or
+failure cannot replace the current request. A failed language-specific load shows
+retry feedback without displaying the previous locale's instructions. Refreshes in
+the same locale retain their existing activities. This changes presentation only;
+adherence writes, schedules and approved wording remain owned by existing APIs.
 Today's symptom shortcut opens Nora directly, without an intermediate timeline.
 The existing Symptoms URL remains a compact mobile-friendly handoff and explicitly
 says that patient symptom history is not connected; it must not display invented

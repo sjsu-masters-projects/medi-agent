@@ -6,6 +6,13 @@ the hosted ledger. Deployed behavior still requires the acceptance checks below.
 
 ## Acceptance plan
 
+DV-011 follow-up in PR #200: Today must not render a previous-locale feed while
+current saved-locale wording loads. Only the latest request may replace the feed
+or its error state. Regression coverage delays an older English response behind
+a Spanish response and verifies task identity, scheduled time and completion are
+retained. A failed locale change displays retry feedback without stale wording.
+This implementation still requires a deployed language-switch recheck.
+
 1. **LOC-002:** carry en-US/es-MX from guest entry through onboarding and saved
    Profile preference; render the document language consistently on first load;
    localize Today/notification errors from stable codes, not backend prose. Reuse

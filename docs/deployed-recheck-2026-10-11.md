@@ -383,3 +383,23 @@ No clinical plan was approved, medication changed, appointment changed or source
 row rewritten during this recheck. The routine test message and its read receipt
 are the new persisted test records. Existing intermittent and localization defects
 remain open; successful loads during this window do not close them.
+
+### October 19 evening follow-up verification and fixes
+
+Latest remote main is `20ea7ac` (merged #159). GitHub reports its Cloud Run and
+both Vercel deployments succeeded. This corrects the board's prior claim that
+#159 was unmerged; runtime activation/library readiness and actual confirmed
+symptom handoff remain unverified by this campaign. The canonical migration
+directory now includes `071_confirmed_symptom_handoff.sql`; DV-009's missing-file
+portion is explained, but a hosted checksum reconciliation is still required.
+
+| Area | Result | Evidence / remaining boundary |
+| --- | --- | --- |
+| UX-006 agenda | Additional partial pass | Elena's week view loaded the confirmed Rajeev October 20 10:00 and Morgan October 22 09:00 visits. Measured `innerWidth` and document `scrollWidth` matched at both 390 and 1280 CSS px. The initial viewport requests mapped through browser zoom, so dimensions were adjusted and measured rather than assuming requested pixels equalled CSS pixels. No appointment changed. |
+| UX-006 new offer | Partial pass | Selecting Rajeev derived Cedar Grove and America/Los_Angeles. Native Arrow key changes triggered Checking your schedule and a returned empty-day result. Automated datetime filling alone changed the visible field without triggering React's change path, and subsequent native keys changed different date segments. Therefore no exact booked-day guidance or server conflict refusal is accepted from this attempt. Closed the unsent form. |
+| LOC-002 / DV-011 implementation | Fixed locally in PR #200; deployed recheck pending | The feed slice previously retained old-language tasks while loading and accepted every response regardless of arrival order. Added the loaded locale and latest request ID; the hook suppresses mismatched-locale tasks/summary before the effect starts, and ignores superseded successes/failures. Same-locale refresh retains prior data. Failure in a new locale shows retry feedback without old-language instructions. No schedule, history or approved wording API changed. |
+| LOC-002 local verification | Pass | Patient suite: 75 files / 814 tests; lint and typecheck pass, with one existing unused-variable warning in the merged chat test. Production webpack build passed with existing Sentry migration warnings. New tests cover delayed old responses, old failures after a new success, and a failed locale transition with no adherence write. `git diff --check` passed. |
+
+DV-010/DV-013 acceptance from the preceding section remains valid. DV-011 must
+be rechecked after this PR deploys; remaining auth, Spanish ADR, source-provenance,
+intermittent loading and clinical-action paths retain their existing limits.
