@@ -396,10 +396,16 @@ portion is explained, but a hosted checksum reconciliation is still required.
 | Area | Result | Evidence / remaining boundary |
 | --- | --- | --- |
 | UX-006 agenda | Additional partial pass | Elena's week view loaded the confirmed Rajeev October 20 10:00 and Morgan October 22 09:00 visits. Measured `innerWidth` and document `scrollWidth` matched at both 390 and 1280 CSS px. The initial viewport requests mapped through browser zoom, so dimensions were adjusted and measured rather than assuming requested pixels equalled CSS pixels. No appointment changed. |
-| UX-006 new offer | Partial pass | Selecting Rajeev derived Cedar Grove and America/Los_Angeles. Native Arrow key changes triggered Checking your schedule and a returned empty-day result. Automated datetime filling alone changed the visible field without triggering React's change path, and subsequent native keys changed different date segments. Therefore no exact booked-day guidance or server conflict refusal is accepted from this attempt. Closed the unsent form. |
+| UX-006 new offer | Booked-day guidance passes | Selecting Rajeev derived Cedar Grove and America/Los_Angeles. Automated datetime filling initially changed the visible field without triggering React's change path. With the month segment selected, an ArrowUp/ArrowDown pair fired native changes and returned the exact value to `2026-10-20T10:00`. The form then showed “Already booked that day” and “10:00–10:30 AM · Cedar Grove Community Health,” matching the confirmed agenda. No offer was sent. Server conflict refusal and visit mutations remain untested. |
 | LOC-002 / DV-011 implementation | Fixed locally in PR #200; deployed recheck pending | The feed slice previously retained old-language tasks while loading and accepted every response regardless of arrival order. Added the loaded locale and latest request ID; the hook suppresses mismatched-locale tasks/summary before the effect starts, and ignores superseded successes/failures. Same-locale refresh retains prior data. Failure in a new locale shows retry feedback without old-language instructions. No schedule, history or approved wording API changed. |
 | LOC-002 local verification | Pass | Patient suite: 75 files / 814 tests; lint and typecheck pass, with one existing unused-variable warning in the merged chat test. Production webpack build passed with existing Sentry migration warnings. New tests cover delayed old responses, old failures after a new success, and a failed locale transition with no adherence write. `git diff --check` passed. |
 
 DV-010/DV-013 acceptance from the preceding section remains valid. DV-011 must
 be rechecked after this PR deploys; remaining auth, Spanish ADR, source-provenance,
 intermittent loading and clinical-action paths retain their existing limits.
+
+The busy-time lookup was also repeated with synthetic Evelyn selected at Willow
+Terrace. For the same October 20 date, it displayed the clinician's Cedar Grove
+10:00–10:30 AM booking without naming the other patient. Cross-clinic busy-time
+guidance therefore passes; the separate server refusal on submission remains
+untested. The unsent form was closed and no appointment/offer was created.
