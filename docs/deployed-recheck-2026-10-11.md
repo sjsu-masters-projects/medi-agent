@@ -409,3 +409,18 @@ Terrace. For the same October 20 date, it displayed the clinician's Cedar Grove
 10:00–10:30 AM booking without naming the other patient. Cross-clinic busy-time
 guidance therefore passes; the separate server refusal on submission remains
 untested. The unsent form was closed and no appointment/offer was created.
+
+### Post-merge #200/#201 verification — October 19
+
+PR #200 merged as `5d46c30`; both Vercel deployment statuses succeeded. The
+preceding backend-affecting #201 deployment also succeeded. Checked the existing
+synthetic Rajeev and Elena accounts after refreshing the patient portal.
+
+| Defect | Result | Evidence / limit |
+| --- | --- | --- |
+| DV-011 | **Observed language transition passes** | English Today initially showed four activities and 0/4 complete. Temporarily saved es-MX in Profile, navigated to Today, and observed “Cargando las actividades de hoy…” with no task articles, then approved Spanish wording and 0/4 complete. Full reload retained Spanish. Spanish Visits retained the confirmed October 20, 10:00 AM America/Los_Angeles visit, one pending offer and the withdrawn alternative. Restored en-US in Profile and navigated to Today: “Loading today's activities…” preceded the original English activity wording, again 0/4 complete. No task completion, schedule, appointment or clinical plan action was submitted. This is successive DOM/screenshot observation, not a frame-by-frame or network-throttled race measurement; delayed-response regression tests supply that branch coverage. Broader LOC-002 acceptance remains open. |
+| DV-004 | **Reported Metformin source-label case passes** | Morgan's approved V5 Metformin item now displays “Source: English source,” and its list entry has no “Translated from Spanish” marker. Expanded source evidence shows the original English excerpts from the Metformin medication order, page 1: “Metformin,” “One tablet (500 mg) / oral,” “Twice daily,” and “Take one tablet by mouth twice daily with meals.” Other Spanish-source activities retain their translation markers. No historical approval or wording was edited. This verifies the originally reported case, not every mixed/unknown-source combination in LOC-003. |
+
+Rajeev's saved language was restored to English before finishing. These outcomes
+supersede the earlier DV-004/DV-011 pending statements while preserving the
+original reproductions and the wider LOC-002/LOC-003 remaining requirements.
