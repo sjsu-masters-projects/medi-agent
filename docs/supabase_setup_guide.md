@@ -206,7 +206,7 @@ so run `backend/scripts/appointment-clinician-overlap-preflight.sql` (read-only)
 appointments in the hosted project. A read-only audit on October 17 found no public table with RLS
 off and no browser-role SELECT or INSERT on a public table.
 
-### Message-translation integrity and wording verification (079-081) — not yet applied
+### Message-translation integrity, wording verification and display provenance (079-082) — not yet applied
 
 Pending the requester's authorization; nothing here has been applied to a hosted project.
 Apply in order, after `078_chat_turn_events.sql`:
@@ -224,9 +224,18 @@ Apply in order, after `078_chat_turn_events.sql`:
    back-translation a clinician verifies against) and `care_plan_items.wording_verification`
    (the deterministic guard outcome recorded with `wording_verified`), plus a `NOT VALID`
    check constraint requiring a verified item to carry its record. `NOT VALID` is deliberate:
-   rows approved before this migration are not rewritten, and new writes are checked.
+   rows approved before this migration are not rewritten, and new writes are checked. It also
+   adds `care_plan_items.translation_model_id`, the model that drafted the second language.
+4. `082_loc003_display_provenance.sql` — `clinical_facts.display_model_id` (the model that
+   produced a fact's English display fields), and widens the `message_translations`
+   `source_table` check to accept `evidence_excerpt`, so an English gloss of Spanish source
+   evidence is stored in the table that already holds translations with their guard outcome
+   and model, rather than in a second table with the same columns. Excerpt glosses are keyed
+   by a UUIDv5 of the excerpt text, so 080's orphan sweep leaves them alone (it only looks
+   under the two message labels). The migration finds 068's inline constraint by definition
+   rather than assuming its generated name, and fails closed if either change is missing.
 
-All three are re-runnable and add no table, so no new grants are introduced. Nothing here is
+All four are re-runnable and add no table, so no new grants are introduced. Nothing here is
 destructive: 080 only deletes translations, which are display state, never a record of truth.
 
 The retention rule is a recorded cron job, `POST /api/v1/cron/message-translations/purge`
@@ -240,9 +249,10 @@ cd backend
 LOC003_TEST_POSTGRES=1 PYTHONPATH=src pytest tests/integration/test_loc003_translation_postgres.py
 ```
 
-It builds a disposable cluster and runs the real migration bytes. On macOS with PostgreSQL 18
-the fixture pins `LC_ALL=C` and creates the `postgres` superuser itself, so no local cluster
-configuration is needed.
+It builds a disposable cluster and runs the real migration bytes (30 cases). On macOS with
+PostgreSQL 18 the fixture pins `LC_ALL=C` and creates the `postgres` superuser itself, so no
+local cluster configuration is needed. CI runs the same file in the PostgreSQL contract
+matrix as `loc003-translation-schema`.
 
 ### Hosted default grants
 

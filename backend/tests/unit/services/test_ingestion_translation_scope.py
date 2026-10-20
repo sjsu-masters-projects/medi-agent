@@ -8,6 +8,7 @@ from uuid import UUID
 
 import pytest
 
+from app.services.fact_display_translation import FactTranslation
 from app.services.ingestion_service import IngestionService
 
 PATIENT = UUID("00000000-0000-0000-0000-000000000301")
@@ -38,7 +39,9 @@ async def test_translation_reads_the_documents_facts_not_the_most_recent_fifty()
 
     async def fake_translate(facts: list[tuple[str, str, dict[str, Any]]]):
         requested.append([fact_id for fact_id, _, _ in facts])
-        return {"f-ours": {"description": "Drink water"}}
+        return {
+            "f-ours": FactTranslation(fields={"description": "Drink water"}, model_id="gemini-test")
+        }
 
     with (
         patch(
@@ -55,7 +58,11 @@ async def test_translation_reads_the_documents_facts_not_the_most_recent_fifty()
     listing.assert_called_once_with(DOCUMENT, PATIENT)
     assert requested == [["f-ours"]]
     assert _updates(db) == [
-        {"display_locale": "es-MX", "display_value": {"description": "Drink water"}}
+        {
+            "display_locale": "es-MX",
+            "display_value": {"description": "Drink water"},
+            "display_model_id": "gemini-test",
+        }
     ]
     eq_ids = [c.args[1] for c in db.table.return_value.update.return_value.eq.call_args_list]
     assert eq_ids == ["f-ours"]
@@ -71,7 +78,10 @@ async def test_a_documents_spanish_facts_are_translated_in_one_batch() -> None:
 
     async def fake_translate(batch: list[tuple[str, str, dict[str, Any]]]):
         calls.append([fact_id for fact_id, _, _ in batch])
-        return {fact_id: {"description": "Drink water"} for fact_id, _, _ in batch}
+        return {
+            fact_id: FactTranslation(fields={"description": "Drink water"}, model_id="gemini-test")
+            for fact_id, _, _ in batch
+        }
 
     with (
         patch(
@@ -102,7 +112,13 @@ async def test_a_rejected_translation_marks_the_fact_spanish_and_untranslated() 
         ),
         patch(
             "app.services.fact_display_translation.translate_facts_to_english",
-            AsyncMock(return_value={"f-kept": {"description": "Drink water"}}),
+            AsyncMock(
+                return_value={
+                    "f-kept": FactTranslation(
+                        fields={"description": "Drink water"}, model_id="gemini-test"
+                    )
+                }
+            ),
         ),
     ):
         await service._translate_spanish_facts(PATIENT, DOCUMENT, MagicMock(created=2))
@@ -111,6 +127,7 @@ async def test_a_rejected_translation_marks_the_fact_spanish_and_untranslated() 
     assert {
         "display_locale": "es-MX",
         "display_value": {"description": "Drink water"},
+        "display_model_id": "gemini-test",
     } in _updates(db)
     rejected = [
         call.args[1]

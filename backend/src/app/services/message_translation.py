@@ -151,6 +151,24 @@ async def translate_message(
     return translated, failure is None, failure, model_id
 
 
+async def back_translate_message(
+    translated_text: str,
+    translated_locale: str,
+    original_locale: str,
+    protected_terms: Iterable[str] = (),
+) -> str:
+    """Translate a translation back, so a clinician can check it without reading it.
+
+    LOC-003 decision 3: the clinician confirms the Spanish a patient will receive by reading
+    its English back-translation. This is the same guarded translation path in reverse, so
+    there is one prompt, one schema and one set of guards rather than a second of each.
+    """
+    back, _guard_passed, _failure, _model = await translate_message(
+        translated_text, translated_locale, original_locale, protected_terms
+    )
+    return back
+
+
 class MessageTranslationService:
     """Store and retrieve message translations."""
 
@@ -188,13 +206,8 @@ class MessageTranslationService:
                 source_message_id,
                 exc_info=False,
             )
-            await self._store(
-                {
-                    **base,
-                    "translated_text": _FAILURE_PLACEHOLDER,
-                    "guard_passed": False,
-                    "guard_failure_code": MODEL_ERROR,
-                }
+            await self.store_failure_marker(
+                source_table, source_message_id, source_locale, target_locale
             )
             return None
 
@@ -206,6 +219,55 @@ class MessageTranslationService:
             "model_id": model_id,
         }
         return await self._store(row) or row
+
+    async def store_gloss(
+        self,
+        *,
+        source_table: str,
+        source_message_id: str,
+        translated_text: str,
+        guard_passed: bool,
+        model_id: str | None,
+        source_locale: str = "es-MX",
+        target_locale: str = "en-US",
+    ) -> dict[str, Any] | None:
+        """Store an already-produced translation (LOC-003 item 2 glosses its own text).
+
+        A gloss that failed its guard is still stored, as the record that this text was
+        tried and must not be shown; the reader decides, not the writer.
+        """
+        return await self._store(
+            {
+                "source_table": source_table,
+                "source_message_id": source_message_id,
+                "source_locale": source_locale,
+                "target_locale": target_locale,
+                "translated_text": translated_text,
+                "guard_passed": guard_passed,
+                "guard_failure_code": None if guard_passed else "guard_rejected",
+                "model_id": model_id,
+            }
+        )
+
+    async def store_failure_marker(
+        self,
+        source_table: str,
+        source_message_id: str,
+        source_locale: str,
+        target_locale: str,
+    ) -> dict[str, Any] | None:
+        """Record that the model failed, so the next read does not retry straight away."""
+        return await self._store(
+            {
+                "source_table": source_table,
+                "source_message_id": source_message_id,
+                "source_locale": source_locale,
+                "target_locale": target_locale,
+                "translated_text": _FAILURE_PLACEHOLDER,
+                "guard_passed": False,
+                "guard_failure_code": MODEL_ERROR,
+            }
+        )
 
     async def _store(self, row: dict[str, Any]) -> dict[str, Any] | None:
         def write() -> Any:

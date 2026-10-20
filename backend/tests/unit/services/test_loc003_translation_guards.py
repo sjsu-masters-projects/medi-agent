@@ -141,7 +141,8 @@ class TestProperNamesAreNeverTranslated:
         async def fake(*_args, **kwargs):
             sent["prompt"] = kwargs["prompt"]
             return SimpleNamespace(
-                text='{"items": [{"id": "single", "fields": {"instructions": "take with water"}}]}'
+                text='{"items": [{"id": "single", "fields": {"instructions": "take with water"}}]}',
+                telemetry=SimpleNamespace(model="gemini-test"),
             )
 
         with patch.object(facts, "generate_for_workload", fake):
@@ -184,7 +185,8 @@ class TestMessageTranslationPromptAndGuards:
         async def fake(*_args, **kwargs):
             sent.update(kwargs)
             return SimpleNamespace(
-                text='{"items": [{"id": "single", "fields": {"instructions": "take with water"}}]}'
+                text='{"items": [{"id": "single", "fields": {"instructions": "take with water"}}]}',
+                telemetry=SimpleNamespace(model="gemini-test"),
             )
 
         with patch.object(facts, "generate_for_workload", fake):
@@ -208,7 +210,8 @@ class TestMessageTranslationPromptAndGuards:
             return SimpleNamespace(
                 text='{"items": ['
                 '{"id": "a", "fields": {"notes": "no changes"}},'
-                '{"id": "b", "fields": {"notes": "take with water"}}]}'
+                '{"id": "b", "fields": {"notes": "take with water"}}]}',
+                telemetry=SimpleNamespace(model="gemini-test"),
             )
 
         with patch.object(facts, "generate_for_workload", fake):
@@ -221,7 +224,11 @@ class TestMessageTranslationPromptAndGuards:
         prompt = sent["prompt"]
         assert prompt.count(facts.START) == 1
         assert prompt.count(facts.END) == 1
-        assert out == {"a": {"notes": "no changes"}, "b": {"notes": "take with water"}}
+        assert {key: value.fields for key, value in out.items()} == {
+            "a": {"notes": "no changes"},
+            "b": {"notes": "take with water"},
+        }
+        assert out["a"].model_id == "gemini-test"
 
     @pytest.mark.asyncio
     async def test_one_rejected_fact_does_not_discard_the_rest_of_its_batch(self) -> None:
@@ -229,7 +236,8 @@ class TestMessageTranslationPromptAndGuards:
             return SimpleNamespace(
                 text='{"items": ['
                 '{"id": "a", "fields": {"notes": "take 250 mg"}},'
-                '{"id": "b", "fields": {"notes": "take 500 mg"}}]}'
+                '{"id": "b", "fields": {"notes": "take 500 mg"}}]}',
+                telemetry=SimpleNamespace(model="gemini-test"),
             )
 
         with patch.object(facts, "generate_for_workload", fake):
@@ -239,18 +247,21 @@ class TestMessageTranslationPromptAndGuards:
                     ("b", "condition", {"notes": "tomar 500 mg"}),
                 ]
             )
-        assert out == {"b": {"notes": "take 500 mg"}}
+        assert {key: value.fields for key, value in out.items()} == {"b": {"notes": "take 500 mg"}}
 
     @pytest.mark.asyncio
     async def test_a_fact_the_model_skipped_is_left_untranslated(self) -> None:
         async def fake(*_args, **kwargs):
-            return SimpleNamespace(text='{"items": [{"id": "a", "fields": {"notes": "ok"}}]}')
+            return SimpleNamespace(
+                text='{"items": [{"id": "a", "fields": {"notes": "ok"}}]}',
+                telemetry=SimpleNamespace(model="gemini-test"),
+            )
 
         with patch.object(facts, "generate_for_workload", fake):
             out = await facts.translate_facts_to_english(
                 [("a", "condition", {"notes": "bien"}), ("b", "condition", {"notes": "bien"})]
             )
-        assert out == {"a": {"notes": "ok"}}
+        assert {key: value.fields for key, value in out.items()} == {"a": {"notes": "ok"}}
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -284,7 +295,10 @@ class TestMessageTranslationPromptAndGuards:
     @pytest.mark.asyncio
     async def test_fact_translation_rejected_when_a_negation_disappears(self) -> None:
         async def fake(*_args, **_kwargs):
-            return SimpleNamespace(text='{"fields": {"instructions": "take with food"}}')
+            return SimpleNamespace(
+                text='{"items": [{"id": "single", "fields": {"instructions": "take with food"}}]}',
+                telemetry=SimpleNamespace(model="gemini-test"),
+            )
 
         with patch.object(facts, "generate_for_workload", fake):
             out = await facts.translate_fact_to_english(

@@ -1,7 +1,9 @@
 import type {
   CareConversation,
   CareConversationMessage,
+  ConfirmedTranslation,
   ConversationMessagePage,
+  ConversationPreviewResult,
   ConversationRecipient,
   MessageTranslationResult,
 } from "../types/care-conversations";
@@ -33,16 +35,38 @@ export function createConversationService(api: ConversationTransport) {
         `${root}/${encodeURIComponent(id)}/messages?limit=50${before ? `&before=${encodeURIComponent(before)}` : ""}`,
         { token, signal },
       ),
-    send: (token: string, id: string, body: string, clientMessageId: string, carePlanItemId?: string) =>
+    // `confirmedTranslation` is the previewed wording a clinician approved (LOC-003); the
+    // server re-checks it against the message body and stores it as the message's translation.
+    send: (
+      token: string,
+      id: string,
+      body: string,
+      clientMessageId: string,
+      carePlanItemId?: string,
+      confirmedTranslation?: ConfirmedTranslation | null,
+    ) =>
       api.post<CareConversationMessage>(
         `${root}/${encodeURIComponent(id)}/messages`,
-        { body: body.trim(), client_message_id: clientMessageId, ...(carePlanItemId ? { care_plan_item_id: carePlanItemId } : {}) },
+        {
+          body: body.trim(),
+          client_message_id: clientMessageId,
+          ...(carePlanItemId ? { care_plan_item_id: carePlanItemId } : {}),
+          ...(confirmedTranslation ? { confirmed_translation: confirmedTranslation } : {}),
+        },
         { token },
       ),
     reviewActivity: (token: string, id: string, messageId: string) =>
       api.post<{ patient_id: string; plan_id: string; item_id: string }>(
         `${root}/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/activity-review`,
         {}, { token },
+      ),
+    // LOC-003: what the patient will receive for an unsent reply, with its English
+    // back-translation. Clinician-only, and nothing is stored.
+    preview: (token: string, id: string, body: string, signal?: AbortSignal) =>
+      api.post<ConversationPreviewResult>(
+        `${root}/${encodeURIComponent(id)}/messages/preview`,
+        { body },
+        { token, signal },
       ),
     // Translates ONE message into the viewer's language (stored once on the server).
     translate: (token: string, id: string, messageId: string, signal?: AbortSignal) =>
@@ -91,16 +115,29 @@ export function mergeConversationMessages(
 
 export const MAX_PARALLEL_TRANSLATIONS = 3;
 
+/** The least a message must be for its pending translation to be requested. */
+export interface TranslatablePending {
+  id: string;
+  translation_pending?: boolean;
+}
+
 /**
  * Ask for the translation of every pending message that has not been requested yet, at most
  * `limit` at a time. Each result (or failure: the original simply stays) is reported through
  * `apply` as it arrives; nothing here blocks reading, typing or sending.
+ *
+ * Generic over the result type so the same queue serves care-team messages and the Nora
+ * transcript in the clinician's Chat tab (LOC-003), which translate through different
+ * endpoints but follow the same rule: a read never calls the model.
  */
-export async function requestPendingTranslations(
-  messages: CareConversationMessage[],
+export async function requestPendingTranslations<
+  Result,
+  Message extends TranslatablePending = CareConversationMessage,
+>(
+  messages: Message[],
   requested: Set<string>,
-  translate: (messageId: string) => Promise<MessageTranslationResult>,
-  apply: (messageId: string, result: MessageTranslationResult | null) => void,
+  translate: (messageId: string) => Promise<Result>,
+  apply: (messageId: string, result: Result | null) => void,
   isActive: () => boolean,
   limit: number = MAX_PARALLEL_TRANSLATIONS,
 ): Promise<void> {
@@ -108,7 +145,7 @@ export async function requestPendingTranslations(
   for (const message of queue) requested.add(message.id);
   const worker = async () => {
     for (let message = queue.shift(); message; message = queue.shift()) {
-      let result: MessageTranslationResult | null = null;
+      let result: Result | null = null;
       try {
         result = await translate(message.id);
       } catch {
@@ -132,6 +169,7 @@ export function applyTranslationResult(
     translation: result.translation,
     translation_locale: result.translation_locale,
     translation_guard_passed: result.translation_guard_passed,
+    translation_model_id: result.translation_model_id,
     translation_pending: false,
   };
 }

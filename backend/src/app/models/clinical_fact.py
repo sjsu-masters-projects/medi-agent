@@ -128,3 +128,36 @@ class ClinicalFactLineage(BaseModel):
     fact: ClinicalFactRead
     provenance: SourceProvenanceRead
     citations: list[EvidenceCitationRead] = Field(default_factory=list)
+
+
+class EvidenceGlossRequest(BaseModel):
+    """LOC-003 item 2: ask for English glosses of Spanish source-evidence excerpts.
+
+    Excerpts are sent as text rather than by row id because the same printed sentence is
+    quoted by several facts and appears on several surfaces; glossing it by its text means
+    it is glossed once. The clinician already sees every excerpt they send.
+    """
+
+    excerpts: list[str] = Field(min_length=1, max_length=25)
+
+
+class EvidenceGloss(BaseModel):
+    """One excerpt's English gloss. The original excerpt is never replaced by it."""
+
+    excerpt_id: str
+    #: The excerpt this glosses, whitespace-collapsed, echoed back so a caller can match it
+    #: to what it sent without recomputing the server's address.
+    excerpt: str
+    gloss: str
+    model_id: str | None = None
+
+
+class EvidenceGlossResponse(BaseModel):
+    """Glosses for the Spanish excerpts that have one.
+
+    An excerpt that is not Spanish, whose gloss failed the LOC-001 guards, or whose last
+    attempt failed recently, is absent: its original stays on screen alone rather than
+    beside English that might have moved a dose.
+    """
+
+    glosses: list[EvidenceGloss] = Field(default_factory=list)

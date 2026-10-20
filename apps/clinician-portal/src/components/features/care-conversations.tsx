@@ -5,8 +5,10 @@ import { useSelector } from "react-redux";
 import type { RootState } from "@/store/store";
 import { Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
+import { TranslationInfo } from "@/components/ui/translation-note";
 import { careConversations } from "@/services/care-conversations";
 import { ConversationActivityReview } from "./conversation-activity";
+import { confirmedTranslationFor, ReplyPreview, sendBlocker, useReplyPreview } from "./reply-preview";
 import type { CareConversation, CareConversationMessage, ConversationDraft, ConversationRecipient } from "@/types/care-conversations";
 import { applyTranslationResult, conversationAccessDenied, conversationRoleLabel, conversationSendFailure, getConversationCopy, mergeConversationMessages, requestPendingTranslations } from "../../../../../packages/shared/src/utils/care-conversations";
 
@@ -248,6 +250,15 @@ function ConversationThread({ token, audience, thread, locale, visible, draft, o
   useEffect(() => { renderedMessages.current = messages; }, [messages]);
   const visibleRef = useRef(visible);
   useEffect(() => { visibleRef.current = visible; }, [visible]);
+
+  /* LOC-003 decision 3: a clinician confirms the wording the patient will receive before
+     sending it. A patient reading English needs no confirmation, which the preview says. */
+  const requestPreview = useCallback(
+    (body: string) => careConversations.preview(token, thread.id, body),
+    [token, thread.id],
+  );
+  const preview = useReplyPreview(requestPreview, draft.body);
+  const previewBlocker = audience === "clinician" ? sendBlocker(preview.state, draft.body, preview.confirmed) : null;
   const callbacks = useRef({ onRead, onSaved, onSending });
   useEffect(() => { callbacks.current = { onRead, onSaved, onSending }; }, [onRead, onSaved, onSending]);
 
@@ -324,6 +335,10 @@ function ConversationThread({ token, audience, thread, locale, visible, draft, o
   async function send() {
     const body = draft.body.trim();
     if (!body || body.length > 4000 || busy.current || denied || !thread.writable || draft.failure === "mismatch") return;
+    if (previewBlocker) return;
+    const confirmedTranslation = audience === "clinician"
+      ? confirmedTranslationFor(preview.state, body, preview.confirmed)
+      : null;
     const clientMessageId = draft.clientMessageId ?? crypto.randomUUID();
     onDraft({ body: draft.body, clientMessageId });
     busy.current = true;
@@ -332,9 +347,10 @@ function ConversationThread({ token, audience, thread, locale, visible, draft, o
     onSending(true);
     setConfirmNewKey(false);
     try {
-      const message = await careConversations.send(token, thread.id, body, clientMessageId);
+      const message = await careConversations.send(token, thread.id, body, clientMessageId, undefined, confirmedTranslation);
       if (!alive.current) return;
       onDraft({ body: "" });
+      preview.reset();
       if (deniedRef.current) return;
       setMessages((current) => mergeConversationMessages(current, [message]));
       callbacks.current.onSaved(message);
@@ -384,8 +400,9 @@ function ConversationThread({ token, audience, thread, locale, visible, draft, o
             {message.translation_pending && !own ? <p role="status" className="px-1 text-[11px] text-muted">{copy.translating}</p> : null}
             {translation && sourceLabel && guardPassed === false ? <p className="px-1 text-[11px] text-muted">{copy.translationUnavailable}</p> : null}
             {translation && sourceLabel && guardPassed !== false ? <div className="mt-0.5 rounded-lg border border-line bg-surface px-3 py-2 text-xs text-ink-2">
-              <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted"><Icon name="spark" className="h-3 w-3" />{sourceLabel}</p>
-              <p className="mt-1 whitespace-pre-wrap break-words">{translation}</p>
+              {/* LOC-003 item 5: the model and its caveat, one tap away from the text. */}
+              <p className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-muted"><Icon name="spark" className="h-3 w-3" />{sourceLabel}<TranslationInfo modelId={message.translation_model_id} /></p>
+              <p className="mt-1 whitespace-pre-wrap break-words" lang="en-US">{translation}</p>
             </div> : null}
           </li>;
         })}
@@ -404,14 +421,17 @@ function ConversationThread({ token, audience, thread, locale, visible, draft, o
       {!thread.writable && !denied && <p className={`${alert} border-line bg-surface-2 text-ink-2`}><Icon name="info" className="mt-0.5 h-4 w-4 shrink-0 text-muted" /><span>{copy.denied}</span></p>}
     </div>
     {!denied && thread.writable && <form onSubmit={(event) => { event.preventDefault(); void send(); }} className="space-y-2 border-t border-line px-5 py-4">
+      {/* LOC-003 decision 3: what the patient will read, with its English back-translation. */}
+      {audience === "clinician" ? <ReplyPreview body={draft.body} confirmed={preview.confirmed} disabled={sending || Boolean(draft.clientMessageId)} onConfirm={preview.setConfirmed} onPreview={() => void preview.preview()} state={preview.state} /> : null}
       <div className="flex items-end gap-2">
         <label className={`${label} min-w-0 flex-1`}>{copy.message}
           <textarea className={`${field} min-h-[42px] resize-y py-2.5 text-sm`} rows={2} maxLength={4000} value={draft.body} disabled={sending || Boolean(draft.clientMessageId)}
             onChange={(event) => onDraft({ body: event.target.value })} />
         </label>
         <button className="ma-press inline-flex h-[42px] shrink-0 items-center justify-center gap-2 rounded-[10px] bg-primary px-[18px] text-sm font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-track disabled:text-[#94A3B8]"
-          disabled={sending || loading || draft.failure === "mismatch" || !draft.body.trim() || draft.body.trim().length > 4000} type="submit"><Icon name="send" className="h-4 w-4" />{sending ? copy.sending : draft.clientMessageId ? copy.retry : copy.send}</button>
+          disabled={sending || loading || draft.failure === "mismatch" || !draft.body.trim() || draft.body.trim().length > 4000 || Boolean(previewBlocker)} type="submit"><Icon name="send" className="h-4 w-4" />{sending ? copy.sending : draft.clientMessageId ? copy.retry : copy.send}</button>
       </div>
+      {previewBlocker ? <p className="text-[13px] font-medium text-warn-ink" role="status">{previewBlocker}</p> : null}
       {draft.clientMessageId && !sending && draft.failure !== "mismatch" && <p className="text-[13px] text-muted">{copy.locked}</p>}
     </form>}
   </div>;

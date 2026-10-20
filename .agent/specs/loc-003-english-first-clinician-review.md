@@ -154,18 +154,58 @@ Both uses are labelled as such.
 
 ## Remaining (owner: Jeevan)
 
-Frontend (clinician portal):
+- Deployed acceptance in both languages, with migrations 079–082 applied.
+- The patient portal's own "may contain errors" treatment, which needs approved es-MX
+  wording for the caveat (LOC-001 bilingual review). The API already carries
+  `translation_model_id` on every message, so this is copy, not plumbing.
 
-- Phone-style patient preview of the translated wording.
-- English glosses beside original excerpts, and the ADR evidence gloss.
-- Translation of the clinician Chat tab (Nora transcripts).
-- A clinician reply preview with back-translation before sending.
-- A "may contain errors" / model-info icon on translated text.
-- Marking facts untranslated when the guard rejects them, with the original Spanish one tap away.
+### Clinician portal — done (October 19)
 
-Verification:
-
-- Deployed acceptance in both languages.
+19. **Phone-style patient preview.** The patient's own language card, in review and in the
+    approved plan, shows the wording inside a static phone frame with the patient app's own
+    chrome, so long Spanish wrapping and an empty frequency are visible before approval
+    rather than after. Only the patient's language gets a frame: the other language is
+    storage, not a screen. The frame is inert — the completion button is not a control — and
+    uses no motion or 3D transform.
+20. **English glosses beside original evidence.** Care-plan source excerpts, the protected
+    source preview's highlighted excerpt, the document facts dialog and ADR patient answers
+    each show an English gloss beneath the original. The excerpt itself is never altered or
+    replaced, in storage or on screen. A gloss is addressed by a UUIDv5 of its own
+    whitespace-collapsed text, so the same printed sentence is glossed once however many
+    citations quote it; glosses are stored in `message_translations` under the
+    `evidence_excerpt` label (migration 082) with the same guards, model provenance and
+    failure markers as a message translation. A gloss that fails its guards is never shown,
+    and new glosses are capped at ten per request.
+    `POST /clinicians/me/patients/{patient_id}/evidence-glosses`.
+21. **The Nora transcript, in English.** The Chat tab attaches stored translations to Spanish
+    turns and marks the rest pending; reading never calls the model, exactly as a
+    care-conversation read behaves. The portal then requests the pending turns, at most three
+    at a time, through
+    `POST /clinicians/me/patients/{patient_id}/chat-messages/{message_id}/translation`. The
+    patient's own words stay above the translation as the record.
+22. **A clinician reply preview with back-translation.** `POST
+    /care-conversations/{id}/messages/preview` returns the wording the patient will receive
+    and an English back-translation of exactly that wording, with the guard result. Sending is
+    gated until the clinician confirms it, and the confirmed wording is sent as
+    `confirmed_translation` and stored as the message's translation, so the patient reads what
+    was approved rather than a fresh translation. The server re-runs the guards on it and
+    rejects a mismatch: the browser asking for something is not permission to skip a guard.
+    Nothing is stored for an unsent reply. A patient who reads English needs no confirmation,
+    and a guard-rejected translation is never offered for one — the reply goes in English, per
+    decision 3's guard rule.
+23. **"May contain errors" and the model behind the text.** One shared affordance marks every
+    machine translation in the portal: the care-plan AI-draft badge, the phone preview, fact
+    cards, evidence glosses, care-team messages and transcript turns. It opens on tap or
+    keyboard, names the stored model, says the translation may contain errors and that the
+    original is the record. The model is now recorded for care-plan wording
+    (`care_plan_items.translation_model_id`, migration 081) and fact display fields
+    (`clinical_facts.display_model_id`, migration 082); message translations already stored
+    it, and it is now surfaced. Stub-produced wording is labelled as never approvable for a
+    patient.
+24. **Facts the guard rejected say so.** A Spanish fact with no English display fields is
+    marked "Not translated" with the reason, instead of appearing in Spanish where the
+    clinician expects English. Every translated field offers the printed original one tap
+    away, in a disclosure marked `lang="es-MX"`.
 
 ### Backend and data — done (October 19)
 

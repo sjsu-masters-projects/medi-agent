@@ -1,4 +1,4 @@
-"""Operator-run, disposable PostgreSQL contract tests for LOC-003 migrations 080 and 081.
+"""Operator-run, disposable PostgreSQL contract tests for LOC-003 migrations 080-082.
 
 What these pin down, against the real migration bytes:
 
@@ -7,6 +7,8 @@ What these pin down, against the real migration bytes:
   browser role can run it.
 * 081 — a verified item must carry its guard outcome, and a row approved before the
   migration is not rewritten by it.
+* 082 — a fact records the model that translated it, and an evidence gloss can be stored as
+  a translation while the widened check still rejects anything else.
 
 No remote database, network or model call is involved.
 """
@@ -39,6 +41,8 @@ MESSAGE = "00000000-0000-0000-0000-0000000000a4"
 CHAT_MESSAGE = "00000000-0000-0000-0000-0000000000a5"
 PLAN = "00000000-0000-0000-0000-0000000000a6"
 ITEM = "00000000-0000-0000-0000-0000000000a7"
+FACT = "00000000-0000-0000-0000-0000000000a8"
+EXCERPT = "00000000-0000-0000-0000-0000000000a9"
 
 CARE_TABLE = "care_team_conversation_messages"
 
@@ -61,10 +65,21 @@ def sql(tmp_path: Path):
         container = f"mediagent-loc003-test-{uuid4().hex}"
         subprocess.run(
             [
-                docker, "run", "--detach", "--pull=never", "--network=none",
-                "--name", container, "--env", "POSTGRES_HOST_AUTH_METHOD=trust", "postgres:16",
+                docker,
+                "run",
+                "--detach",
+                "--pull=never",
+                "--network=none",
+                "--name",
+                container,
+                "--env",
+                "POSTGRES_HOST_AUTH_METHOD=trust",
+                "postgres:16",
             ],
-            check=True, capture_output=True, text=True, timeout=30,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         try:
             readiness = (
@@ -74,7 +89,8 @@ def sql(tmp_path: Path):
             for _ in range(100):
                 ready = subprocess.run(
                     [docker, "exec", container, "sh", "-c", readiness],
-                    capture_output=True, timeout=5,
+                    capture_output=True,
+                    timeout=5,
                 )
                 if ready.returncode == 0:
                     break
@@ -93,17 +109,30 @@ def sql(tmp_path: Path):
         environment = {**os.environ, "LC_ALL": "C"}
         initialization = subprocess.run(
             [programs["initdb"], "-D", str(data), "-A", "trust", "-U", "postgres"],
-            check=False, capture_output=True, text=True, env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+            env=environment,
         )
         if initialization.returncode:
             sockets.cleanup()
             pytest.fail(f"Disposable PostgreSQL initialization failed: {initialization.stderr}")
         subprocess.run(
             [
-                programs["pg_ctl"], "-D", str(data), "-l", str(tmp_path / "server.log"),
-                "-o", f"-k {sockets.name} -h ''", "-w", "start",
+                programs["pg_ctl"],
+                "-D",
+                str(data),
+                "-l",
+                str(tmp_path / "server.log"),
+                "-o",
+                f"-k {sockets.name} -h ''",
+                "-w",
+                "start",
             ],
-            check=True, capture_output=True, text=True, env=environment,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=environment,
         )
         command = [programs["psql"], "-h", sockets.name, "-U", "postgres"]
     command += ["-X", "-d", "postgres", "-At", "-q", "-v", "ON_ERROR_STOP=1"]
@@ -112,7 +141,9 @@ def sql(tmp_path: Path):
         result = subprocess.run(
             command,
             input=f"SET statement_timeout='8s';\n{statement}",
-            capture_output=True, text=True, timeout=12,
+            capture_output=True,
+            text=True,
+            timeout=12,
         )
         assert (result.returncode == 0) is succeeds, result.stderr
         return result.stdout.strip() if succeeds else result.stderr
@@ -140,16 +171,26 @@ def sql(tmp_path: Path):
             plan_version_id uuid NOT NULL,
             wording jsonb,
             wording_verified boolean NOT NULL DEFAULT false);
+          CREATE TABLE public.clinical_facts(
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            patient_id uuid NOT NULL,
+            fact_type text,
+            value jsonb,
+            display_locale text,
+            display_value jsonb);
         """)
         execute((MIGRATIONS / "068_message_translations.sql").read_text())
         execute((MIGRATIONS / "080_message_translation_integrity.sql").read_text())
         execute((MIGRATIONS / "081_care_plan_wording_verification.sql").read_text())
+        execute((MIGRATIONS / "082_loc003_display_provenance.sql").read_text())
         execute(f"""
           INSERT INTO public.care_conversation_messages(id, conversation_id, body)
             VALUES ('{MESSAGE}', '{CONVERSATION}', 'Tomo 500 mg cada dia');
           INSERT INTO public.chat_messages(id, patient_id, content)
             VALUES ('{CHAT_MESSAGE}', '{PATIENT}', 'Me siento mejor');
           INSERT INTO public.care_plan_items(id, plan_version_id) VALUES ('{ITEM}', '{PLAN}');
+          INSERT INTO public.clinical_facts(id, patient_id, fact_type, value)
+            VALUES ('{FACT}', '{PATIENT}', 'obligation', '{{"description": "Tome agua"}}'::jsonb);
         """)
         yield execute
     finally:
@@ -160,7 +201,8 @@ def sql(tmp_path: Path):
         else:
             subprocess.run(
                 [programs["pg_ctl"], "-D", str(data), "-m", "immediate", "-w", "stop"],
-                check=False, capture_output=True,
+                check=False,
+                capture_output=True,
             )
         sockets.cleanup()
 
@@ -285,9 +327,7 @@ class TestRetentionRule:
 class TestRetentionIsBackendOnly:
     @pytest.mark.parametrize("role", ["anon", "authenticated"])
     def test_a_browser_role_cannot_purge(self, sql, role: str) -> None:
-        error = sql(
-            f"SET ROLE {role}; SELECT public.purge_message_translations();", succeeds=False
-        )
+        error = sql(f"SET ROLE {role}; SELECT public.purge_message_translations();", succeeds=False)
         assert "permission denied" in error
 
     def test_service_role_can(self, sql) -> None:
@@ -353,16 +393,22 @@ class TestWordingVerificationRecord:
             VALUES ('{legacy}', '{PLAN}', true);
         """)
         sql((MIGRATIONS / "081_care_plan_wording_verification.sql").read_text())
-        assert sql(
-            f"""SELECT wording_verification IS NULL FROM public.care_plan_items
+        assert (
+            sql(
+                f"""SELECT wording_verification IS NULL FROM public.care_plan_items
                 WHERE id = '{legacy}'"""
-        ) == "t"
+            )
+            == "t"
+        )
 
     def test_the_migration_can_be_applied_twice(self, sql) -> None:
         sql((MIGRATIONS / "081_care_plan_wording_verification.sql").read_text())
         sql((MIGRATIONS / "081_care_plan_wording_verification.sql").read_text())
-        assert sql("""SELECT count(*) FROM pg_constraint
-                      WHERE conname = 'care_plan_items_wording_verification_present'""") == "1"
+        assert (
+            sql("""SELECT count(*) FROM pg_constraint
+                      WHERE conname = 'care_plan_items_wording_verification_present'""")
+            == "1"
+        )
 
 
 def test_the_integrity_migration_can_be_applied_twice(sql) -> None:
@@ -370,3 +416,77 @@ def test_the_integrity_migration_can_be_applied_twice(sql) -> None:
     translation(sql)
     sql(f"DELETE FROM public.care_conversation_messages WHERE id = '{MESSAGE}'")
     assert count(sql) == 0
+
+
+# ── 082: display provenance and the gloss store ───────────────────────────
+
+
+class TestDisplayProvenance:
+    def test_a_fact_records_the_model_that_translated_it(self, sql) -> None:
+        sql(f"""UPDATE public.clinical_facts
+                SET display_locale = 'es-MX',
+                    display_value = '{{"description": "Drink water"}}'::jsonb,
+                    display_model_id = 'gemini-test'
+                WHERE id = '{FACT}'""")
+        assert (
+            sql(f"SELECT display_model_id FROM public.clinical_facts WHERE id = '{FACT}'")
+            == "gemini-test"
+        )
+
+    def test_an_untranslated_fact_records_no_model(self, sql) -> None:
+        sql(f"UPDATE public.clinical_facts SET display_locale = 'es-MX' WHERE id = '{FACT}'")
+        assert (
+            sql(
+                f"""SELECT display_value IS NULL AND display_model_id IS NULL
+                FROM public.clinical_facts WHERE id = '{FACT}'"""
+            )
+            == "t"
+        )
+
+    def test_an_evidence_gloss_can_be_stored_as_a_translation(self, sql) -> None:
+        """Item 2: a gloss is the same record this table holds, not a second table."""
+        sql(f"""
+          INSERT INTO public.message_translations(
+            source_table, source_message_id, source_locale, target_locale,
+            translated_text, guard_passed, model_id)
+          VALUES ('evidence_excerpt', '{EXCERPT}', 'es-MX', 'en-US',
+            'Take 1 tablet', true, 'gemini-test');
+        """)
+        assert count(sql, "source_table = 'evidence_excerpt'") == 1
+
+    def test_the_widened_check_still_rejects_an_unknown_source(self, sql) -> None:
+        error = sql(
+            f"""INSERT INTO public.message_translations(
+                  source_table, source_message_id, source_locale, target_locale, translated_text)
+                VALUES ('soap_notes', '{EXCERPT}', 'es-MX', 'en-US', 'x')""",
+            succeeds=False,
+        )
+        assert "source_table" in error
+
+    def test_the_retention_sweep_leaves_glosses_alone(self, sql) -> None:
+        """A gloss has no source message to be orphaned from; it must survive the sweep."""
+        sql(f"""
+          INSERT INTO public.message_translations(
+            source_table, source_message_id, source_locale, target_locale, translated_text)
+          VALUES ('evidence_excerpt', '{EXCERPT}', 'es-MX', 'en-US', 'Take 1 tablet');
+        """)
+        assert purge(sql) == {"orphans_removed": 0, "expired_failure_markers_removed": 0}
+        assert count(sql, "source_table = 'evidence_excerpt'") == 1
+
+    def test_one_gloss_per_excerpt_and_language(self, sql) -> None:
+        """The same printed sentence is glossed once, however many citations quote it."""
+        insert = f"""INSERT INTO public.message_translations(
+            source_table, source_message_id, source_locale, target_locale, translated_text)
+          VALUES ('evidence_excerpt', '{EXCERPT}', 'es-MX', 'en-US', 'Take 1 tablet')"""
+        sql(insert)
+        assert "duplicate key" in sql(insert, succeeds=False)
+
+    def test_the_migration_can_be_applied_twice(self, sql) -> None:
+        sql((MIGRATIONS / "082_loc003_display_provenance.sql").read_text())
+        sql((MIGRATIONS / "082_loc003_display_provenance.sql").read_text())
+        assert (
+            sql("""SELECT count(*) FROM pg_constraint
+                      WHERE conrelid = 'public.message_translations'::regclass
+                        AND conname = 'message_translations_source_table_check'""")
+            == "1"
+        )

@@ -16,18 +16,28 @@ from app.core.exceptions import (
 )
 from app.models.auth import CurrentUser
 from app.models.care_conversation import (
+    ConfirmedTranslation,
     ConversationCreate,
     ConversationReadMarker,
     ConversationSend,
 )
 from app.models.enums import Language, coerce_locale
 from app.services.clinic_membership_service import ClinicMembershipService
+from app.services.translation_guards import guard_failure
+from app.utils.localization import detect_locale
 
 logger = logging.getLogger(__name__)
 
 # Translation never runs in the send or read path (Cloud Run only gives CPU while a request
 # is open): reads mark what is missing, and the viewer asks for each one on its own request.
 _SOURCE_TABLE = "care_team_conversation_messages"
+
+#: Plain-language reasons a confirmed translation is rejected, for the clinician who sees it.
+_GUARD_LABELS = {
+    "numbers_changed": "a number or unit differs from your message",
+    "negation_changed": "a negation (no, not, never, without) differs from your message",
+    "medication_name_changed": "a medication name differs from your message",
+}
 
 _ACTIVITY_ERROR_HINTS: dict[str, tuple[str, str]] = {
     "activity_context_unavailable": (
@@ -94,17 +104,27 @@ class CareConversationService:
         return result
 
     async def send(self, conversation: UUID, data: ConversationSend) -> dict[str, Any]:
+        payload = data.model_dump(mode="json", exclude={"confirmed_translation"})
         result = cast(
             dict[str, Any],
             await self._call(
                 "send",
                 {
                     "conversation_id": str(conversation),
-                    **data.model_dump(mode="json"),
+                    **payload,
                 },
             ),
         )
-        # LOC-003: no model call here. The reader requests the translation of this message.
+        # LOC-003: no model call here. A reader asks for the translation of this message —
+        # unless the clinician previewed and confirmed one, which is stored as-is so the
+        # patient reads exactly the wording that was approved (decision 3).
+        if data.confirmed_translation and result.get("id"):
+            await self.store_confirmed_translation(
+                str(conversation), str(result["id"]), data.body, data.confirmed_translation
+            )
+            result["translation"] = data.confirmed_translation.text
+            result["translation_locale"] = data.confirmed_translation.locale.value
+            result["translation_guard_passed"] = True
         return result
 
     async def mark_read(self, conversation: UUID, data: ConversationReadMarker) -> dict[str, Any]:
@@ -271,8 +291,6 @@ class CareConversationService:
 
         Own messages, empty bodies and text already in the viewer's language need nothing.
         """
-        from app.utils.localization import detect_locale
-
         body = str(msg.get("body") or "").strip()
         if not body or str(msg.get("sender_role") or "") == self.actor.role:
             return None
@@ -317,6 +335,8 @@ class CareConversationService:
                     msg["translation"] = tr.get("translated_text")
                     msg["translation_locale"] = target_locale
                     msg["translation_guard_passed"] = tr.get("guard_passed", True)
+                    # LOC-003 item 5: which model produced it, so the reader can be told.
+                    msg["translation_model_id"] = tr.get("model_id")
                     continue
                 if tr and failure_marker_is_recent(tr):
                     continue  # failed recently: not shown, not requested again yet
@@ -325,6 +345,95 @@ class CareConversationService:
         except Exception:
             # Translations are optional; never fail the read. Log the failure, never the text.
             logger.warning("Attaching message translations failed", exc_info=False)
+
+    async def preview_reply(self, conversation: UUID, body: str) -> dict[str, Any]:
+        """LOC-003 decision 3: the Spanish a patient will receive, and its back-translation.
+
+        A clinician writes English. Before sending, they see exactly what the patient will
+        read, plus an English back-translation of it and the guard results, so they can
+        confirm the Spanish without reading Spanish. Nothing is stored: this is unsent text.
+
+        When the patient reads English there is nothing to preview, and ``needed`` is false.
+        """
+        from app.services.message_translation import back_translate_message, translate_message
+
+        if self.actor.role != "clinician":
+            raise self._denial()
+        conversation_id = str(conversation)
+        # Same authorization as reading the thread: an outsider cannot preview into it.
+        await self._call("messages", {"conversation_id": conversation_id, "limit": 1})
+        target_locale = await self._patient_locale(conversation_id)
+        text = body.strip()
+        result: dict[str, Any] = {
+            "needed": False,
+            "target_locale": target_locale,
+            "translation": None,
+            "back_translation": None,
+            "guard_passed": None,
+            "guard_failure_code": None,
+            "model_id": None,
+        }
+        source_locale = detect_locale(text) or Language.EN.value
+        if not text or source_locale == target_locale:
+            return result  # the patient reads this language already
+        result["needed"] = True
+
+        protected = await self._medication_names(conversation_id)
+        try:
+            translation, guard_passed, failure_code, model_id = await translate_message(
+                text, source_locale, target_locale, protected
+            )
+        except Exception:
+            logger.warning("Reply preview translation failed", exc_info=False)
+            return result  # no preview; the caller offers to send the English as written
+        result.update(
+            {
+                "translation": translation,
+                "guard_passed": guard_passed,
+                "guard_failure_code": failure_code,
+                "model_id": model_id,
+            }
+        )
+        if not guard_passed:
+            # A translation that moved a number is never offered, so it is never confirmed.
+            return result
+        try:
+            result["back_translation"] = await back_translate_message(
+                translation, target_locale, source_locale, protected
+            )
+        except Exception:
+            logger.warning("Reply preview back-translation failed", exc_info=False)
+        return result
+
+    async def store_confirmed_translation(
+        self, conversation_id: str, message_id: str, body: str, confirmed: ConfirmedTranslation
+    ) -> None:
+        """Store the exact wording the clinician confirmed as this message's translation.
+
+        The clinician approved specific Spanish, so that is what the patient must see rather
+        than a fresh translation that could differ. The guards are re-run here against the
+        message body: the browser asking for something must never be a way around them.
+        """
+        from app.services.message_translation import MessageTranslationService
+
+        source_locale = detect_locale(body) or Language.EN.value
+        if confirmed.locale == source_locale:
+            raise ValidationError("A confirmed translation must be in the patient's language")
+        failure = guard_failure(body, confirmed.text, await self._medication_names(conversation_id))
+        if failure:
+            raise ValidationError(
+                "The confirmed translation no longer matches the message: "
+                f"{_GUARD_LABELS.get(failure, failure)}. Preview it again."
+            )
+        await MessageTranslationService(self.db).store_gloss(
+            source_table=_SOURCE_TABLE,
+            source_message_id=message_id,
+            translated_text=confirmed.text,
+            guard_passed=True,
+            model_id=confirmed.model_id,
+            source_locale=source_locale,
+            target_locale=confirmed.locale,
+        )
 
     async def translate_message(self, conversation: UUID, message_id: UUID) -> dict[str, Any]:
         """Translate ONE message for the viewer, store it, and return it (idempotent).
@@ -381,6 +490,7 @@ class CareConversationService:
     def _with_translation(result: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
         result["translation"] = row.get("translated_text")
         result["translation_guard_passed"] = row.get("guard_passed", True)
+        result["translation_model_id"] = row.get("model_id")
         return result
 
     async def _load_message(self, conversation_id: str, message_id: str) -> dict[str, Any]:

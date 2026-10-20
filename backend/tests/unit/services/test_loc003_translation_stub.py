@@ -106,8 +106,12 @@ class TestEveryTranslationPathRunsOffline:
                 )
             ]
         )
-        assert translated["f-1"]["description"] == "Take 2 glasses of water"
-        assert translated["f-1"]["frequency"] == "every day"
+        assert translated["f-1"].fields == {
+            "description": "Take 2 glasses of water",
+            "frequency": "every day",
+        }
+        # The record says the text came from the stub, not from a reviewed model.
+        assert translated["f-1"].model_id == stub.STUB_MODEL_ID
 
     async def test_message_translation_is_marked_as_stub_produced(self, stubbed: None) -> None:
         text, guard_passed, failure, model_id = await translate_message(

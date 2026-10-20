@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -217,12 +218,20 @@ async def _translate_chunk(payload: list[dict[str, Any]]) -> GenerationResponse:
     )
 
 
+@dataclass(frozen=True)
+class FactTranslation:
+    """One fact's accepted English display fields and the model that produced them."""
+
+    fields: dict[str, str]
+    model_id: str | None
+
+
 async def translate_facts_to_english(
     facts: list[tuple[str, str, dict[str, Any]]],
-) -> dict[str, dict[str, str]]:
+) -> dict[str, FactTranslation]:
     """Translate several Spanish facts' display fields in one model call per batch.
 
-    ``facts`` is ``(fact_id, fact_type, value)``. Returns ``{fact_id: english_fields}`` for
+    ``facts`` is ``(fact_id, fact_type, value)``. Returns ``{fact_id: FactTranslation}`` for
     the facts that translated and passed their guards. A fact that the model skipped, or
     whose translation changed a number, flipped a negation or dropped a field, is simply
     absent, and its caller stores it as untranslated with the original Spanish intact.
@@ -237,7 +246,7 @@ async def translate_facts_to_english(
     if not requested:
         return {}
 
-    accepted: dict[str, dict[str, str]] = {}
+    accepted: dict[str, FactTranslation] = {}
     ids = list(requested)
     for start in range(0, len(ids), BATCH_SIZE):
         chunk = ids[start : start + BATCH_SIZE]
@@ -250,11 +259,12 @@ async def translate_facts_to_english(
             logger.warning("Fact translation batch of %d failed", len(chunk), exc_info=True)
             continue
         returned = {entry.id: entry.fields for entry in parsed.items}
+        model_id = getattr(response.telemetry, "model", None)
         for fact_id in chunk:
             fields = requested[fact_id]
             translated = _accept(fact_id, fields, returned.get(fact_id) or {})
             if translated:
-                accepted[fact_id] = translated
+                accepted[fact_id] = FactTranslation(fields=translated, model_id=model_id)
     return accepted
 
 
@@ -290,4 +300,5 @@ async def translate_fact_to_english(
     A thin wrapper over the batch path so both share one prompt, schema and guard set.
     """
     translated = await translate_facts_to_english([("single", fact_type, value)])
-    return translated.get("single")
+    accepted = translated.get("single")
+    return accepted.fields if accepted else None

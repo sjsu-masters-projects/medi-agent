@@ -46,6 +46,20 @@ from app.services.reminder_schedule_service import ReminderScheduleService
 
 # The clinician portal is English; patient-facing wording is shown in that language.
 CLINICIAN_LOCALE = "en-US"
+#: ``message_translations.source_table`` for Nora transcript turns (migration 068).
+_CHAT_SOURCE_TABLE = "chat_messages"
+
+
+def _with_transcript_translation(result: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
+    """Fill a transcript translation result from a stored row. A failed guard is not shown."""
+    guard_passed = bool(row.get("guard_passed", True))
+    result["translation_guard_passed"] = guard_passed
+    if guard_passed:
+        result["translation"] = row.get("translated_text")
+        result["translation_model_id"] = row.get("model_id")
+    return result
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -861,12 +875,16 @@ class ClinicianService:
 
         chats = await self._execute(
             self.db.table("chat_messages")
-            .select("role, content, created_at, audio_url")
+            .select("id, role, content, created_at, audio_url")
             .eq("patient_id", pid)
             .order("created_at", desc=True)
             .limit(30)
         )
         chat_messages = cast(list[dict[str, Any]], chats.data or [])
+        # LOC-003: a clinician reads English, so a Spanish turn in the Nora transcript needs
+        # a translation. Reading never calls the model: stored ones are attached and the rest
+        # are marked pending, which the portal then asks for one at a time.
+        await self._attach_transcript_translations(chat_messages)
 
         conds = await self._execute(self.db.table("conditions").select("*").eq("patient_id", pid))
         conditions = cast(list[dict[str, Any]], conds.data or [])
@@ -1024,6 +1042,159 @@ class ClinicianService:
         self, clinician_id: UUID, patient_id: UUID, document_id: UUID
     ) -> list[dict[str, Any]]:
         return await self.document_workflows.document_facts(clinician_id, patient_id, document_id)
+
+    # ── LOC-003: Nora transcript translation ─────────────────────────────────
+
+    async def _attach_transcript_translations(self, messages: list[dict[str, Any]]) -> None:
+        """Attach stored English translations to Spanish transcript turns; never fail a read.
+
+        No model call happens here, exactly as in a care-conversation read: a turn detected
+        as Spanish with no usable stored translation is marked ``translation_pending`` and
+        the portal requests it. A fresh failure marker is neither shown nor requested again.
+        """
+        from app.services.message_translation import (
+            MessageTranslationService,
+            failure_marker_is_recent,
+            is_failure_marker,
+        )
+
+        try:
+            spanish = {
+                str(message["id"]): message
+                for message in messages
+                if message.get("id") and self._transcript_needs_translation(message)
+            }
+            if not spanish:
+                return
+            stored = await MessageTranslationService(self.db).get_translations_for_messages(
+                source_table=_CHAT_SOURCE_TABLE,
+                message_ids=list(spanish),
+                target_locale=CLINICIAN_LOCALE,
+            )
+            for message_id, message in spanish.items():
+                row = stored.get(message_id)
+                if row and not is_failure_marker(row):
+                    if row.get("guard_passed", True):
+                        message["translation"] = row.get("translated_text")
+                        message["translation_locale"] = CLINICIAN_LOCALE
+                        message["translation_model_id"] = row.get("model_id")
+                    message["translation_guard_passed"] = row.get("guard_passed", True)
+                    continue
+                if row and failure_marker_is_recent(row):
+                    continue
+                message["translation_pending"] = True
+        except Exception:
+            # Translations are a reading aid; the transcript itself must always load.
+            logger.warning("Attaching transcript translations failed", exc_info=False)
+
+    @staticmethod
+    def _transcript_needs_translation(message: dict[str, Any]) -> bool:
+        """A Spanish turn the clinician cannot read. Nora's own English turns need nothing."""
+        from app.utils.localization import detect_locale
+
+        content = str(message.get("content") or "").strip()
+        return bool(content) and detect_locale(content) == "es-MX"
+
+    async def translate_transcript_message(
+        self, clinician_id: UUID, patient_id: UUID, message_id: UUID
+    ) -> dict[str, Any]:
+        """Translate ONE Nora transcript turn into English, store it, and return it.
+
+        Authorized as a read of this patient's record. Idempotent: a stored translation or a
+        fresh failure marker is returned without a model call. A turn that is already English
+        gets no translation, and nothing here can fail the clinician's reading.
+        """
+        from app.services.message_translation import (
+            MessageTranslationService,
+            failure_marker_is_recent,
+            is_failure_marker,
+        )
+
+        await self._assert_patient_assignment(clinician_id, patient_id)
+        message = await self._transcript_message(patient_id, message_id)
+        result: dict[str, Any] = {
+            "message_id": str(message_id),
+            "translation": None,
+            "translation_locale": CLINICIAN_LOCALE,
+            "translation_guard_passed": None,
+            "translation_pending": False,
+            "translation_model_id": None,
+        }
+        if not self._transcript_needs_translation(message):
+            return result  # already English: nothing to translate
+
+        service = MessageTranslationService(self.db)
+        stored = await service.get_translation(
+            _CHAT_SOURCE_TABLE, str(message_id), CLINICIAN_LOCALE
+        )
+        if stored and not is_failure_marker(stored):
+            return _with_transcript_translation(result, stored)
+        if stored and failure_marker_is_recent(stored):
+            return result
+        row = await service.translate_and_store(
+            source_table=_CHAT_SOURCE_TABLE,
+            source_message_id=str(message_id),
+            text=str(message["content"]).strip(),
+            source_locale="es-MX",
+            target_locale=CLINICIAN_LOCALE,
+            protected_terms=await self._active_medication_names(patient_id),
+        )
+        return _with_transcript_translation(result, row) if row else result
+
+    async def _transcript_message(self, patient_id: UUID, message_id: UUID) -> dict[str, Any]:
+        """One of this patient's transcript turns. Another patient's turn is "not found"."""
+        result = await self._execute(
+            self.db.table("chat_messages")
+            .select("id, content")
+            .eq("id", str(message_id))
+            .eq("patient_id", str(patient_id))
+            .limit(1)
+        )
+        rows = cast(list[dict[str, Any]], result.data or [])
+        if not rows:
+            raise NotFoundError("Chat message", str(message_id))
+        return rows[0]
+
+    async def gloss_evidence_excerpts(
+        self, clinician_id: UUID, patient_id: UUID, excerpts: list[str]
+    ) -> dict[str, Any]:
+        """LOC-003 item 2: English glosses beside Spanish source evidence.
+
+        Authorized as a read of this patient's record, which is what the clinician already
+        did to see the excerpts. Glossing adds no disclosure: the Spanish is on their screen.
+        The original is never replaced, here or in storage.
+        """
+        from app.services.evidence_gloss import EvidenceGlossService
+
+        await self._assert_patient_assignment(clinician_id, patient_id)
+        medications = await self._active_medication_names(patient_id)
+        glosses = await EvidenceGlossService(self.db).glosses_for(excerpts, medications)
+        return {
+            "glosses": [
+                {
+                    "excerpt_id": address,
+                    "excerpt": entry["excerpt"],
+                    "gloss": entry["gloss"],
+                    "model_id": entry.get("model_id"),
+                }
+                for address, entry in glosses.items()
+            ]
+        }
+
+    async def _active_medication_names(self, patient_id: UUID) -> list[str]:
+        """Medication names a gloss must not change; an unreadable list simply guards less."""
+        try:
+            result = await self._execute(
+                self.db.table("medications")
+                .select("name")
+                .eq("patient_id", str(patient_id))
+                .eq("is_active", True)
+            )
+            rows = cast(list[dict[str, Any]], result.data or [])
+            return [str(row["name"]) for row in rows if row.get("name")]
+        except Exception:
+            logger.warning("Could not read medication names for the gloss guard", exc_info=False)
+            return []
 
     async def get_patient_a2a_timeline(
         self,
