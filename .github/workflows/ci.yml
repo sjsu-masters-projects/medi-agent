@@ -407,10 +407,10 @@ jobs:
             files: tests/integration/test_chat_turn_events_postgres.py
             minimums: test_chat_turn_events_postgres=35
           - name: loc003-translation-schema
-            # Message-translation integrity and retention, and the wording-verification
-            # record (080-081).
+            # Message-translation integrity and retention, the wording-verification
+            # record and the display provenance (080-082).
             files: tests/integration/test_loc003_translation_postgres.py
-            minimums: test_loc003_translation_postgres=23
+            minimums: test_loc003_translation_postgres=30
     defaults:
       run:
         working-directory: backend

@@ -413,7 +413,11 @@ class CarePlanService:
                 "Try again, or write it yourself."
             )
         self._store_translation(
-            item, draft.source_locale, draft.target_locale, draft.wording.model_dump()
+            item,
+            draft.source_locale,
+            draft.target_locale,
+            draft.wording.model_dump(),
+            draft.model_id,
         )
         self._audit(
             plan_id,
@@ -505,6 +509,7 @@ class CarePlanService:
         source_locale: str,
         target_locale: str,
         translated: dict[str, str],
+        model_id: str | None = None,
     ) -> None:
         wording = dict(cast(dict[str, dict[str, str]], item.get("wording") or {}))
         origin = dict(cast(dict[str, str], item.get("wording_origin") or {}))
@@ -520,6 +525,8 @@ class CarePlanService:
                 "wording": wording,
                 "wording_origin": origin,
                 "wording_verified": False,
+                # LOC-003 item 5: the model is stored with the wording it produced.
+                "translation_model_id": model_id,
                 # New wording means the previous check and back-translation describe text
                 # that no longer exists, so neither is kept (LOC-003 items 8 and 11).
                 "wording_verification": None,
@@ -545,7 +552,11 @@ class CarePlanService:
             draft = drafts.get(str(item["id"]))
             if draft is not None:
                 self._store_translation(
-                    item, draft.source_locale, draft.target_locale, draft.wording.model_dump()
+                    item,
+                    draft.source_locale,
+                    draft.target_locale,
+                    draft.wording.model_dump(),
+                    draft.model_id,
                 )
         return diagnostics
 

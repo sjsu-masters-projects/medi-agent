@@ -8,7 +8,9 @@ ALTER TABLE public.care_plan_items
   ADD COLUMN IF NOT EXISTS back_translation jsonb
     CHECK (back_translation IS NULL OR jsonb_typeof(back_translation) = 'object'),
   ADD COLUMN IF NOT EXISTS wording_verification jsonb
-    CHECK (wording_verification IS NULL OR jsonb_typeof(wording_verification) = 'object');
+    CHECK (wording_verification IS NULL OR jsonb_typeof(wording_verification) = 'object'),
+  ADD COLUMN IF NOT EXISTS translation_model_id text
+    CHECK (translation_model_id IS NULL OR char_length(translation_model_id) <= 200);
 
 COMMENT ON COLUMN public.care_plan_items.back_translation IS
   'LOC-003 item 8: cached English back-translation of the Spanish wording, with the '
@@ -21,6 +23,10 @@ COMMENT ON COLUMN public.care_plan_items.wording_verification IS
   'which checks ran (numbers with units, negation, medication name, field presence), '
   'whether they passed, the fingerprints of the wording checked, and when. Display and '
   'audit only: publication re-runs the guards and never trusts this record.';
+
+COMMENT ON COLUMN public.care_plan_items.translation_model_id IS
+  'LOC-003 item 5: the model that drafted the second language, shown to the clinician '
+  'beside the translated wording so machine wording is never read as reviewed wording.';
 
 -- A verified item must carry its guard outcome, and an unverified one must not keep a
 -- stale record of a check that no longer describes the stored wording. Added NOT VALID so

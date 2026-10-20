@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui";
 import { AiChip } from "@/components/ui/ai-chip";
 import { Icon } from "@/components/ui/icons";
 import { ADRReviewActions } from "@/components/features/adr-review-actions";
+import { EvidenceGlossLine, glossFor, useEvidenceGlosses, type GlossMap } from "@/components/features/evidence-gloss";
 import { queueTabOf, STATUS_LABELS, type QueueTab } from "@/components/features/adr-queue";
 import { MedWatchPreparationAction } from "@/components/features/medwatch-preparation-action";
 import { formatReviewTimestamp } from "@/components/features/review-time";
@@ -83,7 +84,7 @@ function ProvenanceLabel({
 const cardClass = "rounded-xl border border-line bg-surface p-5";
 const headingClass = "text-sm font-semibold text-ink";
 
-function EvidenceList({ item }: { item: ADRReviewQueueItem }) {
+function EvidenceList({ item, glosses }: { item: ADRReviewQueueItem; glosses: GlossMap }) {
     if (item.evidence.length === 0) {
         return (
             <p className="rounded-xl border border-dashed border-line-strong bg-surface-2 px-4 py-3 text-sm text-muted">
@@ -113,9 +114,12 @@ function EvidenceList({ item }: { item: ADRReviewQueueItem }) {
                     <div className="flex flex-wrap items-center gap-2">
                         <ProvenanceLabel entry={entry} item={item} />
                     </div>
+                    {/* LOC-003 item 2: a patient's answer is evidence, so it is quoted as
+                        given; the English gloss sits beneath it, never in its place. */}
                     {entry.evidence ? (
                         <blockquote className="max-w-[72ch] border-l-2 border-line-strong pl-3 text-sm leading-relaxed text-ink-2">
-                            “{entry.evidence}”
+                            <span className="block">“{entry.evidence}”</span>
+                            <EvidenceGlossLine gloss={glossFor(glosses, entry.evidence)} />
                         </blockquote>
                     ) : null}
                 </li>
@@ -154,6 +158,11 @@ export function ADRReviewCard({
     const patientName = `${item.patientFirstName} ${item.patientLastName}`.trim();
     const tab = queueTabOf(item);
     const open = item.status === "draft";
+    /* LOC-003 item 2: one gloss request covers every Spanish answer quoted on this card. */
+    const glosses = useEvidenceGlosses(item.patientId, [
+        ...item.evidence.map((entry) => entry.evidence),
+        ...item.patientResponses.map((response) => response.evidence),
+    ]);
 
     return (
         <article className="ma-enter space-y-6">
@@ -209,7 +218,7 @@ export function ADRReviewCard({
                         <h2 className="mb-3 text-sm font-semibold text-ink">
                             Patient-grounded Naranjo evidence
                         </h2>
-                        <EvidenceList item={item} />
+                        <EvidenceList glosses={glosses} item={item} />
                     </section>
 
                     {scoringItems.length > 0 ? (
@@ -291,7 +300,8 @@ export function ADRReviewCard({
                                                 </p>
                                                 {response.evidence ? (
                                                     <p className="mt-1 text-sm text-ink-2">
-                                                        “{response.evidence}”
+                                                        <span className="block">“{response.evidence}”</span>
+                                                        <EvidenceGlossLine gloss={glossFor(glosses, response.evidence)} />
                                                     </p>
                                                 ) : null}
                                             </div>

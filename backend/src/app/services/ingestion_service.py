@@ -334,10 +334,15 @@ class IngestionService:
         self._mark_fact_display_locale(
             [fact_id for fact_id, _, _ in spanish if fact_id not in translated], "es-MX"
         )
-        for fact_id, english_fields in translated.items():
+        for fact_id, accepted in translated.items():
             with contextlib.suppress(Exception):
                 self.db.table("clinical_facts").update(
-                    {"display_locale": "es-MX", "display_value": english_fields}
+                    {
+                        "display_locale": "es-MX",
+                        "display_value": accepted.fields,
+                        # LOC-003 item 5: the model is stored with the text it produced.
+                        "display_model_id": accepted.model_id,
+                    }
                 ).eq("id", fact_id).execute()
 
     def _mark_fact_display_locale(self, fact_ids: list[str], locale: str) -> None:

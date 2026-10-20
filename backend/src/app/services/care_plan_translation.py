@@ -76,6 +76,8 @@ class TranslationDraft:
     source_locale: PatientLocale
     target_locale: PatientLocale
     wording: CarePlanWording
+    #: The model that produced this draft, shown with the wording it produced (item 5).
+    model_id: str | None = None
 
 
 def other_locale(locale: PatientLocale) -> PatientLocale:
@@ -290,6 +292,7 @@ async def draft_translations(
                 source_locale=source_locale,
                 target_locale=other_locale(source_locale),
                 wording=CarePlanWording(**draft),
+                model_id=getattr(response.telemetry, "model", None),
             )
     diagnostics = {
         "translation_requested_count": len(items),

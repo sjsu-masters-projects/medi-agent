@@ -5,6 +5,7 @@ from pathlib import Path
 MIGRATIONS = Path(__file__).resolve().parents[3] / "src/app/db/migrations"
 INTEGRITY = (MIGRATIONS / "080_message_translation_integrity.sql").read_text()
 VERIFICATION = (MIGRATIONS / "081_care_plan_wording_verification.sql").read_text()
+PROVENANCE = (MIGRATIONS / "082_loc003_display_provenance.sql").read_text()
 
 
 def _code(source: str) -> str:
@@ -13,6 +14,7 @@ def _code(source: str) -> str:
 
 INTEGRITY_CODE = _code(INTEGRITY)
 VERIFICATION_CODE = _code(VERIFICATION)
+PROVENANCE_CODE = _code(PROVENANCE)
 
 
 class TestDuplicatePrefixIsResolved:
@@ -100,6 +102,10 @@ class TestCarePlanWordingVerification:
         assert "NOT VALID" in VERIFICATION_CODE
         assert "IF NOT EXISTS (" in VERIFICATION_CODE
 
+    def test_the_translating_model_is_stored_with_the_wording(self) -> None:
+        """Item 5: the clinician sees which model drafted the second language."""
+        assert "ADD COLUMN IF NOT EXISTS translation_model_id text" in VERIFICATION_CODE
+
     def test_the_columns_say_they_are_not_trusted_at_publication(self) -> None:
         assert "publication re-runs the guards and never trusts this record" in VERIFICATION
         assert "fingerprint matches" in VERIFICATION
@@ -107,3 +113,39 @@ class TestCarePlanWordingVerification:
     def test_it_adds_no_table_and_so_no_new_grants(self) -> None:
         assert "CREATE TABLE" not in VERIFICATION_CODE
         assert "GRANT" not in VERIFICATION_CODE
+
+
+class TestDisplayProvenance:
+    def test_a_facts_translating_model_is_recorded(self) -> None:
+        """Item 5: the review screen can say what produced a fact's English, not just that
+        something did."""
+        assert "ADD COLUMN IF NOT EXISTS display_model_id text" in PROVENANCE_CODE
+        assert "public.clinical_facts" in PROVENANCE_CODE
+
+    def test_evidence_excerpts_may_be_stored_as_translations(self) -> None:
+        """Item 2: a gloss is the same record this table already holds, not a second table."""
+        assert "CREATE TABLE" not in PROVENANCE_CODE
+        assert "'evidence_excerpt'" in PROVENANCE_CODE
+        assert "message_translations_source_table_check" in PROVENANCE_CODE
+
+    def test_the_widened_check_still_rejects_anything_else(self) -> None:
+        clause = PROVENANCE_CODE.split("CHECK (source_table IN (")[1].split("))")[0]
+        assert sorted(
+            value.strip().strip("',") for value in clause.split() if value.strip().startswith("'")
+        ) == ["care_team_conversation_messages", "chat_messages", "evidence_excerpt"]
+
+    def test_it_finds_the_old_constraint_rather_than_assuming_its_name(self) -> None:
+        """068 declared the check inline, so its generated name is not ours to guess."""
+        assert "FROM pg_catalog.pg_constraint" in PROVENANCE_CODE
+        assert "pg_get_constraintdef(oid) LIKE '%source_table%'" in PROVENANCE_CODE
+
+    def test_it_is_re_runnable(self) -> None:
+        assert "IF NOT EXISTS" in PROVENANCE_CODE
+        assert "NOT LIKE '%evidence_excerpt%'" in PROVENANCE_CODE
+
+    def test_it_fails_closed_on_either_change_missing(self) -> None:
+        assert PROVENANCE_CODE.count("RAISE EXCEPTION") == 2
+
+    def test_it_runs_outside_an_explicit_transaction(self) -> None:
+        for transaction in ("BEGIN;", "COMMIT;", "ROLLBACK;"):
+            assert transaction not in PROVENANCE_CODE

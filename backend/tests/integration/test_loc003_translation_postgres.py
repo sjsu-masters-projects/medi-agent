@@ -1,4 +1,4 @@
-"""Operator-run, disposable PostgreSQL contract tests for LOC-003 migrations 080 and 081.
+"""Operator-run, disposable PostgreSQL contract tests for LOC-003 migrations 080-082.
 
 What these pin down, against the real migration bytes:
 
@@ -7,6 +7,8 @@ What these pin down, against the real migration bytes:
   browser role can run it.
 * 081 — a verified item must carry its guard outcome, and a row approved before the
   migration is not rewritten by it.
+* 082 — a fact records the model that translated it, and an evidence gloss can be stored as
+  a translation while the widened check still rejects anything else.
 
 No remote database, network or model call is involved.
 """
@@ -39,6 +41,8 @@ MESSAGE = "00000000-0000-0000-0000-0000000000a4"
 CHAT_MESSAGE = "00000000-0000-0000-0000-0000000000a5"
 PLAN = "00000000-0000-0000-0000-0000000000a6"
 ITEM = "00000000-0000-0000-0000-0000000000a7"
+FACT = "00000000-0000-0000-0000-0000000000a8"
+EXCERPT = "00000000-0000-0000-0000-0000000000a9"
 
 CARE_TABLE = "care_team_conversation_messages"
 
@@ -167,16 +171,26 @@ def sql(tmp_path: Path):
             plan_version_id uuid NOT NULL,
             wording jsonb,
             wording_verified boolean NOT NULL DEFAULT false);
+          CREATE TABLE public.clinical_facts(
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            patient_id uuid NOT NULL,
+            fact_type text,
+            value jsonb,
+            display_locale text,
+            display_value jsonb);
         """)
         execute((MIGRATIONS / "068_message_translations.sql").read_text())
         execute((MIGRATIONS / "080_message_translation_integrity.sql").read_text())
         execute((MIGRATIONS / "081_care_plan_wording_verification.sql").read_text())
+        execute((MIGRATIONS / "082_loc003_display_provenance.sql").read_text())
         execute(f"""
           INSERT INTO public.care_conversation_messages(id, conversation_id, body)
             VALUES ('{MESSAGE}', '{CONVERSATION}', 'Tomo 500 mg cada dia');
           INSERT INTO public.chat_messages(id, patient_id, content)
             VALUES ('{CHAT_MESSAGE}', '{PATIENT}', 'Me siento mejor');
           INSERT INTO public.care_plan_items(id, plan_version_id) VALUES ('{ITEM}', '{PLAN}');
+          INSERT INTO public.clinical_facts(id, patient_id, fact_type, value)
+            VALUES ('{FACT}', '{PATIENT}', 'obligation', '{{"description": "Tome agua"}}'::jsonb);
         """)
         yield execute
     finally:
@@ -414,3 +428,82 @@ def test_the_integrity_migration_can_be_applied_twice(sql) -> None:
     translation(sql)
     sql(f"DELETE FROM public.care_conversation_messages WHERE id = '{MESSAGE}'")
     assert count(sql) == 0
+
+
+# ── 082: display provenance and the gloss store ───────────────────────────
+
+
+def test_a_fact_records_the_model_that_translated_it(sql) -> None:
+    sql(f"""UPDATE public.clinical_facts
+            SET display_locale = 'es-MX',
+                display_value = '{{"description": "Drink water"}}'::jsonb,
+                display_model_id = 'gemini-test'
+            WHERE id = '{FACT}'""")
+    assert (
+        sql(f"SELECT display_model_id FROM public.clinical_facts WHERE id = '{FACT}'")
+        == "gemini-test"
+    )
+
+
+def test_an_untranslated_fact_records_no_model(sql) -> None:
+    sql(f"UPDATE public.clinical_facts SET display_locale = 'es-MX' WHERE id = '{FACT}'")
+    assert (
+        sql(
+            f"""SELECT display_value IS NULL AND display_model_id IS NULL
+            FROM public.clinical_facts WHERE id = '{FACT}'"""
+        )
+        == "t"
+    )
+
+
+def test_an_evidence_gloss_can_be_stored_as_a_translation(sql) -> None:
+    """Item 2: a gloss is the same record this table holds, not a second table."""
+    sql(f"""
+      INSERT INTO public.message_translations(
+        source_table, source_message_id, source_locale, target_locale,
+        translated_text, guard_passed, model_id)
+      VALUES ('evidence_excerpt', '{EXCERPT}', 'es-MX', 'en-US',
+        'Take 1 tablet', true, 'gemini-test');
+    """)
+    assert count(sql, "source_table = 'evidence_excerpt'") == 1
+
+
+def test_the_widened_check_still_rejects_an_unknown_source(sql) -> None:
+    error = sql(
+        f"""INSERT INTO public.message_translations(
+              source_table, source_message_id, source_locale, target_locale, translated_text)
+            VALUES ('soap_notes', '{EXCERPT}', 'es-MX', 'en-US', 'x')""",
+        succeeds=False,
+    )
+    assert "source_table" in error
+
+
+def test_the_retention_sweep_leaves_glosses_alone(sql) -> None:
+    """A gloss has no source message to be orphaned from; it must survive the sweep."""
+    sql(f"""
+      INSERT INTO public.message_translations(
+        source_table, source_message_id, source_locale, target_locale, translated_text)
+      VALUES ('evidence_excerpt', '{EXCERPT}', 'es-MX', 'en-US', 'Take 1 tablet');
+    """)
+    assert purge(sql) == {"orphans_removed": 0, "expired_failure_markers_removed": 0}
+    assert count(sql, "source_table = 'evidence_excerpt'") == 1
+
+
+def test_one_gloss_per_excerpt_and_language(sql) -> None:
+    """The same printed sentence is glossed once, however many citations quote it."""
+    insert = f"""INSERT INTO public.message_translations(
+        source_table, source_message_id, source_locale, target_locale, translated_text)
+      VALUES ('evidence_excerpt', '{EXCERPT}', 'es-MX', 'en-US', 'Take 1 tablet')"""
+    sql(insert)
+    assert "duplicate key" in sql(insert, succeeds=False)
+
+
+def test_the_provenance_migration_can_be_applied_twice(sql) -> None:
+    sql((MIGRATIONS / "082_loc003_display_provenance.sql").read_text())
+    sql((MIGRATIONS / "082_loc003_display_provenance.sql").read_text())
+    assert (
+        sql("""SELECT count(*) FROM pg_constraint
+                  WHERE conrelid = 'public.message_translations'::regclass
+                    AND conname = 'message_translations_source_table_check'""")
+        == "1"
+    )

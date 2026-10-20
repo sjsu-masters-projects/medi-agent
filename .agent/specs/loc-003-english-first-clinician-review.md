@@ -154,18 +154,100 @@ Both uses are labelled as such.
 
 ## Remaining (owner: Jeevan)
 
-Frontend (clinician portal):
+- **Apply migrations 079–082**, then run the deployed acceptance journeys below. The apply
+  needs `MEDIAGENT_DB_URL` (the Session pooler URI from Dashboard → Connect), which is not
+  stored in this repository or in `.env`; see `docs/supabase_setup_guide.md`.
+- **LOC-001 review of the es-MX caveat drafts** for the patient-side translation note (listed
+  under item 25 below). They are drafts, not approved wording.
+- **Open guard question for LOC-001 (found October 19).** `negation_flipped` compares whether
+  a negation is *present*, not how many there are, so dropping one of several negations does
+  not fail the guard: `Do not take 1,000 mg or 2.5 mL without water` → `Take 1,000 mg or
+  2.5 mL without water` passes, because `without` survives. The comment on the function says
+  counts are deliberately not compared, and that is defensible across this language pair —
+  `Never take` is idiomatically `No tomes nunca` (one negation becoming two), and `and do
+  not` often becomes `ni` (two becoming one), so a plain count would reject correct
+  translations. The narrow fix worth considering is to compare counts **only when both texts
+  are in the same language**, which is exactly the back-translation comparison
+  (English source against English back-translation) and would catch the inverted-instruction
+  case without touching cross-language behaviour. Not changed here: it is a LOC-001 guard
+  decision, not a LOC-003 display one. `preflight_loc003_translation.py --self-check` prints
+  this as `KNOWN_GAP negation_count_not_compared` on every run so it is not rediscovered.
 
-- Phone-style patient preview of the translated wording.
-- English glosses beside original excerpts, and the ADR evidence gloss.
-- Translation of the clinician Chat tab (Nora transcripts).
-- A clinician reply preview with back-translation before sending.
-- A "may contain errors" / model-info icon on translated text.
-- Marking facts untranslated when the guard rejects them, with the original Spanish one tap away.
+### Clinician portal — done (October 19)
 
-Verification:
+19. **Phone-style patient preview.** The patient's own language card, in review and in the
+    approved plan, shows the wording inside a static phone frame with the patient app's own
+    chrome, so long Spanish wrapping and an empty frequency are visible before approval
+    rather than after. Only the patient's language gets a frame: the other language is
+    storage, not a screen. The frame is inert — the completion button is not a control — and
+    uses no motion or 3D transform.
+20. **English glosses beside original evidence.** Care-plan source excerpts, the protected
+    source preview's highlighted excerpt, the document facts dialog and ADR patient answers
+    each show an English gloss beneath the original. The excerpt itself is never altered or
+    replaced, in storage or on screen. A gloss is addressed by a UUIDv5 of its own
+    whitespace-collapsed text, so the same printed sentence is glossed once however many
+    citations quote it; glosses are stored in `message_translations` under the
+    `evidence_excerpt` label (migration 082) with the same guards, model provenance and
+    failure markers as a message translation. A gloss that fails its guards is never shown,
+    and new glosses are capped at ten per request.
+    `POST /clinicians/me/patients/{patient_id}/evidence-glosses`.
+21. **The Nora transcript, in English.** The Chat tab attaches stored translations to Spanish
+    turns and marks the rest pending; reading never calls the model, exactly as a
+    care-conversation read behaves. The portal then requests the pending turns, at most three
+    at a time, through
+    `POST /clinicians/me/patients/{patient_id}/chat-messages/{message_id}/translation`. The
+    patient's own words stay above the translation as the record.
+22. **A clinician reply preview with back-translation.** `POST
+    /care-conversations/{id}/messages/preview` returns the wording the patient will receive
+    and an English back-translation of exactly that wording, with the guard result. Sending is
+    gated until the clinician confirms it, and the confirmed wording is sent as
+    `confirmed_translation` and stored as the message's translation, so the patient reads what
+    was approved rather than a fresh translation. The server re-runs the guards on it and
+    rejects a mismatch: the browser asking for something is not permission to skip a guard.
+    Nothing is stored for an unsent reply. A patient who reads English needs no confirmation,
+    and a guard-rejected translation is never offered for one — the reply goes in English, per
+    decision 3's guard rule.
+23. **"May contain errors" and the model behind the text.** One shared affordance marks every
+    machine translation in the portal: the care-plan AI-draft badge, the phone preview, fact
+    cards, evidence glosses, care-team messages and transcript turns. It opens on tap or
+    keyboard, names the stored model, says the translation may contain errors and that the
+    original is the record. The model is now recorded for care-plan wording
+    (`care_plan_items.translation_model_id`, migration 081) and fact display fields
+    (`clinical_facts.display_model_id`, migration 082); message translations already stored
+    it, and it is now surfaced. Stub-produced wording is labelled as never approvable for a
+    patient.
+24. **Facts the guard rejected say so.** A Spanish fact with no English display fields is
+    marked "Not translated" with the reason, instead of appearing in Spanish where the
+    clinician expects English. Every translated field offers the printed original one tap
+    away, in a disclosure marked `lang="es-MX"`.
 
-- Deployed acceptance in both languages.
+### Patient portal and acceptance tooling — done (October 19)
+
+25. **The patient is told a computer translated it.** A message shown as a translation, and a
+    message whose translation was withheld, both carry an info control beside the existing
+    "Translated from English · show original" line. It opens the bottom sheet (tap or
+    keyboard, 44px touch area, never hover alone) and says a computer made the translation, it
+    may contain errors, which model made it, that the original message is the one that counts
+    and that the care team reads the original, that numbers, doses and medication names are
+    checked, and to ask the care team if anything is unclear. **The es-MX wording is a draft
+    for LOC-001 review, not approved:** `Acerca de esta traducción`, `Esta traducción es
+    automática`, `La hizo una computadora, no una persona, y puede tener errores.`, `La hizo
+    el modelo {model}.`, `No se registró qué modelo la hizo.`, `El mensaje original es el que
+    cuenta. Tu equipo de atención lee el original, no la traducción.`, `Revisamos que los
+    números, las dosis y los nombres de los medicamentos sean iguales en los dos idiomas. Si
+    algo no coincide, no mostramos la traducción.`, `Si algo no te queda claro, pregúntale a
+    tu equipo de atención.`, `Cerrar`.
+    The caveat is on messages only. A patient's Today carries clinician-approved wording, and
+    marking approved clinical wording as machine output would misrepresent it.
+26. **Acceptance runs without the model.** `backend/scripts/preflight_loc003_translation.py`
+    `--self-check` exercises every translation path offline through the stub and asserts the
+    properties the feature rests on — numbers with units, thousands separators, decimals,
+    negations and medication names surviving a translation; a changed dose, an added or lost
+    negation, a separator swap and a changed drug name being rejected; proper names never
+    reaching the model; the fingerprint tracking edits; the reply round trip; the gloss
+    address being its own text. 19/19 pass with no network, database or model.
+    `--check-target` reads the configured project's ledger and the columns 079–082 add, with
+    no mutations. Both are read-only.
 
 ### Backend and data — done (October 19)
 

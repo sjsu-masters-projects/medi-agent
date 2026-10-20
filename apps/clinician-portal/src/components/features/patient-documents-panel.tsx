@@ -536,7 +536,7 @@ export function PatientDocumentsPanel({
                         <div className="grid gap-4 lg:grid-cols-2">
                             <div className="space-y-2.5">
                                 <AiChip>AI-extracted candidates</AiChip>
-                                <ExtractedFactCandidates facts={facts} onSelect={setSelectedFactId} selectedFactId={selectedFactId} />
+                                <ExtractedFactCandidates facts={facts} onSelect={setSelectedFactId} patientId={patientId} selectedFactId={selectedFactId} />
                             </div>
                             <div className="min-h-80 space-y-3">
                                 <p className="text-sm font-semibold text-ink">Protected source preview</p>
