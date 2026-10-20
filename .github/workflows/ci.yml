@@ -406,6 +406,11 @@ jobs:
             # The worker queue, events and claim (078).
             files: tests/integration/test_chat_turn_events_postgres.py
             minimums: test_chat_turn_events_postgres=35
+          - name: loc003-translation-schema
+            # Message-translation integrity and retention, and the wording-verification
+            # record (080-081).
+            files: tests/integration/test_loc003_translation_postgres.py
+            minimums: test_loc003_translation_postgres=23
     defaults:
       run:
         working-directory: backend
@@ -432,6 +437,8 @@ jobs:
           NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER: "1"
           EMAIL_TEST_POSTGRES_DOCKER: "1"
           CHAT_TURN_TEST_POSTGRES_DOCKER: "1"
+          LOC003_TEST_POSTGRES: "1"
+          LOC003_TEST_POSTGRES_DOCKER: "1"
         run: |
           mkdir -p test-results
           pytest ${{ matrix.files }} -v -rs --tb=short --no-cov --junitxml=test-results/postgres-${{ matrix.name }}.xml

@@ -35,7 +35,12 @@ from app.services.care_plan_classification import (
 )
 from app.services.care_plan_evidence_gate import eligible_fact_ids
 from app.services.care_plan_reconciliation import overlaps
-from app.services.care_plan_translation import draft_translations, validate_draft
+from app.services.care_plan_translation import (
+    draft_translations,
+    guard_report,
+    validate_draft,
+    wording_fingerprint,
+)
 from app.services.clinical_fact_service import ClinicalFactService
 from app.services.document_intelligence.grounding import (
     INACTIVE_MEDICATION_ACTIONS,
@@ -207,8 +212,14 @@ class CarePlanService:
                 and not item.is_removed
                 and self._wording_complete({**item.model_dump(), **wording_fields})
             )
+            verification: dict[str, Any] | None = None
             if verified:
-                self._require_wording_guards({**item.model_dump(), **wording_fields})
+                merged = {**item.model_dump(), **wording_fields}
+                self._require_wording_guards(merged)
+                # LOC-003 item 11: the checks that actually passed are recorded with the
+                # verification, so a reviewer can see what was checked, not only that
+                # someone ticked the box. Publication re-runs them and never trusts this.
+                verification = self._wording_verification_record(merged, clinician_id)
             blocker = self._blocker(
                 category=str(original["category"]),
                 title=item.title,
@@ -244,6 +255,7 @@ class CarePlanService:
                         ],
                         **wording_fields,
                         "wording_verified": verified,
+                        "wording_verification": verification,
                     },
                 )
             )
@@ -323,6 +335,34 @@ class CarePlanService:
             )
 
     @staticmethod
+    def _wording_verification_record(item: dict[str, Any], clinician_id: UUID) -> dict[str, Any]:
+        """LOC-003 item 11: what was checked when the wording was marked verified.
+
+        Stores each deterministic check and its result, the fingerprints of the two
+        language versions it covered, who attested and when. It is a record of a check,
+        never a substitute for one: the publication preflight and the database guard both
+        re-run the checks against the stored wording.
+        """
+        wording = cast(dict[str, dict[str, str]], item.get("wording") or {})
+        source_locale = item.get("source_locale")
+        other = "es-MX" if source_locale == "en-US" else "en-US"
+        checks = (
+            guard_report(wording.get(source_locale) or {}, wording.get(other) or {}, item)
+            if source_locale in PATIENT_LOCALES
+            else {}
+        )
+        return {
+            "verified_at": datetime.now(UTC).isoformat(),
+            "verified_by": str(clinician_id),
+            "source_locale": source_locale,
+            "checks": checks,
+            "checks_passed": all(checks.values()) if checks else None,
+            "fingerprints": {
+                locale: wording_fingerprint(wording.get(locale)) for locale in PATIENT_LOCALES
+            },
+        }
+
+    @staticmethod
     def _wording_complete(item: dict[str, Any]) -> bool:
         """Mirror of private.care_plan_wording_is_complete for a clear preflight error."""
         wording = cast(dict[str, dict[str, str]], item.get("wording") or {})
@@ -389,8 +429,14 @@ class CarePlanService:
         patient_id: UUID,
         plan_id: UUID,
         item_id: UUID,
+        *,
+        refresh: bool = False,
     ) -> dict[str, Any]:
-        """LOC-003: Back-translate the Spanish wording of one item to English for verification."""
+        """LOC-003: Back-translate the Spanish wording of one item to English for verification.
+
+        The result is cached against the wording it covered; ``refresh`` is the clinician's
+        "Check again", which calls the model again for the same text.
+        """
         from app.services.care_plan_translation import back_translate_spanish
 
         self._require_assignment(clinician_id, patient_id)
@@ -403,13 +449,34 @@ class CarePlanService:
         english = wording.get("en-US") or {}
         if not (spanish.get("title") or "").strip():
             raise ValidationError("No Spanish wording to back-translate")
+
+        # LOC-003 item 8: a back-translation is of exact stored text, so the cached one is
+        # reused while both languages still fingerprint the same. Reviewing a plan, or
+        # reopening it, therefore costs no further model calls. Wording that changes
+        # invalidates the cache by fingerprint rather than needing to be cleared.
+        fingerprints = {
+            "es-MX": wording_fingerprint(spanish),
+            "en-US": wording_fingerprint(english),
+        }
+        cached = cast(dict[str, Any], item.get("back_translation") or {})
+        if (
+            not refresh
+            and cached.get("fingerprints") == fingerprints
+            and cached.get("back_translation")
+        ):
+            return {
+                "back_translation": cached["back_translation"],
+                "guards": cached.get("guards") or {},
+                "cached": True,
+            }
+
         try:
             result = await back_translate_spanish(spanish, english, item)
         except (GenerationProviderError, ValueError):
             raise ValidationError(
                 "The back-translation is unavailable right now. Try again in a moment."
             ) from None
-        return {
+        payload = {
             "back_translation": {
                 "title": result.title,
                 "instructions": result.instructions,
@@ -420,6 +487,17 @@ class CarePlanService:
                 "medication_names_match": result.medication_names_match,
             },
         }
+        self._store_back_translation(item_id, plan_id, {**payload, "fingerprints": fingerprints})
+        return {**payload, "cached": False}
+
+    def _store_back_translation(self, item_id: UUID, plan_id: UUID, record: dict[str, Any]) -> None:
+        """Cache a back-translation against the wording it covered; never fails the read."""
+        try:
+            self.db.table("care_plan_items").update(
+                {"back_translation": {**record, "created_at": datetime.now(UTC).isoformat()}}
+            ).eq("id", str(item_id)).eq("plan_version_id", str(plan_id)).execute()
+        except Exception:
+            logger.warning("Could not cache the back-translation", exc_info=False)
 
     def _store_translation(
         self,
@@ -442,6 +520,10 @@ class CarePlanService:
                 "wording": wording,
                 "wording_origin": origin,
                 "wording_verified": False,
+                # New wording means the previous check and back-translation describe text
+                # that no longer exists, so neither is kept (LOC-003 items 8 and 11).
+                "wording_verification": None,
+                "back_translation": None,
             }
         ).eq("id", str(item["id"])).eq("plan_version_id", str(item["plan_version_id"])).execute()
 

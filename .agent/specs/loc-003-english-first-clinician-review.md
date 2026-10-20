@@ -154,19 +154,64 @@ Both uses are labelled as such.
 
 ## Remaining (owner: Jeevan)
 
+Frontend (clinician portal):
+
 - Phone-style patient preview of the translated wording.
 - English glosses beside original excerpts, and the ADR evidence gloss.
 - Translation of the clinician Chat tab (Nora transcripts).
 - A clinician reply preview with back-translation before sending.
 - A "may contain errors" / model-info icon on translated text.
 - Marking facts untranslated when the guard rejects them, with the original Spanish one tap away.
-- Batching ingestion fact translation.
-- Caching back-translations.
-- A foreign key and a retention rule for `message_translations`.
-- The duplicate `067` migration prefix (the validator allows it).
-- Recording the guard outcome with the wording verification. Send/read model calls
-  were removed in #187 using the explicit per-message translation endpoint below;
-  a background job is not an outstanding implementation requirement.
+
+Verification:
+
+- Deployed acceptance in both languages.
+
+### Backend and data — done (October 19)
+
+Send/read model calls were removed in #187 using the explicit per-message translation
+endpoint below; a background job was never an outstanding implementation requirement.
+
+13. **Ingestion translates a document's Spanish facts in batches.** One model call carries up
+    to fifteen facts (`BATCH_SIZE` in `fact_display_translation.py`) instead of one call per
+    fact. Guards run per fact, so one rejected translation never discards the rest of its
+    batch. Every fact is marked either way: an English fact records `en-US` so a later run
+    does not re-check it, and a Spanish fact whose translation failed or was rejected records
+    `es-MX` with no `display_value`, which is the untranslated state the review screen reads.
+14. **Back-translations are cached on the item.** `care_plan_items.back_translation` stores the
+    English back-translation, the guard results and a fingerprint of the two language versions
+    it covered (migration 081). It is served only while the fingerprint still matches the
+    stored wording, so a back-translation can never stand in for wording that has since
+    changed, and re-reading a plan costs no model call. The clinician's "Check again" sends
+    `?refresh=true`, which calls the model for the same text. A re-translation clears both the
+    cache and the verification record, because they describe text that no longer exists.
+15. **The guard outcome is recorded with the verification.**
+    `care_plan_items.wording_verification` stores each deterministic check and its result
+    (numbers with units, negation, medication name, field presence), the fingerprints of the
+    wording checked, who attested and when (migration 081). A `NOT VALID` check constraint
+    requires a verified item to carry the record. It is display and audit only: the
+    publication preflight and the database guard both re-run the checks and never trust it.
+    This closes the follow-up noted under decision 9.
+16. **`message_translations` has referential integrity and a retention rule** (migration 080).
+    `source_table` is polymorphic, so one SQL foreign key cannot express it; `AFTER DELETE`
+    triggers on `care_conversation_messages` and `chat_messages` give the same cascade.
+    `public.purge_message_translations(interval)` removes orphans and failure markers past
+    their useful age, and runs as the recorded cron job `message_translation_purge`
+    (`POST /api/v1/cron/message-translations/purge`). A successful translation is kept while
+    its message lives. Nothing clinical is lost: a translation is display state, and the
+    original message stays the record.
+17. **The duplicate `067` prefix is resolved.** `067_english_display_facts.sql` is renumbered to
+    `079_english_display_facts.sql`; it is re-runnable, so it reapplies cleanly, and the
+    validator no longer grandfathers sequence 67.
+18. **Translation runs without a live model when explicitly enabled.** `TRANSLATION_STUB_ENABLED`
+    answers all four translation paths — second-language drafting, back-translation, fact
+    display fields and message translation — from a small deterministic bilingual glossary
+    instead of Vertex AI, so the English-first display rules, the guards and the attestation
+    can be exercised where the model is unreachable. It substitutes known words and leaves
+    everything else as written, which is why numbers, units, doses, medication names and
+    negations survive by construction. It is ignored in production, and stubbed output records
+    `offline-translation-stub` as its model so it is never read as reviewed wording. **Stubbed
+    wording must never be approved as patient-facing text.**
 
 ## Non-blocking translation implemented in #187 (October 17)
 

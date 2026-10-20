@@ -206,6 +206,44 @@ so run `backend/scripts/appointment-clinician-overlap-preflight.sql` (read-only)
 appointments in the hosted project. A read-only audit on October 17 found no public table with RLS
 off and no browser-role SELECT or INSERT on a public table.
 
+### Message-translation integrity and wording verification (079-081) — not yet applied
+
+Pending the requester's authorization; nothing here has been applied to a hosted project.
+Apply in order, after `078_chat_turn_events.sql`:
+
+1. `079_english_display_facts.sql` — the renumbered LOC-003 fact-display columns (see
+   "Renamed migration files"). Re-runnable; reapplying is a no-op on a project that already
+   has `display_locale` and `display_value`.
+2. `080_message_translation_integrity.sql` — `AFTER DELETE` triggers on
+   `care_conversation_messages` and `chat_messages` that remove a deleted message's stored
+   translations (the cascade a polymorphic `source_table` cannot express as one foreign key),
+   plus `public.purge_message_translations(interval)`, which removes orphans and expired
+   failure markers. The function is `service_role`-only; the migration's verification block
+   fails closed if either trigger is missing or a browser role can execute it.
+3. `081_care_plan_wording_verification.sql` — `care_plan_items.back_translation` (the cached
+   back-translation a clinician verifies against) and `care_plan_items.wording_verification`
+   (the deterministic guard outcome recorded with `wording_verified`), plus a `NOT VALID`
+   check constraint requiring a verified item to carry its record. `NOT VALID` is deliberate:
+   rows approved before this migration are not rewritten, and new writes are checked.
+
+All three are re-runnable and add no table, so no new grants are introduced. Nothing here is
+destructive: 080 only deletes translations, which are display state, never a record of truth.
+
+The retention rule is a recorded cron job, `POST /api/v1/cron/message-translations/purge`
+(internal, `CRON_AUTH_TOKEN`), intended for Cloud Scheduler about once a day. It is safe to
+repeat and reports `orphans_removed` and `expired_failure_markers_removed`.
+
+Verify with the contract suite before applying anywhere:
+
+```bash
+cd backend
+LOC003_TEST_POSTGRES=1 PYTHONPATH=src pytest tests/integration/test_loc003_translation_postgres.py
+```
+
+It builds a disposable cluster and runs the real migration bytes. On macOS with PostgreSQL 18
+the fixture pins `LC_ALL=C` and creates the `postgres` superuser itself, so no local cluster
+configuration is needed.
+
 ### Hosted default grants
 
 New public tables and functions created through SQL receive platform default grants to `anon`,
@@ -224,6 +262,11 @@ and is applied again, so every migration must be idempotent (`IF NOT EXISTS`, `C
 guarded constraint and policy creation). Example: LOC-003's migrations were first applied as
 `065_english_display_facts` and `066_message_translations`, then renumbered to `067_english_display_facts`
 and `068_message_translations`; the renumbered files reapplied cleanly because they are re-runnable.
+`067_english_display_facts.sql` was renumbered once more, to `079_english_display_facts.sql`, to clear
+the `067` collision with `067_clinic_lists_and_roles.sql`. It reapplies cleanly for the same reason
+(`ADD COLUMN IF NOT EXISTS` plus `COMMENT ON`), and the earlier ledger rows stay as the record of
+when those columns first landed. `067` now holds one migration, and the validator no longer
+grandfathers that sequence, so a new `067` collision fails CI like any other.
 Never edit an applied migration; renumber only a file that has not merged, and test it twice.
 
 ### Appointment booking guards (042/043)

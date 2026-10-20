@@ -8,6 +8,7 @@ Safety checks and escalation use only the original, never the translation.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections import Counter
 from collections.abc import Iterable
@@ -21,6 +22,7 @@ from supabase import Client
 from app.adk.background_generation import generate_for_workload
 from app.adk.registry import Workload
 from app.services.translation_guards import guard_failure, number_tokens
+from app.services.translation_stub import generate_or_stub, translate_text
 from app.utils.localization import detect_locale
 
 logger = logging.getLogger(__name__)
@@ -117,17 +119,22 @@ async def translate_message(
     is still returned with guard_passed=False so the UI can decide whether to show it.
     """
     try:
-        response = await generate_for_workload(
-            Workload.CARE_PLAN_TRANSLATION,
-            prompt=MESSAGE_TRANSLATION_USER.format(
-                source_locale="English" if source_locale == "en-US" else "Spanish",
-                target_locale="Spanish" if target_locale == "es-MX" else "English",
-                message_text=_fence(text),
+        response = await generate_or_stub(
+            stub=lambda: json.dumps(
+                {"translated_text": translate_text(text, target_locale)}, ensure_ascii=False
             ),
-            system_instruction=MESSAGE_TRANSLATION_SYSTEM,
-            temperature=0,
-            response_schema=_message_schema(),
-            record_telemetry=True,
+            generate=lambda: generate_for_workload(
+                Workload.CARE_PLAN_TRANSLATION,
+                prompt=MESSAGE_TRANSLATION_USER.format(
+                    source_locale="English" if source_locale == "en-US" else "Spanish",
+                    target_locale="Spanish" if target_locale == "es-MX" else "English",
+                    message_text=_fence(text),
+                ),
+                system_instruction=MESSAGE_TRANSLATION_SYSTEM,
+                temperature=0,
+                response_schema=_message_schema(),
+                record_telemetry=True,
+            ),
         )
         parsed = _TranslatedMessage.model_validate_json(response.text)
     except (PydanticValidationError, Exception) as exc:

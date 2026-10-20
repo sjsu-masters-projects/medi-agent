@@ -8,8 +8,10 @@ Diagnostics carry counts only: never wording, fact values or identifiers.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -19,11 +21,13 @@ from pydantic import ValidationError as PydanticValidationError
 from app.adk.background_generation import generate_for_workload
 from app.adk.registry import Workload
 from app.models.care_plan import PATIENT_LOCALES, CarePlanWording, PatientLocale
+from app.models.generation import GenerationResponse
 from app.services.translation_guards import (
     changed_protected_terms,
     negation_flipped,
     number_tokens,
 )
+from app.services.translation_stub import generate_or_stub, translate_fields
 from app.utils.localization import detect_locale
 
 _FIELDS = ("title", "instructions", "frequency")
@@ -115,29 +119,115 @@ def _protected_terms(item: dict[str, Any]) -> list[str]:
     return [term for term in (str(medication.get("name") or "").strip(),) if term]
 
 
+# The deterministic checks, in the order a rejection reports them. The order matters only
+# for which single reason a caller is told about first; every check runs in guard_report.
+GUARD_CHECKS: tuple[str, ...] = (
+    "fields_present",
+    "numbers_match",
+    "negation_match",
+    "medication_names_match",
+)
+
+# The rejection code reported for each failed check.
+_GUARD_FAILURE_CODES: dict[str, str] = {
+    "fields_present": "field_missing",
+    "numbers_match": "numbers_changed",
+    "negation_match": "negation_changed",
+    "medication_names_match": "medication_name_changed",
+}
+
+
+def guard_report(
+    source: dict[str, str], draft: dict[str, str], item: dict[str, Any]
+) -> dict[str, bool]:
+    """Run every deterministic check and report each outcome separately.
+
+    ``validate_draft`` reports the first failure; this reports all of them, so a
+    verification can record which checks actually passed rather than only that none failed.
+    """
+    return {
+        "fields_present": all(
+            not (source.get(field) or "").strip() or bool((draft.get(field) or "").strip())
+            for field in _FIELDS
+        ),
+        "numbers_match": _numbers(source) == _numbers(draft),
+        "negation_match": not negation_flipped(_joined(source), _joined(draft)),
+        # Whole words: "Metformina" is a changed name, not the original one.
+        "medication_names_match": not changed_protected_terms(
+            [source.get(f) or "" for f in _FIELDS],
+            [draft.get(f) or "" for f in _FIELDS],
+            _protected_terms(item),
+        ),
+    }
+
+
 def validate_draft(
     source: dict[str, str], draft: dict[str, str], item: dict[str, Any]
 ) -> str | None:
     """Return a rejection code, or None when the draft preserves the checked facts."""
-    for field in _FIELDS:
-        if (source.get(field) or "").strip() and not (draft.get(field) or "").strip():
-            return "field_missing"
-    if _numbers(source) != _numbers(draft):
-        return "numbers_changed"
-    if negation_flipped(_joined(source), _joined(draft)):
-        return "negation_changed"
-    if changed_protected_terms(
-        [source.get(f) or "" for f in _FIELDS],
-        [draft.get(f) or "" for f in _FIELDS],
-        _protected_terms(item),
-    ):
-        # Whole words: "Metformina" is a changed name, not the original one.
-        return "medication_name_changed"
+    report = guard_report(source, draft, item)
+    for check in GUARD_CHECKS:
+        if not report[check]:
+            return _GUARD_FAILURE_CODES[check]
     return None
+
+
+def wording_fingerprint(wording: Mapping[str, str] | None) -> str:
+    """Stable fingerprint of one language's wording, for tying a check to the exact text.
+
+    A cached back-translation and a recorded verification are only meaningful for the
+    wording they covered, so both store this and are ignored once it stops matching.
+    """
+    joined = "\x1f".join((wording or {}).get(field, "").strip() for field in _FIELDS)
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:32]
 
 
 def _source_wording(item: dict[str, Any]) -> dict[str, str]:
     return {field: str(item.get(field) or "") for field in _FIELDS}
+
+
+async def _draft_chunk(
+    prompt_items: list[dict[str, Any]],
+    schema: dict[str, Any],
+    *,
+    record_telemetry: bool,
+) -> GenerationResponse:
+    """One batch of drafting: the model, or the offline stub when it is enabled."""
+    return await generate_or_stub(
+        stub=lambda: _stub_drafts(prompt_items),
+        generate=lambda: generate_for_workload(
+            Workload.CARE_PLAN_TRANSLATION,
+            prompt=TRANSLATION_USER.format(
+                items_json=json.dumps(prompt_items, ensure_ascii=False, sort_keys=True)
+            ),
+            system_instruction=TRANSLATION_SYSTEM,
+            temperature=0,
+            response_schema=schema,
+            record_telemetry=record_telemetry,
+        ),
+    )
+
+
+def _stub_drafts(prompt_items: list[dict[str, Any]]) -> str:
+    """Offline stand-in for a drafting response (see ``translation_stub``)."""
+    return json.dumps(
+        {
+            "items": [
+                {
+                    "id": item["id"],
+                    "source_locale": item["source_locale"],
+                    **translate_fields(
+                        {field: str(item.get(field) or "") for field in _FIELDS},
+                        other_locale(item["source_locale"])
+                        if item["source_locale"] in PATIENT_LOCALES
+                        else "es-MX",
+                    ),
+                }
+                for item in prompt_items
+            ]
+        },
+        ensure_ascii=False,
+    )
 
 
 async def draft_translations(
@@ -173,16 +263,7 @@ async def draft_translations(
             }
             for item in chunk
         ]
-        response = await generate_for_workload(
-            Workload.CARE_PLAN_TRANSLATION,
-            prompt=TRANSLATION_USER.format(
-                items_json=json.dumps(prompt_items, ensure_ascii=False, sort_keys=True)
-            ),
-            system_instruction=TRANSLATION_SYSTEM,
-            temperature=0,
-            response_schema=schema,
-            record_telemetry=record_telemetry,
-        )
+        response = await _draft_chunk(prompt_items, schema, record_telemetry=record_telemetry)
         try:
             parsed = _TranslationResponse.model_validate_json(response.text)
         except PydanticValidationError:
@@ -282,15 +363,20 @@ async def back_translate_spanish(
         "frequency": spanish_wording.get("frequency", ""),
         "keep_unchanged": _protected_terms(item),
     }
-    response = await generate_for_workload(
-        Workload.CARE_PLAN_TRANSLATION,
-        prompt=BACK_TRANSLATION_USER.format(
-            item_json=json.dumps(prompt_item, ensure_ascii=False, sort_keys=True)
+    response = await generate_or_stub(
+        stub=lambda: json.dumps(
+            translate_fields({field: spanish_wording.get(field, "") for field in _FIELDS}, "en-US")
         ),
-        system_instruction=BACK_TRANSLATION_SYSTEM,
-        temperature=0,
-        response_schema=_back_translation_schema(),
-        record_telemetry=True,
+        generate=lambda: generate_for_workload(
+            Workload.CARE_PLAN_TRANSLATION,
+            prompt=BACK_TRANSLATION_USER.format(
+                item_json=json.dumps(prompt_item, ensure_ascii=False, sort_keys=True)
+            ),
+            system_instruction=BACK_TRANSLATION_SYSTEM,
+            temperature=0,
+            response_schema=_back_translation_schema(),
+            record_telemetry=True,
+        ),
     )
     try:
         parsed = _BackTranslatedItem.model_validate_json(response.text)
