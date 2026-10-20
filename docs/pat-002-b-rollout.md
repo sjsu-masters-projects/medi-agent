@@ -29,6 +29,15 @@ configuration.
 
 ## Release order
 
+### October 20 post-202 acceptance
+
+#202 merged/deployed automatically; backend `00173-t5q` and worker `00016-29q`
+serve the updated code. Morgan's Spanish typed/mobile confirmation produced one
+canonical completed task and one exact clinician ADR draft, unlike the preserved
+pre-fix duplicate history. Saved region wording/reload and unchecked consent pass.
+See [live evidence](deployed-recheck-2026-10-11.md#october-20--post-202-live-acceptance).
+Physical voice, forced outage and wider mobile/accessibility checks remain.
+
 ### October 19 authorized activation checkpoint
 
 Candidate-1, exact migration checksums, trigger and browser-write restrictions

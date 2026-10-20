@@ -338,8 +338,8 @@ request bodies were not copied into this report.
 | DV-004 | LOC-003 | Medium | Morgan V5 Care Plan → Metformin item labels the source “Spanish document” and “Translated from Spanish,” but Source excerpts and confidence shows only English text from `Morgan-Ellis_Metformin-Medication-Order_2026-10-02.pdf` page 1. | Translation/source labels accurately describe the item provenance. | Pass live for the reported Metformin case after #201; English source label matches original English page-one evidence and the false Spanish marker is absent. See the post-merge #200/#201 checkpoint; broader LOC-003 cases remain. |
 | DV-005 | UX-005 | Low; browser-specific | At measured 390 CSS px, MedWatch Preview's embedded PDF area was blank in the Codex in-app browser although its “Open in new tab” link returned a valid, renderable eight-page PDF. | The embedded preview shows the document or a helpful fallback in supported browsers. | Open; compare in Chrome/mobile before attributing this to application code. The 390 px stepper itself passed. |
 | DV-006 | Cross-portal; SCH-001-V, PV-001-B/C | High; intermittent | Clinician Schedule, ADR case and Alerts, plus patient Visits, Profile, Chat and ADR follow-up alternated between error/indefinite loading and success on retry. Clinician console recorded a Next.js RSC `Failed to fetch` fallback. The October 19 log correlation found older notification-only 502s, while schedule/ADR/profile GETs observed during the earlier failure window were 200; those status codes do not prove browser success. Six separate risk-score `TypeError`s are caught by the clinician deep dive (DV-012), not a demonstrated cause of these page failures. | Stable reads and clear retry rather than stranded loading or misleading empty states. | Open; reproduce in Chrome/phone with browser network timing/response details and correlate exact request IDs across Vercel and Cloud Run. Current last-30-minute Vercel window and browser console had no errors; this does not reconstruct the earlier event. Do not infer a single root cause from status alone. |
-| DV-007 | PV-001-B | Medium; presentation | After Hannah's new two “do not know” answers, her clinician ADR case lists dose-response and similar previous reaction twice each as “Patient-confirmed”: older entries plus new entries marked “Answered” with a time. | Distinguish historical from latest evidence, or collapse identical answers without losing provenance. | Fixed locally in PR #202, deployed recheck pending. Live Hannah duplicate rows reproduced October 19. Every row remains; patient evidence now identifies Current follow-up, Different follow-up, Recorded follow-up or missing request metadata. Dates stay scoped to exact request matches; no inferred chronology or scoring change. |
-| DV-008 | PV-001-C; localization | Low; copy | With Hannah's saved locale es-MX, an answered ADR request rendered its controls, answers and date in Spanish, but the heading read “Unas preguntas sobre nausea and stomach cramps” and the detail said “Reportado con ferrous sulfate.” The symptom is English source text; medication identity intentionally remains untranslated. | Clearly distinguish original patient-reported symptom text from translated interface copy, without inventing a clinical translation. | Fixed locally in PR #202, deployed/bilingual review pending. Headings label quoted symptom text as original wording and medication names as recorded in both locales, without translating clinical free text. New es-MX copy is listed as a draft in the PV-001-C requirements. |
+| DV-007 | PV-001-B | Medium; presentation | Hannah's repeated answers lacked distinct request attribution. | Preserve evidence and distinguish current from historical requests without inferred dates. | Closed for the reported case after #202: October 20 live retained all rows, four Different follow-up/two Current follow-up, dates only on current pair; score unchanged. [Evidence](#october-20--post-202-live-acceptance). |
+| DV-008 | PV-001-C; localization | Low; copy | Spanish headings mixed English clinical source text into the interface without a source label. | Identify original symptom wording and recorded medicine names without inventing translations. | Closed for answered-request path after #202: en-US/es-MX labels, read-only unknown answers and reload pass October 20. Demo wording review accepted; both preferences restored. [Evidence](#october-20--post-202-live-acceptance). |
 | DV-009 | Migration ledger | Medium; schema provenance | A read-only hosted-ledger query found `076_care_conversation_activity_review.sql` applied on October 19, but also `071_confirmed_symptom_handoff.sql` applied on October 18. The latter filename is not among current main's 91 local migration files, which include `071_clinician_visit_management.sql`; the two newer local files are 077/078 and their hosted status was not checked. | Every hosted applied filename and checksum should be accounted for in the canonical migration history or an explicit exception record. | Partially reconciled: merged #159 now includes the canonical 071_confirmed_symptom_handoff.sql file and its pinned history. A fresh hosted checksum comparison and full 077/078 reconciliation remain; do not rename/replay applied files. |
 | DV-010 | COM-002 | Medium; navigation | Rajeev sent a synthetic message linked to his approved daily fasting-glucose activity. Elena clicked “Review activity in draft” from that private thread. The care-plan route included `#care-plan-item-252f…`, but the panel rendered its first Atorvastatin editor instead. On repeat, the hash remained but the target was not in the DOM because only the selected item editor is mounted; focus was `BODY`. Manually selecting the fourth glucose item worked. | The linked activity is selected, scrolled into view and keyboard-focused when the clinician opens the draft; a repeat open is idempotent. | Pass live after #196: exact glucose article mounted, scrolled and H3 focused, with V2 unpublished and V1 live. See the #196 evening checkpoint. Broader COM-002 acceptance remains. |
 | DV-011 | LOC-002 | Medium; locale transition | After Rajeev saved en-US following an es-MX test and navigated to Today, the English chrome briefly displayed Spanish approved activity wording with “Written in Spanish by your care team,” then a subsequent settled render showed the English wording. On the first Spanish Today navigation, English activity wording with the English-source label appeared before the locale-specific feed settled. | The initial and subsequent Today renders use the current saved locale consistently, or hold the feed while locale-specific wording loads; do not show stale approved wording as if it were the current choice. | Observed transition passes live after #200: matching loading state preceded Spanish/English approved tasks; 0/4 completion and confirmed appointment persisted; English restored. See post-merge checkpoint. Every-frame/network-throttled first-paint measurement and broader LOC-002 checks remain. |
@@ -642,3 +642,71 @@ gate or runtime certificate verification was disabled.
 Final local patient `npm run test` — **75 files / 816 tests passed** including
 the new both-locale region-state regressions. The clinician full-suite result
 remains 69 files / 620 passed for the schedule-test correction.
+
+### October 20 — post-202 live acceptance
+
+**Deployment:** #202 merged as `7c4d9f9`; main CI, frontend CI, CodeQL and
+automatic backend rollout succeeded. Both Vercel commit statuses succeeded.
+Backend serves revision `mediagent-backend-00173-t5q`; chat worker serves
+`mediagent-chat-worker-00016-29q`. No manual deployment, migration, configuration
+change or repair was performed during this recheck.
+
+**DV-007 passes:** Elena opened Hannah's existing case
+`aa904f7b-bd23-4ce2-8d14-6c98f910c297`. All six repeated patient-confirmed rows
+remain: four label Different follow-up, two Current follow-up. Only the current
+pair shows the October 19 answer time; no dates were inferred for older rows.
+Two AI-extracted rows remain separately identified. Score remains 4 / Possible,
+Awaiting review. No clinician decision changed.
+
+**DV-008 passes:** requester switched the patient portal to Hannah. Opened answered
+request `3a55f7c9-b3a4-40f1-b686-2df8fdaae479`: en-US labels identify original
+symptom wording and medicine name as recorded. Temporarily switched saved locale
+to es-MX: `Síntoma reportado (texto original): «nausea and stomach cramps»` and
+`Medicamento (nombre registrado): ferrous sulfate.` appear. The two unchanged
+`No sé` answers stay read-only with the October 19 answered date, including after
+reload. Original clinical free text was not translated or modified. Restored
+Hannah's original en-US preference and closed the language sheet.
+
+**Spanish typed/mobile confirmation passes; DV-015/016 close for this path:**
+Morgan's saved preference switched en-US→es-MX. In a new daily session
+`day-2026-10-20`, sent clearly fictional mild nausea 2/10 with no emergency symptoms
+or treatment-change request. Nora created private intake
+`fedcbe69-09c5-40bd-85f9-b4244de263cb`, locale es-MX. A target-host-pinned service
+read proved `confirmed_report_id=null` before confirmation. The typed Spanish
+questions, source-suggestion acceptance, rating, detailed medication testimony,
+`No sé` concomitant answer and `Prefiero no responder` history answer persisted.
+Private answers did not become ordinary chat bubbles.
+
+At 390×844, preview separates patient-reported/unverified product from recorded
+Metformin 500 mg context; it does not add a medicine. Preview and answers survived
+reload. Consent remained unchecked and confirm disabled until explicitly checked.
+After authorized confirmation, patient saved state and accessible region both read
+`Informe guardado para revisión del equipo clínico`, including after reload.
+Document scrollWidth equalled viewport width (390px). A rapid attempted 360/430
+override still reported 390 before resize settled, so **no 360/430 result is claimed**.
+Viewport reset and Morgan's en-US preference restored afterward.
+
+Confirmed report `9bf8db93-f512-494c-b02c-7437512c7047` has exactly one task:
+`1d70d896-f316-4826-8d8e-d33deb8d584a`, completed, key
+`confirmed_symptom:9bf8db93-f512-494c-b02c-7437512c7047`. Exactly one ADR case
+exists, `b3824e74-0d78-424a-a9f5-e853b3aea399`, status draft. Elena opened that
+exact case: Spanish original testimony, 2/10, patient-reported association,
+Awaiting review and score 0 / Doubtful. No medication/plan/clinical decision changed.
+The older duplicate-task history was preserved, not deleted or relabelled.
+
+**DV-014 passes sampled transitions:** Elena's Today showed Rajeev Oct 20 10:00.
+Selecting This week immediately showed Loading your schedule with no stale agenda,
+then the correct Rajeev and Morgan Oct 22 09:00 entries. Changing All clinics to
+Willow Terrace likewise hid prior clinic visits while loading, then displayed
+`No visits at Willow Terrace Family Medicine match.` Failure/retained-refresh
+branches retain automated regression evidence, not a forced live-failure claim.
+
+**Bounded failure check:** metadata-only query for errors/HTTP 5xx on backend
+revision `00173-t5q` returned no rows during this recheck. This does not explain
+the earlier intermittent DV-006 failures. No patient text or credentials logged.
+
+Local screenshots retained: `/private/tmp/pr202-spanish-intake-preview-390.png`
+and `/private/tmp/post202-spanish-report-saved-390.png`. Physical microphone,
+forced network outage, quiet 3500-second renewal, wider mobile/accessibility
+matrix and patient deletion remain distinct next steps. Hannah's label screenshot
+is `/private/tmp/post202-hannah-spanish-source-labels.png`.
