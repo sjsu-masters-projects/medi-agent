@@ -76,8 +76,8 @@ export interface ADRFollowUpCopy {
 // "Send to care team", "Edit").
 const EN: ADRFollowUpCopy = {
   eyebrow: "Care team follow-up",
-  heading: (symptom) => `A few questions about ${symptom}`,
-  reportedWith: (medication) => `Reported with ${medication}.`,
+  heading: (symptom) => `Reported symptom (original wording): “${symptom}”`,
+  reportedWith: (medication) => `Medication name as recorded: ${medication}.`,
   careTeamMessage: "Message from your care team",
   caution:
     "Answer only from what has already happened. Do not restart, stop, or change a medicine just to answer these questions.",
@@ -174,8 +174,8 @@ const EN: ADRFollowUpCopy = {
 // ("tu equipo de atención"). Pending review by a Spanish-fluent reviewer (D9).
 const ES: ADRFollowUpCopy = {
   eyebrow: "Seguimiento de tu equipo de atención",
-  heading: (symptom) => `Unas preguntas sobre ${symptom}`,
-  reportedWith: (medication) => `Reportado con ${medication}.`,
+  heading: (symptom) => `Síntoma reportado (texto original): «${symptom}»`,
+  reportedWith: (medication) => `Medicamento (nombre registrado): ${medication}.`,
   careTeamMessage: "Mensaje de tu equipo de atención",
   caution:
     "Responde solo con lo que ya pasó. No reinicies, suspendas ni cambies un medicamento solo para responder estas preguntas.",

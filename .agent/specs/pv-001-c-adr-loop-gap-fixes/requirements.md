@@ -19,6 +19,23 @@
 
 ## Introduction
 
+### Presentation follow-up in PR #202 (October 19)
+
+- DV-007: retain every evidence entry and its stored answer. Patient follow-up
+  evidence identifies whether it belongs to the case's current request, a
+  different recorded request, or has no request metadata. Only an exact request
+  match may carry the current response timestamp. No inferred chronology,
+  deduplication, scoring change or evidence rewrite is permitted.
+- DV-008: follow-up headings identify quoted symptom text as original wording;
+  medication text is explicitly the recorded name. This applies to pending,
+  answered, closed and history views through their existing shared copy. The
+  stored symptom/medicine values are not automatically translated.
+- **New es-MX drafts, pending bilingual review:**
+  `Síntoma reportado (texto original): «{symptom}»` and
+  `Medicamento (nombre registrado): {medication}.`
+  These labels do not certify a translation of medical source text. Existing
+  retrospective-question and medication-change cautions remain unchanged.
+
 PR #136 (`feat(adr): close patient information loop`) lets an assigned clinician request up to three
 patient-answerable, retrospective Naranjo questions (`reappeared_on_rechallenge`, `dose_response`,
 `similar_previous_reaction`). The patient answers in chat. The RPC `respond_to_adr_information_request`

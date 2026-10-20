@@ -192,6 +192,12 @@ clinic). Invite history is intentionally role-sensitive, per clinic:
 
 ## ADR Review Workflow
 
+ADR evidence preserves repeated historical answers. Patient-confirmed rows label
+their relationship to the case's current follow-up request; missing request
+metadata is explicit. Only matching request IDs receive that request's response
+timestamp. These labels do not infer which answer is clinically correct or change
+the deterministic score.
+
 - The cases page and report page replace the single `/medwatch` page: where this section says "queue" or "editor", read the routes above.
 
 - `GET /api/v1/clinicians/me/adr-assessments` returns draft assessments only for patients assigned to the authenticated clinician.
