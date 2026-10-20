@@ -68,6 +68,15 @@ function ProvenanceLabel({
     return (
         <>
             <Badge variant="neutral">Patient-confirmed</Badge>
+            <span className="text-xs text-muted">
+                {!entry.information_request_id
+                    ? "Follow-up request not recorded"
+                    : !item.informationRequestId
+                      ? "Recorded follow-up"
+                      : entry.information_request_id === item.informationRequestId
+                        ? "Current follow-up"
+                        : "Different follow-up"}
+            </span>
             {answeredAt ? (
                 <span className="text-xs text-muted">
                     Answered{" "}

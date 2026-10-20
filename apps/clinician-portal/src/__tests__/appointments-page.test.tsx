@@ -157,6 +157,37 @@ describe("My schedule", () => {
     expect(screen.getByText("Your visits and appointment offers")).toBeInTheDocument();
   });
 
+  it("does not describe the previous day result as an empty week while loading", async () => {
+    let finish!: (value: MySchedule) => void;
+    mocks.schedule.mockResolvedValueOnce(schedule()).mockImplementationOnce(
+      () => new Promise<MySchedule>((resolve) => { finish = resolve; }),
+    );
+    render(<AppointmentsPage />);
+    await screen.findByText("No visits today");
+    fireEvent.click(screen.getByRole("radio", { name: "This week" }));
+    expect(screen.getByText("Loading your schedule…")).toBeInTheDocument();
+    expect(screen.queryByText("No visits this week")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Refresh schedule" })).toBeDisabled();
+    finish(schedule({ visits: [visit()] }));
+    expect(await screen.findByText("Maya Patel")).toBeInTheDocument();
+  });
+
+  it("does not reuse old-range visits on failure, but preserves a same-range refresh", async () => {
+    mocks.schedule.mockResolvedValueOnce(schedule({ visits: [visit()] }));
+    render(<AppointmentsPage />);
+    await screen.findByText("Maya Patel");
+    mocks.schedule.mockRejectedValueOnce(new Error("Unavailable"));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh schedule" }));
+    await screen.findByText(/Showing what was loaded before/);
+    expect(screen.getByText("Maya Patel")).toBeInTheDocument();
+    mocks.schedule.mockRejectedValueOnce(new Error("Unavailable"));
+    fireEvent.click(screen.getByRole("radio", { name: "This week" }));
+    expect(screen.queryByText(/Showing what was loaded before/)).not.toBeInTheDocument();
+    await screen.findByText("Your schedule is unavailable");
+    expect(screen.queryByText("Maya Patel")).not.toBeInTheDocument();
+    expect(screen.queryByText("No visits this week")).not.toBeInTheDocument();
+  });
+
   it("opens a visit from its row", async () => {
     mocks.schedule.mockResolvedValue(schedule({ visits: [visit()] }));
     render(<AppointmentsPage />);
@@ -261,7 +292,8 @@ describe("My schedule", () => {
         expect.objectContaining({ care_team_id: "team1", slots: ["2026-10-20T16:00:00.000Z", "2026-10-21T21:00:00.000Z"] }),
       );
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-      expect(mocks.schedule).toHaveBeenCalledTimes(2);
+      // The success notice can render before the refresh effect runs.
+      await waitFor(() => expect(mocks.schedule).toHaveBeenCalledTimes(2));
     });
 
     it("keeps the server conflict callout and blocks sending until the time changes", async () => {

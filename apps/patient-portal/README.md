@@ -3,6 +3,9 @@
 Next.js PWA for MediAgent patients: Today, Records, Chat with Nora and the care team,
 Visits, Reminders and Profile, in en-US and es-MX.
 
+Symptom-intake region labels reflect the saved state (private draft, confirmed,
+cancelled or safety-interrupted), matching the visible localized heading.
+
 ## Local development
 
 From `apps/patient-portal`, install dependencies and run the portal on the default port
@@ -26,6 +29,12 @@ On Node 26, if auth-session tests fail because localStorage is unavailable, run
 `NODE_OPTIONS=--no-experimental-webstorage npm run test` so jsdom supplies browser storage.
 
 ## Behaviour notes
+
+ADR care-team follow-ups label the symptom as quoted original wording and the
+medicine name as recorded. Spanish interface text does not imply that a stored
+English symptom or medicine name has been translated. The same copy applies to
+pending forms and read-only answered/closed history; safety questions and answers
+are unchanged. New Spanish labels await the tracked bilingual wording review.
 
 - Sessions are shared across tabs (one refresh at a time, sign-out in any tab signs out all).
   Defaults: 30 days idle and 90 days absolute, silent with a login notice; override with
@@ -212,7 +221,8 @@ exists; empty; and recent history (up to 5 answered or closed requests from the 
 
 **Localization.** All strings come from `src/content/adr-follow-up-copy.ts` in en-US and es-MX,
 guarded by a key-parity test. The clinician's message, symptom and medication name are shown
-verbatim. The Spanish wording is pending review by a Spanish-fluent reviewer.
+verbatim. ADR Spanish wording received requester-authorized LLM-assisted demo
+meaning-and-safety review on October 19; this is not professional translation validation.
 
 **Errors and drafts.** The server error code is mapped to localized copy: `ADR_REQUEST_CLOSED`
 shows the closed state, and server message text is never displayed. Unsent answers live only in

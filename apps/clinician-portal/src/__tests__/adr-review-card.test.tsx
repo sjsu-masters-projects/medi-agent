@@ -88,6 +88,28 @@ afterEach(() => {
 });
 
 describe("ADR review card evidence provenance", () => {
+    it("distinguishes repeated patient answers by request without discarding evidence or inventing dates", () => {
+        const { container } = renderCard({
+            evidence: [
+                { ...patientEntry, information_request_id: null },
+                { ...patientEntry, information_request_id: "request-older", answer: "no" },
+                patientEntry,
+            ],
+            informationRequestId: "request-1",
+            patientRespondedAt: RESPONDED_AT,
+        });
+        const entries = evidenceEntries(container);
+        expect(entries).toHaveLength(3);
+        expect(entries[0]).toHaveTextContent("Follow-up request not recorded");
+        expect(entries[1]).toHaveTextContent("Different follow-up");
+        expect(entries[2]).toHaveTextContent("Current follow-up");
+        expect(entries[0].querySelector("time")).toBeNull();
+        expect(entries[1].querySelector("time")).toBeNull();
+        expect(entries[2].querySelector("time")).toHaveAttribute("dateTime", RESPONDED_AT);
+        for (const entry of entries) expect(labelsIn(entry)).toEqual(["Patient-confirmed"]);
+        expect(within(entries[1]).getByText("no", { exact: true })).toBeInTheDocument();
+    });
+
     it("labels every entry AI-extracted when no entry records a source", () => {
         const { container } = renderCard({
             evidence: [aiEntry, { ...aiEntry, question: "improved_on_dechallenge" }],

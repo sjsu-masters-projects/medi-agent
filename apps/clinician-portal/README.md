@@ -4,6 +4,10 @@ Next.js app for clinician and clinic-admin workflows in MediAgent.
 
 ## Local Development
 
+The schedule displays only results matching the selected range, clinic and
+cancelled filter. Scope changes show loading/retry rather than relabelling old
+visits or an old empty result; same-scope refresh failures retain prior data.
+
 From `apps/clinician-portal`, install dependencies and run the portal on port 3001
 (the patient portal uses the default 3000):
 
@@ -191,6 +195,12 @@ clinic). Invite history is intentionally role-sensitive, per clinic:
 - Layouts: below 768 px the tables become stacked rows and the stepper reads "Step N of 4" with previous and next step buttons (#180); from 768 px a grid table and a numbered stepper. Neither page scrolls horizontally at 390 px or 1280 px.
 
 ## ADR Review Workflow
+
+ADR evidence preserves repeated historical answers. Patient-confirmed rows label
+their relationship to the case's current follow-up request; missing request
+metadata is explicit. Only matching request IDs receive that request's response
+timestamp. These labels do not infer which answer is clinically correct or change
+the deterministic score.
 
 - The cases page and report page replace the single `/medwatch` page: where this section says "queue" or "editor", read the routes above.
 
