@@ -42,9 +42,13 @@ function englishTitle(item: CarePlanItem | EditableItem): string {
     return item.wording?.["en-US"]?.title?.trim() || item.title;
 }
 
-/** True when the English title shown to the clinician is a translation of a Spanish source. */
+/**
+ * True when the English title shown to the clinician is a translation of a Spanish source.
+ * DV-004: keyed on the SOURCE EVIDENCE language (the fact/document), not the item's authored
+ * wording — an English order that produced Spanish-authored wording is not "translated from Spanish".
+ */
 function isTranslatedFromSpanish(item: CarePlanItem | EditableItem): boolean {
-    return item.source_locale === "es-MX" && Boolean(item.wording?.["en-US"]?.title?.trim());
+    return item.source_evidence_locale === "es-MX" && Boolean(item.wording?.["en-US"]?.title?.trim());
 }
 const MEDICATION_ROUTES = ["oral", "topical", "inhaled", "iv", "im", "subcutaneous"];
 
