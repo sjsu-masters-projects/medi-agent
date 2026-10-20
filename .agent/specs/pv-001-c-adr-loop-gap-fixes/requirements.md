@@ -1,5 +1,13 @@
 # Requirements Document
 
+> **Scope decision — October 19, 2026:** The requester excludes actual FDA
+> submission and external-submission recording from the current project. Neither
+> is an acceptance gate or future integration commitment. MedWatch ends at
+> draft/review/approval, preview/export and retained discard history. Historical
+> Requirement 22 and its external-record clauses below describe already-existing
+> implementation, not required work. This documentation decision does not itself
+> remove deployed controls, stored records or audit safeguards.
+
 > **Status:** Implementation merged/deployed in #171, with migrations 063/064 recorded applied. Remaining acceptance is tracked under PV-001-C and PV-002, not a pending implementation sequence.
 > Requirements 1 to 14 (PR 1, PR 2) were approved by the requester on 2026-10-12; requirements 15 to 24 (PR 3) were
 > added the same day, and the requester decided D12 to D17 exactly as proposed. Design in `design.md`, tasks in
