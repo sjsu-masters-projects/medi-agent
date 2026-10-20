@@ -278,3 +278,45 @@ class TestStoredTranslationRows:
             )
         assert db.table.return_value.upsert.call_args.args[0]["model_id"] == "gemini-x"
         assert threads and threads[0] != threading.main_thread().name
+
+
+class TestSourceEvidenceLocale:
+    """DV-004: the source-evidence language is the fact's language, never the authored wording."""
+
+    def test_english_medication_fact_is_en_us(self) -> None:
+        # Morgan's real Metformin fact: all-English evidence that produced Spanish wording.
+        value = {
+            "name": "Metformin",
+            "dosage": "One tablet (500 mg)",
+            "frequency": "Twice daily",
+            "instructions": "Take one tablet by mouth twice daily with meals.",
+        }
+        assert facts.detected_fact_locale(value, "medication", None) == "en-US"
+
+    def test_spanish_obligation_fact_is_es_mx(self) -> None:
+        value = {
+            "description": "Tome un vaso de agua con cada comida y camine después de cenar",
+            "frequency": "tres veces al día",
+        }
+        assert facts.detected_fact_locale(value, "obligation", None) == "es-MX"
+
+    def test_display_locale_wins_when_present(self) -> None:
+        english_value = {"name": "Metformin", "instructions": "Take one tablet twice daily."}
+        assert facts.detected_fact_locale(english_value, "medication", "es-MX") == "es-MX"
+
+    def test_untranslatable_only_fact_is_unknown(self) -> None:
+        assert (
+            facts.detected_fact_locale({"value": "126", "unit": "mg/dL"}, "lab_result", None)
+            is None
+        )
+
+    def test_service_helper_maps_fact_to_locale(self) -> None:
+        from app.services.care_plan_service import CarePlanService
+
+        english_fact = {
+            "fact_type": "medication",
+            "value": {"name": "Metformin", "instructions": "Take one tablet twice daily."},
+            "display_locale": None,
+        }
+        assert CarePlanService._source_evidence_locale(english_fact) == "en-US"
+        assert CarePlanService._source_evidence_locale(None) is None
