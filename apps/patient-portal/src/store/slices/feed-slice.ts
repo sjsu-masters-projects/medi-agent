@@ -53,6 +53,8 @@ interface FeedState {
     summary: FeedSummary;
     loading: boolean;
     error: string | null;
+    locale: Locale | null;
+    currentRequestId: string | null;
 }
 
 export const defaultFeedSummary: FeedSummary = {
@@ -68,6 +70,8 @@ const initialState: FeedState = {
     summary: defaultFeedSummary,
     loading: false,
     error: null,
+    locale: null,
+    currentRequestId: null,
 };
 
 function mapApiProvider(provider?: ApiFeedProvider | null): FeedTask["provider"] {
@@ -184,17 +188,29 @@ export const feedSlice = createSlice({
     },
     extraReducers: (builder) => {
         builder
-            .addCase(fetchTodayFeed.pending, (state) => {
+            .addCase(fetchTodayFeed.pending, (state, action) => {
                 state.loading = true;
                 state.error = null;
+                state.currentRequestId = action.meta.requestId;
             })
             .addCase(fetchTodayFeed.fulfilled, (state, action) => {
+                if (state.currentRequestId !== action.meta.requestId) return;
                 state.tasks = action.payload.tasks;
                 state.summary = action.payload.summary;
+                state.locale = action.meta.arg?.locale ?? "en-US";
+                state.currentRequestId = null;
                 state.loading = false;
                 state.error = null;
             })
             .addCase(fetchTodayFeed.rejected, (state, action) => {
+                if (state.currentRequestId !== action.meta.requestId) return;
+                const locale = action.meta.arg?.locale ?? "en-US";
+                if (state.locale !== locale) {
+                    state.tasks = [];
+                    state.summary = { ...defaultFeedSummary };
+                }
+                state.locale = locale;
+                state.currentRequestId = null;
                 state.loading = false;
                 state.error = action.payload ?? "load";
             });

@@ -365,3 +365,47 @@ glucose editor is selected/focused; follow one fresh unread private-message noti
 and verify only that receipt/count clears; then query a bounded backend log window to
 confirm no new null-severity conversion traceback. Until those checks are recorded,
 DV-010, DV-012 and DV-013 remain deployed-recheck items rather than Done.
+
+### PR #196 deployed recheck — October 19 evening
+
+This follow-up supersedes the earlier pending-deployment statements for DV-010
+and DV-013. Performed around 18:02–18:07 America/Los_Angeles using the already
+signed-in synthetic Rajeev patient and Elena clinician accounts. The backend
+reported revision `mediagent-backend-00170-hgw` serving 100% of traffic.
+
+| Check | Result | Observed evidence and remaining boundary |
+| --- | --- | --- |
+| DV-010: activity message → correct draft editor | **Pass live** | Opened the existing Rajeev/Elena/Cedar Grove conversation and its daily fasting-glucose attachment through “Review activity in draft.” The resulting hash was `#care-plan-item-252f3605-631d-4cd4-82b5-3de16cab2407`; exactly one article mounted, containing the glucose editor, and `document.activeElement` was its H3 heading. The editor was scrolled into view. V2 still had four proposed items, 0/4 verified and disabled publication; V1 remained live. No review edits were saved. COM-002's other acceptance boundaries remain. |
+| DV-013: fresh notification → private thread → persisted read state | **Pass live** | The old notification was already read before this recheck. Sent exactly one routine synthetic message from Rajeev to Elena: “Synthetic notification verification after PR #196. No action needed.” It persisted with time 18:05:45 Pacific. Explicit notification refresh showed 38 unread, up from the baseline 37, and a fresh Rajeev entry. Its Open conversation link reached the existing private thread with the saved message; unread returned to 37. Full browser reload retained 37, and the fresh notification no longer had an Unread marker or Mark read control. Unrelated safety and appointment notifications remained unread; 36 action items remained. No bulk/manual-read action was used. |
+| DV-012: risk-detail regression and logs | **Partial live evidence** | After reload Rajeev showed Low / 100% recorded completion; Morgan's detail showed Medium / 68%, matching the roster rather than falling back to unknown/0. At 18:07:26 Pacific, a revision-scoped `gcloud logging read` with `--freshness=20m`, limit 20, and filter `RiskScoreService OR TypeError OR severity>=ERROR` returned no entries. This does not establish that a null-severity row was within either calculation's lookback window; the mixed/all-null regression tests remain the direct branch evidence. Do not claim a directly reproduced null-row deployed pass. |
+
+No clinical plan was approved, medication changed, appointment changed or source
+row rewritten during this recheck. The routine test message and its read receipt
+are the new persisted test records. Existing intermittent and localization defects
+remain open; successful loads during this window do not close them.
+
+### October 19 evening follow-up verification and fixes
+
+Latest remote main is `20ea7ac` (merged #159). GitHub reports its Cloud Run and
+both Vercel deployments succeeded. This corrects the board's prior claim that
+#159 was unmerged; runtime activation/library readiness and actual confirmed
+symptom handoff remain unverified by this campaign. The canonical migration
+directory now includes `071_confirmed_symptom_handoff.sql`; DV-009's missing-file
+portion is explained, but a hosted checksum reconciliation is still required.
+
+| Area | Result | Evidence / remaining boundary |
+| --- | --- | --- |
+| UX-006 agenda | Additional partial pass | Elena's week view loaded the confirmed Rajeev October 20 10:00 and Morgan October 22 09:00 visits. Measured `innerWidth` and document `scrollWidth` matched at both 390 and 1280 CSS px. The initial viewport requests mapped through browser zoom, so dimensions were adjusted and measured rather than assuming requested pixels equalled CSS pixels. No appointment changed. |
+| UX-006 new offer | Booked-day guidance passes | Selecting Rajeev derived Cedar Grove and America/Los_Angeles. Automated datetime filling initially changed the visible field without triggering React's change path. With the month segment selected, an ArrowUp/ArrowDown pair fired native changes and returned the exact value to `2026-10-20T10:00`. The form then showed “Already booked that day” and “10:00–10:30 AM · Cedar Grove Community Health,” matching the confirmed agenda. No offer was sent. Server conflict refusal and visit mutations remain untested. |
+| LOC-002 / DV-011 implementation | Fixed locally in PR #200; deployed recheck pending | The feed slice previously retained old-language tasks while loading and accepted every response regardless of arrival order. Added the loaded locale and latest request ID; the hook suppresses mismatched-locale tasks/summary before the effect starts, and ignores superseded successes/failures. Same-locale refresh retains prior data. Failure in a new locale shows retry feedback without old-language instructions. No schedule, history or approved wording API changed. |
+| LOC-002 local verification | Pass | Patient suite: 75 files / 814 tests; lint and typecheck pass, with one existing unused-variable warning in the merged chat test. Production webpack build passed with existing Sentry migration warnings. New tests cover delayed old responses, old failures after a new success, and a failed locale transition with no adherence write. `git diff --check` passed. |
+
+DV-010/DV-013 acceptance from the preceding section remains valid. DV-011 must
+be rechecked after this PR deploys; remaining auth, Spanish ADR, source-provenance,
+intermittent loading and clinical-action paths retain their existing limits.
+
+The busy-time lookup was also repeated with synthetic Evelyn selected at Willow
+Terrace. For the same October 20 date, it displayed the clinician's Cedar Grove
+10:00–10:30 AM booking without naming the other patient. Cross-clinic busy-time
+guidance therefore passes; the separate server refusal on submission remains
+untested. The unsent form was closed and no appointment/offer was created.

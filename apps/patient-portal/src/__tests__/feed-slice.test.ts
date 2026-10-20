@@ -12,6 +12,39 @@ vi.mock("@/services/api", () => ({
 }));
 
 describe("feedSlice", () => {
+    it("keeps the latest locale when an older feed response finishes last", async () => {
+        const response = (name: string) => ({
+            date: "2026-10-19", timezone: "America/Los_Angeles",
+            summary: { completed: 1, missed: 0, pending: 0, skipped: 0, total: 1 },
+            tasks: [{ id: "same-task", target_id: "same-activity", type: FeedTaskType.OBLIGATION,
+                name, frequency: "daily", status: FeedTaskStatus.COMPLETED,
+                scheduled_time: "08:00", completed_at: "2026-10-19T15:00:00Z" }],
+        });
+        let finishEnglish!: (value: ReturnType<typeof response>) => void;
+        get.mockReturnValueOnce(new Promise((resolve) => { finishEnglish = resolve; }));
+        get.mockResolvedValueOnce(response("Revisa tu glucosa"));
+        const store = configureStore({ reducer: feedSlice.reducer });
+        const oldRequest = store.dispatch(fetchTodayFeed({ token: "token", locale: "en-US" }));
+        await store.dispatch(fetchTodayFeed({ token: "token", locale: "es-MX" }));
+        finishEnglish(response("Check your glucose"));
+        await oldRequest;
+        expect(store.getState()).toMatchObject({ locale: "es-MX", loading: false,
+            summary: { completed: 1 }, tasks: [{ name: "Revisa tu glucosa", targetId: "same-activity",
+                status: FeedTaskStatus.COMPLETED, scheduledTime: "08:00", completedAt: "2026-10-19T15:00:00Z" }] });
+    });
+
+    it("ignores an old failed request after the current locale succeeds", async () => {
+        let failOld!: (reason: Error) => void;
+        get.mockReturnValueOnce(new Promise((_, reject) => { failOld = reject; }));
+        get.mockResolvedValueOnce({ date: "2026-10-19", timezone: "UTC", tasks: [], summary: {} });
+        const store = configureStore({ reducer: feedSlice.reducer });
+        const oldRequest = store.dispatch(fetchTodayFeed({ locale: "en-US" }));
+        await store.dispatch(fetchTodayFeed({ locale: "es-MX" }));
+        failOld(new Error("old request failed"));
+        await oldRequest;
+        expect(store.getState()).toMatchObject({ locale: "es-MX", error: null, loading: false });
+    });
+
     it("stores a stable load key rather than backend prose", async () => {
         get.mockRejectedValue(new Error("Internal English server detail"));
         const store = configureStore({ reducer: feedSlice.reducer });
