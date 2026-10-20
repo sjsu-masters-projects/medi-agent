@@ -154,10 +154,24 @@ Both uses are labelled as such.
 
 ## Remaining (owner: Jeevan)
 
-- Deployed acceptance in both languages, with migrations 079–082 applied.
-- The patient portal's own "may contain errors" treatment, which needs approved es-MX
-  wording for the caveat (LOC-001 bilingual review). The API already carries
-  `translation_model_id` on every message, so this is copy, not plumbing.
+- **Apply migrations 079–082**, then run the deployed acceptance journeys below. The apply
+  needs `MEDIAGENT_DB_URL` (the Session pooler URI from Dashboard → Connect), which is not
+  stored in this repository or in `.env`; see `docs/supabase_setup_guide.md`.
+- **LOC-001 review of the es-MX caveat drafts** for the patient-side translation note (listed
+  under item 25 below). They are drafts, not approved wording.
+- **Open guard question for LOC-001 (found October 19).** `negation_flipped` compares whether
+  a negation is *present*, not how many there are, so dropping one of several negations does
+  not fail the guard: `Do not take 1,000 mg or 2.5 mL without water` → `Take 1,000 mg or
+  2.5 mL without water` passes, because `without` survives. The comment on the function says
+  counts are deliberately not compared, and that is defensible across this language pair —
+  `Never take` is idiomatically `No tomes nunca` (one negation becoming two), and `and do
+  not` often becomes `ni` (two becoming one), so a plain count would reject correct
+  translations. The narrow fix worth considering is to compare counts **only when both texts
+  are in the same language**, which is exactly the back-translation comparison
+  (English source against English back-translation) and would catch the inverted-instruction
+  case without touching cross-language behaviour. Not changed here: it is a LOC-001 guard
+  decision, not a LOC-003 display one. `preflight_loc003_translation.py --self-check` prints
+  this as `KNOWN_GAP negation_count_not_compared` on every run so it is not rediscovered.
 
 ### Clinician portal — done (October 19)
 
@@ -206,6 +220,34 @@ Both uses are labelled as such.
     marked "Not translated" with the reason, instead of appearing in Spanish where the
     clinician expects English. Every translated field offers the printed original one tap
     away, in a disclosure marked `lang="es-MX"`.
+
+### Patient portal and acceptance tooling — done (October 19)
+
+25. **The patient is told a computer translated it.** A message shown as a translation, and a
+    message whose translation was withheld, both carry an info control beside the existing
+    "Translated from English · show original" line. It opens the bottom sheet (tap or
+    keyboard, 44px touch area, never hover alone) and says a computer made the translation, it
+    may contain errors, which model made it, that the original message is the one that counts
+    and that the care team reads the original, that numbers, doses and medication names are
+    checked, and to ask the care team if anything is unclear. **The es-MX wording is a draft
+    for LOC-001 review, not approved:** `Acerca de esta traducción`, `Esta traducción es
+    automática`, `La hizo una computadora, no una persona, y puede tener errores.`, `La hizo
+    el modelo {model}.`, `No se registró qué modelo la hizo.`, `El mensaje original es el que
+    cuenta. Tu equipo de atención lee el original, no la traducción.`, `Revisamos que los
+    números, las dosis y los nombres de los medicamentos sean iguales en los dos idiomas. Si
+    algo no coincide, no mostramos la traducción.`, `Si algo no te queda claro, pregúntale a
+    tu equipo de atención.`, `Cerrar`.
+    The caveat is on messages only. A patient's Today carries clinician-approved wording, and
+    marking approved clinical wording as machine output would misrepresent it.
+26. **Acceptance runs without the model.** `backend/scripts/preflight_loc003_translation.py`
+    `--self-check` exercises every translation path offline through the stub and asserts the
+    properties the feature rests on — numbers with units, thousands separators, decimals,
+    negations and medication names surviving a translation; a changed dose, an added or lost
+    negation, a separator swap and a changed drug name being rejected; proper names never
+    reaching the model; the fingerprint tracking edits; the reply round trip; the gloss
+    address being its own text. 19/19 pass with no network, database or model.
+    `--check-target` reads the configured project's ledger and the columns 079–082 add, with
+    no mutations. Both are read-only.
 
 ### Backend and data — done (October 19)
 

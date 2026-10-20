@@ -208,6 +208,16 @@ export function getConversationCopy(locale: string) {
     activityNotCurrent: "Esta actividad ya no pertenece al plan actual.",
     // Draft for LOC-001 review, not approved wording.
     translating: "Traduciendo…",
+    // LOC-003 item 5, patient side. Drafts for LOC-001 review, NOT approved wording.
+    aboutTranslation: "Acerca de esta traducción",
+    aboutTranslationTitle: "Esta traducción es automática",
+    translationMayErr: "La hizo una computadora, no una persona, y puede tener errores.",
+    translationModel: (model: string) => `La hizo el modelo ${model}.`,
+    translationModelUnknown: "No se registró qué modelo la hizo.",
+    translationOriginalIsRecord: "El mensaje original es el que cuenta. Tu equipo de atención lee el original, no la traducción.",
+    translationGuards: "Revisamos que los números, las dosis y los nombres de los medicamentos sean iguales en los dos idiomas. Si algo no coincide, no mostramos la traducción.",
+    translationAsk: "Si algo no te queda claro, pregúntale a tu equipo de atención.",
+    close: "Cerrar",
   } : {
     recipient: "Choose recipient", choose: "Select a person", open: "Open conversation",
     threads: "Conversations", empty: "No conversations yet.", noRecipients: "No linked recipients available.",
@@ -240,6 +250,16 @@ export function getConversationCopy(locale: string) {
     activityAttached: "Attached plan activity",
     activityNotCurrent: "This activity is no longer part of the current plan.",
     translating: "Translating…",
+    // LOC-003 item 5, patient side.
+    aboutTranslation: "About this translation",
+    aboutTranslationTitle: "This translation is automatic",
+    translationMayErr: "A computer made it, not a person, and it may contain errors.",
+    translationModel: (model: string) => `It was made by the ${model} model.`,
+    translationModelUnknown: "Which model made it was not recorded.",
+    translationOriginalIsRecord: "The original message is the one that counts. Your care team reads the original, not the translation.",
+    translationGuards: "We check that numbers, doses and medication names are the same in both languages. If something does not match, we do not show the translation.",
+    translationAsk: "If anything is unclear, ask your care team.",
+    close: "Close",
   };
 }
 

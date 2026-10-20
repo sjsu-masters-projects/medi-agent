@@ -365,3 +365,66 @@ glucose editor is selected/focused; follow one fresh unread private-message noti
 and verify only that receipt/count clears; then query a bounded backend log window to
 confirm no new null-severity conversion traceback. Until those checks are recorded,
 DV-010, DV-012 and DV-013 remain deployed-recheck items rather than Done.
+
+### LOC-003 remaining scope — local verification and deployed acceptance plan (October 19)
+
+This checkpoint validates implementation, not deployment. It applies no migration and
+changes no remote configuration, care plan, reminder or clinical record. Migrations
+`079`–`082` are committed and contract-tested but **not applied to any hosted project**.
+
+| Surface | Command | Result |
+| --- | --- | --- |
+| Translation paths without a model | `PYTHONPATH=src python scripts/preflight_loc003_translation.py --self-check` | 19/19 PASS. Exercises care-plan drafting both directions, back-translation, fact display fields, message translation both directions, the reply round trip and evidence glosses, through the offline stub. Prints `KNOWN_GAP negation_count_not_compared` (see below). |
+| Migration naming and syntax | `PYTHONPATH=src python scripts/validate_migrations.py` | 97 files validated; the `067` collision is gone and the validator no longer grandfathers that sequence. |
+| 080/081/082 database behaviour | `LOC003_TEST_POSTGRES=1 PYTHONPATH=src pytest tests/integration/test_loc003_translation_postgres.py` | 30 passed against the real migration bytes on a disposable cluster: both cleanup triggers, the retention rule's four row classes, browser roles refused the purge, the verified-wording constraint, `NOT VALID` leaving approved rows alone, the widened `source_table` check, glosses surviving the sweep, and every migration applied twice. |
+| Backend behaviour | `PYTHONPATH=src pytest tests/unit --no-cov` | 3426 passed. `tests/unit/services/test_chat_turn_queue.py` is excluded locally: `google-cloud-tasks` is in `requirements.txt` from #195 but absent from this virtualenv, which is unrelated to this change. |
+| Backend quality | `ruff check src/`, `ruff format --check src/`, `mypy src/ --ignore-missing-imports` | Passed. |
+| Clinician portal | `npm run lint`, `npx tsc --noEmit`, `npm test`, `npm run build` | Passed; 654 tests including 37 new LOC-003 display cases. |
+| Patient portal | `npm run lint`, `npx tsc --noEmit`, `npm test`, `npm run build` | Passed; 817 tests including 6 new translation-note cases. One pre-existing unused-variable warning in `chat-page.test.tsx` remains. |
+
+**Known gap surfaced by the preflight, not introduced by it.** `negation_flipped` compares
+whether a negation is present, not how many there are, so dropping one of several negations
+survives the guard (`Do not take 1,000 mg or 2.5 mL without water` → `Take 1,000 mg or
+2.5 mL without water` passes, because `without` remains). Comparing counts across languages
+would reject correct translations, because the pair does not use negatives one-for-one. The
+narrow candidate fix — compare counts only when both texts are the same language, which is
+the back-translation comparison — is recorded as an open LOC-001 guard question in the
+[LOC-003 specification](../.agent/specs/loc-003-english-first-clinician-review.md). The
+preflight prints it every run so it is not rediscovered.
+
+#### Deployed acceptance, once 079–082 are applied
+
+Run in this order and record the outcome per step. Do not apply migrations as part of a
+verification pass; applying stays a separate authorized step.
+
+1. `PYTHONPATH=src python scripts/preflight_loc003_translation.py --check-target` — the four
+   migrations recorded with this tree's checksums, and the four new columns readable.
+2. **Spanish document → English review.** Upload a synthetic Spanish discharge summary for
+   the synthetic patient. In the review queue: condition, procedure and instruction fields
+   read English with "Translated from Spanish" and the model named behind the info control;
+   medication, allergen and vaccine names read exactly as printed; each translated field
+   reveals its printed original; a fact whose translation the guard rejected reads "Not
+   translated" with its reason. One translation call per batch, not per fact.
+3. **Care-plan review in both languages.** Open the resulting draft. Proposed items list in
+   English with the "Translated from Spanish" marker; the strip reads Source → You review →
+   Patient sees; the patient's language card shows the phone preview with the patient app's
+   own chrome; source excerpts carry an English gloss beneath the untouched Spanish, as does
+   the highlighted excerpt above the source preview. Reopen the plan and confirm the
+   back-translation is served from the cache (no new model call); use "Check again" and
+   confirm it does call the model. Tick the attestation and confirm the recorded guard
+   outcome lands in `wording_verification`.
+4. **Approve, then read the patient's Today** as the patient in es-MX and again in en-US.
+   The approved wording matches what the phone preview showed.
+5. **Messages both ways.** As the clinician, draft an English reply to an es-MX patient:
+   preview shows the Spanish and its English back-translation; the send is held until
+   confirmed; after sending, the patient sees exactly the confirmed Spanish with "Translated
+   from English · show original" and the new info sheet naming the model. As the patient,
+   send a Spanish message and confirm the clinician's thread shows the English translation
+   with its model. Confirm a reply to an en-US patient needs no confirmation.
+6. **Nora transcript.** With a Spanish Nora conversation on record, open the clinician's Chat
+   tab: Spanish turns carry an English translation beneath the original with the model named,
+   and the first read shows "Translating…" rather than blocking.
+7. **ADR evidence.** Open an ADR review whose evidence quotes Spanish patient answers; each
+   quote keeps the patient's words with an English gloss beneath.
+8. **Retention.** Call `POST /api/v1/cron/message-translations/purge` once and record the
+   returned counts; confirm a second call reports zeros.
