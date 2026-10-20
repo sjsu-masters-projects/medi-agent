@@ -23,8 +23,11 @@ export interface ChatMessageApi {
 }
 
 export interface ChatTurnApi {
+    /** The server turn id; present on saved turns, absent on a turn this tab has not yet had acknowledged. */
+    id?: string;
+    deadline_at?: string | null;
     client_message_id: string;
-    status: "processing" | "completed" | "failed" | "interrupted";
+    status: "queued" | "processing" | "completed" | "failed" | "interrupted";
     retryable: boolean;
     attempt: number;
     failure_code?: string | null;
@@ -140,7 +143,6 @@ export interface AppointmentCreatedEvent {
 }
 
 export type ChatSocketEvent =
-    | { type: "safety_turn_saved"; client_message_id: string }
     | { type: "chat_turn"; turn: ChatTurnApi }
     | { type: "chat_turns"; turns: ChatTurnApi[] }
     | AppointmentCreatedEvent
@@ -258,6 +260,17 @@ export async function fetchChatHistory(
     return response.map(mapChatMessageFromApi);
 }
 
+export interface TurnEventsApi {
+    turn: { status: string };
+    events: { seq: number; type: string; payload?: { content?: string } | null }[];
+    next_seq: number;
+}
+
+/** Reads a turn's ordered events (draft checkpoints and the terminal event), resumable by seq. */
+export async function fetchTurnEvents(turnId: string, afterSeq: number, token: string): Promise<TurnEventsApi> {
+    return api.get<TurnEventsApi>(`/api/v1/chat/turns/${encodeURIComponent(turnId)}/events?after_seq=${afterSeq}`, { token });
+}
+
 export interface ChatConversationApi {
     session_id: string;
     title: string;
@@ -350,11 +363,24 @@ export function buildChatWebSocketUrl(
     return parsed.toString();
 }
 
+function isTurnShape(value: unknown): boolean {
+    return typeof value === "object" && value !== null
+        && typeof (value as { client_message_id?: unknown }).client_message_id === "string";
+}
+
+/**
+ * A socket event the portal can read. Turn events must carry well-formed turns; a turn with
+ * a status this portal does not know is accepted and handled as "in progress" (never as
+ * interrupted), so a newer backend status cannot break the transcript.
+ */
 export function isChatSocketEvent(value: unknown): value is ChatSocketEvent {
     if (!value || typeof value !== "object") {
         return false;
     }
 
-    const eventType = (value as { type?: unknown }).type;
-    return typeof eventType === "string";
+    const event = value as { type?: unknown; turn?: unknown; turns?: unknown };
+    if (typeof event.type !== "string") return false;
+    if (event.type === "chat_turn") return isTurnShape(event.turn);
+    if (event.type === "chat_turns") return Array.isArray(event.turns) && event.turns.every(isTurnShape);
+    return true;
 }

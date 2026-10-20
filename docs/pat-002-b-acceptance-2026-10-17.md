@@ -36,9 +36,14 @@ PAT-002-C and ADR follow-up lifecycle implementation remain outside this change.
 
 ## Target and approval facts
 
-Read-only preflight found exact 059/060/065 ledger matches and no matching 071.
-The requester explicitly authorized **only migration 071**. No successful remote
-application is claimed until its result and ledger verification are recorded.
+The October 17 read-only preflight found exact 059/060/065 ledger matches and no
+symptom-handoff migration. A later read-only ledger check records the exact
+`071_confirmed_symptom_handoff.sql` identity as applied on October 18 with SHA-256
+`f690b788d5f29c3d7583f2fe8cc43b7a51a6af817c276d6839cc9c9ab2ded36b`.
+The migration directory also contains `071_clinician_visit_management.sql`; this exact
+historical pair is intentional because the ledger keys by filename and checksum, not only
+the numeric prefix. Preserve both applied identities and do not rename or replay either.
+This review did not itself apply remote SQL.
 The CLI has no database URL configured; the Supabase SQL editor requires sign-in.
 
 Approved candidate-1 and its recorded October 12 requester-reported approval remain
@@ -75,14 +80,15 @@ store; do not copy them into documentation. A fresh seed/reset is unnecessary.
    answer and verify consent resets. Review again, check consent and press
    **Confirm and share** once. Refresh: it recovers the same saved report.
 6. At `http://localhost:3001`, open the assigned patient's Symptoms and existing
-   ADR workspace. After migration 071 and the retry worker are active, verify the
+   ADR workspace. After the exact `071_confirmed_symptom_handoff.sql` identity and the
+   retry worker are active, verify the
    confirmed summary, one review notice and the eligible medication's ADR draft.
    A draft assessment is decision support awaiting clinician review, not causality.
 7. Cancel a separate draft. No symptom report or ordinary ADR task should be
    created. A high-severity answer can still generate a minimal safety notice;
    emergency wording must interrupt ordinary intake independently.
 8. Repeat with a Spanish source message and `es-MX` prompts. The source message's
-   locale governs new drafts after 071, even when the profile differs. Verify
+   locale governs new drafts after the 071 handoff, even when the profile differs. Verify
    mobile width, keyboard/controls, no raw database IDs/JSON, and refresh recovery.
 9. Verify another patient cannot read the draft/report and an inactive/unassigned
    clinician cannot read it. Interrupt connectivity and retry the same action;
@@ -318,3 +324,62 @@ concurrent 076 migration remains outside this delivery. Do not merge both copies
 without reconciling their overlap. The documentation-only evidence update needs
 its own CI result, available on the PR. No source, dependency, migration, library
 selection, remote configuration, deployment or merge changes are part of this step.
+
+
+### October 19 — integration after PR #159 merged
+
+The previous readiness head `34f34d3` passed all 34 checks. On continuation, GitHub
+reported conflicts because main advanced to `5d46c30` and independently merged #159
+through `20ea7ac`. The earlier separate/unmerged #159 notes above are historical.
+Integration uses an isolated worktree so the requester's unrelated board, team,
+scheduling, map and locally edited scripts stay untouched in the original checkout.
+
+Main now contains the intake implementation and the exact historical 071 migration
+with SHA-256 `f690b788d5f29c3d7583f2fe8cc43b7a51a6af817c276d6839cc9c9ab2ded36b`.
+No migration bytes, names or ledger rows change here. PR #193 now carries the
+remaining fixes and evidence rather than another copy of the feature. Retain main's
+server-owned turns, worker/event protocol, conditional ADR claim, locale/feed fixes
+and split SQL CI jobs. Its completion identity fix already covers the earlier fix;
+its standard terminal recovery replaces the superseded private acknowledgement
+helper. No ADR follow-up implementation is added or reverted by this PR.
+
+Retained fixes: pending answer and correction selection belong to their draft;
+the microphone policy permits only the portal's own origin; a private REST reply
+uses its intake's own busy state while an ordinary Nora turn is outstanding;
+source-bound draft opening checks the durable action fence first. The voice route
+also now forwards the recognizer locale through the page wrapper. A Spanish
+`cinco` regression checks that locale in the private answer request; this is an
+automated transport test, not new physical speech evidence.
+
+The real-worker SQL transport adapter now supports main's conditional status filter.
+Its retry case requeues the task after a simulated failed completion write and
+verifies the actual database assessment keeps the clinician's reviewed state.
+The runtime ADR worker itself is unchanged. The required 17/8 intake SQL counts
+remain enforced alongside all six main SQL jobs.
+
+Post-integration local verification:
+
+- Backend chat/worker/intake API and library/service cases: **229 passed**.
+- Patient suite: **818 passed**, 75 files; final chat-page regression: **99 passed**.
+- Clinician suite: **617 passed**, 69 files.
+- Both portal lint/typecheck and production builds pass.
+- Ruff and format pass across **298** source/script files; changed router/preflight
+  mypy passes; parser validation passes **94** migration files.
+
+The first local backend launch lacked synthetic CI settings; rerun used explicit
+fake test settings. Docker was stopped, so the initial SQL fixture setup could not
+start; the installed local daemon was started. Turbopack rejected dependencies
+symlinked outside the isolated worktree, so dependencies were copied locally and
+both normal builds passed. No application configuration workaround was introduced.
+The corrected SQL rerun passed **25** cases (17 intake / 8 handoff), with XML-verified
+zero skips/failures/errors. Its first application-level failure identified the local
+adapter's outdated status filter and upsert operation; the adapter now executes
+main's actual insert and conditional claim. A separate setup timeout occurred under
+parallel build load; the completed rerun changed no timeout or runtime behavior.
+New-head CI results are recorded on PR #193 when available.
+
+Requester-reported October 18 app/microphone/phone acceptance remains evidence for
+its named prior implementation. No new authenticated deployed journey is claimed
+for this integration. Candidate-1 stays active; candidate-2 remains pending actual
+wording review. Genuine peer/safety review is still required. No remote migration,
+seed/reset, service configuration, deployment or merge is performed by this step.

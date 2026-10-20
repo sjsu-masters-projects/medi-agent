@@ -220,3 +220,208 @@ def test_clinical_consumers_never_receive_cached_source_context():
     assert "context" not in visible["confirmed_content"]
     assert visible["confirmed_content"]["answers"]["severity"]["value"] is None
     assert "context" in report["confirmed_content"]
+
+
+@pytest.mark.asyncio
+async def test_confirmed_product_concern_starts_report_scoped_adr_handoff(monkeypatch):
+    svc = service()
+    report_id = str(uuid4())
+    medication_id = str(uuid4())
+    report = {
+        "id": report_id,
+        "confirmed_content": {
+            "answers": {
+                "product": {
+                    "state": "answered",
+                    "value": {"concern": True, "name": "Metformin"},
+                }
+            },
+            "context": {"medications": [{"source_id": medication_id, "name": "Metformin"}]},
+        },
+    }
+    svc._call = AsyncMock(return_value=report)
+    run = AsyncMock(return_value={"task_id": "task-1", "status": "completed"})
+    monkeypatch.setattr(
+        "app.services.symptom_intake_service.A2ATaskService.run_symptom_to_pharmacovigilance",
+        run,
+    )
+
+    result = await svc._handoff_confirmed_product_concern(
+        {"confirmed_report_id": report_id, "session_id": "session-1"}
+    )
+
+    assert result["adr_handoff"] == {"task_id": "task-1", "status": "completed"}
+    run.assert_awaited_once_with(
+        patient_id=str(svc.actor.id),
+        payload={"session_id": "session-1", "symptom_report": report},
+    )
+
+
+@pytest.mark.asyncio
+async def test_confirmed_report_without_product_concern_skips_adr_handoff(monkeypatch):
+    svc = service()
+    report_id = str(uuid4())
+    svc._call = AsyncMock(
+        return_value={
+            "id": report_id,
+            "confirmed_content": {
+                "answers": {
+                    "product": {
+                        "state": "answered",
+                        "value": {"concern": False},
+                    }
+                }
+            },
+        }
+    )
+    run = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.symptom_intake_service.A2ATaskService.run_symptom_to_pharmacovigilance",
+        run,
+    )
+
+    result = await svc._handoff_confirmed_product_concern(
+        {"confirmed_report_id": report_id, "session_id": "session-1"}
+    )
+
+    assert "adr_handoff" not in result
+    run.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_confirmed_unlisted_product_is_preserved_without_fabricated_adr_link(monkeypatch):
+    svc = service()
+    report_id = str(uuid4())
+    svc._call = AsyncMock(
+        return_value={
+            "id": report_id,
+            "confirmed_content": {
+                "answers": {
+                    "product": {
+                        "state": "answered",
+                        "value": {"concern": True, "name": "Patient-reported product"},
+                    }
+                },
+                "context": {"medications": []},
+            },
+        }
+    )
+    run = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.symptom_intake_service.A2ATaskService.run_symptom_to_pharmacovigilance",
+        run,
+    )
+
+    result = await svc._handoff_confirmed_product_concern(
+        {"confirmed_report_id": report_id, "session_id": "session-1"}
+    )
+
+    assert result["adr_handoff"]["status"] == "requires_medication_reconciliation"
+    run.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_confirm_retry_uses_public_path_to_recover_report_handoff(monkeypatch):
+    svc = service()
+    row = resolved_row()
+    report_id = str(uuid4())
+    medication_id = str(uuid4())
+    row.update(status="confirmed", confirmed_report_id=report_id)
+    report = {
+        "id": report_id,
+        "confirmed_content": {
+            "answers": {
+                "product": {
+                    "state": "answered",
+                    "value": {"concern": True, "name": "Metformin"},
+                }
+            },
+            "context": {"medications": [{"source_id": medication_id, "name": "Metformin"}]},
+        },
+    }
+    svc.library = MagicMock(return_value=synthetic_bundle())
+    svc._read_row = AsyncMock(return_value=row)
+    svc._call = AsyncMock(side_effect=[row, report])
+    run = AsyncMock(return_value={"task_id": "task-1", "status": "completed"})
+    monkeypatch.setattr(
+        "app.services.symptom_intake_service.A2ATaskService.run_symptom_to_pharmacovigilance",
+        run,
+    )
+
+    result = await svc.confirm(
+        row["id"],
+        IntakeConfirm(
+            expected_revision=row["revision"],
+            confirmation_id=uuid4(),
+            preview_hash="a" * 64,
+            consent=True,
+        ),
+    )
+
+    assert result["adr_handoff"] == {"task_id": "task-1", "status": "completed"}
+    run.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_first_confirm_uses_public_path_to_start_report_handoff(monkeypatch):
+    svc = service()
+    row = resolved_row()
+    svc.library = MagicMock(return_value=synthetic_bundle())
+    report_id = str(uuid4())
+    medication_id = str(uuid4())
+    row.update(status="ready_for_confirmation", preview={"context": {}})
+    confirmed = {**row, "status": "confirmed", "confirmed_report_id": report_id}
+    report = {
+        "id": report_id,
+        "confirmed_content": {
+            "answers": {
+                "product": {
+                    "state": "answered",
+                    "value": {"concern": True, "name": "Metformin"},
+                }
+            },
+            "context": {"medications": [{"source_id": medication_id, "name": "Metformin"}]},
+        },
+    }
+    svc._read_row = AsyncMock(return_value=row)
+    svc._call = AsyncMock(side_effect=[confirmed, report])
+    monkeypatch.setattr(
+        "app.services.symptom_intake_service.verify_context", AsyncMock(return_value=True)
+    )
+    run = AsyncMock(return_value={"task_id": "task-1", "status": "completed"})
+    monkeypatch.setattr(
+        "app.services.symptom_intake_service.A2ATaskService.run_symptom_to_pharmacovigilance",
+        run,
+    )
+
+    result = await svc.confirm(
+        row["id"],
+        IntakeConfirm(
+            expected_revision=row["revision"],
+            confirmation_id=uuid4(),
+            preview_hash="a" * 64,
+            consent=True,
+        ),
+    )
+
+    assert result["adr_handoff"] == {"task_id": "task-1", "status": "completed"}
+    assert svc._call.await_args_list[0].args[0] == "confirm"
+    assert svc._call.await_args_list[1].args == (
+        "report",
+        {"report_id": report_id},
+    )
+
+
+@pytest.mark.asyncio
+async def test_confirmed_report_remains_authoritative_when_handoff_is_temporarily_unavailable():
+    svc = service()
+    report_id = str(uuid4())
+    svc._call = AsyncMock(side_effect=RuntimeError("temporary worker outage"))
+
+    result = await svc._handoff_confirmed_product_concern(
+        {"confirmed_report_id": report_id, "status": "confirmed"}
+    )
+
+    assert result["status"] == "confirmed"
+    assert result["confirmed_report_id"] == report_id
+    assert result["adr_handoff"] == {"task_id": None, "status": "pending"}

@@ -32,7 +32,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from app.models.ai_evaluation import EvalRunReport, EvalScenario, ScenarioScore, WorkloadSummary
@@ -93,6 +93,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--locale", choices=["en-US", "es-MX"], help="Limit to one locale")
     parser.add_argument("--risk", choices=["low", "medium", "high"], help="Limit to one risk level")
+    parser.add_argument("--suite", choices=["full", "demo"], default="full")
+    parser.add_argument("--responses", type=Path, help="Score recorded final responses offline")
     parser.add_argument(
         "--limit", type=int, default=0, help="Stop after N scenarios per workload (0 = all)"
     )
@@ -191,7 +193,9 @@ def _google_adc_bearer() -> Callable[[], str]:
 
     def token() -> str:
         if not credentials.valid:
-            credentials.refresh(request)
+            # google-auth leaves this boundary untyped; its refresh contract takes
+            # the transport Request and mutates the existing credentials in place.
+            cast(Callable[[Request], None], credentials.refresh)(request)
         return str(credentials.token)
 
     token()  # Fail at startup rather than on the first scenario.
@@ -276,6 +280,8 @@ def _environment(args: argparse.Namespace, providers: list[TextProvider]) -> dic
         "python": platform.python_version(),
         "platform": platform.platform(),
         "git_commit": commit or None,
+        "suite": args.suite,
+        "execution_mode": "recorded_offline" if args.responses else "provider_run",
         "packages": {
             name: _version(name)
             for name in ("google-genai", "google-cloud-aiplatform", "httpx", "pydantic")
@@ -331,9 +337,29 @@ async def _run(args: argparse.Namespace) -> int:
         print(f"error: {args.scenarios} is not a directory", file=sys.stderr)
         return 2
     sets = load_scenario_sets(args.scenarios)
-    scenarios = _select([s for group in sets for s in group.scenarios], args)
+    from app.services.demo_evaluation import (
+        add_demo_report_criteria,
+        load_demo_scenarios,
+        load_final_responses,
+    )
+
+    available = (
+        [s for group in sets for s in group.scenarios]
+        if args.suite == "full"
+        else load_demo_scenarios(args.scenarios)
+    )
+    scenarios = _select(available, args)
+    if args.suite == "demo":
+        sets += load_scenario_sets(args.scenarios / "demo")
     versions = {group.workload.value: group.version for group in sets}
-    print(f"loaded {sum(len(g.scenarios) for g in sets)} scenarios, selected {len(scenarios)}")
+    if args.suite == "demo":
+        versions = {
+            f"{index}:{group.workload.value}": group.version for index, group in enumerate(sets)
+        }
+    print(f"loaded {len(available)} scenarios, selected {len(scenarios)}")
+    if not scenarios:
+        print("error: no scenarios selected", file=sys.stderr)
+        return 2
 
     if args.dry_run:
         for scenario in scenarios:
@@ -343,13 +369,19 @@ async def _run(args: argparse.Namespace) -> int:
             )
         return 0
 
-    providers, unavailable_count = _resolve_providers(args)
+    try:
+        recorded = load_final_responses(args.responses, scenarios) if args.responses else None
+    except (OSError, ValueError) as error:
+        # Validation errors can contain rejected input (including forbidden reasoning).
+        print(f"error: invalid recorded responses ({_error_type(error)})", file=sys.stderr)
+        return 2
+    providers, unavailable_count = ([], 0) if recorded else _resolve_providers(args)
     if unavailable_count:
         print(
             f"skipped {unavailable_count} provider(s) that could not initialize",
             file=sys.stderr,
         )
-    if not providers:
+    if not providers and recorded is None:
         print("error: no provider could be initialized", file=sys.stderr)
         return 2
 
@@ -368,8 +400,11 @@ async def _run(args: argparse.Namespace) -> int:
             )
         # These providers share one Google project's capacity, so asking them in parallel
         # makes them compete for the very capacity being measured.
-        comparison = await compare_text_providers(request, providers, sequential=True)
-        for trial in comparison.trials:
+        if recorded is None:
+            trials = (await compare_text_providers(request, providers, sequential=True)).trials
+        else:
+            trials = recorded[scenario.scenario_id]
+        for trial in trials:
             try:
                 score = score_trial(scenario, trial)
             except Exception as error:  # noqa: BLE001
@@ -402,7 +437,7 @@ async def _run(args: argparse.Namespace) -> int:
                 f"[{index}/{len(scenarios)}] {scenario.scenario_id} {trial.provider:12} {marker} "
                 f"score={score.score:.2f} safety={score.safety_pass} {trial.latency_ms}ms"
             )
-        if args.pause_seconds and index < len(scenarios):
+        if recorded is None and args.pause_seconds and index < len(scenarios):
             await asyncio.sleep(args.pause_seconds)
 
     for provider in providers:
@@ -410,13 +445,16 @@ async def _run(args: argparse.Namespace) -> int:
         if close is not None:
             await close()
 
+    summaries = summarize(scores)
+    if args.suite == "demo":
+        add_demo_report_criteria(summaries, scores, scenarios)
     report = EvalRunReport(
         run_id=uuid.uuid4().hex[:12],
         started_at=started,
         finished_at=datetime.now(UTC),
         scenario_set_versions=versions,
         environment=_environment(args, providers),
-        summaries=summarize(scores),
+        summaries=summaries,
         scores=scores,
     )
     args.out.mkdir(parents=True, exist_ok=True)
@@ -482,8 +520,9 @@ def render_markdown(report: EvalRunReport) -> str:
         "",
         f"Started {report.started_at.isoformat()} · finished {report.finished_at.isoformat()}",
         "",
-        "Synthetic scenarios only. Scores are heuristic and offline; clinician adjudication of",
-        "high-risk cases is still required before any threshold below counts as met.",
+        "Synthetic scenarios only. Deterministic scores require raw final-answer review.",
+        "Provider runs, offline replay, and dry runs are separate evidence; none is clinical validation.",
+        "Professional adjudication is optional research expansion, not an expo gate.",
         "",
         "## Summary",
         "",

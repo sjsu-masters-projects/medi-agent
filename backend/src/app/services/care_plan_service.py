@@ -41,6 +41,7 @@ from app.services.document_intelligence.grounding import (
     INACTIVE_MEDICATION_ACTIONS,
     medication_action,
 )
+from app.services.fact_display_translation import detected_fact_locale
 
 logger = logging.getLogger(__name__)
 
@@ -1178,7 +1179,7 @@ class CarePlanService:
             facts = cast(
                 list[dict[str, Any]],
                 self.db.table("clinical_facts")
-                .select("id, fact_type, value")
+                .select("id, fact_type, value, display_locale")
                 .in_("id", fact_ids)
                 .execute()
                 .data
@@ -1269,6 +1270,9 @@ class CarePlanService:
                             "location": location,
                         }
                     )
+        # DV-004: the strip and "Translated from Spanish" marker describe the SOURCE EVIDENCE
+        # language, which is the fact's language, not the item's authored-wording source_locale.
+        facts_by_id = {str(fact["id"]): fact for fact in facts}
         peers = overlaps(items, facts) if plan.get("status") == "draft" else {}
         return {
             **plan,
@@ -1283,10 +1287,24 @@ class CarePlanService:
                     ),
                     "source": next(iter(sources.get(str(item.get("source_fact_id")), [])), None),
                     "sources": sources.get(str(item.get("source_fact_id")), []),
+                    "source_evidence_locale": self._source_evidence_locale(
+                        facts_by_id.get(str(item.get("source_fact_id")))
+                    ),
                 }
                 for item in items
             ],
         }
+
+    @staticmethod
+    def _source_evidence_locale(fact: dict[str, Any] | None) -> str | None:
+        """Language of an item's source evidence (DV-004), or None when unknown."""
+        if not fact:
+            return None
+        return detected_fact_locale(
+            cast(dict[str, Any], fact.get("value") or {}),
+            str(fact.get("fact_type") or ""),
+            fact.get("display_locale"),
+        )
 
     def _audit(
         self, plan_id: UUID, actor_id: UUID | None, event: str, data: dict[str, Any]

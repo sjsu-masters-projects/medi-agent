@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -10,6 +11,7 @@ from uuid import uuid4
 import pytest
 
 from app.core.exceptions import ExternalServiceError, ValidationError
+from tests.integration.routers.chat_turn_helpers import run_turn
 from tests.integration.routers.test_chat_document_focus import (  # noqa: F401
     _FakeChatStore,
     _opening_events,
@@ -30,7 +32,7 @@ class _Turns:
     def factory(self, *_args: Any) -> MagicMock:
         turns = MagicMock()
 
-        async def call(action: str, payload: dict[str, Any] | None = None) -> Any:
+        async def call(action: str, payload: dict[str, Any] | None = None, **_: Any) -> Any:
             self.calls.append((action, payload))
             if action == "recover":
                 if isinstance(self.recover, Exception):
@@ -199,7 +201,7 @@ async def test_lost_completion_confirmation_delivers_the_committed_reply(monkeyp
         }
     )
     turns.call = AsyncMock(
-        side_effect=lambda action, payload=None: {"items": [committed]}
+        side_effect=lambda action, payload=None, **_: {"items": [committed]}
         if action == "recover"
         else {"accepted": True}
     )
@@ -230,7 +232,7 @@ async def test_lost_completion_confirmation_delivers_the_committed_reply(monkeyp
         "conversation_state": {},
         "incoming": chat.ChatMessageCreate(content="q", role=chat.ChatRole.USER, language="en-US"),
     }
-    await chat._process_durable_message(socket, service, context, {"client_message_id": request_id})
+    await run_turn(socket, service, context, {"client_message_id": request_id})
     sent = [call.args[0]["type"] for call in socket.send_json.call_args_list]
     assert sent.index("chat_history") < sent.index("chat_turns")
 
@@ -268,7 +270,7 @@ async def test_disconnect_mid_stream_then_retry_after_reconnect(monkeypatch):
         ]
     )
     turns.call = AsyncMock(
-        side_effect=lambda action, payload=None: {"items": []}
+        side_effect=lambda action, payload=None, **_: {"items": []}
         if action == "recover"
         else {"accepted": True, "message": saved}
     )
@@ -288,7 +290,7 @@ async def test_disconnect_mid_stream_then_retry_after_reconnect(monkeypatch):
     }
     request = {"client_message_id": request_id}
     monkeypatch.setattr(chat, "_process_chat_message", AsyncMock(side_effect=TimeoutError()))
-    await chat._process_durable_message(socket, service, context, request)
+    await run_turn(socket, service, context, request)
     actions = [call.args[0] for call in turns.call.call_args_list]
     assert actions.count("interrupted") == 1 and turns.begin.await_count == 1
 
@@ -300,6 +302,34 @@ async def test_disconnect_mid_stream_then_retry_after_reconnect(monkeypatch):
         return {}
 
     monkeypatch.setattr(chat, "_process_chat_message", finish)
-    await chat._process_durable_message(socket, service, context, request)
+    await run_turn(socket, service, context, request)
     actions = [call.args[0] for call in turns.call.call_args_list]
     assert actions.count("complete") == 1 and turns.begin.await_count == 2
+
+
+def _closure_records(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    return [r for r in caplog.records if getattr(r, "event", None) == "chat_ws.closed"]
+
+
+def test_a_client_close_is_logged_with_its_code_and_initiator(connect, turns, caplog):
+    caplog.set_level(logging.INFO, logger="app.routers.chat")
+    with connect("turn_protocol=1") as socket:
+        _opening_events(socket)
+        socket.close(code=1001, reason="going away")
+    records = _closure_records(caplog)
+    assert len(records) == 1
+    assert records[0].initiator == "client"
+    assert records[0].close_code == 1001
+    assert records[0].duration_ms >= 0
+
+
+def test_a_server_fault_close_is_logged_as_the_server(connect, turns, caplog):
+    caplog.set_level(logging.INFO, logger="app.routers.chat")
+    turns.recover = ExternalServiceError("Chat", "down")
+    with connect("turn_protocol=1") as socket:
+        while socket.receive_json()["type"] != "error":
+            pass
+    records = _closure_records(caplog)
+    assert len(records) == 1
+    assert (records[0].initiator, records[0].close_code) == ("server", 1011)
+    assert records[0].reason == "startup_failed"

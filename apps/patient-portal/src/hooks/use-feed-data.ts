@@ -18,6 +18,7 @@ import {
 } from "@/store/slices/auth-slice";
 import {
   fetchTodayFeed,
+  defaultFeedSummary,
   markTaskComplete,
   markTaskSkipped,
 } from "@/store/slices/feed-slice";
@@ -28,7 +29,8 @@ import {
   type FeedTask,
 } from "@/types";
 import { getEffectiveSessionExpiresAt } from "../../../../packages/shared/src/utils/jwt-expiry";
-import { ApiTransportError, getTransportErrorMessage } from "../../../../packages/shared/src/utils/api-transport";
+import { ApiTransportError } from "../../../../packages/shared/src/utils/api-transport";
+import { getTodayDocumentImportErrorMessage, getTodayErrorMessage, type TodayDocumentImportErrorCode, type TodayErrorCode } from "@/content/today-copy";
 import type { Locale } from "@/types";
 
 interface ApiAdherenceStats {
@@ -90,11 +92,11 @@ export function useFeedData(locale: Locale = "en-US") {
   );
   const [adherenceStats, setAdherenceStats] =
     useState<AdherenceStats>(emptyAdherenceStats);
-  const [documentImportError, setDocumentImportError] = useState<string | null>(
+  const [documentImportError, setDocumentImportError] = useState<TodayDocumentImportErrorCode | null>(
     null,
   );
   const [documentImporting, setDocumentImporting] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<TodayErrorCode | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const submissionInFlight = useRef(false);
 
@@ -128,7 +130,7 @@ export function useFeedData(locale: Locale = "en-US") {
     if (submissionInFlight.current) return false;
     setActionError(null);
     if (!accessToken) {
-      setActionError(locale === "es-MX" ? "Vuelve a iniciar sesión. Tu respuesta no se ha guardado." : "Please sign in again. Your response has not been saved.");
+      setActionError("signIn");
       return false;
     }
     submissionInFlight.current = true;
@@ -156,10 +158,8 @@ export function useFeedData(locale: Locale = "en-US") {
       return true;
     } catch (error) {
       setActionError(error instanceof ApiTransportError
-        ? getTransportErrorMessage(error.outcomeUnknown, locale)
-        : locale === "es-MX"
-          ? "No pudimos confirmar que se guardó tu respuesta. Actualiza antes de volver a intentarlo; la actividad no se ha marcado como completada."
-          : "We couldn’t confirm that your response was saved. Refresh before retrying; your schedule has not been marked complete.");
+        ? error.outcomeUnknown ? "uncertain" : "offline"
+        : "save");
       return false;
     } finally {
       submissionInFlight.current = false;
@@ -181,9 +181,7 @@ export function useFeedData(locale: Locale = "en-US") {
 
   async function getDocumentImportSession(): Promise<ActivePatientSession | null> {
     if (!accessToken || !user) {
-      setDocumentImportError(
-        "Please sign in again before importing a clinical document.",
-      );
+      setDocumentImportError("signIn");
       return null;
     }
 
@@ -206,9 +204,7 @@ export function useFeedData(locale: Locale = "en-US") {
     if (!refreshToken) {
       dispatch(logout());
       redirectToLogin({ reason: "session_expired" });
-      setDocumentImportError(
-        "Your session expired. Please sign in again before importing a clinical document.",
-      );
+      setDocumentImportError("expired");
       return null;
     }
 
@@ -225,9 +221,7 @@ export function useFeedData(locale: Locale = "en-US") {
       dispatch(logout());
       redirectToLogin({ reason: "session_expired" });
     }
-    setDocumentImportError(
-      "Your session expired. Please sign in again before importing a clinical document.",
-    );
+    setDocumentImportError("expired");
     return null;
   }
 
@@ -262,28 +256,26 @@ export function useFeedData(locale: Locale = "en-US") {
         },
         { token: session.accessToken },
       );
-    } catch (error) {
-      setDocumentImportError(
-        (error as Error).message || "Document import failed.",
-      );
+    } catch {
+      setDocumentImportError("failed");
     } finally {
       setDocumentImporting(false);
     }
   }
 
   return {
-    actionError,
+    actionError: actionError ? getTodayErrorMessage(actionError, locale) : null,
     submitting,
     adherenceStats,
-    documentImportError,
+    documentImportError: documentImportError ? getTodayDocumentImportErrorMessage(documentImportError, locale) : null,
     documentImporting,
-    error: feed.error,
+    error: feed.locale === locale ? feed.error : null,
     importDocumentFile,
-    loading: feed.loading,
+    loading: feed.loading || feed.locale !== locale,
     markComplete,
     reportBarrier,
     refreshFeed,
-    summary: feed.summary,
-    tasks: feed.tasks,
+    summary: feed.locale === locale ? feed.summary : defaultFeedSummary,
+    tasks: feed.locale === locale ? feed.tasks : [],
   };
 }

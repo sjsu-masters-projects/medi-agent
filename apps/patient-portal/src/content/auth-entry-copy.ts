@@ -1,6 +1,7 @@
 import { normalizeLocale, type Locale } from "@/types";
+import { GUEST_LOCALE_STORAGE_KEY, isAuthEntryPath, readLocaleCookie, supportedPatientLocale } from "@/content/patient-locale";
 
-export const GUEST_LOCALE_STORAGE_KEY = "patient-portal.guest.locale";
+export { GUEST_LOCALE_STORAGE_KEY } from "@/content/patient-locale";
 
 export function getSignupErrorKey(error: unknown): "accountExists" | "failure" {
   if (typeof error !== "object" || error === null || !("status" in error) || error.status !== 422 || !("details" in error)) return "failure";
@@ -49,7 +50,8 @@ export function getAuthEntryCopy(locale: Locale) {
 export function authEntryLocale(): Locale {
   if (typeof window === "undefined") return "en-US";
   try {
-    return normalizeLocale(new URLSearchParams(window.location.search).get("lang") ?? window.localStorage.getItem(GUEST_LOCALE_STORAGE_KEY) ?? window.navigator.language);
+    return (isAuthEntryPath(window.location.pathname) ? supportedPatientLocale(new URLSearchParams(window.location.search).get("lang")) : null) ?? readLocaleCookie()
+      ?? normalizeLocale(window.localStorage.getItem(GUEST_LOCALE_STORAGE_KEY) ?? window.navigator.language);
   } catch {
     return normalizeLocale(window.navigator.language);
   }

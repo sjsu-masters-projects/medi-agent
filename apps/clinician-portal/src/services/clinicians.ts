@@ -739,6 +739,8 @@ export interface CarePlanItem {
     blocker_reason?: string | null;
     reviewed_locale?: string | null;
     source_locale?: CarePlanLocale | null;
+    /** DV-004: language of the source evidence (fact/document), not the authored wording. */
+    source_evidence_locale?: CarePlanLocale | null;
     wording?: Partial<Record<CarePlanLocale, CarePlanWording>>;
     wording_origin?: Partial<Record<CarePlanLocale, CarePlanWordingOrigin>>;
     wording_verified?: boolean;

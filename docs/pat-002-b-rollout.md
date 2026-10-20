@@ -5,32 +5,37 @@ proof of deployment. It changes no remote data until separately authorized.
 
 ## Exact additive change
 
-Apply only `071_confirmed_symptom_handoff.sql` after verifying the existing ledger.
-Its SHA-256 is `f690b788d5f29c3d7583f2fe8cc43b7a51a6af817c276d6839cc9c9ab2ded36b`.
-Applied `059_chat_safety_alerts.sql` and `060_confirmed_symptom_intake.sql` must keep
-their filenames and checksums. Migration 065 clinic memberships is also required. After main integration, 072,
-073 and 074 are required for the durable Nora protocol. Their existing target
-ledger checksums, main's independent 071 visit migration and 075 notification
-lookup were read-only verified on October 18; none was applied by this task.
-Do not run a catch-all migration command that could apply unrelated pending SQL.
+The historical identity is `071_confirmed_symptom_handoff.sql`, SHA-256
+`f690b788d5f29c3d7583f2fe8cc43b7a51a6af817c276d6839cc9c9ab2ded36b`. A read-only
+hosted-ledger check records that exact file as applied on October 18. Preserve its
+filename and bytes; do not rename, replay or insert a second ledger identity for it.
+Applied `059_chat_safety_alerts.sql` and `060_confirmed_symptom_intake.sql` must likewise
+keep their filenames and checksums. Migration 065 clinic memberships is also required.
+In a fresh or explicitly authorized environment where the exact 071 handoff is missing,
+apply only that exact file after verifying the ledger. Do not run a catch-all migration
+command that could apply unrelated pending SQL.
 
-071 makes confirmation atomically queue the existing ADR screen, preserve a
+The 071 handoff makes confirmation atomically queue the existing ADR screen, preserve a
 patient-named product without adding medication, notify active assigned clinic
 members and retain independent urgent/emergency notices. It adds a service-only,
 read-only readiness probe. It does not backfill old reports, approve a library,
 reset/seed data or implement ADR follow-up.
 
 The October 17 read-only target probe found matching 059/060/065 entries and no
-matching 071 entry. The process flags passed only in the explicitly supplied
-preflight configuration; this does not attest to deployed service configuration.
+matching symptom-handoff entry. The later October 18 ledger evidence records the exact
+071 handoff as applied. The process flags passed only in the explicitly supplied
+preflight configuration; neither ledger result attests to deployed service
+configuration.
 
 ## Release order
 
-1. Obtain explicit authorization for the selected synthetic database and exact
-   071 file above. Use the team's ledger procedure, one transaction and advisory
-   lock; insert its filename/checksum only on successful commit. Never print the
-   connection string. Do not execute a locally modified migration runner that
-   embeds credentials. Inspect its committed source or use a clean checkout.
+1. Verify the selected synthetic database ledger against the exact 071 filename and
+   checksum above. If it already matches, run no SQL and do not rewrite the ledger. For a
+   fresh or missing environment, obtain explicit authorization before applying the exact
+   file. Use the team's ledger procedure, one transaction and advisory lock; insert its
+   filename/checksum only on successful commit. Never print the connection string. Do not
+   execute a locally modified migration runner that embeds credentials. Inspect its
+   committed source or use a clean checkout.
 2. Keep the existing approved `candidate-1` immutable. Review the exact paired
    `candidate-2` package and [review record](../backend/src/app/intake/question_library/candidate-2-review.md)
    before recording any approval or selecting it. New applicability and severity
@@ -109,3 +114,16 @@ for peer/safety review without changes to its implementation or active library.
 Candidate-2 remains inactive and pending genuine wording approval; no eligibility
 write or service deployment is authorized by this verification report. Peer/safety
 review and explicit merge/deployment authorization remain separate requirements.
+
+
+## October 19 integration checkpoint
+
+PR #159 has since merged into main. Main 5d46c30 contains the exact applied 071
+handoff file and newer Nora worker/event migrations. PR #193 is now a follow-up
+fix/verification change against that base; it does not replay the feature or
+rename/remove any applied migration. The old 076 handoff draft is not an operator
+instruction. Main's 076 activity-review migration is a different file and is not
+applied by this task. Use the current documented worker rollout for worker flags;
+this readiness work changes no external configuration. Retain the historical
+October 18 manual verification provenance and record any new deployed check
+separately. Candidate-2 is still inactive pending genuine wording review.

@@ -683,3 +683,354 @@ def test_concurrent_read_then_send_leaves_arrival_unread(sql):
 def test_stale_transaction_isolation_fails_closed(sql):
     error = sql("BEGIN ISOLATION LEVEL REPEATABLE READ; " + operation("list"), succeeds=False)
     assert "requires read committed" in error
+
+
+@pytest.fixture
+def activity_sql(sql):
+    # Install actual care-plan table/wording definitions. Clinical-source tables
+    # are prerequisites only; no approval/projection function is replaced here.
+    sql("""
+      CREATE TABLE clinical_recommendations(id uuid PRIMARY KEY);
+      CREATE TABLE clinical_facts(id uuid PRIMARY KEY);
+    """)
+    sql(
+        (MIGRATION.parent / "040_clinician_approved_care_plans.sql")
+        .read_text()
+        .split("ALTER TABLE public.medications")[0]
+    )
+    sql(
+        (MIGRATION.parent / "049_bilingual_care_plan_wording.sql")
+        .read_text()
+        .split("-- Projection copies")[0]
+    )
+    gate = (MIGRATION.parent / "048_patient_upload_care_plan_review_gate.sql").read_text()
+    sql(gate.split("CREATE FUNCTION private.care_plan_fact_is_eligible")[0])
+    sql("""
+      GRANT SELECT,INSERT,UPDATE ON care_plan_versions,care_plan_items,care_plan_audit_events TO service_role;
+      ALTER TABLE care_plan_versions ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE care_plan_items ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE care_plan_audit_events ENABLE ROW LEVEL SECURITY;
+      REVOKE ALL ON care_plan_items FROM PUBLIC,anon,authenticated;
+      REVOKE ALL ON FUNCTION private.lock_care_plan_evidence(uuid,boolean) FROM PUBLIC,anon,authenticated;
+      GRANT EXECUTE ON FUNCTION private.lock_care_plan_evidence(uuid,boolean) TO service_role;
+    """)
+    migration = (MIGRATION.parent / "076_care_conversation_activity_review.sql").read_text()
+    clinic_guards = """SELECT md5(pg_get_functiondef(
+      'public.care_conversation_operation(uuid,text,text,jsonb)'::regprocedure)) ||
+      md5(pg_get_functiondef('private.lock_care_conversation_pair(uuid,uuid,text)'::regprocedure));"""
+    existing_guards = sql(clinic_guards)
+    sql(migration)
+    sql(migration)  # rerun safety, including grants and final assertions
+    assert sql(clinic_guards) == existing_guards
+    plan, item = str(uuid4()), str(uuid4())
+    sql(f"""
+      INSERT INTO care_plan_versions(id,patient_id,version_number,status,approved_by,approved_at)
+        VALUES('{plan}','{PATIENT}',1,'approved','{CLINICIAN}',now());
+      INSERT INTO care_plan_items(id,plan_version_id,category,title,instructions,frequency)
+        VALUES('{item}','{plan}','hydration','Synthetic activity','Approved source instruction','daily');
+    """)
+    return sql, plan, item
+
+
+def activity_operation(action, payload, *, actor=PATIENT, role="patient"):
+    return operation(action, payload, actor=actor, role=role).replace(
+        "public.care_conversation_operation(", "public.care_conversation_activity_operation("
+    )
+
+
+def attached_message(sql, item):
+    thread = open_thread(sql)
+    payload = {
+        "conversation_id": thread["id"],
+        "body": "Question about frequency",
+        "client_message_id": str(uuid4()),
+        "care_plan_item_id": item,
+    }
+    message = json.loads(sql(activity_operation("send", payload)))
+    return thread, payload, message
+
+
+def test_activity_send_replay_and_context_mismatch(activity_sql):
+    sql, _, item = activity_sql
+    _, payload, message = attached_message(sql, item)
+    assert message["activity_context"]["item_id"] == item
+    assert json.loads(sql(activity_operation("send", payload)))["id"] == message["id"]
+    error = sql(activity_operation("send", {**payload, "care_plan_item_id": None}), succeeds=False)
+    assert "idempotency mismatch" in error
+    assert sql("SELECT count(*) FROM care_conversation_messages") == "1"
+
+
+def test_activity_draft_reuses_items_and_never_publishes(activity_sql):
+    sql, plan, item = activity_sql
+    thread, _, message = attached_message(sql, item)
+    payload = {"conversation_id": thread["id"], "message_id": message["id"]}
+    first = json.loads(
+        sql(activity_operation("review", payload, actor=CLINICIAN, role="clinician"))
+    )
+    second = json.loads(
+        sql(activity_operation("review", payload, actor=CLINICIAN, role="clinician"))
+    )
+    assert first == second
+    assert sql(f"SELECT status FROM care_plan_versions WHERE id='{plan}'") == "approved"
+    assert sql(f"SELECT status FROM care_plan_versions WHERE id='{first['plan_id']}'") == "draft"
+    assert (
+        sql(f"SELECT review_source_item_id FROM care_plan_items WHERE id='{first['item_id']}'")
+        == item
+    )
+    assert sql("SELECT count(*) FROM care_plan_items") == "2"
+    assert (
+        sql("SELECT count(*) FROM care_plan_audit_events WHERE event_type='message_review_opened'")
+        == "1"
+    )
+    assert sql("SELECT count(*) FROM medications") == "0"
+    assert sql("SELECT count(*) FROM obligations") == "0"
+
+
+@pytest.mark.parametrize(
+    "actor,role", [(PATIENT, "patient"), (OTHER, "clinician"), (FOREIGN, "patient")]
+)
+def test_activity_review_does_not_cross_private_threads(activity_sql, actor, role):
+    sql, _, item = activity_sql
+    thread, _, message = attached_message(sql, item)
+    sql(
+        activity_operation(
+            "review",
+            {"conversation_id": thread["id"], "message_id": message["id"]},
+            actor=actor,
+            role=role,
+        ),
+        succeeds=False,
+    )
+    assert sql("SELECT count(*) FROM care_plan_versions WHERE status='draft'") == "0"
+
+
+def test_activity_source_replacement_blocks_new_sends_and_review(activity_sql):
+    sql, plan, item = activity_sql
+    thread, payload, message = attached_message(sql, item)
+    sql(f"UPDATE care_plan_versions SET status='superseded' WHERE id='{plan}'")
+    # Same saved request remains recoverable; no new send or draft from stale data.
+    assert json.loads(sql(activity_operation("send", payload)))["id"] == message["id"]
+    sql(activity_operation("send", {**payload, "client_message_id": str(uuid4())}), succeeds=False)
+    sql(
+        activity_operation(
+            "review",
+            {"conversation_id": thread["id"], "message_id": message["id"]},
+            actor=CLINICIAN,
+            role="clinician",
+        ),
+        succeeds=False,
+    )
+    assert sql("SELECT count(*) FROM care_conversation_messages") == "1"
+
+
+def test_activity_foreign_item_rolls_back_message_and_audit(activity_sql):
+    sql, plan, item = activity_sql
+    sql(f"UPDATE care_plan_versions SET patient_id='{FOREIGN}' WHERE id='{plan}'")
+    thread = open_thread(sql)
+    sql(
+        activity_operation(
+            "send",
+            {
+                "conversation_id": thread["id"],
+                "body": "Synthetic",
+                "client_message_id": str(uuid4()),
+                "care_plan_item_id": item,
+            },
+        ),
+        succeeds=False,
+    )
+    assert sql("SELECT count(*) FROM care_conversation_messages") == "0"
+    assert sql("SELECT count(*) FROM care_conversation_audit_events WHERE action='sent'") == "0"
+
+
+def test_activity_revocation_and_browser_roles_fail_closed(activity_sql):
+    sql, _, item = activity_sql
+    thread, _, message = attached_message(sql, item)
+    sql(f"UPDATE care_teams SET status='inactive' WHERE id='{TEAM}'")
+    payload = {"conversation_id": thread["id"], "message_id": message["id"]}
+    sql(activity_operation("review", payload, actor=CLINICIAN, role="clinician"), succeeds=False)
+    for role in ("anon", "authenticated"):
+        sql(
+            f"SET ROLE {role}; SELECT public.care_conversation_activity_operation('{PATIENT}','patient','send','{{}}');",
+            succeeds=False,
+        )
+
+
+def test_activity_concurrent_draft_review_is_idempotent(activity_sql):
+    sql, _, item = activity_sql
+    thread, _, message = attached_message(sql, item)
+    request = activity_operation(
+        "review",
+        {"conversation_id": thread["id"], "message_id": message["id"]},
+        actor=CLINICIAN,
+        role="clinician",
+    )
+    first = sql.start("BEGIN; " + request + " SELECT pg_sleep(0.4); COMMIT;", "activity-first")
+    wait_event(sql, "activity-first", "PgSleep")
+    second = sql.start(request, "activity-second")
+    wait_event(sql, "activity-second", "Lock")
+    finish(first)
+    finish(second)
+    assert sql("SELECT count(*) FROM care_plan_versions WHERE status='draft'") == "1"
+    assert sql("SELECT count(*) FROM care_plan_items") == "2"
+
+
+def test_activity_review_waits_before_publication_row_locks(activity_sql):
+    sql, _, item = activity_sql
+    thread, _, message = attached_message(sql, item)
+    request = activity_operation(
+        "review",
+        {"conversation_id": thread["id"], "message_id": message["id"]},
+        actor=CLINICIAN,
+        role="clinician",
+    )
+    draft = json.loads(sql(request))
+    # Reproduce publication's actual evidence -> draft -> patient lock footprint.
+    publication = sql.start(
+        f"""BEGIN; SET ROLE service_role;
+      SELECT private.lock_care_plan_evidence('{PATIENT}',true);
+      SELECT id FROM care_plan_versions WHERE id='{draft["plan_id"]}' FOR UPDATE;
+      SELECT pg_sleep(0.4);
+      SELECT id FROM patients WHERE id='{PATIENT}' FOR UPDATE;
+      COMMIT;""",
+        "publication-locks",
+    )
+    wait_event(sql, "publication-locks", "PgSleep")
+    review = sql.start(request, "activity-after-publication")
+    wait_event(sql, "activity-after-publication", "Lock")
+    finish(publication)
+    finish(review)
+    assert sql("SELECT count(*) FROM care_plan_versions WHERE status='draft'") == "1"
+
+
+def test_activity_review_rejects_an_outsider_without_queueing_behind_evidence_locks(
+    activity_sql,
+):
+    """The authorization pre-check runs before the blocking per-patient evidence lock."""
+    sql, _, item = activity_sql
+    thread, _, message = attached_message(sql, item)
+    holder = sql.start(
+        f"""BEGIN; SET ROLE service_role;
+      SELECT private.lock_care_plan_evidence('{PATIENT}',true);
+      SELECT pg_sleep(2.5);
+      COMMIT;""",
+        "evidence-holder",
+    )
+    wait_event(sql, "evidence-holder", "PgSleep")
+    started = time.monotonic()
+    error = sql(
+        activity_operation(
+            "review",
+            {"conversation_id": thread["id"], "message_id": message["id"]},
+            actor=OTHER,
+            role="clinician",
+        ),
+        succeeds=False,
+    )
+    elapsed = time.monotonic() - started
+    finish(holder)
+    assert "Conversation unavailable" in error
+    assert elapsed < 2.0
+
+
+PLATFORM_STUBS = """
+CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY);
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT null::uuid $$;
+CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$ SELECT '{}'::jsonb $$;
+CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$ SELECT 'anon' $$;
+CREATE SCHEMA storage;
+CREATE TABLE storage.buckets(id text PRIMARY KEY, name text, public boolean,
+  file_size_limit bigint, allowed_mime_types text[]);
+CREATE TABLE storage.objects(id uuid DEFAULT gen_random_uuid() PRIMARY KEY, bucket_id text,
+  name text, owner uuid, metadata jsonb);
+CREATE FUNCTION storage.foldername(name text) RETURNS text[] LANGUAGE sql IMMUTABLE
+  AS $$ SELECT string_to_array(name,'/') $$;
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='supabase_auth_admin') THEN
+  CREATE ROLE supabase_auth_admin NOLOGIN; END IF; END $$;
+CREATE FUNCTION public.rls_auto_enable() RETURNS void LANGUAGE sql AS $$ SELECT 1 $$;
+CREATE TABLE public.schema_migrations(filename text PRIMARY KEY, checksum text,
+  applied_at timestamptz DEFAULT now());
+-- 015 needs the pgvector extension, which the stock image lacks; 020 only pins its function.
+CREATE DOMAIN public.vector AS real[];
+CREATE FUNCTION public.match_drug_knowledge_chunks(public.vector,integer,text[],text[],double precision)
+  RETURNS void LANGUAGE sql AS $$ SELECT $$;
+"""
+
+
+@pytest.fixture
+def full_chain_sql(postgres):
+    """Every committed migration in order (except the pgvector-only 015), as production runs."""
+    database = "chain_" + uuid4().hex
+    subprocess.run(
+        postgres,
+        input=f"CREATE DATABASE {database};",
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    command = postgres + ["-d", database]
+
+    def execute(statement, *, succeeds=True):
+        result = subprocess.run(
+            command, input=statement, capture_output=True, text=True, timeout=60
+        )
+        assert (result.returncode == 0) is succeeds, result.stderr
+        return result.stdout.strip() if succeeds else result.stderr
+
+    execute(PLATFORM_STUBS)
+    for path in sorted(MIGRATION.parent.glob("*.sql")):
+        if path.name.startswith("015_"):
+            continue
+        execute(path.read_text())
+    execute(f"""
+      INSERT INTO auth.users VALUES ('{PATIENT}'),('{CLINICIAN}');
+      INSERT INTO patients(id,email,first_name,last_name,date_of_birth) VALUES
+        ('{PATIENT}','patient@synthetic.invalid','Synthetic','Patient','1960-01-01');
+      INSERT INTO clinics(id,display_name,canonical_name) VALUES
+        ('{CLINIC}','Synthetic clinic','synthetic clinic');
+      INSERT INTO clinicians(id,email,first_name,last_name,specialty,clinic_name,clinic_id) VALUES
+        ('{CLINICIAN}','one@synthetic.invalid','Synthetic','Clinician','Synthetic',
+         'Synthetic clinic','{CLINIC}');
+      INSERT INTO care_teams(id,patient_id,clinician_id,role,status) VALUES
+        ('{TEAM}','{PATIENT}','{CLINICIAN}','primary_care','active');
+    """)
+    return execute
+
+
+def test_activity_attach_and_review_work_on_the_full_migration_chain(full_chain_sql):
+    """Notification triggers (051 to 075) must coexist with the activity operations."""
+    sql = full_chain_sql
+    plan, item = str(uuid4()), str(uuid4())
+    sql(f"""
+      INSERT INTO care_plan_versions(id,patient_id,version_number,status)
+        VALUES('{plan}','{PATIENT}',1,'draft');
+      INSERT INTO care_plan_items(id,plan_version_id,category,title,instructions,frequency)
+        VALUES('{item}','{plan}','hydration','Synthetic activity','Approved source instruction','daily');
+      -- Seeding only: source-document eligibility is owned by the care-plan suite.
+      ALTER TABLE care_plan_versions DISABLE TRIGGER care_plan_aaa_document_review_guard;
+      UPDATE care_plan_versions SET status='approved',approved_by='{CLINICIAN}',approved_at=now()
+        WHERE id='{plan}';
+      ALTER TABLE care_plan_versions ENABLE TRIGGER care_plan_aaa_document_review_guard;
+    """)
+    thread = json.loads(sql(operation("open", {"recipient_id": CLINICIAN})))
+    payload = {
+        "conversation_id": thread["id"],
+        "body": "Question about frequency",
+        "client_message_id": str(uuid4()),
+        "care_plan_item_id": item,
+    }
+    message = json.loads(sql(activity_operation("send", payload)))
+    assert message["activity_context"]["item_id"] == item
+    review = json.loads(
+        sql(
+            activity_operation(
+                "review",
+                {"conversation_id": thread["id"], "message_id": message["id"]},
+                actor=CLINICIAN,
+                role="clinician",
+            )
+        )
+    )
+    assert sql(f"SELECT status FROM care_plan_versions WHERE id='{review['plan_id']}'") == "draft"
+    assert sql("SELECT count(*) FROM care_conversation_messages") == "1"

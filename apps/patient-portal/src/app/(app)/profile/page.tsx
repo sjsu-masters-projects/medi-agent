@@ -26,6 +26,7 @@ import { careTeamRoleLabel } from "./care-team-labels";
 import { profileCopy, profileGenderLabels } from "./profile-copy";
 import { useSharedPatientProfile } from "@/hooks/use-patient-profile";
 import { EmailPreferences } from "@/components/features/email-preferences";
+import { clearPatientLocale } from "@/content/patient-locale";
 
 interface PatientProfileResponse {
     id: string;
@@ -191,6 +192,7 @@ function ProfilePageContent() {
 
     function handleLogout() {
         clearStoredSession();
+        clearPatientLocale();
         dispatch(logout());
         replace("/login");
     }

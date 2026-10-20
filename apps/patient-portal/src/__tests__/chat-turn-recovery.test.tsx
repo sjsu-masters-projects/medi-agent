@@ -1,6 +1,6 @@
 import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { useChatTurnRecovery } from "@/hooks/use-chat-turn-recovery";
+import { isTurnInProgress, normalizeTurnStatus, useChatTurnRecovery } from "@/hooks/use-chat-turn-recovery";
 import { ChatTurnRecovery } from "@/components/features/chat-turn-recovery";
 import type { ChatTurnApi } from "@/services/chat-api";
 import { ChatRole } from "@/types";
@@ -105,16 +105,24 @@ describe("saved Nora turn recovery", () => {
         expect(screen.getByRole("button", { name: copy.retry })).toBeDisabled();
         expect(screen.getByRole("button", { name: copy.retry })).toHaveAccessibleDescription(copy.waitBeforeRetry);
     });
-});
 
-it("clears only a safety-outbox acknowledgement without inventing a durable turn", () => {
-    const { result, send } = setup();
-    act(() => { result.current.send("Synthetic emergency fixture", "en-US", null); });
-    const id = JSON.parse(send.mock.calls[0][0]).client_message_id;
-    act(() => { result.current.completeSafety("unrelated-id"); });
-    expect(result.current.turnBusy).toBe(true);
-    act(() => { result.current.completeSafety(id); });
-    expect(result.current.turns).toEqual([]);
-    expect(result.current.turnBusy).toBe(false);
-    act(() => { expect(result.current.retry(id)).toBe(false); });
+    it("treats queued like processing: busy, no retry, and no card (the thread shows the typing bubble)", () => {
+        const { result } = setup();
+        act(() => { result.current.accept([{ ...row, status: "queued", retryable: false }], true); });
+        expect(result.current.turnBusy).toBe(true);
+        expect(result.current.turns[0].status).toBe("queued");
+        const copy = getChatRecoveryCopy("en-US");
+        const view = render(<ChatTurnRecovery turns={result.current.turns} locale="en-US" connected onRetry={vi.fn()} onDismiss={vi.fn()} />);
+        expect(view.container.querySelector("section")).toBeNull();
+        expect(screen.queryByText(copy.interrupted)).not.toBeInTheDocument();
+    });
+
+    it("maps an unrecognised status to in progress, never interrupted", () => {
+        const { result } = setup();
+        act(() => { result.current.accept([{ ...row, status: "paused" as ChatTurnApi["status"], retryable: false }], true); });
+        expect(result.current.turns[0].status).toBe("unknown");
+        expect(result.current.turnBusy).toBe(true);
+        expect(normalizeTurnStatus("queued")).toBe("queued");
+        expect(isTurnInProgress(normalizeTurnStatus("nonsense"))).toBe(true);
+    });
 });

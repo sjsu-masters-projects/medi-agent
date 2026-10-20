@@ -4,6 +4,9 @@
 > Requirements 1 to 14 (PR 1, PR 2) were approved by the requester on 2026-10-12; requirements 15 to 24 (PR 3) were
 > added the same day, and the requester decided D12 to D17 exactly as proposed. Design in `design.md`, tasks in
 > `tasks.md`.
+> **Routing amendment (2026-10-18):** the requester directed that clinician ADR follow-up appear under Care Team,
+> never inside Nora. The exact-request notification still opens the structured form directly; Back returns to
+> Care team messages.
 > **Migration numbers:** the drafts used the working names 059 and 060. `origin/main` has since taken 059 to 062
 > (critical-result alerts and chat attachments), so PR 2 is `063_adr_information_loop_lifecycle.sql` and PR 3 is
 > `064_medwatch_form_3500.sql`. The contract-test fixture finds the PR 2 file by name
@@ -277,16 +280,16 @@ questions, so that I can answer in one step.
    allowlist with a test, and SHALL not put raw identifiers in copy. The link target SHALL be resolvable without a
    migration, for example by the assessment ID that is already the event's `source_id`. *Evidence: Observed
    (`destination()`; `notificationDestination()` in `services/notifications.ts`).*
-3. THE Patient_Portal SHALL no longer depend on an open Nora assistant thread to show the Follow_Up_Form, and a
-   patient inside an open Nora thread SHALL still reach it from a visible control. *Evidence: Observed. The panel
-   renders only in the `assistantThread` branch of `chat/page.tsx`.*
+3. THE Patient_Portal SHALL render the clinician's Information_Request under Care team messages and SHALL NOT
+   render its entry row or message inside an open Nora assistant thread. A patient in Nora SHALL reach it by
+   switching to Care team messages. *Evidence: requester routing amendment, 2026-10-18.*
 4. WHILE at least one Information_Request is `pending`, THE Patient_Portal SHALL show an entry row to the
-   Follow_Up_Form in the chat inbox and on Today, each in the Saved_Locale, built from `GroupedList` / `IconTile`
-   and at least 44 px tall. WHILE none is pending, THE Patient_Portal SHALL show neither row. *Evidence: Design
-   (decision D6, decided: both rows, only while a request is pending).*
-5. THE Follow_Up_Form SHALL show the existing emergency and "messages are not continuously monitored" caution
-   (`controls.caution` in `chat-copy.ts`) in the Saved_Locale wherever it is hosted. *Evidence: Observed. The caution
-   renders immediately above the panel in the Nora thread today; moving the form must not lose it.*
+   Follow_Up_Form under Care team messages in the chat inbox and on Today, each in the Saved_Locale, built from
+   `GroupedList` / `IconTile` and at least 44 px tall. WHILE none is pending, THE Patient_Portal SHALL show neither
+   row. *Evidence: Design (decision D6, amended 2026-10-18: both rows, only while pending, never Nora).*
+5. THE Follow_Up_Form SHALL show the human care-conversation emergency and "messages are not continuously
+   monitored" notice in the Saved_Locale wherever it is hosted, and SHALL NOT label clinician-authored content
+   with Nora's AI caution. *Evidence: requester routing amendment, 2026-10-18.*
 6. WHEN the patient is not signed in and opens the link, THE Patient_Portal SHALL follow its existing sign-in redirect
    and return to the form afterwards. *Evidence: Inferred (existing protected-route behaviour).*
 7. THE Patient_Portal SHALL keep the new view and entry rows within Requirement 1. *Evidence: Design.*

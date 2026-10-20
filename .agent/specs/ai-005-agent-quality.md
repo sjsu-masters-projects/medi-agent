@@ -165,14 +165,22 @@ branch `fix/medication-evidence-and-draft-titles`:
   results-only report. The extraction prompt (`document-extraction/3`) now leaves report
   boilerplate out.
 
-Still open: asked for general sleep tips, Nora said it could not look up reference
-information and pointed to the care team instead of giving general guidance.
+Follow-up found: asked for general sleep tips, Nora refused instead of giving
+bounded general guidance. AI-006 now refines the coordinator/responder instructions;
+actual provider behavior remains to be evaluated, not inferred from prompt edits.
 
-## Remaining
+## AI-006 follow-up implementation
 
-1. Over-triage calibration for mild symptoms and low mood (safe, but noisy for the care team).
-2. Remove the unused legacy ingestion graph (`agents/ingestion/graph.py`) and its test.
-3. SOAP generation through the model registry.
+1. Instructions distinguish mild/stable symptoms and low mood from deterioration,
+   preserving deterministic safety floors and urgent medication-reaction rules.
+2. The unused ingestion graph/test are removed; golden coverage now exercises the
+   current extraction service and FHIR validator.
+3. SOAP uses the model registry with explicit operational limits and no-note failure.
+
+[Combined acceptance/rollout](demo-care-loop-followups.md) and [repeatable paired
+evaluation](../../docs/demo-ai-evaluation.md) distinguish mocked/dry-run evidence
+from outstanding real-provider and deployed acceptance. No measured improvement
+in over-triage is claimed by these implementation changes.
 
 ## Acceptance
 

@@ -164,10 +164,11 @@ Both uses are labelled as such.
 - Caching back-translations.
 - A foreign key and a retention rule for `message_translations`.
 - The duplicate `067` migration prefix (the validator allows it).
-- Moving message translation on send and read to a background job; recording the guard outcome
-  with the wording verification.
+- Recording the guard outcome with the wording verification. Send/read model calls
+  were removed in #187 using the explicit per-message translation endpoint below;
+  a background job is not an outstanding implementation requirement.
 
-## Decision from the October 17 UX-006 branch (`feature/clinician-schedule`)
+## Non-blocking translation implemented in #187 (October 17)
 
 12. **Translation never runs in the send or read path (done).** Production Cloud Run gives CPU
     only while a request is open, so no background task or thread is used.

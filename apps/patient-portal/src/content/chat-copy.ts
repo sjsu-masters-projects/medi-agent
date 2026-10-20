@@ -114,11 +114,10 @@ export function getPatientChatCopy(locale: Locale): PatientChatCopy {
 /** PAT-001-A interface wording; es-MX candidates are tracked for bilingual review. */
 export function getChatRecoveryCopy(locale: Locale) {
   return locale === "es-MX" ? {
-    preparing: "Nora está preparando tu respuesta",
-    checking: "Comprobando el estado de tu mensaje",
     interrupted: "La respuesta quedó incompleta",
     uncertain: "Es posible que se haya registrado una acción. No la repetiremos automáticamente. Si necesitas ayuda, contacta a tu equipo de atención.",
-    returnLater: "Puedes volver a esta conversación. La respuesta se mostrará cuando esté guardada.",
+    // DRAFT es-MX, pending bilingual review.
+    leaveAndReturn: "Puedes salir; la respuesta aparecerá aquí.",
     safeRetry: "Puedes reintentar el mismo mensaje sin enviarlo dos veces.",
     noRetry: "No volveremos a ejecutar este mensaje. Puedes continuar con una pregunta nueva.",
     retry: "Reintentar mensaje",
@@ -131,11 +130,9 @@ export function getChatRecoveryCopy(locale: Locale) {
     reconnect: "Volver a conectar",
     replyUnavailable: "La respuesta de esta conversación ya no está disponible. No la volveremos a ejecutar. Puedes continuar con una pregunta nueva.",
   } : {
-    preparing: "Nora is preparing your reply",
-    checking: "Checking your message status",
     interrupted: "The reply was interrupted",
     uncertain: "An action may already have been recorded. We will not repeat it automatically. Contact your care team if you need help.",
-    returnLater: "You can return to this conversation. The reply will appear when it is saved.",
+    leaveAndReturn: "You can leave; the reply will appear here.",
     safeRetry: "You can retry the same message without sending it twice.",
     noRetry: "We will not rerun this message. You can continue with a new question.",
     retry: "Retry message",
@@ -152,7 +149,7 @@ export function getChatRecoveryCopy(locale: Locale) {
 
 export function getChatControlsCopy(locale: Locale) {
   return locale === "es-MX" ? {
-    connection: { idle: "Sin conexión", connected: "Conectado", connecting: "Conectando…", disconnected: "Sin conexión", error: "Problema de conexión" },
+    connection: { idle: "Sin conexión", connected: "Conectado", connecting: "Conectando…", disconnected: "Sin conexión", error: "Problema de conexión", reconnecting: "Reconectando…" },
     caution: "Nora es una IA y puede equivocarse. No cambies tu tratamiento sin consultar a tu equipo clínico. Para una emergencia, llama al 911.",
     loading: "Cargando conversación…", recordContext: "Registro adjunto", dismiss: "Cerrar", message: "Mensaje para Nora", send: "Enviar mensaje",
     documentUnavailable: "Este documento no está disponible o cambió. Desvincúlalo antes de hacer una pregunta sobre el resto de tu expediente.",
@@ -163,7 +160,7 @@ export function getChatControlsCopy(locale: Locale) {
     humanOriginal: "Los mensajes se muestran tal como se escribieron, sin traducción automática.",
     profileRequired: "Necesitamos cargar tu idioma preferido antes de enviar. Si tarda demasiado, vuelve a abrir Chat.",
   } : {
-    connection: { idle: "Offline", connected: "Connected", connecting: "Connecting…", disconnected: "Offline", error: "Connection issue" },
+    connection: { idle: "Offline", connected: "Connected", connecting: "Connecting…", disconnected: "Offline", error: "Connection issue", reconnecting: "Reconnecting…" },
     caution: "Nora is AI and can make mistakes. Check with your care team before changing treatment. For an emergency, call 911.",
     loading: "Loading conversation…", recordContext: "Record context attached", dismiss: "Dismiss", message: "Message to Nora", send: "Send message",
     documentUnavailable: "This document is unavailable or has changed. Dismiss it before asking about the rest of your record.",

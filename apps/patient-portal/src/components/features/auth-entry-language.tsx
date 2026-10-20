@@ -5,6 +5,8 @@ import { useSharedPatientProfile } from "@/hooks/use-patient-profile";
 import { authEntryLocale, getAuthEntryCopy, GUEST_LOCALE_STORAGE_KEY } from "@/content/auth-entry-copy";
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES, getLocaleLabel, normalizeLocale, type Locale } from "@/types";
 import { Icon } from "@/components/ui/icons";
+import { rememberPatientLocale } from "@/content/patient-locale";
+import { useInitialPatientLocale } from "@/contexts/patient-locale-context";
 
 const subscribe = (callback: () => void) => {
   window.addEventListener("popstate", callback);
@@ -14,17 +16,19 @@ const subscribe = (callback: () => void) => {
 // Before sign-in there is no patient profile. Carry this entry choice through links.
 export function useAuthEntryLocale() {
   const shared = useSharedPatientProfile();
-  const browserLocale = useSyncExternalStore(subscribe, authEntryLocale, () => DEFAULT_LOCALE);
+  const initialLocale = useInitialPatientLocale();
+  const browserLocale = useSyncExternalStore(subscribe, authEntryLocale, () => initialLocale ?? DEFAULT_LOCALE);
   const [choice, setLocale] = useState<Locale | null>(null);
   const locale = shared?.profile?.preferredLanguage ?? choice ?? browserLocale;
   useEffect(() => {
-    document.documentElement.lang = locale;
+    rememberPatientLocale(locale);
   }, [locale]);
   return {
     locale,
     setLocale: (locale: Locale) => {
       if (shared?.profile) return;
       setLocale(locale);
+      rememberPatientLocale(locale);
       // This key is for entry screens only, never an authenticated preference.
       try { window.localStorage.setItem(GUEST_LOCALE_STORAGE_KEY, locale); } catch { /* Entry choice remains usable without storage. */ }
     },

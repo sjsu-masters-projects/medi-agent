@@ -192,7 +192,9 @@ export function ADRReviewCard({
                         <dl className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2">
                             <Fact label="Reported symptom">{item.symptom}</Fact>
                             <Fact label="Severity">
-                                <span className="font-mono">{item.severity === null ? "Unknown / not provided" : `${item.severity}/10`}</span>
+                                <span className="font-mono">
+                                    {item.severity === null ? "Unknown / not provided" : `${item.severity}/10`}
+                                </span>
                             </Fact>
                             <Fact label="Suspect medication">{item.suspectMedicationName}</Fact>
                             <Fact label="Onset">{item.onset || "Not recorded"}</Fact>

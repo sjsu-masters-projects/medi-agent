@@ -49,6 +49,7 @@ describe("Patient login page", () => {
         expect(screen.getByLabelText("Email address")).toHaveClass("bg-surface");
     });
     beforeEach(() => {
+        document.cookie = "patient-portal.locale=; Path=/; Max-Age=0";
         window.localStorage.clear();
         window.history.replaceState({}, "", "/");
         replace.mockReset();

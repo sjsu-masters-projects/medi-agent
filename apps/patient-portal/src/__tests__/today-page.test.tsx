@@ -125,13 +125,15 @@ describe("TodayPage", () => {
         vi.useFakeTimers();
         vi.setSystemTime(new Date("2026-10-10T01:00:00Z"));
         usePatientProfile.mockReturnValue({ preferredLanguage: "es-MX", timezone: "Invalid/Zone" });
-        mockFeedData({ error: "No se pudieron cargar tus actividades." });
+        mockFeedData({ error: "Internal English server detail" });
         render(<TodayPage />);
         expect(screen.getByText("sábado, 10 de octubre")).toBeInTheDocument();
         expect(screen.getByText("No se pudieron cargar las actividades")).toBeInTheDocument();
         fireEvent.click(screen.getByRole("button", { name: "Intentar de nuevo" }));
         expect(refreshFeed).toHaveBeenCalledOnce();
         expect(screen.queryByText("Try again")).not.toBeInTheDocument();
+        expect(screen.queryByText("Internal English server detail")).not.toBeInTheDocument();
+        expect(screen.getByText("Actualiza tus actividades e intenta de nuevo.")).toBeInTheDocument();
     });
 
     it("localizes reminder and plan labels while retaining clinical wording and completion semantics", async () => {

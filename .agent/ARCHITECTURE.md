@@ -61,17 +61,19 @@ Deployed October 12 (migrations 057/058); production status and open items are i
 
 PAT-002-B's source audit and confirmation contract are recorded in the
 [confirmed symptom intake plan](specs/pat-002-b-confirmed-symptom-intake-plan.md).
-Current implementation and activation prerequisites are described below. The
-unpublished migrations are 059/060; they follow main's 058 and reuse the chat-session
-column owned by 051. The ordinary initial Nora utterance retains existing clinician
-transcript visibility; subsequent intake form answers are patient-private.
+Current implementation and activation prerequisites are described below. Migrations
+059/060 and the checksum-pinned `071_confirmed_symptom_handoff.sql` are recorded as
+applied; the 071 handoff adds durable confirmed-report ADR work. These migrations reuse
+the chat-session column owned by 051. The ordinary initial Nora utterance retains
+existing clinician transcript visibility; subsequent intake form answers are
+patient-private.
 
 Only these four work boundaries are supported by the product direction:
 
 | Boundary | Current implementation anchor | Authority |
 | --- | --- | --- |
 | Care Coordinator | Chat triage, per-conversation stored history, and read-only tools over the patient's record, documents and the shared reference cache | Guides, explains and routes; cannot approve clinical action |
-| Document and Evidence Worker | Document ingestion graph, extraction and explanation | Produces source-linked candidates |
+| Document and Evidence Worker | Ingestion service, extraction and explanation | Produces source-linked candidates |
 | Medication Safety Worker | Rule-based symptom-to-ADR task lifecycle and clinician-review candidate | Produces review candidate; cannot submit or alter medication |
 | Follow-up Worker | Symptom capture, adherence, reminders, and care-gap follow-up | Collects and schedules follow-up only |
 
@@ -85,6 +87,18 @@ Scheduling, notification delivery, authentication/authorization, database access
 retry/idempotency, and approval enforcement are deterministic services. Model output
 may suggest or draft; it must not decide authority, bypass rules, or write an approved
 clinical fact without review.
+
+Demo follow-ups route SOAP through the existing workload registry (failure writes
+no note). The unused ingestion graph has been retired after its golden tests moved
+to the current extraction service. Chat-turn and notification database calls use
+separate bounded connection pools so a slow notification read cannot expire a turn.
+Message translation is off the send and read paths. Browser sessions are shared across
+tabs with idle and absolute limits. The patient locale cookie (seeded from the profile,
+cleared on sign-out, falling back to `Accept-Language`) is a presentation hint only,
+never identity or authorization. COM-002 stores an approved activity
+reference in a private message; its explicit review transaction opens/reuses an
+audited draft under the existing evidence fence. Messages and replies do not
+publish or change reminders. Contract and rollout: [combined plan](specs/demo-care-loop-followups.md).
 
 ## Nora's knowledge and conversations (NORA-002)
 
@@ -222,14 +236,18 @@ commit one immutable patient-confirmed report with append-only audit. Unknown se
 is null. New direct inserts fail closed; historical rows stay `legacy_unconfirmed`.
 Clinical consumers select confirmed reports; the existing clinician detail view labels
 legacy history and confirmed testimony separately. Delegated symptom tasks canonicalize
-report input at submission/working transitions. Additive migration 071 atomically
-enqueues the existing ADR screen and assigned-clinic notices at confirmation;
-exact unique active-list products permit ADR drafts, while unlisted products remain
-unverified testimony without medication writes. Retry cannot overwrite clinician
-review. Independent urgent and emergency outbox identities prevent suppression.
-Chat/voice questions reuse the existing voice transport without storing private
-recording audio or TTS against a chat row. Explicit confirmation remains a button;
-spoken assent cannot submit. No new clinical verdict or automatic ADR follow-up is added. PAT-002-C's timeline remains separate.
+report input at submission/working transitions. The applied, checksum-pinned
+`071_confirmed_symptom_handoff.sql` atomically enqueues the existing ADR screen and
+assigned-clinic notices at confirmation. An exact,
+unique active-list product match supplies the medication foreign key and permits the worker
+to create one report-keyed clinician ADR draft; unlisted products remain unverified testimony
+without medication writes or a fabricated ADR link. Retry cannot overwrite clinician review.
+Independent urgent and emergency outbox identities prevent suppression. Chat/voice questions
+reuse the existing voice transport without storing private recording audio or TTS against a
+chat row. Explicit confirmation remains a button; spoken assent cannot submit. This is
+decision support, not a causality verdict or automatic MedWatch submission. Existing
+clinician-authored ADR requests are presented to the patient under Care Team, not Nora.
+PAT-002-C's timeline remains separate.
 
 See [the contract and acceptance evidence](../docs/pat-002-b-acceptance-2026-10-12.md)
 for exact endpoints, recovery behavior and rollout prerequisites.

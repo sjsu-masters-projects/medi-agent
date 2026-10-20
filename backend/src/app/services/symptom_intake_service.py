@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any, cast
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -26,8 +27,11 @@ from app.models.symptom_intake import (
 )
 from app.safety.intake_gate import IntakeSafetyDecision, evaluate_intake_safety, safety_response
 from app.safety.triage_floor import SafetyVerdict
+from app.services.a2a_task_service import A2ATaskService
 from app.services.chat_safety_service import ChatSafetyService
 from app.utils.localization import written_language
+
+logger = logging.getLogger(__name__)
 
 
 class SymptomIntakeService:
@@ -456,7 +460,8 @@ class SymptomIntakeService:
         row = await self._read_row(intake_id)
         payload = {"intake_id": str(intake_id), **data.model_dump(mode="json")}
         if row["status"] == "confirmed":
-            return self.describe(await self._call("confirm", payload))
+            confirmed = self.describe(await self._call("confirm", payload))
+            return await self._handoff_confirmed_product_concern(confirmed)
         decision = self._ledger_safety(row, None)
         if decision:
             return await self.interrupt(row, {}, decision)
@@ -466,4 +471,43 @@ class SymptomIntakeService:
             return await self.interrupt(row, {}, decision)
         if not self.describe(row)["can_confirm"] or not await verify_context(self.db, row):
             raise ValidationError("Preview must be rebuilt", code="INTAKE_PREVIEW_STALE")
-        return self.describe(await self._call("confirm", payload))
+        confirmed = self.describe(await self._call("confirm", payload))
+        return await self._handoff_confirmed_product_concern(confirmed)
+
+    async def _handoff_confirmed_product_concern(self, confirmed: dict[str, Any]) -> dict[str, Any]:
+        report_id = str(confirmed.get("confirmed_report_id") or "").strip()
+        if not report_id:
+            return confirmed
+        try:
+            report = cast(dict[str, Any], await self._call("report", {"report_id": report_id}))
+            if not A2ATaskService.confirmed_product_concern(report):
+                return confirmed
+            medication_id, _medication_name = A2ATaskService.confirmed_medication(report)
+            if not medication_id:
+                return {
+                    **confirmed,
+                    "adr_handoff": {
+                        "task_id": None,
+                        "status": "requires_medication_reconciliation",
+                    },
+                }
+            handoff = await A2ATaskService(self.db).run_symptom_to_pharmacovigilance(
+                patient_id=str(self.actor.id),
+                payload={
+                    "session_id": confirmed.get("session_id") or "default",
+                    "symptom_report": report,
+                },
+            )
+            return {
+                **confirmed,
+                "adr_handoff": {
+                    "task_id": handoff.get("task_id"),
+                    "status": handoff.get("status"),
+                },
+            }
+        except Exception:
+            # Confirmation is authoritative and must not become ambiguous because a
+            # downstream worker is temporarily unavailable. An idempotent retry of
+            # the same confirmation will retry the report-scoped handoff.
+            logger.exception("Confirmed symptom ADR handoff failed", extra={"report_id": report_id})
+            return {**confirmed, "adr_handoff": {"task_id": None, "status": "pending"}}

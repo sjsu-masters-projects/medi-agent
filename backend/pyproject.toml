@@ -48,8 +48,6 @@ plugins = ["pydantic.mypy"]
 module = [
     "supabase.*",
     "deepgram.*",
-    "langgraph.*",
-    "langchain_google_genai.*",
     "resend.*",
     "google.generativeai.*",
     "fitz",

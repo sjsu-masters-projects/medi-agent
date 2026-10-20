@@ -1213,3 +1213,22 @@ approval. Do not change its status, active library or remote eligibility. The te
 contract still requires genuine peer/safety review, and merge/deployment need exact
 authorization. This step changes evidence/docs only; its current CI result belongs
 on the PR, separate from the already green implementation receipt.
+
+
+## 28. October 19 readiness continuation after #159 merged
+
+Main advanced to 5d46c30 and independently merged #159. Integrate that current base
+in an isolated worktree, retaining the existing worker/event protocol, locale/feed
+fixes and conditional ADR claims. Keep PR #193 focused on remaining corrections,
+pending-answer identity, same-origin microphone permission, private composer and
+voice-locale routing, the draft-opening action fence and enforced intake SQL tests.
+The exact applied 071 remains unchanged; no database migration or remote action is
+part of integration. Update the local SQL adapter for the current conditional claim
+and real retry state; do not weaken or bypass the runtime worker.
+
+Record post-integration commands/results in the acceptance file and current CI on
+the PR. Previous 34f34d3 passed all 34 checks; that does not prove this new merge.
+Requester-reported manual acceptance stays tied to its original implementation.
+Candidate-2 remains inactive; genuine peer/safety review and separately authorized
+merge/deployment remain prerequisites. The full intake and ADR work merged through
+#159 is base behavior, not newly implemented scope for #193.

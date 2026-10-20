@@ -27,6 +27,12 @@ TRIAGE_COPY = {
             "yourself or feeling unsafe, call or text 988 (Suicide and Crisis Lifeline) right "
             "away — they are available 24/7. You are not alone, and help is available."
         ),
+        "medication_error_response": (
+            "A possible medication dose or stop/hold error needs same-day guidance. "
+            "Contact your care team or pharmacist today. If you have severe or sudden "
+            "symptoms, trouble breathing, chest pain, fainting, or feel unsafe, call 911 "
+            "or go to the nearest emergency department now."
+        ),
         "fallback_general": (
             "Thanks for sharing this. I am here to help and can continue tracking your symptoms."
         ),
@@ -70,6 +76,12 @@ TRIAGE_COPY = {
             "If you are in immediate danger, call 911 now. If you are thinking about hurting "
             "yourself or feeling unsafe, call or text 988 (Suicide and Crisis Lifeline) right "
             "away — they are available 24/7. You are not alone, and help is available."
+        ),
+        "medication_error_response": (
+            "A possible medication dose or stop/hold error needs same-day guidance. "
+            "Contact your care team or pharmacist today. If you have severe or sudden "
+            "symptoms, trouble breathing, chest pain, fainting, or feel unsafe, call 911 "
+            "or go to the nearest emergency department now."
         ),
         "fallback_general": (
             "Thanks for sharing this. I am here to help and can continue tracking your symptoms."
@@ -115,6 +127,13 @@ TRIAGE_COPY = {
             "hacerte daño o no te sientes a salvo, llama o envía un mensaje al 988 (Línea de "
             "Prevención del Suicidio y Crisis) de inmediato — están disponibles 24/7. No estás "
             "solo y hay ayuda disponible."
+        ),
+        "medication_error_response": (
+            "Un posible error de dosis o al tomar un medicamento que debía pausarse o "
+            "suspenderse requiere orientación hoy mismo. Contacta hoy a tu equipo de "
+            "atención o a tu farmacéutico. Si tienes síntomas graves o repentinos, "
+            "dificultad para respirar, dolor de pecho, desmayo o no te sientes a salvo, "
+            "llama al 911 o acude al servicio de urgencias más cercano ahora."
         ),
         "fallback_general": (
             "Gracias por el mensaje. Estoy aquí para ayudarte y puedo seguir dando seguimiento a tus síntomas."

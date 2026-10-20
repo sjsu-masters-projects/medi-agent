@@ -237,6 +237,7 @@ class TestRiskSignalFetching:
                 data=[
                     {"severity": 4},
                     {"severity": "9"},
+                    {"severity": None},
                     {},
                 ]
             )
@@ -245,6 +246,19 @@ class TestRiskSignalFetching:
         severity = await service._fetch_recent_symptom_severity(uuid4())
 
         assert severity == 9
+
+    @pytest.mark.asyncio
+    async def test_fetch_recent_symptom_severity_returns_unknown_when_all_values_are_null(
+        self, service
+    ):
+        service._execute = AsyncMock(  # type: ignore[method-assign]
+            return_value=_response(data=[{"severity": None}, {}])
+        )
+
+        severity = await service._fetch_recent_symptom_severity(uuid4())
+
+        assert severity is None
+        service.db.table.return_value.eq.assert_any_call("confirmation_state", "patient_confirmed")
 
     @pytest.mark.asyncio
     async def test_fetch_open_adr_count_queries_only_valid_draft_status(self, service):
@@ -348,12 +362,3 @@ class TestHumanizeDelta:
     def test_boundary_exactly_one_day(self):
         result = _humanize_delta(timedelta(days=1))
         assert result == "1d ago"
-
-
-@pytest.mark.asyncio
-async def test_confirmed_unknown_ratings_remain_unknown():
-    db = MagicMock()
-    service = RiskScoreService(db)
-    service._execute = AsyncMock(return_value=_response(data=[{"severity": None}]))
-    assert await service._fetch_recent_symptom_severity(uuid4()) is None
-    db.table().select().eq.assert_any_call("confirmation_state", "patient_confirmed")

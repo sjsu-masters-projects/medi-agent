@@ -17,22 +17,43 @@ export interface RecoverableTurn extends Omit<ChatTurnApi, "status"> {
     status: ChatTurnApi["status"] | "unknown";
 }
 
+export type TurnStatus = RecoverableTurn["status"];
+
+const KNOWN_STATUSES: readonly TurnStatus[] = ["queued", "processing", "unknown", "completed", "failed", "interrupted"];
+
+/** Any status this portal does not recognise is "unknown": in progress, never interrupted. */
+export function normalizeTurnStatus(status: unknown): TurnStatus {
+    return KNOWN_STATUSES.includes(status as TurnStatus) ? status as TurnStatus : "unknown";
+}
+
+/** Queued, processing and unknown are busy: send is disabled, there is no retry, and exactly
+ *  one progress indicator is shown. Failed and interrupted need the patient's attention. */
+export function isTurnInProgress(status: TurnStatus): boolean {
+    return status === "queued" || status === "processing" || status === "unknown";
+}
+
+export function isTurnUnfinished(status: TurnStatus): boolean {
+    return status === "failed" || status === "interrupted";
+}
+
 /** Requests stay in memory, never in browser storage. Saved requests recover from the server. */
 export function useChatTurnRecovery(scope: string, socket: RefObject<WebSocket | null>) {
     const requests = useRef(new Map<string, TurnRequest>());
     const blocked = useRef(new Set<string>());
+    const sentHere = useRef(new Set<string>());
     const latest = useRef(new Map<string, RecoverableTurn[]>());
     const [byScope, setByScope] = useState<Record<string, RecoverableTurn[]>>({});
     const turns = byScope[scope] ?? [];
 
     function write(next: RecoverableTurn[]) {
         latest.current.set(scope, next);
-        if (next.some((turn) => turn.status === "processing" || turn.status === "unknown")) blocked.current.add(scope);
+        if (next.some((turn) => isTurnInProgress(turn.status))) blocked.current.add(scope);
         else blocked.current.delete(scope);
         setByScope((current) => ({ ...current, [scope]: next }));
     }
 
-    function accept(rows: ChatTurnApi[], snapshot = false) {
+    function accept(incoming: ChatTurnApi[], snapshot = false) {
+        const rows = incoming.map((row) => ({ ...row, status: normalizeTurnStatus(row.status) })) as RecoverableTurn[];
         for (const row of rows) {
             if (row.user_message) requests.current.set(`${scope}:${row.client_message_id}`, {
                 type: "user_message", client_message_id: row.client_message_id,
@@ -56,6 +77,7 @@ export function useChatTurnRecovery(scope: string, socket: RefObject<WebSocket |
         const request: TurnRequest = { type: "user_message", client_message_id: crypto.randomUUID(),
             content, language, document_id: documentId, audio_url: audioUrl ?? null };
         requests.current.set(`${scope}:${request.client_message_id}`, request);
+        sentHere.current.add(`${scope}:${request.client_message_id}`);
         write([...(latest.current.get(scope) ?? []), { client_message_id: request.client_message_id, status: "unknown",
             retryable: true, attempt: 0, document_id: documentId }]);
         try { socket.current.send(JSON.stringify(request)); } catch { /* Preserve the exact retry identity. */ }
@@ -66,7 +88,7 @@ export function useChatTurnRecovery(scope: string, socket: RefObject<WebSocket |
         const turns = latest.current.get(scope) ?? [];
         const turn = turns.find((item) => item.client_message_id === id);
         const request = requests.current.get(`${scope}:${id}`);
-        if (!turn?.retryable || !request || turns.some((item) => item.status === "processing" || (item.status === "unknown" && item.client_message_id !== id))
+        if (!turn?.retryable || !request || turns.some((item) => isTurnInProgress(item.status) && item.client_message_id !== id)
             || socket.current?.readyState !== WebSocket.OPEN) return false;
         write(turns.map((item) => item.client_message_id === id ? { ...item, status: "unknown" } : item));
         try { socket.current.send(JSON.stringify(request)); } catch { /* Recover or retry the same request. */ }
@@ -90,13 +112,9 @@ export function useChatTurnRecovery(scope: string, socket: RefObject<WebSocket |
         return request?.content;
     }
 
-    function completeSafety(id: string) {
-        // Emergency direction persists through its independent safety outbox.
-        // Clear only the correlated in-memory request, without inventing a chat-turn row.
-        requests.current.delete(`${scope}:${id}`);
-        write((latest.current.get(scope) ?? []).filter((turn) => turn.client_message_id !== id));
-    }
+    /** This tab sent the turn, so it follows the reply with the typing indicator and draft. */
+    const isOwnTurn = (id: string) => sentHere.current.has(`${scope}:${id}`);
 
-    return { turns, accept, send, retry, dismiss, reject, completeSafety,
-        turnBusy: turns.some((turn) => turn.status === "processing" || turn.status === "unknown") };
+    return { turns, accept, isOwnTurn, send, retry, dismiss, reject,
+        turnBusy: turns.some((turn) => isTurnInProgress(turn.status)) };
 }

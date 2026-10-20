@@ -17,9 +17,34 @@ function setup(authenticated = true, locale: "en-US" | "es-MX" = "en-US") {
     const store = configureStore({ reducer: { auth: authSlice.reducer, feed: feedSlice.reducer } });
     if (authenticated) store.dispatch(hydrateSession({ accessToken: "synthetic-token", refreshToken: "synthetic-refresh", expiresAt: 9999999999, user: { id: "patient-1", email: "test@example.test", role: "patient" } }));
     const wrapper = ({ children }: { children: ReactNode }) => <Provider store={store}>{children}</Provider>;
-    return { store, ...renderHook(() => useFeedData(locale), { wrapper }) };
+    return { store, ...renderHook(({ language }) => useFeedData(language), { wrapper, initialProps: { language: locale } }) };
 }
 describe("saved adherence acknowledgement", () => {
+    it("hides previous-locale activities until replacement wording arrives, including failures", async () => {
+        const { result, rerender } = setup();
+        await waitFor(() => expect(result.current.tasks).toHaveLength(1));
+        let failSpanish!: (reason: Error) => void;
+        get.mockImplementation((path: string) => path.includes("feed")
+            ? new Promise((_, reject) => { failSpanish = reject; })
+            : Promise.resolve({ overall_score: 1 }));
+        rerender({ language: "es-MX" });
+        expect(result.current.tasks).toEqual([]);
+        expect(result.current.loading).toBe(true);
+        await act(async () => { failSpanish(new Error("offline")); });
+        expect(result.current.tasks).toEqual([]);
+        expect(result.current.loading).toBe(false);
+        expect(result.current.error).toBe("load");
+        expect(post).not.toHaveBeenCalled();
+    });
+    it("renders an existing save failure in the new language without resubmitting", async () => {
+        post.mockRejectedValue(new Error("Internal English detail"));
+        const { result, rerender } = setup();
+        await act(async () => { await result.current.markComplete(task); });
+        expect(result.current.actionError).toContain("couldn’t confirm");
+        rerender({ language: "es-MX" });
+        expect(result.current.actionError).toContain("No pudimos confirmar");
+        expect(post).toHaveBeenCalledTimes(1);
+    });
     it("localizes an uncertain Spanish save without replaying or acknowledging it", async () => {
         post.mockRejectedValue(new ApiTransportError(true, 0));
         const { result } = setup(true, "es-MX");

@@ -1,9 +1,8 @@
 """Golden-set evaluation tests — load fixture documents, run through extraction, compare against expected output.
 
-These tests verify that the ingestion pipeline's AI extraction + FHIR validation
-produces results structurally matching hand-curated expected outputs. Because LLM
-output is non-deterministic, assertions check *structure* and *key fields* rather
-than exact string equality.
+These tests exercise current extraction parsing and FHIR validation with mocked
+generation over synthetic fixtures. They verify the complete golden structure,
+not live model accuracy, PDF/OCR, item-level grounding or candidate persistence.
 """
 
 from __future__ import annotations
@@ -16,7 +15,7 @@ from uuid import UUID
 
 import pytest
 
-from app.agents.ingestion.graph import extract_content, validate_fhir
+from app.services.ingestion_service import IngestionService
 from app.tools.fhir_builder import validate_extracted_data
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
@@ -30,6 +29,31 @@ def _load_fixture(name: str) -> str:
 
 def _load_expected(name: str) -> dict[str, Any]:
     return json.loads((FIXTURES / name).read_text())
+
+
+def _model_payload(expected: dict[str, Any], source: str) -> dict[str, Any]:
+    """Adapt legacy gold keys to the current schema without changing clinical values.
+
+    Verbatim source chunks meet the parser's evidence shape; these tests do not
+    assert that every chunk grounds each item. Item anchoring has separate tests.
+    """
+    evidence = [
+        {"page": 1, "excerpt": source[start : start + 1800], "confidence": 1.0}
+        for start in range(0, len(source), 1800)
+    ]
+    payload = {
+        key: [{**item, "evidence": evidence} for item in expected.get(key, [])]
+        for key in ("medications", "conditions")
+    }
+    payload["allergies"] = [
+        {**item, "allergen": item.get("allergen") or item["substance"], "evidence": evidence}
+        for item in expected.get("allergies", [])
+    ]
+    payload["appointments"] = [
+        {**item, "scheduled_for": item.get("timing"), "evidence": evidence}
+        for item in expected.get("follow_up_instructions", [])
+    ]
+    return payload
 
 
 # ── Smoke: Fixtures actually exist ──────────────────────
@@ -169,11 +193,11 @@ class TestDiagnosticGoldenSet:
         assert errors == [], f"FHIR validation errors: {errors}"
 
 
-# ── Integration: extract_content with fixture text ──────
+# ── Current extraction parsing with fixture text ──────
 
 
 class TestExtractContentWithFixture:
-    """Test extract_content node with real fixture text and mocked LLM returning golden-set output."""
+    """Exercise the ingestion service's model/parsing boundary for every golden document."""
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -190,59 +214,75 @@ class TestExtractContentWithFixture:
         raw_content = _load_fixture(fixture_txt)
         expected = _load_expected(fixture_json)
 
-        with patch("app.agents.ingestion.graph.get_router") as mock_get_router:
+        db = MagicMock()
+        with patch("app.services.ingestion_service.get_router") as mock_get_router:
             mock_router = MagicMock()
             mock_router.generate_text_with_telemetry = AsyncMock(
-                return_value=(json.dumps(expected), MagicMock(model="gemini-3.8-flash"))
+                return_value=(
+                    json.dumps(_model_payload(expected, raw_content)),
+                    MagicMock(model="synthetic-extractor"),
+                )
             )
             mock_get_router.return_value = mock_router
 
-            state = {
-                "document_id": str(DOCUMENT_ID),
-                "raw_content": raw_content,
-            }
-            result = await extract_content(state)
+            result, model, invalid_items = await IngestionService(db)._extract_structured(
+                raw_content
+            )
 
-        assert result["error"] is None
-        assert result["raw_content"] is None, "raw_content should be cleared after extraction"
-
-        extracted = result["extracted_data"]
-        assert len(extracted.get("medications", [])) == len(expected["medications"])
-        assert len(extracted.get("conditions", [])) == len(expected["conditions"])
+        assert invalid_items == 0
+        assert model == "synthetic-extractor"
+        for key in ("medications", "conditions", "allergies"):
+            assert len(getattr(result, key)) == len(expected[key])
+        assert len(result.appointments) == len(expected["follow_up_instructions"])
+        call = mock_router.generate_text_with_telemetry.await_args
+        assert raw_content in call.kwargs["prompt"]
+        assert call.kwargs["max_tokens"] == 8192
+        db.table.assert_not_called()
 
 
 # ── Integration: full extract → validate pipeline ───────
 
 
 class TestExtractThenValidate:
-    """Test extract_content → validate_fhir with fixture data."""
+    """Exercise current extraction followed by the FHIR validation owner."""
 
     @pytest.mark.asyncio
-    async def test_discharge_extract_then_validate(self) -> None:
-        expected = _load_expected("discharge_summary_expected.json")
+    @pytest.mark.parametrize(
+        "fixture_name", ["discharge_summary", "lab_report", "prescription", "diagnostic_report"]
+    )
+    async def test_extract_then_validate(self, fixture_name: str) -> None:
+        expected = _load_expected(f"{fixture_name}_expected.json")
+        source = _load_fixture(f"{fixture_name}.txt")
 
-        with patch("app.agents.ingestion.graph.get_router") as mock_get_router:
+        with patch("app.services.ingestion_service.get_router") as mock_get_router:
             mock_router = MagicMock()
             mock_router.generate_text_with_telemetry = AsyncMock(
-                return_value=(json.dumps(expected), MagicMock(model="gemini-3.8-flash"))
+                return_value=(
+                    json.dumps(_model_payload(expected, source)),
+                    MagicMock(model="synthetic-extractor"),
+                )
             )
             mock_get_router.return_value = mock_router
 
-            state = {
-                "document_id": str(DOCUMENT_ID),
-                "patient_id": str(PATIENT_ID),
-                "raw_content": _load_fixture("discharge_summary.txt"),
-            }
-            state = await extract_content(state)
+            result, _, invalid_items = await IngestionService(MagicMock())._extract_structured(
+                source
+            )
 
-        with patch(
-            "app.tools.fhir_builder.validate_extracted_data",
-            wraps=validate_extracted_data,
+        assert invalid_items == 0
+        fhir_input = result.model_dump()
+        # The parser represents printed timing as scheduled_for; the FHIR utility
+        # accepts timing. Keep this explicit fixture projection between the owners.
+        fhir_input["appointments"] = [
+            {**item.model_dump(), "timing": item.scheduled_for} for item in result.appointments
+        ]
+        validated, errors = validate_extracted_data(fhir_input, PATIENT_ID, DOCUMENT_ID)
+        assert errors == []
+        for key in ("medications", "conditions", "allergies"):
+            assert len(validated[key]) == len(expected[key])
+        assert len(validated["appointments"]) == len(expected["follow_up_instructions"])
+        for actual, gold in zip(
+            validated["appointments"], expected["follow_up_instructions"], strict=True
         ):
-            state = await validate_fhir(state)
-
-        assert state["error"] is None
-        assert state["validation_errors"] is None or state["validation_errors"] == []
-        assert len(state["validated_data"]["medications"]) == 5
-        assert len(state["validated_data"]["conditions"]) == 4
-        assert len(state["validated_data"]["allergies"]) == 2
+            assert actual["description"] == gold["description"]
+            assert actual["timing"] == gold.get("timing")
+            assert actual["provider"] == gold.get("provider")

@@ -405,17 +405,19 @@ describe("ADR follow-up form", () => {
 
     describe("browser storage", () => {
         it("never writes draft answers to localStorage, sessionStorage or cookies", async () => {
-            // jsdom's Storage rejects instance spies, so spy on the prototype when
-            // the storages are real Storage objects and on the instance otherwise.
-            const spyOn = (storage: Storage) =>
-                vi.spyOn(
-                    typeof Storage !== "undefined" && storage instanceof Storage
-                        ? Storage.prototype
-                        : storage,
-                    "setItem",
-                );
-            const localSpy = spyOn(window.localStorage);
-            const sessionSpy = spyOn(window.sessionStorage);
+            // Node 24 exposes a different global `Storage` constructor from jsdom.
+            // Spy on each actual storage prototype so Window's getter can return a
+            // fresh wrapper without bypassing the control below.
+            const storages = [window.localStorage, window.sessionStorage];
+            const targets = Array.from(new Set<Pick<Storage, "setItem">>(storages.map((storage) => {
+                const prototype = Object.getPrototypeOf(storage) as object | null;
+                return (prototype && "setItem" in prototype ? prototype : storage) as Pick<Storage, "setItem">;
+            })));
+            const storageSpies = targets.map((target) => vi.spyOn(target, "setItem"));
+            const writeCount = () => storageSpies.reduce(
+                (count, spy) => count + spy.mock.calls.length,
+                0,
+            );
             const cookiesBefore = document.cookie;
             try {
                 respond
@@ -435,18 +437,16 @@ describe("ADR follow-up form", () => {
                 fireEvent.click(screen.getByRole("button", { name: copy.send }));
                 await waitFor(() => expect(onSent).toHaveBeenCalledTimes(1));
 
-                expect(localSpy).not.toHaveBeenCalled();
-                expect(sessionSpy).not.toHaveBeenCalled();
+                expect(writeCount()).toBe(0);
                 expect(document.cookie).toBe(cookiesBefore);
 
                 // Control: the spy is live, so the assertions above are meaningful.
-                const callsBefore = sessionSpy.mock.calls.length;
+                const callsBefore = writeCount();
                 window.sessionStorage.setItem("__probe__", "1");
-                expect(sessionSpy.mock.calls.length).toBe(callsBefore + 1);
+                expect(writeCount()).toBe(callsBefore + 1);
                 window.sessionStorage.removeItem("__probe__");
             } finally {
-                localSpy.mockRestore();
-                sessionSpy.mockRestore();
+                storageSpies.forEach((spy) => spy.mockRestore());
             }
         });
     });

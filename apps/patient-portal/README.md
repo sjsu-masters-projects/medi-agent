@@ -27,6 +27,14 @@ On Node 26, if auth-session tests fail because localStorage is unavailable, run
 
 ## Behaviour notes
 
+- Sessions are shared across tabs (one refresh at a time, sign-out in any tab signs out all).
+  Defaults: 30 days idle and 90 days absolute, silent with a login notice; override with
+  `NEXT_PUBLIC_PATIENT_SESSION_IDLE_MINUTES` / `NEXT_PUBLIC_PATIENT_SESSION_MAX_HOURS`.
+- Language: the proxy resolves entry query, then the `patient-portal.locale` cookie, then
+  `Accept-Language`, so server rendering always knows en-US or es-MX (the root layout is
+  dynamic on purpose). The saved Profile preference seeds the cookie; any sign-out clears it.
+- Notification polling is throttled with backoff and keeps the last data when a read fails.
+
 Care-team roles are displayed as readable en-US/es-MX labels rather than raw stored
 codes; unknown roles use generic care-team copy. API transport recovery retries GET/HEAD
 once after 100–249 ms, honors cancellation, and never retries HTTP errors or writes.
@@ -59,6 +67,24 @@ approved in that language (LOC-001); it never machine-translates clinical instru
 historical messages. Failed saves
 retain the prior preference. Guest entry screens carry a separate language choice
 until a profile exists; chat has no competing persisted language setting.
+The locale-only `patient-portal.locale` cookie supplies the server document language.
+The request proxy accepts supported `lang` queries on entry routes and carries that
+locale into the same response, including `html lang`. Existing guest choices stored
+only in local storage resolve before translated content is shown and then populate
+the cookie. Authentication remains in local storage; authenticated screens wait for
+the saved patient profile before rendering. A loaded profile and successful language
+saves refresh the cookie; failed saves retain the existing preference. This cookie
+is a presentation hint, never an identity or authorization source. First visits
+without a hint briefly defer content until the browser locale is resolved.
+Today stores stable failure keys and resolves feedback in the current language,
+including after a language switch; backend error prose is not displayed. Notification
+load/write feedback already follows the same localized-key pattern.
+Today associates loaded feed data with the requested saved locale. A language change
+holds activity content until that locale's response arrives; an older response or
+failure cannot replace the current request. A failed language-specific load shows
+retry feedback without displaying the previous locale's instructions. Refreshes in
+the same locale retain their existing activities. This changes presentation only;
+adherence writes, schedules and approved wording remain owned by existing APIs.
 Today's symptom shortcut opens Nora directly, without an intermediate timeline.
 The existing Symptoms URL remains a compact mobile-friendly handoff and explicitly
 says that patient symptom history is not connected; it must not display invented
@@ -75,6 +101,13 @@ Enter-to-send and Shift+Enter for a new line; human conversation input retains i
 existing multiline behavior.
 
 ## Care team conversations
+
+**Ask about a plan activity** opens an optional approved-activity picker in the
+private composer. It does not choose a clinician or send automatically. The
+attachment stays bound to an uncertain-send retry; it clears after a confirmed
+send. Saved messages show the referenced approved wording separately from human
+text and label replaced activities as historical. Neither the question nor the
+clinician's reply changes the plan or reminder schedule (COM-002).
 
 In Chat, choose **Care team messages**, then explicitly select a linked clinician.
 Each clinician has a separate thread labelled with their clinic. Nora remains a
@@ -151,16 +184,18 @@ three retrospective questions about a prior clinician-directed dose change, a pr
 similar prior reaction. The form says not to restart, stop, or change a medicine to answer, asks for
 a description of known yes/no answers, and requires a final confirmation before sending.
 
-**Route.** `/chat?view=follow-up` opens the follow-up view without a thread or recipient step. The
+**Route.** `/chat?view=follow-up` opens the structured Care Team follow-up view without a thread or recipient step. The
 optional `request` parameter opens one request in any state and wins over `assessment`, which opens
 the newest request for that assessment. With neither, the view lists every pending request.
 Notifications link here by assessment (or by request), and the entry rows link to the bare route.
-The view carries the same emergency and "not continuously monitored" caution as chat. Signed-out
+Back returns to **Care team messages**. The view carries the human-message emergency and "not
+continuously monitored" notice; it does not use Nora's AI warning. Signed-out
 visits follow the normal sign-in redirect and return to the same URL.
 
-**Entry rows.** A row appears in the chat inbox, in an open Nora thread and on Today, only while at
-least one request is pending. It is hidden while loading, on a load error, or when nothing is
-pending, because the view itself reports errors. The count refreshes on focus and does not poll.
+**Entry rows.** A row appears under **Care team messages** in the chat inbox and on Today, only while
+at least one request is pending. It is never rendered as Nora content. It is hidden while loading,
+on a load error, or when nothing is pending, because the view itself reports errors. The count
+refreshes on focus and does not poll.
 
 **Endpoints.**
 - `GET /api/v1/patients/me/adr-information-requests` lists pending requests (used by the entry rows).
@@ -228,8 +263,9 @@ revision. Detailed fields remain available as a fallback. Read the preview, sele
 consent and press **Confirm and share**; spoken assent never submits it.
 
 Approved `candidate-1` remains active. Revised `candidate-2` wording/applicability is
-pending genuine review and cannot activate yet. Migration 071 adds durable ADR and
-review notices; the existing retry worker must run. Follow the
+pending genuine review and cannot activate yet. The checksum-pinned, applied
+`071_confirmed_symptom_handoff.sql` adds durable ADR and review notices; the existing
+retry worker must run. Follow the
 [October 17 verification record](../../docs/pat-002-b-acceptance-2026-10-17.md) and
 [coordinated rollout](../../docs/pat-002-b-rollout.md).
 The saved patient symptom timeline remains PAT-002-C.

@@ -105,6 +105,23 @@ async def test_spanish_self_harm_reaches_the_spanish_crisis_copy() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("message", "locale", "expected"),
+    [
+        ("I accidentally took my medicine twice", Language.EN.value, "pharmacist"),
+        ("Me tomé el medicamento dos veces por error", Language.ES.value, "farmacéutico"),
+    ],
+)
+async def test_medication_errors_get_same_day_guidance_without_a_model(
+    message: str, locale: str, expected: str
+) -> None:
+    result = await _run(message, locale=locale)
+
+    assert expected in _text(result)
+    assert "911" in _text(result)
+
+
+@pytest.mark.asyncio
 async def test_an_unknown_locale_still_gets_actionable_copy() -> None:
     """Falling back is acceptable; saying nothing actionable is not."""
     result = await _run("I have crushing chest pain", locale="fr-FR")

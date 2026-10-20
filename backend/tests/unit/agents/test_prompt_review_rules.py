@@ -43,3 +43,8 @@ def test_every_spanish_writer_uses_one_register() -> None:
     for prompt in (care_plan, TRANSLATE_SUMMARY_SYSTEM, CARE_RESPONDER_INSTRUCTION):
         assert "tú" in prompt
         assert not re.search(r"\busted\b", prompt)
+
+
+def test_responder_tells_persistent_low_mood_to_contact_the_care_team() -> None:
+    assert "low mood" in CARE_RESPONDER_INSTRUCTION
+    assert "persists or gets worse, advise contacting the care team" in CARE_RESPONDER_INSTRUCTION

@@ -35,7 +35,7 @@ const {
     fetchChatConversations: vi.fn(),
     fetchChatHistory: vi.fn(),
     getVoiceCapabilities: vi.fn(() => ({ recording: false, recognition: false, synthesis: false })),
-    playAssistantVoiceResponse: vi.fn<(options: { onEnd?: () => void; onStart?: () => void }) => null>(() => null),
+    playAssistantVoiceResponse: vi.fn((_options: { onEnd?: () => void; onStart?: () => void }) => null),
     replace: vi.fn(),
     setConversationOpen: vi.fn(),
     shell: { conversationOpen: false },
@@ -50,6 +50,11 @@ vi.mock("@/contexts/patient-shell-context", () => ({
 
 vi.mock("@/services/care-conversations", () => ({
     careConversations: { recipients: vi.fn().mockResolvedValue([]), list: vi.fn().mockResolvedValue([]) },
+    getConversationCopy: (locale: string) => ({
+        notice: locale === "es-MX"
+            ? "Estos mensajes no se supervisan continuamente. Para una emergencia, llama al 911."
+            : "Messages are not continuously monitored. For an emergency, call 911.",
+    }),
 }));
 
 let searchParamsValue = new URLSearchParams();
@@ -354,7 +359,7 @@ describe("Patient chat page", () => {
         renderPage();
         const socket = MockWebSocket.instances[0];
         await act(async () => { socket.onopen?.(); socket.emitMessage({ type: "chat_turns", turns: [turnRow("processing")] }); });
-        expect(screen.getByText("Nora is preparing your reply")).toBeInTheDocument();
+        expect(screen.getByText("Nora is typing...")).toBeInTheDocument();
         const recovers = () => socket.sent.filter((text) => JSON.parse(text).type === "recover_turns").length;
         await act(async () => { vi.advanceTimersByTime(5_000); });
         expect(recovers()).toBe(1);
@@ -363,10 +368,80 @@ describe("Patient chat page", () => {
             socket.emitMessage({ type: "chat_turns", turns: [turnRow("completed")] });
         });
         expect(screen.getByText("Your results are stable.")).toBeInTheDocument();
-        expect(screen.queryByText("Nora is preparing your reply")).not.toBeInTheDocument();
+        expect(screen.queryByText("Nora is typing...")).not.toBeInTheDocument();
         await act(async () => { vi.advanceTimersByTime(30_000); });
         expect(recovers()).toBe(1);
         vi.useRealTimers();
+    });
+
+    it("keeps one socket while the URL search params change", async () => {
+        renderPage();
+        await act(async () => { MockWebSocket.instances[0].emitOpen(); });
+        const sessionId = buildChatWebSocketUrl.mock.lastCall?.[1].sessionId;
+        for (const query of [`session=${sessionId}&focus=none`, `session=${sessionId}`, `session=${sessionId}&focus=none&x=1`]) {
+            searchParamsValue = new URLSearchParams(query);
+            renderedPage.rerender(<Provider store={store}><ChatPage /></Provider>);
+        }
+        expect(MockWebSocket.instances).toHaveLength(1);
+        expect(MockWebSocket.instances[0].readyState).toBe(1);
+        expect(buildChatWebSocketUrl).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows only the typing indicator in the tab that is streaming the reply", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.emitOpen(); });
+        fireEvent.change(screen.getByPlaceholderText(/Type or speak/i), { target: { value: "Explain my results" } });
+        fireEvent.click(screen.getByRole("button", { name: /send message/i }));
+        const sent = JSON.parse(socket.sent.at(-1)!);
+        await act(async () => {
+            socket.emitMessage({ type: "chat_turn", turn: turnRow("processing", { client_message_id: sent.client_message_id }) });
+        });
+        expect(screen.getByText("Nora is typing...")).toBeInTheDocument();
+        expect(screen.queryByText("Nora is preparing your reply")).not.toBeInTheDocument();
+        await act(async () => {
+            socket.emitMessage({ type: "assistant_start", intent: "general", urgency: "routine" });
+            socket.emitMessage({ type: "assistant_chunk", content: "Streaming now" });
+        });
+        expect(screen.queryByText("Nora is preparing your reply")).not.toBeInTheDocument();
+    });
+
+    it("shows the typing bubble in a tab that is not receiving the stream, then the replayed draft", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.onopen?.(); socket.emitMessage({ type: "chat_turns", turns: [turnRow("processing")] }); });
+        expect(screen.getByText("Nora is typing...")).toBeInTheDocument();
+        await act(async () => {
+            socket.emitMessage({ type: "assistant_start", intent: "general", urgency: "routine" });
+            socket.emitMessage({ type: "assistant_chunk", content: "Draft so far" });
+        });
+        expect(screen.getByText(/Draft so far/)).toBeInTheDocument();
+        expect(screen.queryByText("Nora is typing...")).not.toBeInTheDocument();
+    });
+
+    it("treats a closed socket as a reconnect, not a failed reply, and re-subscribes to the draft", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.onopen?.();
+            socket.emitMessage({ type: "chat_turns", turns: [turnRow("processing")] });
+            socket.emitMessage({ type: "assistant_chunk", content: "Part one" });
+        });
+        await act(async () => { socket.close(); });
+        expect(screen.queryByText("The reply was interrupted")).not.toBeInTheDocument();
+        await waitFor(() => expect(MockWebSocket.instances.length).toBe(2), { timeout: 1500 });
+        const next = MockWebSocket.instances[1];
+        await act(async () => {
+            next.onopen?.();
+            next.emitMessage({ type: "chat_turns", turns: [turnRow("processing")] });
+            next.emitMessage({ type: "assistant_start", intent: "general", urgency: "routine" });
+            next.emitMessage({ type: "assistant_chunk", content: "Part one and two" });
+        });
+        expect(screen.getByText(/Part one and two/)).toBeInTheDocument();
+        expect(screen.queryByText(/Live chat connection encountered an issue/)).not.toBeInTheDocument();
     });
 
     it("clears a streamed draft as soon as the turn is reported interrupted", async () => {
@@ -384,17 +459,252 @@ describe("Patient chat page", () => {
         expect(screen.getByText("The reply was interrupted")).toBeInTheDocument();
     });
 
-    it("clears a streamed draft when its socket closes", async () => {
+    it("keeps a streamed draft on screen when its socket closes, until the server replays it", async () => {
         renderPage();
         await screen.findByText(/I can help explain results/i);
         const socket = MockWebSocket.instances[0];
         await act(async () => {
             socket.emitOpen();
+            socket.emitMessage({ type: "assistant_start", intent: "general", urgency: "routine" });
             socket.emitMessage({ type: "assistant_chunk", content: "Cut off mid reply" });
         });
-        expect(screen.getByText(/Cut off mid reply/)).toBeInTheDocument();
         await act(async () => { socket.close(); });
-        expect(screen.queryByText(/Cut off mid reply/)).not.toBeInTheDocument();
+        expect(screen.getByText(/Cut off mid reply/)).toBeInTheDocument();
+        expect(screen.queryByText("The reply was interrupted")).not.toBeInTheDocument();
+    });
+
+    describe("one progress indicator per turn", () => {
+        const noise = () => {
+            expect(screen.queryByText("The reply was interrupted")).not.toBeInTheDocument();
+            expect(screen.queryByText(/preparing your reply/)).not.toBeInTheDocument();
+            expect(screen.queryAllByRole("alert").filter((node) => !node.textContent?.includes("emergency"))).toHaveLength(0);
+        };
+        const typing = () => screen.queryAllByText("Nora is typing...").length;
+
+        async function sendOwnTurn() {
+            renderPage();
+            await screen.findByText(/I can help explain results/i);
+            const socket = MockWebSocket.instances[0];
+            await act(async () => { socket.emitOpen(); });
+            fireEvent.change(screen.getByPlaceholderText(/Type or speak/i), { target: { value: "Explain my results" } });
+            fireEvent.click(screen.getByRole("button", { name: /send message/i }));
+            const id = JSON.parse(socket.sent.at(-1)!).client_message_id as string;
+            return { socket, id };
+        }
+
+        it("a normal turn goes queued, processing, streaming, completed with no card or banner", async () => {
+            const { socket, id } = await sendOwnTurn();
+            noise();
+            expect(typing()).toBe(1);
+            await act(async () => { socket.emitMessage({ type: "chat_turn", turn: turnRow("queued", { client_message_id: id }) }); });
+            noise(); expect(typing()).toBe(1);
+            expect(screen.getByRole("button", { name: /send message/i })).toBeDisabled();
+            await act(async () => { socket.emitMessage({ type: "chat_turn", turn: turnRow("processing", { client_message_id: id }) }); });
+            noise(); expect(typing()).toBe(1);
+            await act(async () => {
+                socket.emitMessage({ type: "assistant_start", intent: "general", urgency: "routine" });
+                socket.emitMessage({ type: "assistant_chunk", content: "Streaming now" });
+            });
+            noise(); expect(typing()).toBe(0);
+            expect(screen.getByText(/Streaming now/)).toBeInTheDocument();
+            await act(async () => {
+                socket.emitMessage({ type: "assistant_complete", message: savedReply });
+                socket.emitMessage({ type: "chat_turn", turn: turnRow("completed", { client_message_id: id }) });
+            });
+            noise(); expect(typing()).toBe(0);
+            expect(screen.getByText("Your results are stable.")).toBeInTheDocument();
+            expect(screen.queryByText(/Streaming now/)).not.toBeInTheDocument();
+        });
+
+        it("a snapshot of the queued turn keeps the typing indicator and a received draft", async () => {
+            const { socket, id } = await sendOwnTurn();
+            await act(async () => {
+                socket.emitMessage({ type: "chat_turn", turn: turnRow("queued", { client_message_id: id }) });
+                socket.emitMessage({ type: "assistant_start", intent: "general", urgency: "routine" });
+                socket.emitMessage({ type: "assistant_chunk", content: "Partial" });
+            });
+            await act(async () => { socket.emitMessage({ type: "chat_turns", turns: [turnRow("processing", { client_message_id: id })] }); });
+            expect(screen.getByText(/Partial/)).toBeInTheDocument();
+            noise();
+        });
+
+        it("keeps the indicator across a reconnect mid-turn without a flicker", async () => {
+            const { socket, id } = await sendOwnTurn();
+            await act(async () => { socket.emitMessage({ type: "chat_turn", turn: turnRow("queued", { client_message_id: id }) }); });
+            await act(async () => { socket.close(); });
+            noise(); expect(typing()).toBe(1);
+            expect(screen.getByText(/^Connected$/)).toBeInTheDocument();
+            await waitFor(() => expect(MockWebSocket.instances.length).toBe(2), { timeout: 1500 });
+            const next = MockWebSocket.instances[1];
+            await act(async () => { next.onopen?.(); next.emitMessage({ type: "chat_turns", turns: [turnRow("processing", { client_message_id: id })] }); });
+            noise(); expect(typing()).toBe(1);
+            await act(async () => {
+                next.emitMessage({ type: "assistant_start", intent: "general", urgency: "routine" });
+                next.emitMessage({ type: "assistant_chunk", content: "Resumed draft" });
+            });
+            noise(); expect(typing()).toBe(0);
+            expect(screen.getByText(/Resumed draft/)).toBeInTheDocument();
+        });
+
+        it("shows the subtle reconnecting note only after a few seconds offline", async () => {
+            vi.useFakeTimers();
+            renderPage();
+            const socket = MockWebSocket.instances[0];
+            await act(async () => { socket.emitOpen(); });
+            await act(async () => { socket.close(); });
+            expect(screen.queryByText("Reconnecting…")).not.toBeInTheDocument();
+            await act(async () => { vi.advanceTimersByTime(3_100); });
+            expect(screen.getByText("Reconnecting…")).toBeInTheDocument();
+            expect(screen.queryAllByRole("alert").filter((node) => node.textContent?.includes("Live chat"))).toHaveLength(0);
+            vi.useRealTimers();
+        });
+
+        it("a reloaded or second tab shows the typing bubble inline below the user message, then the replayed draft", async () => {
+            renderPage();
+            await screen.findByText(/I can help explain results/i);
+            const socket = MockWebSocket.instances[0];
+            await act(async () => {
+                socket.onopen?.();
+                socket.emitMessage({ type: "chat_history", messages: [
+                    { id: "older", patient_id: "patient-1", content: "Older question", role: "user", language: "en-US", created_at: "2026-10-16T10:00:00Z" },
+                    { id: "saved-first", patient_id: "patient-1", content: "Explain my recent results", role: "user", language: "en-US", created_at: "2026-10-17T10:00:00Z" },
+                ] });
+                socket.emitMessage({ type: "chat_turns", turns: [turnRow("queued")] });
+            });
+            expect(typing()).toBe(1);
+            noise();
+            const typingNode = screen.getByText("Nora is typing...");
+            const userNode = screen.getAllByText("Explain my recent results").at(-1)!;
+            expect(userNode.compareDocumentPosition(typingNode) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            await act(async () => { socket.emitMessage({ type: "chat_turn", turn: turnRow("processing") }); });
+            expect(typing()).toBe(1);
+            await act(async () => {
+                socket.emitMessage({ type: "assistant_start", intent: "general", urgency: "routine" });
+                socket.emitMessage({ type: "assistant_chunk", content: "Replayed draft" });
+            });
+            expect(screen.getByText(/Replayed draft/)).toBeInTheDocument();
+            expect(typing()).toBe(0);
+        });
+
+        it("renders the interrupted card inline after the messages, not above them", async () => {
+            renderPage();
+            await screen.findByText(/I can help explain results/i);
+            const socket = MockWebSocket.instances[0];
+            await act(async () => {
+                socket.onopen?.();
+                socket.emitMessage({ type: "chat_history", messages: [savedReply] });
+                socket.emitMessage({ type: "chat_turns", turns: [turnRow("interrupted", { retryable: true })] });
+            });
+            const card = screen.getByText("The reply was interrupted");
+            expect(screen.getByText("Your results are stable.").compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        });
+
+        it("adds the leave-and-return note only after about 15 seconds without a draft", async () => {
+            vi.useFakeTimers();
+            renderPage();
+            const socket = MockWebSocket.instances[0];
+            await act(async () => { socket.onopen?.(); socket.emitMessage({ type: "chat_turns", turns: [turnRow("processing")] }); });
+            expect(screen.queryByText(getChatRecoveryCopy("en-US").leaveAndReturn)).not.toBeInTheDocument();
+            await act(async () => { vi.advanceTimersByTime(15_100); });
+            expect(screen.getByText(getChatRecoveryCopy("en-US").leaveAndReturn)).toBeInTheDocument();
+            expect(typing()).toBe(1);
+            vi.useRealTimers();
+        });
+
+        describe("draft polling in a tab the socket does not feed", () => {
+            it("polls the event log, shows the draft, and stops on completion", async () => {
+                vi.useFakeTimers();
+                const api = await import("@/services/chat-api");
+                const spy = vi.spyOn(api, "fetchTurnEvents");
+                spy.mockResolvedValueOnce({ turn: { status: "processing" }, events: [{ seq: 2, type: "draft", payload: { content: "Polled draft" } }], next_seq: 2 });
+                spy.mockResolvedValue({ turn: { status: "completed" }, events: [{ seq: 3, type: "completed", payload: {} }], next_seq: 3 });
+                renderPage();
+                const socket = MockWebSocket.instances[0];
+                await act(async () => { socket.onopen?.(); socket.emitMessage({ type: "chat_turns", turns: [turnRow("processing", { id: "turn-1" })] }); });
+                expect(typing()).toBe(1);
+                await act(async () => { vi.advanceTimersByTime(1_100); });
+                expect(spy).toHaveBeenCalledWith("turn-1", 0, expect.any(String));
+                expect(screen.getByText(/Polled draft/)).toBeInTheDocument();
+                expect(typing()).toBe(0);
+                await act(async () => { vi.advanceTimersByTime(1_100); });
+                expect(spy).toHaveBeenCalledTimes(2);
+                expect(spy).toHaveBeenLastCalledWith("turn-1", 2, expect.any(String));
+                await act(async () => { vi.advanceTimersByTime(10_000); });
+                expect(spy).toHaveBeenCalledTimes(2);
+                expect(socket.sent.some((text) => JSON.parse(text).type === "recover_turns")).toBe(true);
+                spy.mockRestore();
+                vi.useRealTimers();
+            });
+
+            it("does not poll while the tab is hidden or while the socket delivers chunks", async () => {
+                vi.useFakeTimers();
+                const api = await import("@/services/chat-api");
+                const spy = vi.spyOn(api, "fetchTurnEvents").mockResolvedValue({ turn: { status: "processing" }, events: [], next_seq: 0 });
+                renderPage();
+                const socket = MockWebSocket.instances[0];
+                const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+                await act(async () => { socket.onopen?.(); socket.emitMessage({ type: "chat_turns", turns: [turnRow("processing", { id: "turn-1" })] }); });
+                await act(async () => { vi.advanceTimersByTime(5_000); });
+                expect(spy).not.toHaveBeenCalled();
+                visibility.mockReturnValue("visible");
+                await act(async () => { socket.emitMessage({ type: "assistant_start", intent: "general", urgency: "routine" }); socket.emitMessage({ type: "assistant_chunk", content: "Live" }); });
+                await act(async () => { vi.advanceTimersByTime(2_000); });
+                expect(spy).not.toHaveBeenCalled();
+                await act(async () => { vi.advanceTimersByTime(3_000); });
+                expect(spy).toHaveBeenCalled();
+                visibility.mockRestore(); spy.mockRestore();
+                vi.useRealTimers();
+            });
+
+            it("keeps the draft and shows no banner when the socket closes with 1005 or 1006 mid-turn", async () => {
+                renderPage();
+                await screen.findByText(/I can help explain results/i);
+                const socket = MockWebSocket.instances[0];
+                await act(async () => {
+                    socket.onopen?.();
+                    socket.emitMessage({ type: "chat_turns", turns: [turnRow("processing", { id: "turn-1" })] });
+                    socket.emitMessage({ type: "assistant_start", intent: "general", urgency: "routine" });
+                    socket.emitMessage({ type: "assistant_chunk", content: "Draft before the drop" });
+                });
+                for (const code of [1005, 1006]) {
+                    const current = MockWebSocket.instances.at(-1)!;
+                    await act(async () => { current.readyState = 3; current.onclose?.({ code } as CloseEvent); });
+                    noise();
+                    expect(screen.getByText(/Draft before the drop/)).toBeInTheDocument();
+                    expect(screen.queryByText(/Live chat/)).not.toBeInTheDocument();
+                    await waitFor(() => expect(MockWebSocket.instances.length).toBe(code === 1005 ? 2 : 3), { timeout: 3000 });
+                    const next = MockWebSocket.instances.at(-1)!;
+                    await act(async () => { next.onopen?.(); next.emitMessage({ type: "chat_turns", turns: [turnRow("processing", { id: "turn-1" })] }); });
+                    expect(screen.getByText(/Draft before the drop/)).toBeInTheDocument();
+                }
+                const last = MockWebSocket.instances.at(-1)!;
+                await act(async () => {
+                    last.emitMessage({ type: "assistant_start", intent: "general", urgency: "routine" });
+                    last.emitMessage({ type: "assistant_chunk", content: "Draft continues" });
+                });
+                expect(screen.getByText(/Draft continues/)).toBeInTheDocument();
+            });
+        });
+
+        it("shows the interrupted card only for a turn saved as interrupted, and the failed card for failed", async () => {
+            renderPage();
+            await screen.findByText(/I can help explain results/i);
+            const socket = MockWebSocket.instances[0];
+            await act(async () => { socket.onopen?.(); socket.emitMessage({ type: "chat_turns", turns: [turnRow("interrupted", { retryable: true })] }); });
+            expect(screen.getByText("The reply was interrupted")).toBeInTheDocument();
+            expect(typing()).toBe(0);
+            await act(async () => { socket.emitMessage({ type: "chat_turns", turns: [turnRow("failed", { retryable: true })] }); });
+            expect(screen.getAllByText("The reply was interrupted")).toHaveLength(1);
+        });
+
+        it("never renders an unrecognised status as interrupted", async () => {
+            renderPage();
+            await screen.findByText(/I can help explain results/i);
+            const socket = MockWebSocket.instances[0];
+            await act(async () => { socket.onopen?.(); socket.emitMessage({ type: "chat_turns", turns: [turnRow("brand_new_status")] }); });
+            expect(screen.queryByText("The reply was interrupted")).not.toBeInTheDocument();
+            expect(screen.getByRole("button", { name: /send message/i })).toBeDisabled();
+        });
     });
 
     it("reconciles a reply whose completion confirmation was lost", async () => {
@@ -681,6 +991,45 @@ describe("Patient chat page", () => {
         });
     });
 
+    it("clears a prior conversation safety notice when starting a new chat", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const oldSocket = MockWebSocket.instances[0];
+        await act(async () => {
+            oldSocket.emitOpen();
+            oldSocket.emitMessage({
+                type: "assistant_complete",
+                escalation_required: true,
+                urgency: "urgent",
+                message: {
+                    audio_url: null,
+                    content: "Please contact your care team today.",
+                    created_at: "2026-04-17T10:01:00Z",
+                    id: "assistant-urgent-old-session",
+                    intent: "symptom",
+                    language: "en",
+                    patient_id: "patient-1",
+                    role: "assistant",
+                },
+            });
+        });
+        expect(await screen.findByRole("alert")).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+        await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+
+        await act(async () => {
+            oldSocket.emitMessage({
+                type: "escalation_recommended",
+                urgency: "urgent",
+                message: "Old session escalation",
+                delivery_state: "delivered",
+                clinicians_notified: 1,
+            });
+        });
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
     it("restores the URL conversation after refresh without starting a new daily chat", async () => {
         searchParamsValue = new URLSearchParams("session=chat-saved&focus=none");
         renderPage();
@@ -701,8 +1050,11 @@ describe("Patient chat page", () => {
         profile.preferredLanguage = locale;
         vi.useFakeTimers();
         renderPage();
-        await act(async () => { MockWebSocket.instances[0].onopen?.(); await Promise.resolve(); vi.advanceTimersByTime(15_000); });
-        expect(screen.getByText(getChatRecoveryCopy(locale).unavailable)).toBeInTheDocument();
+        // Let the mocked symptom-intake recovery settle before advancing past
+        // both the intake and durable-chat timeouts in one fake-timer step.
+        await act(async () => {});
+        await act(async () => { MockWebSocket.instances[0].onopen?.(); vi.advanceTimersByTime(15_000); });
+        expect(screen.getByRole("alert")).toHaveTextContent(getChatRecoveryCopy(locale).unavailable);
         expect(screen.getByRole("button", { name: getChatControlsCopy(locale).send })).toBeDisabled();
         await act(async () => { vi.advanceTimersByTime(120_000); });
         expect(MockWebSocket.instances).toHaveLength(1);
@@ -727,7 +1079,7 @@ describe("Patient chat page", () => {
         });
         expect(screen.getByRole("alert")).toHaveTextContent(getChatRecoveryCopy(locale).busy);
         expect(screen.getByDisplayValue("New synthetic question")).toBeInTheDocument();
-        expect(screen.getByText("Earlier synthetic question")).toBeInTheDocument();
+        expect(screen.getByText(getPatientChatCopy(locale).typingMessage)).toBeInTheDocument();
         expect(screen.getByRole("button", { name: getChatControlsCopy(locale).send })).toBeDisabled();
         expect(socket.sent.map((text) => JSON.parse(text).type)).toEqual(["user_message", "recover_turns"]);
     });
@@ -750,6 +1102,7 @@ describe("Patient chat page", () => {
 
     it("replaces the focused document in an open conversation without losing the unsent draft", async () => {
         renderPage();
+        await act(async () => { MockWebSocket.instances[0].emitOpen(); });
         fireEvent.change(screen.getByRole("textbox", { name: "Message to Nora" }), { target: { value: "Unsent synthetic question" } });
         const sessionId = buildChatWebSocketUrl.mock.lastCall?.[1].sessionId;
         storePendingChatDocumentContext({ documentId: "doc-next", documentName: "New synthetic record", documentType: "other", preferredLanguage: Language.EN, suggestedQuestion: "Suggested replacement" });
@@ -757,10 +1110,11 @@ describe("Patient chat page", () => {
         renderedPage.rerender(<Provider store={store}><ChatPage /></Provider>);
         expect(await screen.findByText("New synthetic record")).toBeInTheDocument();
         expect(screen.getByDisplayValue("Unsent synthetic question")).toBeInTheDocument();
-        expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith("patient-1", { documentId: "doc-next", durableTurns: true, sessionId });
-        const stale = MockWebSocket.instances[0];
-        await act(async () => { stale.emitMessage({ type: "chat_history", messages: [{ id: "stale", patient_id: "patient-1", role: "assistant", content: "Obsolete socket reply", language: "en-US", created_at: new Date().toISOString() }] }); });
-        expect(screen.queryByText("Obsolete socket reply")).not.toBeInTheDocument();
+        // The focus change travels over the open socket; the socket is not rebuilt.
+        expect(MockWebSocket.instances).toHaveLength(1);
+        expect(MockWebSocket.instances[0].readyState).toBe(1);
+        expect(MockWebSocket.instances[0].sent.map((text) => JSON.parse(text)))
+            .toContainEqual({ type: "document_focus", document_id: "doc-next" });
     });
 
     it("hydrates document context into chat from the records bridge", async () => {
@@ -864,23 +1218,18 @@ describe("Patient chat page", () => {
 
         expect(await screen.findByText(/Medication List\.pdf/i)).toBeInTheDocument();
         const sessionId = buildChatWebSocketUrl.mock.lastCall?.[1].sessionId;
+        const first = MockWebSocket.instances[0];
+        await act(async () => { first.emitOpen(); });
         fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
 
-        await waitFor(() => {
-            expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
-                "patient-1",
-                { documentId: null, documentDismissed: true, durableTurns: true, sessionId },
-            );
-        });
+        // The dismissal goes to the server over the open socket, which is not rebuilt.
+        await waitFor(() => expect(first.sent.map((text) => JSON.parse(text)))
+            .toContainEqual({ type: "document_focus", document_id: null }));
+        expect(MockWebSocket.instances).toHaveLength(1);
         expect(screen.queryByText(/Medication List\.pdf/i)).not.toBeInTheDocument();
 
-        // The server has cleared the saved document, so the reconnected socket sends
-        // only history; a later transient reconnect still carries the dismissal.
-        const reconnected = MockWebSocket.instances.at(-1)!;
-        await act(async () => {
-            reconnected.emitOpen();
-            reconnected.emitMessage({ type: "chat_history", messages: [] });
-        });
+        // A later transient reconnect still carries the dismissal.
+        const reconnected = first;
         vi.useFakeTimers();
         const socketsBefore = MockWebSocket.instances.length;
         await act(async () => {
@@ -924,9 +1273,9 @@ describe("Patient chat page", () => {
         // Do not silently answer a focused question from the general chart.
         expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
         fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
-        await waitFor(() => expect(buildChatWebSocketUrl).toHaveBeenLastCalledWith(
-            "patient-1", { documentId: null, documentDismissed: true, durableTurns: true, sessionId: expect.stringMatching(/^chat-/) },
-        ));
+        await waitFor(() => expect(socket.sent.map((text) => JSON.parse(text)))
+            .toContainEqual({ type: "document_focus", document_id: null }));
+        expect(MockWebSocket.instances).toHaveLength(1);
     });
 
     it("shows the unavailable-document note in Spanish", async () => {
@@ -1086,7 +1435,8 @@ describe("Patient chat page", () => {
             socket.close();
         });
 
-        expect(await screen.findByText(/^Offline$/)).toBeInTheDocument();
+        // A short drop is invisible: the header keeps saying Connected.
+        expect(screen.queryByText(/^Offline$/)).not.toBeInTheDocument();
 
         await waitFor(() => {
             expect(MockWebSocket.instances.length).toBe(2);
@@ -1211,14 +1561,15 @@ describe("Patient chat page", () => {
         fetchChatHistory.mockRejectedValueOnce(new Error("History unavailable"));
         renderPage();
         await screen.findByText("Keep this reply during recovery");
-        await act(async () => { MockWebSocket.instances[0].emitOpen(); });
         await act(async () => { MockWebSocket.instances[0].close(); });
         await waitFor(() => expect(MockWebSocket.instances).toHaveLength(2), { timeout: 1500 });
         await waitFor(() => expect(store.getState().chat.error).toMatch(/Unable to load chat history/));
         expect(screen.getByText("Keep this reply during recovery")).toBeInTheDocument();
     });
 
-    it.each(["ordinary", "private", "cancelled"])("routes dictated audio through its own boundary (%s)", async (scenario) => {
+    it.each(["ordinary", "private", "private-Spanish", "cancelled"])("routes dictated audio through its own boundary (%s)", async (scenario) => {
+        const spokenLocale = scenario === "private-Spanish" ? "es-MX" : "en-US";
+        const transcript = scenario === "private-Spanish" ? "cinco" : "I feel dizzy";
         const privateIntake = scenario !== "ordinary";
         if (privateIntake) vi.mocked(fetchActiveIntake).mockResolvedValue(privateDraft);
         getVoiceCapabilities.mockReturnValue({ recording: true, recognition: false, synthesis: true });
@@ -1272,9 +1623,9 @@ describe("Patient chat page", () => {
 
         await act(async () => {
             voiceSocket.emitMessage({
-                language: "en-US",
+                language: spokenLocale,
                 model: "nova-3",
-                transcript: "I feel dizzy",
+                transcript,
                 type: "transcript_final",
             });
             fireEvent.click(screen.getByRole("button", { name: /Stop voice recording/i }));
@@ -1288,7 +1639,7 @@ describe("Patient chat page", () => {
         // Default behavior: transcript fills the input box; user reviews
         // before sending. NO user_message frame is auto-emitted.
         await waitFor(() => {
-            expect(screen.getByPlaceholderText(/Type or speak/i)).toHaveValue("I feel dizzy");
+            expect(screen.getByPlaceholderText(/Type or speak/i)).toHaveValue(transcript);
         });
         expect(chatSocket.sent.some((event) => JSON.parse(event).type === "user_message")).toBe(
             false,
@@ -1309,7 +1660,7 @@ describe("Patient chat page", () => {
             fireEvent.click(screen.getByRole("button", { name: "Send message" }));
             await waitFor(() => expect(mutateIntake).toHaveBeenCalled());
             expect(vi.mocked(mutateIntake).mock.calls[0][2]).toBe("reply");
-            expect(vi.mocked(mutateIntake).mock.calls[0][3]).toMatchObject({ text: "I feel dizzy", input_mode: "voice", question_id: "severity" });
+            expect(vi.mocked(mutateIntake).mock.calls[0][3]).toMatchObject({ text: transcript, input_mode: "voice", question_id: "severity", locale: spokenLocale });
             expect(chatSocket.sent.some((frame) => JSON.parse(frame).type === "user_message")).toBe(false);
         }
     });
@@ -1480,16 +1831,19 @@ describe("Patient chat page", () => {
             expect(screen.queryByRole("heading", { name: "Your care team" })).not.toBeInTheDocument();
             expect(screen.queryByRole("link", { name: /Questions from your care team/ })).not.toBeInTheDocument();
         });
-        it.each([Language.EN, Language.ES])("shows the caution strip, localized back button and focused heading (%s)", (locale) => {
+        it.each([Language.EN, Language.ES])("shows the care-team notice, localized back button and focused heading (%s)", (locale) => {
             profile.preferredLanguage = locale;
             renderFollowUp(`view=follow-up&request=${requestId}`);
-            const caution = getChatControlsCopy(locale).caution;
+            const caution = locale === Language.ES
+                ? "Estos mensajes no se supervisan continuamente. Para una emergencia, llama al 911."
+                : "Messages are not continuously monitored. For an emergency, call 911.";
             expect(screen.getByText(caution)).toBeInTheDocument();
+            expect(screen.queryByText(getChatControlsCopy(locale).caution)).not.toBeInTheDocument();
             expect(screen.getByRole("heading", { level: 1 })).toHaveFocus();
             expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(locale === Language.ES ? "Preguntas de tu equipo de atención" : "Questions from your care team");
             expect(lastViewProps()).toMatchObject({ locale });
             fireEvent.click(screen.getByRole("button", { name: locale === Language.ES ? "Volver a mensajes" : "Back to messages" }));
-            expect(replace).toHaveBeenCalledWith("/chat");
+            expect(replace).toHaveBeenCalledWith("/chat?view=care-team");
         });
         it("keeps the bottom navigation hidden by marking the conversation open", () => {
             renderFollowUp(`view=follow-up&request=${requestId}`);
@@ -1505,7 +1859,7 @@ describe("Patient chat page", () => {
         it("leaves follow-up mode through the view's own back action", () => {
             renderFollowUp("view=follow-up");
             lastViewProps().onBack();
-            expect(replace).toHaveBeenCalledWith("/chat");
+            expect(replace).toHaveBeenCalledWith("/chat?view=care-team");
         });
         it("ignores request and assessment outside follow-up mode", () => {
             renderFollowUp(`request=${requestId}&assessment=${assessmentId}`);
@@ -1531,32 +1885,31 @@ describe("Patient chat page", () => {
             [Language.EN, 2, "2 requests are waiting for your answers"],
             [Language.ES, 1, "1 solicitud espera tus respuestas"],
             [Language.ES, 2, "2 solicitudes esperan tus respuestas"],
-        ])("shows the inbox row after the Nora card for %s with %i pending", (locale, count, text) => {
+        ])("shows the inbox row inside Care team messages for %s with %i pending", (locale, count, text) => {
             profile.preferredLanguage = locale;
             pending.count = count;
             renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
-            const row = screen.getByRole("link", { name: rowName(locale) });
+            const careTeam = screen.getByRole("region", {
+                name: getPatientChatCopy(locale).careTeamLabel,
+            });
+            const row = within(careTeam).getByRole("link", { name: rowName(locale) });
             expect(row).toHaveAttribute("href", "/chat?view=follow-up");
             expect(row).toHaveTextContent(text);
             expect(row).toHaveAttribute("lang", locale);
-            const nora = screen.getByRole("heading", { name: "Nora AI" });
-            expect(nora.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         });
-        it("shows the row in the open Nora thread only while a request is pending", () => {
+        it("keeps the clinician request out of Nora and exposes it only in Care team messages", () => {
             pending.count = 1;
             renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
             fireEvent.click(screen.getByRole("button", { name: /Nora ·/ }));
             expect(screen.getByRole("textbox", { name: "Message to Nora" })).toBeInTheDocument();
-            expect(screen.getByRole("link", { name: rowName(Language.EN) })).toHaveAttribute("href", "/chat?view=follow-up");
-            renderedPage.unmount();
-            pending.count = 0;
-            renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
-            fireEvent.click(screen.getByRole("button", { name: /Nora ·/ }));
-            expect(screen.getByRole("textbox", { name: "Message to Nora" })).toBeInTheDocument();
             expect(screen.queryByRole("link", { name: rowName(Language.EN) })).not.toBeInTheDocument();
+
+            fireEvent.click(screen.getByRole("button", { name: "Care team messages" }));
+            const careTeam = screen.getByRole("region", { name: "Care team messages" });
+            expect(within(careTeam).getByRole("link", { name: rowName(Language.EN) }))
+                .toHaveAttribute("href", "/chat?view=follow-up");
         });
     });
-
 it("keeps private replies usable while the ordinary Nora turn awaits completion", async () => {
     vi.mocked(fetchActiveIntake).mockResolvedValue(privateDraft);
     renderPage();
