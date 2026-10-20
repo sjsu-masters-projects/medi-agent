@@ -2,7 +2,7 @@
 
 > **Active plan:** [October 18 deployed-verification campaign](../docs/deployed-recheck-2026-10-11.md#october-18-deployed-verification-campaign) for the remaining `Verify deployed` rows, including #191’s merged features; resolve its recorded appointment and provenance defects, then continue CLN-003 slice G, PLAN-002 and DEMO-001 · [accepted PAT-005 contract](specs/pat-005-clinician-approved-today-feed-plan.md)
 >
-> **Updated:** October 19, 2026 · **Feature freeze:** December 4, 2026
+> **Updated:** October 20, 2026 · **Feature freeze:** December 4, 2026
 >
 > **Target:** A working, polished university-expo master's project using fictional patient and clinician accounts. No real-patient or real-clinician recruitment, VC pitch, or production qualification is required.
 
@@ -35,6 +35,13 @@ discard history only. Actual FDA submission and recording an external submission
 are out of scope for this project; neither is an expo acceptance requirement.
 
 ## Current release and live status
+
+October 20 PR #202 is still open; its fixes are not live. CI investigation found
+two root failures: the PR description omitted the mandatory verification checklist,
+and the offer-success test asserted refresh before the React effect ran. Checklist
+restored; the test now awaits exactly two schedule calls without weakening the
+assertion or changing production behavior. Focused 28 schedule tests, ESLint and
+typecheck pass. Full-suite/latest CI outcomes are recorded in the linked evidence.
 
 PR #202 [grouped acceptance continuation](../docs/deployed-recheck-2026-10-11.md#pr-202-grouped-acceptance-continuation--october-19):
 PV-001-B/C Spanish “No sé” answers persisted in Hannah's history and Elena's

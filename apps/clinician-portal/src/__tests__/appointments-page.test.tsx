@@ -292,7 +292,8 @@ describe("My schedule", () => {
         expect.objectContaining({ care_team_id: "team1", slots: ["2026-10-20T16:00:00.000Z", "2026-10-21T21:00:00.000Z"] }),
       );
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-      expect(mocks.schedule).toHaveBeenCalledTimes(2);
+      // The success notice can render before the refresh effect runs.
+      await waitFor(() => expect(mocks.schedule).toHaveBeenCalledTimes(2));
     });
 
     it("keeps the server conflict callout and blocks sending until the time changes", async () => {

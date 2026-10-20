@@ -593,3 +593,20 @@ Resume in this order:
    reproduction/log correlation. Successful rechecks do not establish root cause.
 4. Keep candidate-2 approval separate. FDA transmission/submission recording and
    a human Spanish reviewer are not remaining expo gates under requester decisions.
+
+### October 20 — PR #202 CI continuation
+
+PR remains open; main is still `5d46c30`. Original CI run `39370392453`, attempt 1:
+`PR Policy Check` failed because the description replacement omitted all seven
+mandatory checked statements. Restored the verified checklist and reran failed
+jobs. `Clinician Portal Lint` actually failed its Vitest step: 619/620 passed;
+`appointments-page.test.tsx` asserted two schedule calls but observed one immediately
+after the success notice. The offer callback sets refresh state; the request runs
+in a later effect. The test now awaits the same exact two-call assertion with
+`waitFor`, rather than sleeping or changing production behavior. `CI Summary`
+was downstream of those failures, not a third implementation defect.
+
+Local `npm run test -- src/__tests__/appointments-page.test.tsx` — **28 passed**;
+`npx eslint src/__tests__/appointments-page.test.tsx` and `npm run typecheck` pass.
+Full `npm run test` — **69 files / 620 tests passed** after the test-only correction. Existing live
+acceptance boundaries above remain unchanged; no merge or deployment was done.
