@@ -610,3 +610,35 @@ Local `npm run test -- src/__tests__/appointments-page.test.tsx` — **28 passed
 `npx eslint src/__tests__/appointments-page.test.tsx` and `npm run typecheck` pass.
 Full `npm run test` — **69 files / 620 tests passed** after the test-only correction. Existing live
 acceptance boundaries above remain unchanged; no merge or deployment was done.
+
+At commit `114d487`, rerun attempt 2 completed successfully. The next head's run
+`39486309863` found a newly reported dependency vulnerability: locked
+`certifi==2026.7.22`, advisory `GHSA-6q48-6c7w-9gw2`, fix `2026.10.19` according
+to its pip-audit output. This is separate from the test timing and PR policy
+failures. Do not suppress the advisory or weaken the audit; upgrade the package
+in both compiled locks, then verify reproducibility and audit.
+
+**Read-only live continuation:** Morgan's saved report still appears after reopening
+his conversation. Elena's signed-in exact case remains Awaiting review, 2/10,
+score 0 / Doubtful, explicitly patient-reported rather than a clinical decision.
+At 390×844, the conversation's width is 358px and document scrollWidth equals
+viewport width (390px); no horizontal overflow. Viewport override was restored.
+This is one mobile layout sample, not physical voice or full intake acceptance.
+
+**DV-016:** saved report heading correctly says “Report saved for care-team review”,
+but its enclosing accessible region remains “Draft — not submitted”. The local
+fix uses the same localized state title for region and heading, including cancelled
+and safety-interrupted states. No new copy, mutation, API or clinical behavior.
+Both locales and all four state labels are covered; **21 intake tests pass**,
+changed-file ESLint and patient typecheck pass. Deployed recheck awaits #202.
+
+Dependency correction: `uv 0.9.24` compiled both locks with
+`--universal --python-version 3.12 --upgrade-package certifi`; only certifi changed
+to `2026.10.19`. Recompiling without the upgrade option retained identical SHA-256
+for each lock. `uvx --from pip-audit==2.10.1 pip-audit -r requirements-dev.txt`
+completed **No known vulnerabilities found**. No advisory was ignored; no workflow
+gate or runtime certificate verification was disabled.
+
+Final local patient `npm run test` — **75 files / 816 tests passed** including
+the new both-locale region-state regressions. The clinician full-suite result
+remains 69 files / 620 passed for the schedule-test correction.

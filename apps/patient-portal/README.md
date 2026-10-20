@@ -3,6 +3,9 @@
 Next.js PWA for MediAgent patients: Today, Records, Chat with Nora and the care team,
 Visits, Reminders and Profile, in en-US and es-MX.
 
+Symptom-intake region labels reflect the saved state (private draft, confirmed,
+cancelled or safety-interrupted), matching the visible localized heading.
+
 ## Local development
 
 From `apps/patient-portal`, install dependencies and run the portal on the default port

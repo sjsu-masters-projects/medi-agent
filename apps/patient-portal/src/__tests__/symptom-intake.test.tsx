@@ -6,6 +6,7 @@ import { store } from "@/store/store";
 import { hydrateSession, logout } from "@/store/slices/auth-slice";
 import type { SymptomIntake } from "@/types";
 import { ApiClientError } from "@/services/api";
+import { getSymptomIntakeCopy } from "@/content/symptom-intake-copy";
 
 const { active, read, start, mutate } = vi.hoisted(() => ({ active: vi.fn(), read: vi.fn(), start: vi.fn(), mutate: vi.fn() }));
 vi.mock("@/services/symptom-intakes", () => ({ fetchActiveIntake: active, fetchIntake: read, startIntake: start, mutateIntake: mutate }));
@@ -15,6 +16,22 @@ const draft: SymptomIntake = { intake_id: "synthetic-intake", status: "collectin
 function login(id = "patient-A") { store.dispatch(hydrateSession({ accessToken: id, refreshToken: "synthetic", expiresAt: 9999999999, user: { id, email: `${id}@synthetic.invalid`, role: "patient" } })); }
 function panel(locale: "en-US" | "es-MX" = "en-US", sessionId = "default") { return <Provider store={store}><SymptomIntakePanel locale={locale} sessionId={sessionId} sourceMessageId="source-turn" /></Provider>; }
 beforeEach(() => { vi.resetAllMocks(); login(); active.mockResolvedValue(structuredClone(draft)); });
+
+it.each(["en-US", "es-MX"] as const)("names intake regions by their actual saved state in %s", async (locale) => {
+    const copy = getSymptomIntakeCopy(locale);
+    for (const [status, title] of [
+        ["collecting", copy.title], ["confirmed", copy.saved],
+        ["cancelled", copy.cancelled], ["interrupted_safety", copy.interrupted],
+    ] as const) {
+        active.mockResolvedValue({ ...draft, locale, status, current_question: null });
+        const view = render(panel(locale));
+        expect(await screen.findByRole("heading", { name: title })).toBeInTheDocument();
+        expect(screen.getByRole("region", { name: title })).toHaveAttribute("lang", locale);
+        if (status !== "collecting") expect(screen.queryByRole("region", { name: copy.title })).not.toBeInTheDocument();
+        expect(mutate).not.toHaveBeenCalled();
+        view.unmount();
+    }
+});
 
 it("recovers the owned draft without writing or mirroring answers into chat", async () => {
     render(panel());

@@ -42,6 +42,12 @@ and the offer-success test asserted refresh before the React effect ran. Checkli
 restored; the test now awaits exactly two schedule calls without weakening the
 assertion or changing production behavior. Focused 28 schedule tests, ESLint and
 typecheck pass. Full-suite/latest CI outcomes are recorded in the linked evidence.
+The subsequent run reported a `certifi` security advisory; both locks now upgrade
+only that package to `2026.10.19`, reproduce unchanged with CI's uv version and
+pass pip-audit locally. Morgan's saved intake/case still agree after
+reload. Mobile 390px chat has no horizontal overflow; DV-016 fixes the confirmed
+intake's stale accessible “Draft — not submitted” name locally with both-locale
+state tests. These PR changes remain undeployed.
 
 PR #202 [grouped acceptance continuation](../docs/deployed-recheck-2026-10-11.md#pr-202-grouped-acceptance-continuation--october-19):
 PV-001-B/C Spanish “No sé” answers persisted in Hannah's history and Elena's
