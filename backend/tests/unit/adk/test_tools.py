@@ -149,6 +149,21 @@ async def test_the_query_is_filtered_by_the_session_patient() -> None:
 
 
 @pytest.mark.asyncio
+async def test_patient_context_exposes_unavailable_symptoms_to_the_model() -> None:
+    service = MagicMock()
+    service.get_context = AsyncMock(
+        return_value={
+            "recent_symptoms": [],
+            "recent_symptoms_available": False,
+        }
+    )
+    with patch.object(patient_context_module, "_service", return_value=service):
+        result = await get_patient_context(_context())
+    assert result["recent_symptoms"] == []
+    assert result["recent_symptoms_available"] is False
+
+
+@pytest.mark.asyncio
 async def test_a_missing_patient_reads_nothing_at_all() -> None:
     """No patient in scope must mean no query, not a query with no filter."""
     service = MagicMock()

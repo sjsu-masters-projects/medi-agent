@@ -50,7 +50,7 @@ class RiskScoreService:
         self,
         adherence_score: float | None,
         open_adr_count: int,
-        recent_symptom_severity: int,
+        recent_symptom_severity: int | None,
     ) -> RiskLevel:
         """Pure function — derive risk level from three signals.
 
@@ -63,12 +63,18 @@ class RiskScoreService:
             "high", "medium", "low", or "unknown"
         """
         # HIGH: any single critical signal triggers high risk
-        if open_adr_count >= 1 or recent_symptom_severity >= _HIGH_SEVERITY_THRESHOLD:
+        if open_adr_count >= 1 or (
+            recent_symptom_severity is not None
+            and recent_symptom_severity >= _HIGH_SEVERITY_THRESHOLD
+        ):
             return "high"
 
         # No adherence data should not auto-mark new patients as high risk.
         if adherence_score is None:
-            if recent_symptom_severity >= _MEDIUM_SEVERITY_THRESHOLD:
+            if (
+                recent_symptom_severity is not None
+                and recent_symptom_severity >= _MEDIUM_SEVERITY_THRESHOLD
+            ):
                 return "medium"
             return "unknown"
 
@@ -76,9 +82,9 @@ class RiskScoreService:
             return "high"
 
         # MEDIUM: borderline adherence or significant symptom severity
-        if (
-            adherence_score < _MEDIUM_ADHERENCE_THRESHOLD
-            or recent_symptom_severity >= _MEDIUM_SEVERITY_THRESHOLD
+        if adherence_score < _MEDIUM_ADHERENCE_THRESHOLD or (
+            recent_symptom_severity is not None
+            and recent_symptom_severity >= _MEDIUM_SEVERITY_THRESHOLD
         ):
             return "medium"
 
@@ -174,23 +180,21 @@ class RiskScoreService:
         )
         return result.count or 0
 
-    async def _fetch_recent_symptom_severity(self, patient_id: UUID) -> int:
-        """Return max symptom severity in last 7 days (0 if none)."""
+    async def _fetch_recent_symptom_severity(self, patient_id: UUID) -> int | None:
+        """Return the highest known confirmed rating, or unknown when none is supplied."""
         cutoff = (datetime.now(UTC) - timedelta(days=_RECENT_SYMPTOM_DAYS)).isoformat()
         result = await self._execute(
             self.db.table("symptom_reports")
             .select("severity")
+            .eq("confirmation_state", "patient_confirmed")
             .eq("patient_id", str(patient_id))
             .gte("created_at", cutoff)
         )
         rows = cast(list[dict[str, Any]], result.data or [])
-        # Legacy and partially completed symptom rows may not carry a severity yet.
-        # Absence is not severity zero on the source row, but it contributes no risk
-        # signal to this maximum. Keep valid recent values instead of failing the whole
-        # patient risk card when another row is null.
+        if not rows:
+            return None
         return max(
-            (int(value) for row in rows if (value := row.get("severity")) is not None),
-            default=0,
+            (int(row["severity"]) for row in rows if row.get("severity") is not None), default=None
         )
 
     async def _fetch_active_med_count(self, patient_id: UUID) -> int:
@@ -216,6 +220,7 @@ class RiskScoreService:
         symptoms_task = self._execute(
             self.db.table("symptom_reports")
             .select("created_at, symptom")
+            .eq("confirmation_state", "patient_confirmed")
             .eq("patient_id", str(patient_id))
             .order("created_at", desc=True)
             .limit(1)

@@ -184,9 +184,7 @@ def test_clinician_review_routes_only_to_authorized_rpc(client, conversation):
         ("care_plan_draft_exists", "CARE_PLAN_DRAFT_EXISTS"),
     ],
 )
-def test_activity_review_returns_stable_safe_error_codes(
-    client, conversation, hint, expected_code
-):
+def test_activity_review_returns_stable_safe_error_codes(client, conversation, hint, expected_code):
     actor, thread, message, db = conversation
     actor.role = "clinician"
     db.rpc.return_value.execute.side_effect = APIError(

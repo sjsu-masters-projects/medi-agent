@@ -34,6 +34,24 @@ function deferred() {
 }
 
 describe("patient detail load states", () => {
+    it("distinguishes confirmed testimony, unknown severity and legacy history", async () => {
+        mocks.tab = "symptoms";
+        mocks.fetch.mockResolvedValue({ ...patient(), symptom_reports: [
+            { id: "confirmed-report", patientId: "synthetic-a", symptom: "Synthetic headache", severity: null,
+                confirmationState: "patient_confirmed", confirmedAt: "2026-10-12T12:00:00Z",
+                confirmedSummary: "Corrected patient testimony", flaggedForAdr: false, createdAt: "2026-10-12T12:00:00Z" },
+            { id: "legacy-report", patientId: "synthetic-a", symptom: "Synthetic cough", severity: 3,
+                confirmationState: "legacy_unconfirmed", flaggedForAdr: false, createdAt: "2026-10-10T12:00:00Z" },
+        ] });
+        render(<PatientPage />);
+        expect(await screen.findByText(/Patient-confirmed/)).toBeInTheDocument();
+        expect(screen.getByText("Historical report — patient confirmation not recorded")).toBeInTheDocument();
+        expect(screen.getByText("Unknown / not provided")).toHaveClass("text-muted");
+        expect(screen.getByText("Unknown ratings are not plotted.")).toBeInTheDocument();
+        fireEvent.click(screen.getByText("Confirmed patient summary"));
+        expect(screen.getByText("Corrected patient testimony")).toBeVisible();
+        expect(screen.queryByText("0/10")).not.toBeInTheDocument();
+    });
     it("shows SOAP draft review context without exposing provider names or changing stored provenance", async () => {
         mocks.tab = "soap";
         const note = { subjective: "Patient report", objective: "Recorded observations", assessment: "Draft assessment",

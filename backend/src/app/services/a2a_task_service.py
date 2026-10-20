@@ -72,7 +72,7 @@ class A2ATaskService:
         raise ExternalServiceError("Supabase", "Failed to submit idempotent A2A task")
 
     async def mark_working(self, task_id: str, worker_payload: dict[str, Any]) -> dict[str, Any]:
-        updates = {
+        updates: dict[str, Any] = {
             "status": "working",
             "worker_payload": worker_payload,
             "started_at": datetime.now(UTC).isoformat(),
@@ -93,6 +93,9 @@ class A2ATaskService:
 
     async def mark_failed(self, task_id: str, error_message: str) -> dict[str, Any]:
         task = await self._get_task(task_id)
+        current_status = str(task.get("status") or "")
+        if current_status in {"completed", "dead_letter"}:
+            return task
         current_attempt = int(task.get("retry_attempt") or 0)
         next_attempt = current_attempt + 1
         max_retries = int(task.get("max_retries") or self.DEFAULT_MAX_RETRIES)
@@ -107,7 +110,7 @@ class A2ATaskService:
                 "error_message": error_message,
                 "completed_at": None,
             }
-            return await self._update_task(task_id, updates)
+            return await self._update_task_if_status(task_id, current_status, updates)
 
         updates = {
             "status": "dead_letter",
@@ -117,7 +120,7 @@ class A2ATaskService:
             "completed_at": datetime.now(UTC).isoformat(),
             "dead_lettered_at": datetime.now(UTC).isoformat(),
         }
-        return await self._update_task(task_id, updates)
+        return await self._update_task_if_status(task_id, current_status, updates)
 
     async def list_timeline(
         self,
@@ -141,9 +144,24 @@ class A2ATaskService:
         return [row for row in (result.data or []) if isinstance(row, dict)]
 
     async def list_due_retry_tasks(self, limit: int = 25) -> list[dict[str, Any]]:
+        """Return durable symptom outbox work plus scheduled retries.
+
+        Confirming a symptom report can create a ``submitted`` task in the same
+        database transaction.  Scanning those rows here closes the recovery gap
+        when the request process exits before it can claim the task itself.
+        """
         safe_limit = max(1, min(limit, 200))
+        submitted_result = await self._execute(
+            self.db.table("a2a_tasks")
+            .select("*")
+            .eq("status", "submitted")
+            .eq("task_type", "symptom_adr_screen")
+            .order("created_at", desc=False)
+            .limit(safe_limit)
+        )
+        submitted = [row for row in (submitted_result.data or []) if isinstance(row, dict)]
         now_iso = datetime.now(UTC).isoformat()
-        result = await self._execute(
+        retry_result = await self._execute(
             self.db.table("a2a_tasks")
             .select("*")
             .eq("status", "retrying")
@@ -151,22 +169,39 @@ class A2ATaskService:
             .order("next_retry_at", desc=False)
             .limit(safe_limit)
         )
-        return [row for row in (result.data or []) if isinstance(row, dict)]
+        retries = [row for row in (retry_result.data or []) if isinstance(row, dict)]
+        ready: list[dict[str, Any]] = []
+        for index in range(max(len(submitted), len(retries))):
+            if index < len(submitted):
+                ready.append(submitted[index])
+            if len(ready) >= safe_limit:
+                break
+            if index < len(retries):
+                ready.append(retries[index])
+            if len(ready) >= safe_limit:
+                break
+        return ready
 
     async def retry_task(self, task_id: str) -> dict[str, Any]:
         task = await self._get_task(task_id)
-        current_attempt = int(task.get("retry_attempt") or 0)
+        task_status = str(task.get("status") or "")
+        if task_status not in {"submitted", "retrying"}:
+            return task
 
-        await self.mark_working(
+        current_attempt = int(task.get("retry_attempt") or 0)
+        working, claimed = await self._claim_task(
             task_id=task_id,
+            expected_status=task_status,
             worker_payload={
                 "step": "retry_execution",
                 "attempt": current_attempt + 1,
                 "engine": "rule_based_v1",
             },
         )
+        if not claimed:
+            return working
 
-        input_payload = task.get("input_payload")
+        input_payload = working.get("input_payload", task.get("input_payload"))
         if not isinstance(input_payload, dict):
             input_payload = {}
 
@@ -221,6 +256,8 @@ class A2ATaskService:
         patient_id: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
+        report = payload.get("symptom_report")
+        symptom_event_id = str(report.get("id") or "").strip() if isinstance(report, dict) else ""
         submitted = await self.submit_task(
             patient_id=patient_id,
             payload={
@@ -228,21 +265,49 @@ class A2ATaskService:
                 "source_agent": "symptom",
                 "target_agent": "pharmacovigilance",
                 "task_type": "symptom_adr_screen",
+                "symptom_event_id": symptom_event_id or None,
                 "input_payload": payload,
             },
         )
         events = [self._to_event(submitted)]
+        submitted_status = str(submitted.get("status") or "submitted")
+        if submitted_status != "submitted":
+            result: dict[str, Any] = {
+                "task_id": str(submitted.get("id") or ""),
+                "status": submitted_status,
+                "events": events,
+            }
+            if isinstance(submitted.get("output_payload"), dict):
+                result["output"] = submitted["output_payload"]
+            if submitted.get("error_message"):
+                result["error"] = str(submitted["error_message"])
+            return result
+
+        # The database replaces testimony with the owned confirmed report at submission.
+        if isinstance(submitted.get("input_payload"), dict):
+            payload = submitted["input_payload"]
 
         task_id = str(submitted.get("id"))
         try:
-            working = await self.mark_working(
-                task_id=task_id,
-                worker_payload={
+            working, claimed = await self._claim_submitted_task(
+                task_id,
+                {
                     "step": "adr_evidence_assessment",
                     "engine": "naranjo_v1",
                 },
             )
             events.append(self._to_event(working))
+            if not claimed:
+                result = {
+                    "task_id": task_id,
+                    "status": str(working.get("status") or "working"),
+                    "events": events,
+                }
+                if isinstance(working.get("output_payload"), dict):
+                    result["output"] = working["output_payload"]
+                return result
+            if isinstance(working.get("input_payload"), dict):
+                payload = working["input_payload"]
 
             output_payload = self._build_pharmacovigilance_result(payload)
             if output_payload["requires_clinician_review"]:
@@ -271,6 +336,42 @@ class A2ATaskService:
                 "error": str(exc),
             }
 
+    async def _claim_submitted_task(
+        self, task_id: str, worker_payload: dict[str, Any]
+    ) -> tuple[dict[str, Any], bool]:
+        """Let only one caller move a report-keyed task from submitted to working."""
+        return await self._claim_task(
+            task_id=task_id,
+            expected_status="submitted",
+            worker_payload=worker_payload,
+        )
+
+    async def _claim_task(
+        self,
+        *,
+        task_id: str,
+        expected_status: str,
+        worker_payload: dict[str, Any],
+    ) -> tuple[dict[str, Any], bool]:
+        """Conditionally claim a task so only one request or worker executes it."""
+        updates: dict[str, Any] = {
+            "status": "working",
+            "worker_payload": worker_payload,
+            "started_at": datetime.now(UTC).isoformat(),
+            "error_message": None,
+            "next_retry_at": None,
+        }
+        result = await self._execute(
+            self.db.table("a2a_tasks")
+            .update(updates)
+            .eq("id", task_id)
+            .eq("status", expected_status)
+        )
+        rows = [item for item in (result.data or []) if isinstance(item, dict)]
+        if rows:
+            return rows[0], True
+        return await self._get_task(task_id), False
+
     async def _insert_task(self, row: dict[str, Any]) -> dict[str, Any]:
         result = await self._execute(self.db.table("a2a_tasks").insert(row))
         rows = [item for item in (result.data or []) if isinstance(item, dict)]
@@ -292,6 +393,21 @@ class A2ATaskService:
             raise ExternalServiceError("Supabase", f"A2A task {task_id} not found")
         return read_rows[0]
 
+    async def _update_task_if_status(
+        self, task_id: str, expected_status: str, updates: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Update a nonterminal task without regressing a concurrent terminal result."""
+        result = await self._execute(
+            self.db.table("a2a_tasks")
+            .update(updates)
+            .eq("id", task_id)
+            .eq("status", expected_status)
+        )
+        rows = [item for item in (result.data or []) if isinstance(item, dict)]
+        if rows:
+            return rows[0]
+        return await self._get_task(task_id)
+
     async def _persist_adr_assessment(
         self,
         *,
@@ -299,14 +415,13 @@ class A2ATaskService:
         payload: dict[str, Any],
         output_payload: dict[str, Any],
     ) -> dict[str, Any]:
-        """Upsert one auditable draft for the symptom report awaiting human review."""
+        """Create one auditable draft without resetting an existing clinician decision."""
         report = payload.get("symptom_report")
         if not isinstance(report, dict):
             raise ValidationError("symptom_report must be a JSON object")
 
         symptom_report_id = str(report.get("id") or "").strip()
-        medication_id = str(report.get("related_medication_id") or "").strip()
-        medication_name = str(report.get("related_medication_name") or "").strip()
+        medication_id, medication_name = self.confirmed_medication(report)
         if not patient_id or not symptom_report_id or not medication_id or not medication_name:
             raise ValidationError(
                 "ADR review requires patient, symptom report, and active medication identifiers"
@@ -315,6 +430,10 @@ class A2ATaskService:
         naranjo = output_payload.get("naranjo_assistance")
         if not isinstance(naranjo, dict):
             raise ValidationError("naranjo_assistance must be a JSON object")
+
+        existing = await self._get_assessment_by_report(symptom_report_id)
+        if existing:
+            return existing
 
         raw_answers = payload.get("naranjo_answers") or {}
         raw_evidence = payload.get("adr_evidence") or []
@@ -330,16 +449,39 @@ class A2ATaskService:
             "evidence": raw_evidence,
             "status": "draft",
         }
-        result = await self._execute(
-            self.db.table("adr_assessments").upsert(
-                row,
-                on_conflict="symptom_report_id",
-            )
-        )
+        try:
+            result = await self._execute(self.db.table("adr_assessments").insert(row))
+        except Exception as exc:
+            if not self._is_unique_violation(exc):
+                raise
+            existing = await self._get_assessment_by_report(symptom_report_id)
+            if existing:
+                return existing
+            raise
         rows = [item for item in (result.data or []) if isinstance(item, dict)]
+        if not rows:
+            # A retry must preserve a draft already edited/reviewed by a clinician.
+            retry_lookup = await self._execute(
+                self.db.table("adr_assessments")
+                .select("*")
+                .eq("symptom_report_id", symptom_report_id)
+                .eq("patient_id", patient_id)
+                .limit(1)
+            )
+            rows = [item for item in (retry_lookup.data or []) if isinstance(item, dict)]
         if not rows:
             raise ExternalServiceError("Supabase", "Failed to persist ADR review draft")
         return rows[0]
+
+    async def _get_assessment_by_report(self, symptom_report_id: str) -> dict[str, Any] | None:
+        result = await self._execute(
+            self.db.table("adr_assessments")
+            .select("*")
+            .eq("symptom_report_id", symptom_report_id)
+            .limit(1)
+        )
+        rows = [item for item in (result.data or []) if isinstance(item, dict)]
+        return rows[0] if rows else None
 
     async def _get_task(self, task_id: str) -> dict[str, Any]:
         result = await self._execute(
@@ -480,9 +622,13 @@ class A2ATaskService:
     @staticmethod
     def _build_pharmacovigilance_result(payload: dict[str, Any]) -> dict[str, Any]:
         report = payload.get("symptom_report") or {}
-        severity = int(report.get("severity") or 0)
+        severity = int(report["severity"]) if report.get("severity") is not None else None
         symptom = str(report.get("symptom") or "reported symptom")
-        flagged_for_adr = bool(report.get("flagged_for_adr") or payload.get("flagged_for_adr"))
+        flagged_for_adr = bool(
+            report.get("flagged_for_adr")
+            or payload.get("flagged_for_adr")
+            or A2ATaskService.confirmed_product_concern(report)
+        )
         raw_answers = payload.get("naranjo_answers")
         if raw_answers is None:
             raw_answers = {}
@@ -491,7 +637,9 @@ class A2ATaskService:
         naranjo = score_naranjo(raw_answers)
 
         requires_review = flagged_for_adr
-        priority = "high" if severity >= 8 or flagged_for_adr else "medium"
+        priority = (
+            "high" if (severity is not None and severity >= 8) or flagged_for_adr else "medium"
+        )
 
         if requires_review:
             recommendation = (
@@ -508,3 +656,46 @@ class A2ATaskService:
             "recommendation": recommendation,
             "naranjo_assistance": naranjo.model_dump(mode="json"),
         }
+
+    @staticmethod
+    def confirmed_product_concern(report: dict[str, Any]) -> bool:
+        content = report.get("confirmed_content")
+        answers = content.get("answers") if isinstance(content, dict) else None
+        product = answers.get("product") if isinstance(answers, dict) else None
+        value = product.get("value") if isinstance(product, dict) else None
+        return (
+            isinstance(product, dict)
+            and product.get("state") == "answered"
+            and isinstance(value, dict)
+            and value.get("concern") is True
+        )
+
+    @staticmethod
+    def confirmed_medication(report: dict[str, Any]) -> tuple[str, str]:
+        medication_id = str(report.get("related_medication_id") or "").strip()
+        medication_name = str(report.get("related_medication_name") or "").strip()
+        if medication_id and medication_name:
+            return medication_id, medication_name
+
+        content = report.get("confirmed_content")
+        answers = content.get("answers") if isinstance(content, dict) else None
+        product = answers.get("product") if isinstance(answers, dict) else None
+        value = product.get("value") if isinstance(product, dict) else None
+        reported_name = str(value.get("name") or "").strip() if isinstance(value, dict) else ""
+        context = content.get("context") if isinstance(content, dict) else None
+        medications = context.get("medications") if isinstance(context, dict) else None
+        if not isinstance(medications, list):
+            return "", medication_name or reported_name
+
+        for medication in medications:
+            if not isinstance(medication, dict):
+                continue
+            candidate_name = str(medication.get("name") or "").strip()
+            candidate_id = str(medication.get("source_id") or "").strip()
+            if (
+                candidate_id
+                and candidate_name
+                and candidate_name.casefold() == reported_name.casefold()
+            ):
+                return candidate_id, candidate_name
+        return "", medication_name or reported_name

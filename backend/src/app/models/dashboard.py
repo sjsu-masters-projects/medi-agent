@@ -41,8 +41,8 @@ class PatientRiskData(ClinicTag):
     adherence_score: float = Field(..., ge=0.0, le=1.0, description="0.0 – 1.0")
     open_adr_count: int = Field(default=0, ge=0)
     active_med_count: int = Field(default=0, ge=0)
-    recent_symptom_severity: int = Field(
-        default=0, ge=0, le=10, description="Max severity in last 7 days"
+    recent_symptom_severity: int | None = Field(
+        default=None, ge=1, le=10, description="Max severity in last 7 days"
     )
     last_activity: str = Field(default="", description="Human-readable last activity string")
 

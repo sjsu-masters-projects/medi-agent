@@ -248,7 +248,7 @@ class TestRiskSignalFetching:
         assert severity == 9
 
     @pytest.mark.asyncio
-    async def test_fetch_recent_symptom_severity_returns_zero_when_all_values_are_null(
+    async def test_fetch_recent_symptom_severity_returns_unknown_when_all_values_are_null(
         self, service
     ):
         service._execute = AsyncMock(  # type: ignore[method-assign]
@@ -257,7 +257,8 @@ class TestRiskSignalFetching:
 
         severity = await service._fetch_recent_symptom_severity(uuid4())
 
-        assert severity == 0
+        assert severity is None
+        service.db.table.return_value.eq.assert_any_call("confirmation_state", "patient_confirmed")
 
     @pytest.mark.asyncio
     async def test_fetch_open_adr_count_queries_only_valid_draft_status(self, service):

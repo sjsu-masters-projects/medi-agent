@@ -8,6 +8,15 @@ import { hydrateSession, logout } from "@/store/slices/auth-slice";
 import { ChatRole, Language, type Locale } from "@/types";
 import { storePendingChatDocumentContext } from "@/services/chat-bridge";
 import { getChatControlsCopy, getPatientChatCopy, getChatRecoveryCopy } from "@/content/chat-copy";
+import { fetchActiveIntake, mutateIntake } from "@/services/symptom-intakes";
+import type { SymptomIntake } from "@/types";
+
+vi.mock("@/services/symptom-intakes", () => ({ fetchActiveIntake: vi.fn().mockResolvedValue(null), mutateIntake: vi.fn() }));
+
+const privateDraft: SymptomIntake = { intake_id: "private-draft", status: "collecting", revision: 3,
+    locale: "en-US", timezone: "America/Los_Angeles", timezone_fallback: false, answers: {},
+    current_question: { id: "severity", answer_type: "rating", wording: { "en-US": "Choose your severity", "es-MX": "Elige tu intensidad" } },
+    library_available: true, can_review: false, can_confirm: false };
 
 const {
     buildChatWebSocketUrl,
@@ -26,7 +35,7 @@ const {
     fetchChatConversations: vi.fn(),
     fetchChatHistory: vi.fn(),
     getVoiceCapabilities: vi.fn(() => ({ recording: false, recognition: false, synthesis: false })),
-    playAssistantVoiceResponse: vi.fn(() => null),
+    playAssistantVoiceResponse: vi.fn((_options: { onEnd?: () => void; onStart?: () => void }) => null),
     replace: vi.fn(),
     setConversationOpen: vi.fn(),
     shell: { conversationOpen: false },
@@ -41,6 +50,11 @@ vi.mock("@/contexts/patient-shell-context", () => ({
 
 vi.mock("@/services/care-conversations", () => ({
     careConversations: { recipients: vi.fn().mockResolvedValue([]), list: vi.fn().mockResolvedValue([]) },
+    getConversationCopy: (locale: string) => ({
+        notice: locale === "es-MX"
+            ? "Estos mensajes no se supervisan continuamente. Para una emergencia, llama al 911."
+            : "Messages are not continuously monitored. For an emergency, call 911.",
+    }),
 }));
 
 let searchParamsValue = new URLSearchParams();
@@ -148,6 +162,8 @@ function renderPage() {
 
 describe("Patient chat page", () => {
     beforeEach(() => {
+        vi.mocked(fetchActiveIntake).mockReset().mockResolvedValue(null);
+        vi.mocked(mutateIntake).mockReset().mockResolvedValue({ ...privateDraft, revision: 4 });
         profile.preferredLanguage = Language.EN;
         buildChatWebSocketUrl.mockReset();
         fetchChatHistory.mockReset();
@@ -165,6 +181,7 @@ describe("Patient chat page", () => {
         MockWebSocket.reset();
         vi.stubGlobal("WebSocket", MockWebSocket);
         Element.prototype.scrollIntoView = vi.fn();
+        Element.prototype.scrollTo = vi.fn();
         window.sessionStorage.clear();
         window.localStorage.clear();
         window.history.replaceState({}, "", "/chat");
@@ -974,6 +991,45 @@ describe("Patient chat page", () => {
         });
     });
 
+    it("clears a prior conversation safety notice when starting a new chat", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const oldSocket = MockWebSocket.instances[0];
+        await act(async () => {
+            oldSocket.emitOpen();
+            oldSocket.emitMessage({
+                type: "assistant_complete",
+                escalation_required: true,
+                urgency: "urgent",
+                message: {
+                    audio_url: null,
+                    content: "Please contact your care team today.",
+                    created_at: "2026-04-17T10:01:00Z",
+                    id: "assistant-urgent-old-session",
+                    intent: "symptom",
+                    language: "en",
+                    patient_id: "patient-1",
+                    role: "assistant",
+                },
+            });
+        });
+        expect(await screen.findByRole("alert")).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+        await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+
+        await act(async () => {
+            oldSocket.emitMessage({
+                type: "escalation_recommended",
+                urgency: "urgent",
+                message: "Old session escalation",
+                delivery_state: "delivered",
+                clinicians_notified: 1,
+            });
+        });
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
     it("restores the URL conversation after refresh without starting a new daily chat", async () => {
         searchParamsValue = new URLSearchParams("session=chat-saved&focus=none");
         renderPage();
@@ -994,6 +1050,9 @@ describe("Patient chat page", () => {
         profile.preferredLanguage = locale;
         vi.useFakeTimers();
         renderPage();
+        // Let the mocked symptom-intake recovery settle before advancing past
+        // both the intake and durable-chat timeouts in one fake-timer step.
+        await act(async () => {});
         await act(async () => { MockWebSocket.instances[0].onopen?.(); vi.advanceTimersByTime(15_000); });
         expect(screen.getByRole("alert")).toHaveTextContent(getChatRecoveryCopy(locale).unavailable);
         expect(screen.getByRole("button", { name: getChatControlsCopy(locale).send })).toBeDisabled();
@@ -1388,7 +1447,129 @@ describe("Patient chat page", () => {
         expect(await screen.findByText(/^Connected$/)).toBeInTheDocument();
     });
 
-    it("streams microphone chunks to backend voice STT and sends final transcript to chat", async () => {
+    it("stops retrying sockets that repeatedly open and immediately close", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        vi.useFakeTimers();
+        for (const delay of [800, 1600, 3200, 6400, 8000]) {
+            const socket = MockWebSocket.instances.at(-1)!;
+            await act(async () => { socket.emitOpen(); socket.close(); });
+            await act(async () => { await vi.advanceTimersByTimeAsync(delay); });
+        }
+        expect(MockWebSocket.instances).toHaveLength(6);
+        await act(async () => {
+            const socket = MockWebSocket.instances.at(-1)!;
+            socket.emitOpen(); socket.close();
+            await vi.advanceTimersByTimeAsync(30000);
+        });
+        expect(MockWebSocket.instances).toHaveLength(6);
+        expect(store.getState().chat.connectionStatus).toBe("disconnected");
+        expect(store.getState().chat.error).toBe("Live chat is offline. Refresh the page to reconnect.");
+    });
+
+    it("restores the retry budget after a connection remains healthy", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        vi.useFakeTimers();
+        await act(async () => { MockWebSocket.instances[0].emitOpen(); MockWebSocket.instances[0].close(); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+        await act(async () => { MockWebSocket.instances[1].emitOpen(); await vi.advanceTimersByTimeAsync(5000); });
+        await act(async () => { MockWebSocket.instances[1].close(); await vi.advanceTimersByTimeAsync(800); });
+        expect(MockWebSocket.instances).toHaveLength(3);
+    });
+
+    it("keeps history and the reader's position while reconnecting and rehydrating", async () => {
+        const history = [{ id: "earlier-reply", patientId: "patient-1", role: ChatRole.ASSISTANT,
+            content: "Earlier conversation stays visible", language: Language.EN, createdAt: "2026-10-12T12:00:00Z" }];
+        fetchChatHistory.mockResolvedValueOnce(history);
+        // Recovery is deliberately pending so a collapse cannot be hidden by
+        // an immediately resolved history request.
+        let recover!: (value: typeof history) => void;
+        fetchChatHistory.mockImplementationOnce(() => new Promise((resolve) => { recover = resolve; }));
+        renderPage();
+        await screen.findByText(history[0].content);
+        const region = screen.getByRole("region", { name: "Nora conversation" });
+        Object.defineProperties(region, { scrollHeight: { configurable: true, value: 2000 },
+            clientHeight: { configurable: true, value: 500 } });
+        region.scrollTop = 300;
+        fireEvent.scroll(region);
+        vi.mocked(region.scrollTo).mockClear();
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.emitOpen(); socket.close(); });
+        await waitFor(() => expect(MockWebSocket.instances).toHaveLength(2), { timeout: 1500 });
+        expect(screen.getByText(history[0].content)).toBeInTheDocument();
+        expect(store.getState().chat.loading).toBe(false);
+        await act(async () => {
+            recover([...history]);
+            MockWebSocket.instances[1].emitOpen();
+            MockWebSocket.instances[1].emitMessage({ type: "chat_history", messages: [{
+                id: history[0].id, patient_id: "patient-1", role: "assistant", content: history[0].content,
+                language: Language.EN, created_at: history[0].createdAt,
+            }] });
+        });
+        expect(region.scrollTo).not.toHaveBeenCalled();
+        expect(region.scrollTop).toBe(300);
+    });
+
+    it.each([Language.EN, Language.ES])("follows streaming without animations only near the bottom in %s", async (locale) => {
+        profile.preferredLanguage = locale;
+        renderPage();
+        await screen.findByText(getPatientChatCopy(locale).welcomeMessage);
+        const region = screen.getByRole("region", { name: locale === Language.ES ? "Conversación con Nora" : "Nora conversation" });
+        Object.defineProperties(region, { scrollHeight: { configurable: true, value: 2000 },
+            clientHeight: { configurable: true, value: 500 } });
+        region.scrollTop = 1500;
+        fireEvent.scroll(region);
+        vi.mocked(region.scrollTo).mockClear();
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.emitMessage({ type: "assistant_chunk", content: "A streamed " }); });
+        expect(region.scrollTo).toHaveBeenLastCalledWith({ top: 2000, behavior: "instant" });
+        region.scrollTop = 300;
+        fireEvent.scroll(region);
+        vi.mocked(region.scrollTo).mockClear();
+        await act(async () => { socket.emitMessage({ type: "assistant_chunk", content: "reply" }); });
+        expect(screen.getByText("A streamed reply")).toBeInTheDocument();
+        expect(region.scrollTo).not.toHaveBeenCalled();
+        region.scrollTop = 1490;
+        fireEvent.scroll(region);
+        await act(async () => { socket.emitMessage({ type: "assistant_chunk", content: " continues" }); });
+        expect(region.scrollTo).toHaveBeenLastCalledWith({ top: 2000, behavior: "instant" });
+    });
+
+    it("starts a newly selected conversation at the bottom and ignores the previous socket", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const region = screen.getByRole("region", { name: "Nora conversation" });
+        Object.defineProperties(region, { scrollHeight: { configurable: true, value: 2000 },
+            clientHeight: { configurable: true, value: 500 } });
+        region.scrollTop = 300;
+        fireEvent.scroll(region);
+        vi.mocked(region.scrollTo).mockClear();
+        const oldSocket = MockWebSocket.instances[0];
+        fetchChatHistory.mockResolvedValueOnce([{ id: "new-reply", patientId: "patient-1", role: ChatRole.ASSISTANT,
+            content: "New conversation history", language: Language.EN, createdAt: "2026-10-12T12:00:00Z" }]);
+        fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+        await screen.findByText("New conversation history");
+        expect(region.scrollTo).toHaveBeenLastCalledWith({ top: 2000, behavior: "instant" });
+        await act(async () => { oldSocket.emitMessage({ type: "chat_history", messages: [] }); });
+        expect(screen.getByText("New conversation history")).toBeInTheDocument();
+    });
+
+    it("keeps recovered history when the reconnect REST request fails", async () => {
+        fetchChatHistory.mockResolvedValueOnce([{ id: "kept-reply", patientId: "patient-1", role: ChatRole.ASSISTANT,
+            content: "Keep this reply during recovery", language: Language.EN, createdAt: "2026-10-12T12:00:00Z" }]);
+        fetchChatHistory.mockRejectedValueOnce(new Error("History unavailable"));
+        renderPage();
+        await screen.findByText("Keep this reply during recovery");
+        await act(async () => { MockWebSocket.instances[0].close(); });
+        await waitFor(() => expect(MockWebSocket.instances).toHaveLength(2), { timeout: 1500 });
+        await waitFor(() => expect(store.getState().chat.error).toMatch(/Unable to load chat history/));
+        expect(screen.getByText("Keep this reply during recovery")).toBeInTheDocument();
+    });
+
+    it.each(["ordinary", "private", "cancelled"])("routes dictated audio through its own boundary (%s)", async (scenario) => {
+        const privateIntake = scenario !== "ordinary";
+        if (privateIntake) vi.mocked(fetchActiveIntake).mockResolvedValue(privateDraft);
         getVoiceCapabilities.mockReturnValue({ recording: true, recognition: false, synthesis: true });
         const trackStop = vi.fn();
         const getUserMedia = vi.fn().mockResolvedValue({
@@ -1462,6 +1643,66 @@ describe("Patient chat page", () => {
             false,
         );
         expect(trackStop).toHaveBeenCalled();
+        expect(voiceSocket.sent.map((frame) => JSON.parse(frame)).find((frame) => frame.type === "audio_start").private_intake).toBe(privateIntake);
+        if (scenario === "cancelled") {
+            vi.mocked(mutateIntake).mockResolvedValue({ ...privateDraft, status: "cancelled", revision: 4 });
+            fireEvent.click(screen.getByRole("button", { name: "Cancel draft" }));
+            await screen.findByRole("heading", { name: /^Draft cancelled\./ });
+            fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+            expect(mutateIntake).toHaveBeenCalledTimes(1);
+            expect(vi.mocked(mutateIntake).mock.calls[0][2]).toBe("cancel");
+            expect(chatSocket.sent.some((frame) => JSON.parse(frame).type === "user_message")).toBe(false);
+            return;
+        }
+        if (privateIntake) {
+            fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+            await waitFor(() => expect(mutateIntake).toHaveBeenCalled());
+            expect(vi.mocked(mutateIntake).mock.calls[0][2]).toBe("reply");
+            expect(vi.mocked(mutateIntake).mock.calls[0][3]).toMatchObject({ text: "I feel dizzy", input_mode: "voice", question_id: "severity" });
+            expect(chatSocket.sent.some((frame) => JSON.parse(frame).type === "user_message")).toBe(false);
+        }
+    });
+
+    it("speaks a private question without attaching it to chat and resumes private recording", async () => {
+        vi.mocked(fetchActiveIntake).mockResolvedValue(privateDraft);
+        vi.mocked(mutateIntake).mockResolvedValue({ ...privateDraft, revision: 4, current_question: {
+            id: "location", answer_type: "text", wording: { "en-US": "Where is it?", "es-MX": "¿Dónde?" } } });
+        getVoiceCapabilities.mockReturnValue({ recording: true, recognition: false, synthesis: true });
+        const getUserMedia = vi.fn().mockResolvedValue({ getTracks: () => [{ stop: vi.fn() }] });
+        vi.stubGlobal("navigator", { ...window.navigator, mediaDevices: { getUserMedia } });
+        class Recorder {
+            static isTypeSupported = () => true;
+            state = "inactive";
+            ondataavailable: ((event: { data: Blob }) => void) | null = null;
+            onstop: (() => void) | null = null;
+            start() { this.state = "recording"; }
+            stop() { this.state = "inactive"; this.onstop?.(); }
+        }
+        vi.stubGlobal("MediaRecorder", Recorder);
+        let finishAudio: (() => void) | undefined;
+        playAssistantVoiceResponse.mockImplementation((options) => { finishAudio = options.onEnd; options.onStart?.(); return null; });
+        renderPage();
+        await screen.findAllByText("Choose your severity");
+        fireEvent.click(screen.getByRole("button", { name: /Turn on hands-free mode/ }));
+        await waitFor(() => expect(MockWebSocket.instances).toHaveLength(2));
+        const voiceSocket = MockWebSocket.instances[1];
+        await act(async () => voiceSocket.emitOpen());
+        const tts = voiceSocket.sent.map((frame) => JSON.parse(frame)).find((frame) => frame.type === "tts_request");
+        expect(tts.text).toContain("Choose your severity");
+        expect(tts).not.toHaveProperty("message_id");
+        await act(async () => voiceSocket.emitMessage({ type: "assistant_audio_ready", audio_base64: "YXVkaW8=", mime_type: "audio/mpeg", language: "en-US", encoding: "mp3" }));
+        await act(async () => finishAudio?.());
+        await waitFor(() => expect(getUserMedia).toHaveBeenCalled());
+        expect(voiceSocket.sent.map((frame) => JSON.parse(frame)).find((frame) => frame.type === "audio_start")).toMatchObject({ private_intake: true });
+        fireEvent.click(screen.getByRole("button", { name: /Stop voice recording/ }));
+        await act(async () => {
+            voiceSocket.emitMessage({ type: "transcript_final", transcript: "five", language: "en-US", model: "test" });
+            voiceSocket.emitMessage({ type: "audio_stream_complete" });
+        });
+        await waitFor(() => expect(mutateIntake).toHaveBeenCalled());
+        expect(vi.mocked(mutateIntake).mock.calls[0][3]).toMatchObject({ text: "five", input_mode: "voice" });
+        expect(MockWebSocket.instances[0].sent.some((frame) => JSON.parse(frame).type === "user_message")).toBe(false);
+        await screen.findAllByText("Where is it?");
     });
 
     it("auto-sends and auto-plays when hands-free mode is enabled", async () => {
@@ -1521,6 +1762,49 @@ describe("Patient chat page", () => {
             "patient-1", { documentId: null, durableTurns: true, sessionId: expect.stringMatching(/^chat-/) },
         ));
     });
+    it.each([
+        ["en-US", "pending"], ["en-US", "unavailable"], ["en-US", "no_recipients"],
+        ["es-MX", "pending"], ["es-MX", "unavailable"], ["es-MX", "no_recipients"],
+    ] as const)("preserves emergency direction and honest %s %s delivery status", async (locale, status) => {
+        profile.preferredLanguage = locale;
+        renderPage();
+        await waitFor(() => expect(MockWebSocket.instances.length).toBeGreaterThan(0));
+        const socket = MockWebSocket.instances[0];
+        const direction = locale === "es-MX"
+            ? "Esto podría ser una emergencia. Llama al 911 ahora."
+            : "This may be an emergency. Please call 911 now.";
+        const copy = getPatientChatCopy(locale);
+        await act(async () => {
+            socket.emitOpen();
+            socket.emitMessage({
+                type: "assistant_start", urgency: "emergency", intent: "symptom",
+            });
+            socket.emitMessage({ type: "assistant_chunk", content: direction });
+            socket.emitMessage({
+                type: "assistant_complete", urgency: "emergency", escalation_required: true,
+                persistence_status: status === "unavailable" ? "uncertain" : "saved",
+                message: {
+                    id: "safety-reply", patient_id: "patient-1", content: direction,
+                    role: "assistant", language: locale, created_at: "2026-10-10T12:00:00Z",
+                },
+            });
+        });
+        const notice = screen.getByRole("alert");
+        expect(notice).toHaveTextContent(direction);
+        if (status === "unavailable") expect(notice).toHaveTextContent(copy.safetySaveUncertain);
+        await act(async () => {
+            socket.emitMessage({
+                type: "escalation_recommended", urgency: "emergency", message: direction,
+                delivery_state: status, clinicians_notified: 0,
+            });
+        });
+        expect(notice).toHaveTextContent(direction);
+        expect(notice).toHaveTextContent(status === "pending" ? copy.safetyAlertPending
+            : status === "unavailable" ? copy.safetySaveUncertain : copy.safetyAlertNoRecipients);
+        expect(notice).not.toHaveTextContent(copy.escalationNotice);
+        expect(screen.queryByText(/Nora is typing|Nora está escribiendo/)).not.toBeInTheDocument();
+    });
+
     describe("ADR follow-up mode", () => {
         const requestId = "11111111-1111-4111-8111-111111111111";
         const assessmentId = "22222222-2222-4222-8222-222222222222";
@@ -1545,16 +1829,19 @@ describe("Patient chat page", () => {
             expect(screen.queryByRole("heading", { name: "Your care team" })).not.toBeInTheDocument();
             expect(screen.queryByRole("link", { name: /Questions from your care team/ })).not.toBeInTheDocument();
         });
-        it.each([Language.EN, Language.ES])("shows the caution strip, localized back button and focused heading (%s)", (locale) => {
+        it.each([Language.EN, Language.ES])("shows the care-team notice, localized back button and focused heading (%s)", (locale) => {
             profile.preferredLanguage = locale;
             renderFollowUp(`view=follow-up&request=${requestId}`);
-            const caution = getChatControlsCopy(locale).caution;
+            const caution = locale === Language.ES
+                ? "Estos mensajes no se supervisan continuamente. Para una emergencia, llama al 911."
+                : "Messages are not continuously monitored. For an emergency, call 911.";
             expect(screen.getByText(caution)).toBeInTheDocument();
+            expect(screen.queryByText(getChatControlsCopy(locale).caution)).not.toBeInTheDocument();
             expect(screen.getByRole("heading", { level: 1 })).toHaveFocus();
             expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(locale === Language.ES ? "Preguntas de tu equipo de atención" : "Questions from your care team");
             expect(lastViewProps()).toMatchObject({ locale });
             fireEvent.click(screen.getByRole("button", { name: locale === Language.ES ? "Volver a mensajes" : "Back to messages" }));
-            expect(replace).toHaveBeenCalledWith("/chat");
+            expect(replace).toHaveBeenCalledWith("/chat?view=care-team");
         });
         it("keeps the bottom navigation hidden by marking the conversation open", () => {
             renderFollowUp(`view=follow-up&request=${requestId}`);
@@ -1570,7 +1857,7 @@ describe("Patient chat page", () => {
         it("leaves follow-up mode through the view's own back action", () => {
             renderFollowUp("view=follow-up");
             lastViewProps().onBack();
-            expect(replace).toHaveBeenCalledWith("/chat");
+            expect(replace).toHaveBeenCalledWith("/chat?view=care-team");
         });
         it("ignores request and assessment outside follow-up mode", () => {
             renderFollowUp(`request=${requestId}&assessment=${assessmentId}`);
@@ -1596,29 +1883,29 @@ describe("Patient chat page", () => {
             [Language.EN, 2, "2 requests are waiting for your answers"],
             [Language.ES, 1, "1 solicitud espera tus respuestas"],
             [Language.ES, 2, "2 solicitudes esperan tus respuestas"],
-        ])("shows the inbox row after the Nora card for %s with %i pending", (locale, count, text) => {
+        ])("shows the inbox row inside Care team messages for %s with %i pending", (locale, count, text) => {
             profile.preferredLanguage = locale;
             pending.count = count;
             renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
-            const row = screen.getByRole("link", { name: rowName(locale) });
+            const careTeam = screen.getByRole("region", {
+                name: getPatientChatCopy(locale).careTeamLabel,
+            });
+            const row = within(careTeam).getByRole("link", { name: rowName(locale) });
             expect(row).toHaveAttribute("href", "/chat?view=follow-up");
             expect(row).toHaveTextContent(text);
             expect(row).toHaveAttribute("lang", locale);
-            const nora = screen.getByRole("heading", { name: "Nora AI" });
-            expect(nora.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         });
-        it("shows the row in the open Nora thread only while a request is pending", () => {
+        it("keeps the clinician request out of Nora and exposes it only in Care team messages", () => {
             pending.count = 1;
             renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
             fireEvent.click(screen.getByRole("button", { name: /Nora ·/ }));
             expect(screen.getByRole("textbox", { name: "Message to Nora" })).toBeInTheDocument();
-            expect(screen.getByRole("link", { name: rowName(Language.EN) })).toHaveAttribute("href", "/chat?view=follow-up");
-            renderedPage.unmount();
-            pending.count = 0;
-            renderedPage = render(<Provider store={store}><ChatPage /></Provider>);
-            fireEvent.click(screen.getByRole("button", { name: /Nora ·/ }));
-            expect(screen.getByRole("textbox", { name: "Message to Nora" })).toBeInTheDocument();
             expect(screen.queryByRole("link", { name: rowName(Language.EN) })).not.toBeInTheDocument();
+
+            fireEvent.click(screen.getByRole("button", { name: "Care team messages" }));
+            const careTeam = screen.getByRole("region", { name: "Care team messages" });
+            expect(within(careTeam).getByRole("link", { name: rowName(Language.EN) }))
+                .toHaveAttribute("href", "/chat?view=follow-up");
         });
     });
 });
