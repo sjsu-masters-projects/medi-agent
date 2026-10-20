@@ -483,3 +483,6 @@ transition therefore remains automated-only acceptance, not a live pass.
 Additional automated command from `backend`:
 `PYTHONPATH=src .venv/bin/pytest tests/unit/services/test_medwatch_service.py tests/unit/services/test_medwatch_form_3500.py tests/unit/services/test_medwatch_form_3500_pdf.py tests/unit/services/test_medwatch_form_3500_legacy.py tests/unit/models/test_medwatch_approval_request.py -q --no-cov`
 — **285 passed**, three existing deprecation warnings. No backend source changed.
+
+Hannah's original en-US Profile preference was restored and the language sheet
+closed after the Spanish journey. The saved retrospective answers remain unchanged.
