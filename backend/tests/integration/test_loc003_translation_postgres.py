@@ -61,10 +61,21 @@ def sql(tmp_path: Path):
         container = f"mediagent-loc003-test-{uuid4().hex}"
         subprocess.run(
             [
-                docker, "run", "--detach", "--pull=never", "--network=none",
-                "--name", container, "--env", "POSTGRES_HOST_AUTH_METHOD=trust", "postgres:16",
+                docker,
+                "run",
+                "--detach",
+                "--pull=never",
+                "--network=none",
+                "--name",
+                container,
+                "--env",
+                "POSTGRES_HOST_AUTH_METHOD=trust",
+                "postgres:16",
             ],
-            check=True, capture_output=True, text=True, timeout=30,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         try:
             readiness = (
@@ -74,7 +85,8 @@ def sql(tmp_path: Path):
             for _ in range(100):
                 ready = subprocess.run(
                     [docker, "exec", container, "sh", "-c", readiness],
-                    capture_output=True, timeout=5,
+                    capture_output=True,
+                    timeout=5,
                 )
                 if ready.returncode == 0:
                     break
@@ -93,17 +105,30 @@ def sql(tmp_path: Path):
         environment = {**os.environ, "LC_ALL": "C"}
         initialization = subprocess.run(
             [programs["initdb"], "-D", str(data), "-A", "trust", "-U", "postgres"],
-            check=False, capture_output=True, text=True, env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+            env=environment,
         )
         if initialization.returncode:
             sockets.cleanup()
             pytest.fail(f"Disposable PostgreSQL initialization failed: {initialization.stderr}")
         subprocess.run(
             [
-                programs["pg_ctl"], "-D", str(data), "-l", str(tmp_path / "server.log"),
-                "-o", f"-k {sockets.name} -h ''", "-w", "start",
+                programs["pg_ctl"],
+                "-D",
+                str(data),
+                "-l",
+                str(tmp_path / "server.log"),
+                "-o",
+                f"-k {sockets.name} -h ''",
+                "-w",
+                "start",
             ],
-            check=True, capture_output=True, text=True, env=environment,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=environment,
         )
         command = [programs["psql"], "-h", sockets.name, "-U", "postgres"]
     command += ["-X", "-d", "postgres", "-At", "-q", "-v", "ON_ERROR_STOP=1"]
@@ -112,7 +137,9 @@ def sql(tmp_path: Path):
         result = subprocess.run(
             command,
             input=f"SET statement_timeout='8s';\n{statement}",
-            capture_output=True, text=True, timeout=12,
+            capture_output=True,
+            text=True,
+            timeout=12,
         )
         assert (result.returncode == 0) is succeeds, result.stderr
         return result.stdout.strip() if succeeds else result.stderr
@@ -160,7 +187,8 @@ def sql(tmp_path: Path):
         else:
             subprocess.run(
                 [programs["pg_ctl"], "-D", str(data), "-m", "immediate", "-w", "stop"],
-                check=False, capture_output=True,
+                check=False,
+                capture_output=True,
             )
         sockets.cleanup()
 
@@ -197,101 +225,108 @@ def purge(sql, max_age: str = "7 days") -> dict:
 # ── 080: the cleanup triggers stand in for the foreign key ────────────────
 
 
-class TestDeletingAMessageDeletesItsTranslations:
-    def test_a_care_team_message(self, sql) -> None:
-        translation(sql)
-        sql(f"DELETE FROM public.care_conversation_messages WHERE id = '{MESSAGE}'")
-        assert count(sql) == 0
+def test_deleting_a_care_team_message_deletes_its_translations(sql) -> None:
+    translation(sql)
+    sql(f"DELETE FROM public.care_conversation_messages WHERE id = '{MESSAGE}'")
+    assert count(sql) == 0
 
-    def test_a_chat_message(self, sql) -> None:
-        translation(sql, "chat_messages", CHAT_MESSAGE)
-        sql(f"DELETE FROM public.chat_messages WHERE id = '{CHAT_MESSAGE}'")
-        assert count(sql) == 0
 
-    def test_only_that_messages_translations_go(self, sql) -> None:
-        """The stored label and the physical table name differ; the trigger must not confuse them."""
-        translation(sql)
-        translation(sql, "chat_messages", CHAT_MESSAGE)
-        sql(f"DELETE FROM public.care_conversation_messages WHERE id = '{MESSAGE}'")
-        assert count(sql) == 1
-        assert sql("SELECT source_table FROM public.message_translations") == "chat_messages"
+def test_deleting_a_chat_message_deletes_its_translations(sql) -> None:
+    translation(sql, "chat_messages", CHAT_MESSAGE)
+    sql(f"DELETE FROM public.chat_messages WHERE id = '{CHAT_MESSAGE}'")
+    assert count(sql) == 0
 
-    def test_a_chat_message_id_matching_a_care_message_id_is_not_collateral(self, sql) -> None:
-        other = "00000000-0000-0000-0000-0000000000b1"
-        sql(f"""
-          INSERT INTO public.care_conversation_messages(id, conversation_id, body)
-            VALUES ('{other}', '{CONVERSATION}', 'Hola');
-          INSERT INTO public.chat_messages(id, patient_id, content)
-            VALUES ('{other}', '{PATIENT}', 'Hola');
-        """)
-        translation(sql, "chat_messages", other)
-        sql(f"DELETE FROM public.care_conversation_messages WHERE id = '{other}'")
-        assert count(sql) == 1
 
-    def test_every_target_language_of_the_message_goes(self, sql) -> None:
-        translation(sql)
-        sql(f"""
-          INSERT INTO public.message_translations(
-            source_table, source_message_id, source_locale, target_locale, translated_text)
-          VALUES ('{CARE_TABLE}', '{MESSAGE}', 'en-US', 'es-MX', 'Toma 500 mg cada dia');
-        """)
-        assert count(sql) == 2
-        sql(f"DELETE FROM public.care_conversation_messages WHERE id = '{MESSAGE}'")
-        assert count(sql) == 0
+def test_only_that_messages_translations_go(sql) -> None:
+    """The stored label and the physical table name differ; the trigger must not confuse them."""
+    translation(sql)
+    translation(sql, "chat_messages", CHAT_MESSAGE)
+    sql(f"DELETE FROM public.care_conversation_messages WHERE id = '{MESSAGE}'")
+    assert count(sql) == 1
+    assert sql("SELECT source_table FROM public.message_translations") == "chat_messages"
+
+
+def test_a_chat_message_id_matching_a_care_message_id_is_not_collateral(sql) -> None:
+    other = "00000000-0000-0000-0000-0000000000b1"
+    sql(f"""
+      INSERT INTO public.care_conversation_messages(id, conversation_id, body)
+        VALUES ('{other}', '{CONVERSATION}', 'Hola');
+      INSERT INTO public.chat_messages(id, patient_id, content)
+        VALUES ('{other}', '{PATIENT}', 'Hola');
+    """)
+    translation(sql, "chat_messages", other)
+    sql(f"DELETE FROM public.care_conversation_messages WHERE id = '{other}'")
+    assert count(sql) == 1
+
+
+def test_every_target_language_of_the_message_goes(sql) -> None:
+    translation(sql)
+    sql(f"""
+      INSERT INTO public.message_translations(
+        source_table, source_message_id, source_locale, target_locale, translated_text)
+      VALUES ('{CARE_TABLE}', '{MESSAGE}', 'en-US', 'es-MX', 'Toma 500 mg cada dia');
+    """)
+    assert count(sql) == 2
+    sql(f"DELETE FROM public.care_conversation_messages WHERE id = '{MESSAGE}'")
+    assert count(sql) == 0
 
 
 # ── 080: the retention rule ───────────────────────────────────────────────
 
 
-class TestRetentionRule:
-    def test_an_orphan_from_before_the_triggers_is_removed(self, sql) -> None:
-        orphan = "00000000-0000-0000-0000-0000000000c1"
-        translation(sql, message_id=orphan)
-        assert purge(sql)["orphans_removed"] == 1
-        assert count(sql) == 0
-
-    def test_an_expired_failure_marker_is_removed(self, sql) -> None:
-        translation(sql, guard_failure_code="model_error", age="8 days")
-        assert purge(sql)["expired_failure_markers_removed"] == 1
-        assert count(sql) == 0
-
-    def test_a_fresh_failure_marker_is_kept_so_the_retry_rule_still_holds(self, sql) -> None:
-        translation(sql, guard_failure_code="model_error", age="30 minutes")
-        assert purge(sql) == {"orphans_removed": 0, "expired_failure_markers_removed": 0}
-        assert count(sql) == 1
-
-    def test_a_successful_translation_is_kept_however_old(self, sql) -> None:
-        """Re-translating a reopened message would spend a model call to reproduce this text."""
-        translation(sql, age="400 days")
-        assert purge(sql) == {"orphans_removed": 0, "expired_failure_markers_removed": 0}
-        assert count(sql) == 1
-
-    def test_a_guard_failure_that_is_not_a_model_error_is_not_retry_state(self, sql) -> None:
-        translation(sql, guard_failure_code="numbers_changed", age="400 days")
-        assert purge(sql)["expired_failure_markers_removed"] == 0
-        assert count(sql) == 1
-
-    def test_the_age_boundary_is_the_caller_s(self, sql) -> None:
-        translation(sql, guard_failure_code="model_error", age="2 days")
-        assert purge(sql, "7 days")["expired_failure_markers_removed"] == 0
-        assert purge(sql, "1 day")["expired_failure_markers_removed"] == 1
-
-    def test_it_is_safe_to_run_twice(self, sql) -> None:
-        translation(sql, guard_failure_code="model_error", age="8 days")
-        purge(sql)
-        assert purge(sql) == {"orphans_removed": 0, "expired_failure_markers_removed": 0}
+def test_an_orphan_from_before_the_triggers_is_removed(sql) -> None:
+    orphan = "00000000-0000-0000-0000-0000000000c1"
+    translation(sql, message_id=orphan)
+    assert purge(sql)["orphans_removed"] == 1
+    assert count(sql) == 0
 
 
-class TestRetentionIsBackendOnly:
-    @pytest.mark.parametrize("role", ["anon", "authenticated"])
-    def test_a_browser_role_cannot_purge(self, sql, role: str) -> None:
-        error = sql(
-            f"SET ROLE {role}; SELECT public.purge_message_translations();", succeeds=False
-        )
-        assert "permission denied" in error
+def test_an_expired_failure_marker_is_removed(sql) -> None:
+    translation(sql, guard_failure_code="model_error", age="8 days")
+    assert purge(sql)["expired_failure_markers_removed"] == 1
+    assert count(sql) == 0
 
-    def test_service_role_can(self, sql) -> None:
-        assert purge(sql) == {"orphans_removed": 0, "expired_failure_markers_removed": 0}
+
+def test_a_fresh_failure_marker_is_kept_so_the_retry_rule_still_holds(sql) -> None:
+    translation(sql, guard_failure_code="model_error", age="30 minutes")
+    assert purge(sql) == {"orphans_removed": 0, "expired_failure_markers_removed": 0}
+    assert count(sql) == 1
+
+
+def test_a_successful_translation_is_kept_however_old(sql) -> None:
+    """Re-translating a reopened message would spend a model call to reproduce this text."""
+    translation(sql, age="400 days")
+    assert purge(sql) == {"orphans_removed": 0, "expired_failure_markers_removed": 0}
+    assert count(sql) == 1
+
+
+def test_a_guard_failure_that_is_not_a_model_error_is_not_retry_state(sql) -> None:
+    translation(sql, guard_failure_code="numbers_changed", age="400 days")
+    assert purge(sql)["expired_failure_markers_removed"] == 0
+    assert count(sql) == 1
+
+
+def test_the_failure_marker_age_boundary_is_the_callers(sql) -> None:
+    translation(sql, guard_failure_code="model_error", age="2 days")
+    assert purge(sql, "7 days")["expired_failure_markers_removed"] == 0
+    assert purge(sql, "1 day")["expired_failure_markers_removed"] == 1
+
+
+def test_the_purge_is_safe_to_run_twice(sql) -> None:
+    translation(sql, guard_failure_code="model_error", age="8 days")
+    purge(sql)
+    assert purge(sql) == {"orphans_removed": 0, "expired_failure_markers_removed": 0}
+
+
+# ── Retention is backend only ─────────────────────────────────────────────
+@pytest.mark.parametrize("role", ["anon", "authenticated"])
+def test_a_browser_role_cannot_purge(sql, role: str) -> None:
+    error = sql(f"SET ROLE {role}; SELECT public.purge_message_translations();", succeeds=False)
+    assert "permission denied" in error
+
+
+def test_service_role_can_purge(sql) -> None:
+    assert purge(sql) == {"orphans_removed": 0, "expired_failure_markers_removed": 0}
 
 
 # ── 081: a verification must carry its guard outcome ──────────────────────
@@ -302,67 +337,76 @@ RECORD = (
 )
 
 
-class TestWordingVerificationRecord:
-    def test_marking_wording_verified_without_a_record_is_rejected(self, sql) -> None:
-        error = sql(
-            f"UPDATE public.care_plan_items SET wording_verified = true WHERE id = '{ITEM}'",
-            succeeds=False,
-        )
-        assert "care_plan_items_wording_verification_present" in error
+def test_marking_wording_verified_without_a_record_is_rejected(sql) -> None:
+    error = sql(
+        f"UPDATE public.care_plan_items SET wording_verified = true WHERE id = '{ITEM}'",
+        succeeds=False,
+    )
+    assert "care_plan_items_wording_verification_present" in error
 
-    def test_marking_it_verified_with_a_record_is_accepted(self, sql) -> None:
-        sql(f"""UPDATE public.care_plan_items
-                SET wording_verified = true, wording_verification = '{RECORD}'
-                WHERE id = '{ITEM}'""")
-        assert sql(f"SELECT wording_verified FROM public.care_plan_items WHERE id = '{ITEM}'") == (
-            "t"
-        )
 
-    def test_clearing_the_flag_may_clear_the_record(self, sql) -> None:
-        """A re-translation drops both, because the record describes text that is now gone."""
-        sql(f"""UPDATE public.care_plan_items
-                SET wording_verified = true, wording_verification = '{RECORD}'
-                WHERE id = '{ITEM}'""")
-        sql(f"""UPDATE public.care_plan_items
-                SET wording_verified = false, wording_verification = NULL
-                WHERE id = '{ITEM}'""")
-        assert count(sql) == 0
+def test_marking_it_verified_with_a_record_is_accepted(sql) -> None:
+    sql(f"""UPDATE public.care_plan_items
+            SET wording_verified = true, wording_verification = '{RECORD}'
+            WHERE id = '{ITEM}'""")
+    assert sql(f"SELECT wording_verified FROM public.care_plan_items WHERE id = '{ITEM}'") == ("t")
 
-    def test_a_record_must_be_an_object(self, sql) -> None:
-        error = sql(
-            f"""UPDATE public.care_plan_items SET wording_verification = '"checked"'
-                WHERE id = '{ITEM}'""",
-            succeeds=False,
-        )
-        assert "wording_verification_check" in error
 
-    def test_a_cached_back_translation_must_be_an_object(self, sql) -> None:
-        error = sql(
-            f"UPDATE public.care_plan_items SET back_translation = '[]' WHERE id = '{ITEM}'",
-            succeeds=False,
-        )
-        assert "back_translation_check" in error
+def test_clearing_the_flag_may_clear_the_record(sql) -> None:
+    """A re-translation drops both, because the record describes text that is now gone."""
+    sql(f"""UPDATE public.care_plan_items
+            SET wording_verified = true, wording_verification = '{RECORD}'
+            WHERE id = '{ITEM}'""")
+    sql(f"""UPDATE public.care_plan_items
+            SET wording_verified = false, wording_verification = NULL
+            WHERE id = '{ITEM}'""")
+    assert count(sql) == 0
 
-    def test_a_row_approved_before_the_migration_is_not_rewritten(self, sql) -> None:
-        """NOT VALID: the constraint governs new writes and leaves published history alone."""
-        legacy = "00000000-0000-0000-0000-0000000000d1"
-        sql(f"""
-          ALTER TABLE public.care_plan_items
-            DROP CONSTRAINT care_plan_items_wording_verification_present;
-          INSERT INTO public.care_plan_items(id, plan_version_id, wording_verified)
-            VALUES ('{legacy}', '{PLAN}', true);
-        """)
-        sql((MIGRATIONS / "081_care_plan_wording_verification.sql").read_text())
-        assert sql(
+
+def test_a_record_must_be_an_object(sql) -> None:
+    error = sql(
+        f"""UPDATE public.care_plan_items SET wording_verification = '"checked"'
+            WHERE id = '{ITEM}'""",
+        succeeds=False,
+    )
+    assert "wording_verification_check" in error
+
+
+def test_a_cached_back_translation_must_be_an_object(sql) -> None:
+    error = sql(
+        f"UPDATE public.care_plan_items SET back_translation = '[]' WHERE id = '{ITEM}'",
+        succeeds=False,
+    )
+    assert "back_translation_check" in error
+
+
+def test_a_row_approved_before_the_migration_is_not_rewritten(sql) -> None:
+    """NOT VALID: the constraint governs new writes and leaves published history alone."""
+    legacy = "00000000-0000-0000-0000-0000000000d1"
+    sql(f"""
+      ALTER TABLE public.care_plan_items
+        DROP CONSTRAINT care_plan_items_wording_verification_present;
+      INSERT INTO public.care_plan_items(id, plan_version_id, wording_verified)
+        VALUES ('{legacy}', '{PLAN}', true);
+    """)
+    sql((MIGRATIONS / "081_care_plan_wording_verification.sql").read_text())
+    assert (
+        sql(
             f"""SELECT wording_verification IS NULL FROM public.care_plan_items
-                WHERE id = '{legacy}'"""
-        ) == "t"
+            WHERE id = '{legacy}'"""
+        )
+        == "t"
+    )
 
-    def test_the_migration_can_be_applied_twice(self, sql) -> None:
-        sql((MIGRATIONS / "081_care_plan_wording_verification.sql").read_text())
-        sql((MIGRATIONS / "081_care_plan_wording_verification.sql").read_text())
-        assert sql("""SELECT count(*) FROM pg_constraint
-                      WHERE conname = 'care_plan_items_wording_verification_present'""") == "1"
+
+def test_the_verification_migration_can_be_applied_twice(sql) -> None:
+    sql((MIGRATIONS / "081_care_plan_wording_verification.sql").read_text())
+    sql((MIGRATIONS / "081_care_plan_wording_verification.sql").read_text())
+    assert (
+        sql("""SELECT count(*) FROM pg_constraint
+                  WHERE conname = 'care_plan_items_wording_verification_present'""")
+        == "1"
+    )
 
 
 def test_the_integrity_migration_can_be_applied_twice(sql) -> None:
