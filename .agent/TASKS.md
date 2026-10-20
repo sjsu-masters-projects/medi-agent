@@ -32,6 +32,15 @@ editing this board.
 
 ## Current release and live status
 
+October 19 evening recheck after merged #196: **DV-010 and DV-013 pass live**.
+The exact glucose draft editor receives focus; a fresh private-message notification
+changes unread 37 → 38 → 37 on destination opening and stays read after reload.
+DV-012 has successful Rajeev/Morgan risk-detail loads and a clean bounded revision
+log window; direct null-row execution remains unproven. These results supersede
+the earlier pending statements below. COM-002 remains Verify deployed for its
+remaining audit, authorization, retry, reminder and bilingual acceptance checks.
+See [the recorded recheck](../docs/deployed-recheck-2026-10-11.md#pr-196-deployed-recheck--october-19-evening).
+
 | Area | Current state | Remaining boundary |
 | --- | --- | --- |
 | Main deployment | Main is `d01ba03` ([#195](https://github.com/sjsu-masters-projects/medi-agent/pull/195)); #191, #194 and #195 are merged. The hosted ledger records `076_care_conversation_activity_review.sql` as applied. The #191 activity-message/language paths and an existing appointment path were exercised October 19. Migrations 077/078 and the OPS-006 worker rollout are **not** verified applied or enabled here. | Build/deployment signals do not prove deployed behavior; acceptance lives in each row and the [deployed recheck](../docs/deployed-recheck-2026-10-11.md). |

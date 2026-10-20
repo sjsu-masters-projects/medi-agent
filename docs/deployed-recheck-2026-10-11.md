@@ -365,3 +365,21 @@ glucose editor is selected/focused; follow one fresh unread private-message noti
 and verify only that receipt/count clears; then query a bounded backend log window to
 confirm no new null-severity conversion traceback. Until those checks are recorded,
 DV-010, DV-012 and DV-013 remain deployed-recheck items rather than Done.
+
+### PR #196 deployed recheck — October 19 evening
+
+This follow-up supersedes the earlier pending-deployment statements for DV-010
+and DV-013. Performed around 18:02–18:07 America/Los_Angeles using the already
+signed-in synthetic Rajeev patient and Elena clinician accounts. The backend
+reported revision `mediagent-backend-00170-hgw` serving 100% of traffic.
+
+| Check | Result | Observed evidence and remaining boundary |
+| --- | --- | --- |
+| DV-010: activity message → correct draft editor | **Pass live** | Opened the existing Rajeev/Elena/Cedar Grove conversation and its daily fasting-glucose attachment through “Review activity in draft.” The resulting hash was `#care-plan-item-252f3605-631d-4cd4-82b5-3de16cab2407`; exactly one article mounted, containing the glucose editor, and `document.activeElement` was its H3 heading. The editor was scrolled into view. V2 still had four proposed items, 0/4 verified and disabled publication; V1 remained live. No review edits were saved. COM-002's other acceptance boundaries remain. |
+| DV-013: fresh notification → private thread → persisted read state | **Pass live** | The old notification was already read before this recheck. Sent exactly one routine synthetic message from Rajeev to Elena: “Synthetic notification verification after PR #196. No action needed.” It persisted with time 18:05:45 Pacific. Explicit notification refresh showed 38 unread, up from the baseline 37, and a fresh Rajeev entry. Its Open conversation link reached the existing private thread with the saved message; unread returned to 37. Full browser reload retained 37, and the fresh notification no longer had an Unread marker or Mark read control. Unrelated safety and appointment notifications remained unread; 36 action items remained. No bulk/manual-read action was used. |
+| DV-012: risk-detail regression and logs | **Partial live evidence** | After reload Rajeev showed Low / 100% recorded completion; Morgan's detail showed Medium / 68%, matching the roster rather than falling back to unknown/0. At 18:07:26 Pacific, a revision-scoped `gcloud logging read` with `--freshness=20m`, limit 20, and filter `RiskScoreService OR TypeError OR severity>=ERROR` returned no entries. This does not establish that a null-severity row was within either calculation's lookback window; the mixed/all-null regression tests remain the direct branch evidence. Do not claim a directly reproduced null-row deployed pass. |
+
+No clinical plan was approved, medication changed, appointment changed or source
+row rewritten during this recheck. The routine test message and its read receipt
+are the new persisted test records. Existing intermittent and localization defects
+remain open; successful loads during this window do not close them.
