@@ -171,7 +171,8 @@ const EN: ADRFollowUpCopy = {
 };
 
 // es-MX uses the second-person "tú" register of existing patient copy
-// ("tu equipo de atención"). Pending review by a Spanish-fluent reviewer (D9).
+// ("tu equipo de atención"). Demo wording review is recorded under D9; this is
+// not a claim of professional translation validation.
 const ES: ADRFollowUpCopy = {
   eyebrow: "Seguimiento de tu equipo de atención",
   heading: (symptom) => `Síntoma reportado (texto original): «${symptom}»`,

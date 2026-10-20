@@ -632,6 +632,10 @@ minimal urgent notice even for cancelled drafts. Emergency alerts remain separat
 Both require `A2A_RETRY_WORKER_ENABLED=true`. Clinician-authored ADR information
 requests and patient replies stay in Care Team messages while Nora remains the AI chat.
 The applied 071 filename and bytes are immutable and must not be renamed or replayed.
+The post-confirmation service reuses the transaction's `confirmed_symptom:{report_id}`
+task key, including queued tasks, rather than creating a second screening task.
+An existing legacy `symptom_event:{report_id}` task is reused when no canonical
+task exists. This compatibility fix changes no migration or clinical review decision.
 See [October 17 acceptance](../docs/pat-002-b-acceptance-2026-10-17.md) and the
 [read-only preflight/release procedure](../docs/pat-002-b-rollout.md).
 

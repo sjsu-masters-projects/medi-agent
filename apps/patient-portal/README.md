@@ -218,7 +218,8 @@ exists; empty; and recent history (up to 5 answered or closed requests from the 
 
 **Localization.** All strings come from `src/content/adr-follow-up-copy.ts` in en-US and es-MX,
 guarded by a key-parity test. The clinician's message, symptom and medication name are shown
-verbatim. The Spanish wording is pending review by a Spanish-fluent reviewer.
+verbatim. ADR Spanish wording received requester-authorized LLM-assisted demo
+meaning-and-safety review on October 19; this is not professional translation validation.
 
 **Errors and drafts.** The server error code is mapped to localized copy: `ADR_REQUEST_CLOSED`
 shows the closed state, and server message text is never displayed. Unsent answers live only in

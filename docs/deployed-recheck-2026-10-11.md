@@ -499,3 +499,97 @@ reload retained the correct local time and visit. Captured browser error logs we
 empty. No appointment was changed. DV-002/003 therefore have a successful repeated
 patient-side observation; the earlier intermittent failures and DV-006 remain
 unexplained, not retroactively disproved or assigned a guessed root cause.
+
+### Acceptance closure evidence — October 19
+
+**Read-only deployed audit checks:** queried only the selected synthetic Hannah
+assessment/request and MedWatch draft, using a target-host guard. The exact Spanish
+request has **one** `patient_information_provided` audit event at
+`2026-10-20T03:59:44.145118+00:00`, with Hannah as patient actor and no clinician
+actor. The MedWatch draft has exactly one each of `created`, `edited`,
+`preview_viewed`, `approved`, `exported`, `discarded`, in that order, all under
+the same identified clinician actor. No audit row or clinical source was changed.
+
+**Requester-authorized LLM-assisted demo wording review:** compared en-US/es-MX
+ADR copy and notification templates. Retrospective restart/dose-change questions
+retain their past-tense constraints; `No lo reinicies para responder` and
+`No cambies tu dosis para responder` preserve the prohibitions. The shared caution
+also prohibits stopping a medicine. `No sé` preserves unknown, not a negative
+answer. The attestation describes past events, not consent to treatment.
+Review/send, unsaved-warning, answered/closed and retry messages retain their
+intended states. Notifications request existing information without diagnosing.
+`texto original` and `nombre registrado` identify unchanged clinical source text,
+not translated or independently verified medicine facts. The tú register is
+consistent. **Accepted for the synthetic demo; no professional translation or
+clinical validation is asserted.** The requester explicitly removed the separate
+fluent-reviewer requirement. PR #202's label rendering still needs deployment.
+
+**Intake activation:** all exact target migration checksums, candidate-1 eligibility,
+handoff trigger and browser-write restrictions passed read-only preflight. With
+specific requester authorization, only `SYMPTOM_INTAKE_ENABLED=true` was updated
+on Cloud Run. Revision `mediagent-backend-00172-vp5` serves 100% traffic; a selective
+configuration read confirms the flag. Candidate-2, SQL and other settings were not
+changed. Activation alone is not patient-confirmation/handoff acceptance.
+
+The chat worker initially retained its false default, explaining Nora's unavailable
+answer after backend activation. Separately authorized flag-only revision
+`mediagent-chat-worker-00015-65j` now enables the same flag; other settings/image
+were preserved. Both services are required for this path.
+
+**PDF compatibility:** the approved eight-page export was inspected in Chrome
+(including filled page 2) and macOS Preview (filled page 1/form values), in addition
+to the prior Poppler renders. No clipped sampled narrative was observed. Chrome
+reported an unavailable text-extraction helper, so full PDF accessibility is not
+claimed. DV-005's blank inline in-app viewer remains distinct; no Acrobat or
+physical-phone acceptance is asserted.
+
+**Longer chat observation:** Connected at 04:16:41 UTC remained Connected at
+04:21:47 UTC, then a harmless synthetic greeting completed once. This is a
+306-second observed connected view plus successful turn, not proof of an unchanged
+socket ID. The bounded close/connect log query returned no matching records.
+Forced network outage and the 3500-second renewal remain untested.
+
+### Push checkpoint and resume order
+
+Morgan's private intake `3eee92cb-e2e3-4e25-bbb4-132caf0cb66e` was ready for
+confirmation with no report ID. Explicit consent/confirmation persisted report
+`09e479d8-806b-411c-ac05-ded43beb43e4`; the saved state survived reload. Elena's
+alert opened ADR case `aa81a4c9-22cb-4a28-b9a1-9a2b5b2b10e7`, awaiting review,
+with synthetic mild nausea 2/10 and unverified patient-reported medication facts.
+No medication, care plan or clinician decision changed. Unknown and declined
+intake answers remained distinct.
+
+**DV-015 — duplicate confirmed-report handoff:** the same report produced completed
+tasks `8e30ed34-feba-4c1d-8759-999dff65708c` (`symptom_event:` key) and
+`7c424e40-60cb-4ae4-bbf8-930ec1e9e103` (`confirmed_symptom:` key). Migration 071
+queues atomically under the latter, while the post-confirmation service used the
+former. PR #202 now reuses the canonical task, including queued/working/completed
+states, with legacy-key fallback only when no canonical task exists. Existing
+live history is preserved; no remote repair or SQL was performed. The fix is
+local, **not deployed**. Regression tests cover canonical reuse and legacy history.
+
+Verification: 95 owning intake/API/voice/service tests pass; changed-service mypy,
+Ruff and format checks pass. The disposable PostgreSQL contract run initially
+found a stale test-adapter whitelist (missing `status`); that adapter was corrected
+without changing production claim semantics. Final database result is recorded
+in the push verification below. Prior portal suites/builds and 285 MedWatch tests
+remain applicable; the only patient-copy change in this increment is a comment.
+
+**Push verification:** `PYTHONPATH=src SYMPTOM_INTAKE_TEST_POSTGRES=1
+CHAT_SAFETY_TEST_POSTGRES_DOCKER=1 .venv/bin/pytest
+tests/integration/test_symptom_handoff_postgres.py -q --no-cov --tb=short`
+from `backend` — **8 passed**, three existing deprecation warnings. The local
+adapter also needed the current plain-insert interface; corrected to preserve
+its actual conflict behavior. Final changed-file Ruff/format and `git diff --check`
+pass. This database suite uses disposable local PostgreSQL, not hosted writes.
+
+Resume in this order:
+1. Review/merge/deploy #202 (not authorized here); recheck DV-007/008/014 presentation
+   and a fresh single-task confirmed intake for DV-015. No migration is added.
+2. Complete forced-network chat failure and quiet socket-renewal acceptance;
+   physical voice, bilingual, denial/outage and mobile intake acceptance.
+3. Perform explicitly authorized synthetic patient-deletion acceptance; retain
+   DV-005 inline viewer and DV-006 intermittent scheduling/read failures for bounded
+   reproduction/log correlation. Successful rechecks do not establish root cause.
+4. Keep candidate-2 approval separate. FDA transmission/submission recording and
+   a human Spanish reviewer are not remaining expo gates under requester decisions.

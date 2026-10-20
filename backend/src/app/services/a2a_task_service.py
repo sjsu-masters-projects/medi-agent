@@ -39,6 +39,20 @@ class A2ATaskService:
         if existing:
             return existing
 
+        # Migration 071 queues confirmed reports atomically. Reuse its key, but
+        # retain pre-071 task history when no canonical queued task exists.
+        if (
+            symptom_event_id
+            and payload.get("task_type") == "symptom_adr_screen"
+            and idempotency_key == f"confirmed_symptom:{symptom_event_id}"
+        ):
+            legacy = await self._get_task_by_idempotency_key(
+                patient_id=patient_id,
+                idempotency_key=f"symptom_event:{symptom_event_id}",
+            )
+            if legacy:
+                return legacy
+
         row = {
             "patient_id": patient_id,
             "conversation_session_id": str(payload.get("session_id") or "default"),
@@ -266,6 +280,11 @@ class A2ATaskService:
                 "target_agent": "pharmacovigilance",
                 "task_type": "symptom_adr_screen",
                 "symptom_event_id": symptom_event_id or None,
+                **(
+                    {"idempotency_key": f"confirmed_symptom:{symptom_event_id}"}
+                    if symptom_event_id
+                    else {}
+                ),
                 "input_payload": payload,
             },
         )

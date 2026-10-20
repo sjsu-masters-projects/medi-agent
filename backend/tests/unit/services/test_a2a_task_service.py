@@ -49,6 +49,7 @@ async def test_run_symptom_to_pharmacovigilance_completes_lifecycle(mock_db):
     assessment_id = str(uuid4())
     mock_db.table().execute.side_effect = [
         _response([]),
+        _response([]),
         _response([submitted]),
         _response([working]),
         _response([]),
@@ -96,7 +97,7 @@ async def test_run_symptom_to_pharmacovigilance_completes_lifecycle(mock_db):
     assert len(result["output"]["naranjo_assistance"]["missing_questions"]) == 9
     task_row = mock_db.table().insert.call_args_list[0].args[0]
     assert task_row["symptom_event_id"] == symptom_id
-    assert task_row["idempotency_key"] == f"symptom_event:{symptom_id}"
+    assert task_row["idempotency_key"] == f"confirmed_symptom:{symptom_id}"
     assessment_row = mock_db.table().insert.call_args_list[1].args[0]
     assert assessment_row["symptom_report_id"] == symptom_id
     assert assessment_row["suspect_medication_id"] == medication_id
@@ -132,6 +133,36 @@ async def test_completed_report_task_is_not_reopened_or_rewritten(mock_db):
     assert result["output"]["adr_assessment_id"] == assessment_id
     mock_db.table().update.assert_not_called()
     mock_db.table().insert.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["retrying", "working", "completed"])
+async def test_confirmation_reuses_transactionally_queued_report_task(mock_db, status):
+    report_id = str(uuid4())
+    existing = {"id": str(uuid4()), "status": status, "target_agent": "pharmacovigilance"}
+    mock_db.table().execute.side_effect = [_response([existing])]
+    result = await A2ATaskService(mock_db).run_symptom_to_pharmacovigilance(
+        patient_id=str(uuid4()), payload={"symptom_report": {"id": report_id}}
+    )
+    assert result["task_id"] == existing["id"]
+    assert result["status"] == status
+    mock_db.table().eq.assert_any_call("idempotency_key", f"confirmed_symptom:{report_id}")
+    mock_db.table().insert.assert_not_called()
+    mock_db.table().update.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_confirmed_report_without_canonical_task_retains_legacy_task(mock_db):
+    report_id = str(uuid4())
+    existing = {"id": str(uuid4()), "status": "completed", "target_agent": "pharmacovigilance"}
+    mock_db.table().execute.side_effect = [_response([]), _response([existing])]
+    result = await A2ATaskService(mock_db).run_symptom_to_pharmacovigilance(
+        patient_id=str(uuid4()), payload={"symptom_report": {"id": report_id}}
+    )
+    assert result["task_id"] == existing["id"]
+    mock_db.table().eq.assert_any_call("idempotency_key", f"symptom_event:{report_id}")
+    mock_db.table().insert.assert_not_called()
+    mock_db.table().update.assert_not_called()
 
 
 @pytest.mark.asyncio

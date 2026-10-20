@@ -1,5 +1,12 @@
 # Requirements Document
 
+> **Wording-review decision — October 19, 2026:** The requester replaces the
+> separate Spanish-fluent reviewer requirement with an explicitly labelled
+> LLM-assisted English/es-MX meaning-and-safety review for the synthetic expo.
+> That review covers retrospective questions, medication cautions, unknown answers,
+> confirmation, outcomes, notifications and PR #202 source-wording labels. It is
+> demo acceptance only, not professional translation or clinical validation.
+
 > **Scope decision — October 19, 2026:** The requester excludes actual FDA
 > submission and external-submission recording from the current project. Neither
 > is an acceptance gate or future integration commitment. MedWatch ends at
@@ -34,7 +41,7 @@
   medication text is explicitly the recorded name. This applies to pending,
   answered, closed and history views through their existing shared copy. The
   stored symptom/medicine values are not automatically translated.
-- **New es-MX drafts, pending bilingual review:**
+- **New es-MX wording, accepted by LLM-assisted synthetic-demo review October 19 (not professional translation validation):**
   `Síntoma reportado (texto original): «{symptom}»` and
   `Medicamento (nombre registrado): {medication}.`
   These labels do not certify a translation of medical source text. Existing
@@ -269,8 +276,8 @@ Spanish, so that I can answer accurately and safely.
    medicine just to answer these questions." The confirmation text SHALL keep its meaning in both locales.
    *Evidence: Observed in `QUESTION_COPY` and the notice block.*
 6. THE es-MX strings SHALL use the second-person register of existing es-MX copy ("tu equipo de atención") and SHALL
-   be reviewed by a Spanish-fluent reviewer before acceptance. *Evidence: Observed register in
-   `notification_centre_presentation.py`; review is a manual item.*
+   receive the requester-authorized LLM-assisted meaning-and-safety review for synthetic-demo acceptance.
+   *Evidence: October 19 wording-review decision above; no professional review asserted.*
 7. IF saving the answers fails, THEN THE Follow_Up_Form SHALL show a message in the Saved_Locale chosen from the
    failure class (request closed, not found, unavailable, other) and SHALL not display raw server text. *Evidence:
    Observed. The panel renders `submissionError.message`; backend errors such as "This information request has
@@ -1054,7 +1061,7 @@ to D17 for PR 3 on 2026-10-12, exactly as proposed.
 | **D6** | Decided | Does Today also carry an entry row? | Entry row in both the chat inbox and Today, only while a request is pending. | R4.4 |
 | **D7** | Decided | Who receives the answered alert? | (a) Shared with all currently assigned clinicians. | R11.3 |
 | **D8** | Decided: in scope (PR 3) | Can a MedWatch draft be discarded or reopened? | Yes, in PR 3 (requester, 2026-10-12): discard with a reason returns the assessment to review. | R23 |
-| **D9** | Manual requester item | Spanish wording sign-off | A Spanish-fluent reviewer named by the requester signs off (V13). | R3.6, R5 |
+| **D9** | Decided October 19 | Demo Spanish wording review | Requester authorizes LLM-assisted English/es-MX meaning-and-safety review (V13); no separate fluent reviewer or professional validation required. | R3.6, R5 |
 | **D10** | Decided | Does answering mark the request's notification read? | Yes. | R9.3 |
 | **D11** | Decided (later) | Remove unused score fields from the patient read model? | Later, as data minimisation. | none |
 | **D12** | Decided (2026-10-12) | Non-serious events (no B2 outcome): block approval, or allow with attestation? | Allow with an explicit, audited clinician attestation that the event is not serious and is reported anyway. FDA's "please limit" is guidance, not a prohibition. | R19.3 |
@@ -1098,7 +1105,7 @@ cd apps/clinician-portal && npm ci
 | V10 | Locale parity and wording tests | Copy-key parity test; presentation tests for all three keys in both locales; exhaustive table test over generated `requested_information` values (R5.2; no property-testing library is a dependency, see design) | 1 | Run output |
 | V11 | Contrast record | Computed ratio for each text / background token pair on changed surfaces (script or devtools) | 1 | Recorded table |
 | V12 | Authenticated manual checks, synthetic accounts | Patient in `en-US` and `es-MX` at 320, 360 and 430 px: notification to form, chat-inbox and Today rows, answer, review, send, answered and closed states, keyboard-only pass including hidden radios, 200% zoom, reduced motion, safe areas. Clinician at 1024, 1280 and 1536 px: ADR card provenance (AI, patient, mixed), MedWatch prepare, edit, refresh with unsaved edits, approve, export, answered alert from the bell. | 1, 2 | **Requester** (screenshots per R1.19) |
-| V13 | Spanish copy review | Fluent reviewer signs off es-MX question, caution, confirmation and notification wording | 1 | **Requester** |
+| V13 | Demo Spanish copy review | Record LLM-assisted review of es-MX question, caution, confirmation, notification and source-label meaning/safety under the October 19 requester decision | 1 | Recorded bilingual comparison; synthetic-demo only |
 | V14 | Apply 063 to a remote environment | Not done by this work; needs explicit authorization naming the action | 2 | **Requester** |
 | V15 | Tracker and docs | TASKS.md rows, NOT-001 spec, patient-portal README updated as in R2.5, recording 048 MedWatch applied to `mediagent-staging` on 2026-10-12 (ledger synchronized through 058) and 063 not applied anywhere | 1, 2 | Diff review |
 | V16 | Dependency lock and audit | After adding `pypdf==6.20.1` to `requirements.in`: `cd backend && uv pip compile requirements.in --universal --python-version 3.12 --output-file requirements.txt && uv pip compile requirements-dev.in --universal --python-version 3.12 --output-file requirements-dev.txt && git diff --stat -- requirements.txt requirements-dev.txt`, then `uvx --from pip-audit==2.10.1 pip-audit -r requirements-dev.txt` (as CI; `uv` 0.9.24 as pinned in CI). CI runs `git diff --exit-code` after recompiling, which is meaningful only once the lockfiles are committed; before that, copy both files first and `cmp` them with the recompiled output | 1, 3 | Run output |
