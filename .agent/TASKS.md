@@ -1,7 +1,8 @@
 # MediAgent — Project task board
 
 > **Active plan:** [October 18 deployed-verification campaign](../docs/deployed-recheck-2026-10-11.md#october-18-deployed-verification-campaign) for the remaining `Verify deployed` rows, including #191’s merged features; resolve its recorded appointment and provenance defects, then continue CLN-003 slice G, PLAN-002 and DEMO-001 · [accepted PAT-005 contract](specs/pat-005-clinician-approved-today-feed-plan.md)
-> **Current requested completion batch:** [records, medication, review and worker audit/plan](specs/expo-workflow-completion.md) — REC-001/002, NOT-003, OPS-006, MED-001, CLN-001/002. Scope decisions pending; existing work is being verified before replacement.
+> **Current requested completion batch:** [records, medication, review and worker audit/plan](specs/expo-workflow-completion.md) — REC-001/002, NOT-003, OPS-006, MED-001, CLN-001/002. Scope decisions accepted; existing work is being verified before replacement.
+> **Delivery:** [draft #208](https://github.com/sjsu-masters-projects/medi-agent/pull/208). Four scope decisions accepted; tested implementation and remaining workflow checks are in the linked plan. Not merge-ready or all tasks complete.
 >
 > **Updated:** October 21, 2026 · **Feature freeze:** December 4, 2026
 >

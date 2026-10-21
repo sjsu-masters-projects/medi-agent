@@ -3,6 +3,9 @@
 Requested October 21, 2026 (Pacific). Scope: REC-001, REC-002, NOT-003,
 OPS-006, MED-001, CLN-001 and CLN-002. This plan is linked from TASKS so future
 work does not depend on chat history. Branch: `codex/expo-workflow-completion`.
+Delivery: [draft PR #208](https://github.com/sjsu-masters-projects/medi-agent/pull/208),
+implementation checkpoint `aec00e2`. Do not merge while its explicit workflow
+checklist is incomplete; continue changes on this branch, not merged #207.
 
 ## Rules and current position
 
@@ -157,8 +160,8 @@ Completed checks: final backend unit/router sweep **3939 passed**; clinician
 **643**, patient **834**, worker PostgreSQL **35**. Both portals passed lint,
 typecheck and production builds with the supported webpack backend; default
 Turbopack remains locally blocked by subprocess-port permissions, not silently
-reported passing. Source mypy passed 278 files; post-catalog check recorded at
-delivery. Ruff check/format and diff whitespace checked on changed Python/files.
+reported passing. Final source mypy passed 278 files. Ruff check/format and diff
+whitespace passed on changed Python/files; commit hooks repeated source checks.
 Installed only the already-locked local missing `google-cloud-tasks==2.23.0`
 with `--no-deps` to collect queue tests; no lockfile change. Fixed logging test
 isolation from LOG_FORMAT/CLOUD_RUN_JOB overrides (test only), then its 13 tests
