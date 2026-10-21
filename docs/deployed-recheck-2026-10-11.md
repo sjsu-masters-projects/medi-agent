@@ -850,3 +850,35 @@ that visible reason does not establish the separate patient session's cause.
 Continuation branch: `codex/post-205-live-checks`, from merged main, rather than
 adding code to an already-merged #205. Both existing user tabs are preserved;
 temporary tab 5 is closed after observation.
+
+### Fresh quiet-session baseline after requester sign-in
+
+October 20, 21:41 Pacific (`2026-10-21T04:41:18Z` clock): patient user tab at
+`/chat?session=day-2026-10-19` shows Connected, blank composer, no pending reply;
+DOM visibility is `visible`, actual width/scroll width 433px. The baseline is a
+new observation, not evidence that the preceding signed-out run passed. Current
+browser IDs are patient 2 / clinician 1, different from the preceding inventory;
+always resolve by current URL. Elena's assigned Morgan ADR review is signed in.
+No send, reload, account change or clinical decision performed. Screenshot:
+`/private/tmp/pr206-renewal-start.png`.
+
+Existing one-time follow-up `verify-nora-quiet-socket-renewal` updated, not
+duplicated, for October 20 at 22:45 Pacific (more than 3500 seconds after baseline).
+Inspect before interaction, record actual execution time, then send one labelled
+nonclinical greeting and verify one saved reply. Record hidden state, expiry,
+late dispatch and lack of per-tab socket attribution rather than inferring
+uninterrupted transport identity. No Wi-Fi interruption during this observation.
+
+Deployed chat header/back/care-team/new-chat/hands-free/mic controls measured
+approximately 43.99px (44px CSS subpixel rounding), send approximately 52px.
+Listen's visible button is 30px but its existing `before` hit area extends 7px
+above/below, giving 44px; do not incorrectly report its visible box as a new
+touch-target failure. Full mobile hit-testing and agenda sampling remain.
+Clinician computed muted text is `rgb(89,105,128)` with token `#596980`, confirming
+the deployed contrast override, not a new all-screen contrast certification.
+
+#206 portal CI checks/builds pass. Its PR policy failed because its initial body
+omitted the required checklist. Dependency audit separately reports eight Pillow
+12.3.0 advisories with fix 13.0.0; do not call CI green or suppress the audit.
+That backend dependency upgrade has not been made or tested in this UI/evidence
+increment. Logs: run `39537621296`, jobs `119017808667` and `119017808944`.

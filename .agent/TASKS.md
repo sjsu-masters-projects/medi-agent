@@ -45,8 +45,11 @@ condition, without changing scheduling behavior. DV-017 network recovery and
 DV-018–020 count/touch-target/contrast fixes are deployed, not yet fully accepted live.
 The original quiet-session follow-up was inspected late, after 20:10 Pacific,
 and found sign-in rather than an authenticated chat. This does not establish
-whether the 3500-second renewal succeeded or caused the interruption. Re-login
-and a fresh bounded observation are needed; no duplicate greeting was sent.
+whether the 3500-second renewal succeeded or caused the interruption. After
+requester re-login, a fresh Connected baseline was recorded October 20 at
+21:41 Pacific; one-time recheck is scheduled 22:45 Pacific, before navigation or
+send. No renewal result is claimed yet. #206 fixes the schedule test; its portal
+checks pass, but PR checklist and a newly reported Pillow dependency audit fail.
 Disposable-account deletion remains excluded. [Evidence](../docs/deployed-recheck-2026-10-11.md#post-205-merge-and-delayed-renewal-observation).
 
 October 20: #202 merged as `7c4d9f9`; main CI, both Vercel deployments and the
