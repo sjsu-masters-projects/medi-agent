@@ -801,3 +801,136 @@ was detected and replaced by clean lockfile installation before final checks.
 No package/lockfile change was needed. `git diff --check` passes. No new backend
 code or database change in this increment; prior backend evidence is not described
 as a fresh rerun. DV-017–020 fixes require #205 merge/deployment and live recheck.
+
+### Post-205 merge and delayed renewal observation
+
+#205 merged October 20 at `20:54:59Z` as
+`fb7fb33d16faffd26952caeddc2e72ae7582dcbc`. GitHub commit statuses confirm both
+Vercel portal deployments succeeded; Frontend CI and both CodeQL workflows passed.
+Main CI run `39496052965` failed only the clinician test
+`shows a week on request and passes the clinic filter to the server`
+(626/627 clinician tests passed). It awaited a heading that renders before the
+schedule request finishes, then synchronously queried the not-yet-mounted radio.
+Follow-up waits for the actual `This week` radio before clicking; no production
+scheduling logic, timing delay or weaker assertion is introduced.
+
+**Real-time check is inconclusive:** the one-time follow-up was scheduled for
+`21:25Z` (14:25 Pacific), but the resumed inspection occurred much later; tool
+clock was `2026-10-21T03:12:13Z` (October 20, 20:12 Pacific). Do not present the
+scheduled trigger time as an actual observation. Original user-owned patient tab
+1 was inspected before any navigation/reload/send and showed `/login` with the
+original day-session return path. Temporary tab 5 separately showed
+`reason=session_expired`. No greeting was submitted and no account was changed.
+Screenshot: `/private/tmp/pr205-long-session-signin.png`.
+
+Content-free backend close logs bounded to the intended observation window
+`20:20:29Z`–`21:25:05Z` show client/code pairs at `20:35:17.935418Z` (1005),
+`20:43:53.218473Z` (1001), `20:58:19.989292Z` (1005) and `21:18:32.435804Z`
+(1005). These are service-wide metadata without per-tab attribution; temporary
+tabs also existed. None establishes the watched socket's identity, renewal or
+sign-out cause. An initially unbounded query included later closes and is not
+used as evidence for the intended window. This is an interrupted acceptance
+run, not a demonstrated renewal regression or success.
+
+DV-017–020 fixes are now deployed. Before session expiry, a separate Records
+tab showed the actual two-record count, no unnamed or sub-44px controls, and
+scroll width equal to its actual 1280px viewport. This does not exercise pending
+or failed network reads, nor finish the full mobile acceptance matrix. Remaining:
+requester re-login; fresh timed renewal with recorded observation time; one
+harmless saved reply; post-fix outage recovery; deployed full-chat/agenda target
+and clinician contrast checks. Do not repeat the Mac-wide outage without fresh
+specific authorization, or during an uninterrupted renewal observation.
+
+**Follow-up verification:** clinician `npm run lint`, `npm run typecheck`,
+`npm run test` pass (70 files / 627 tests); focused schedule suite passes
+(28 tests). `git diff --check` passes. Only a test synchronization and evidence
+documents changed; no new application bundle, auth setting or database change.
+Clinician tab independently reports sign-out after two hours of inactivity;
+that visible reason does not establish the separate patient session's cause.
+Continuation branch: `codex/post-205-live-checks`, from merged main, rather than
+adding code to an already-merged #205. Both existing user tabs are preserved;
+temporary tab 5 is closed after observation.
+
+### Fresh quiet-session baseline after requester sign-in
+
+October 20, 21:41 Pacific (`2026-10-21T04:41:18Z` clock): patient user tab at
+`/chat?session=day-2026-10-19` shows Connected, blank composer, no pending reply;
+DOM visibility is `visible`, actual width/scroll width 433px. The baseline is a
+new observation, not evidence that the preceding signed-out run passed. Current
+browser IDs are patient 2 / clinician 1, different from the preceding inventory;
+always resolve by current URL. Elena's assigned Morgan ADR review is signed in.
+No send, reload, account change or clinical decision performed. Screenshot:
+`/private/tmp/pr206-renewal-start.png`.
+
+Existing one-time follow-up `verify-nora-quiet-socket-renewal` updated, not
+duplicated, for October 20 at 22:45 Pacific (more than 3500 seconds after baseline).
+Inspect before interaction, record actual execution time, then send one labelled
+nonclinical greeting and verify one saved reply. Record hidden state, expiry,
+late dispatch and lack of per-tab socket attribution rather than inferring
+uninterrupted transport identity. No Wi-Fi interruption during this observation.
+
+Deployed chat header/back/care-team/new-chat/hands-free/mic controls measured
+approximately 43.99px (44px CSS subpixel rounding), send approximately 52px.
+Listen's visible button is 30px but its existing `before` hit area extends 7px
+above/below, giving 44px; do not incorrectly report its visible box as a new
+touch-target failure. Full mobile hit-testing and agenda sampling remain.
+Clinician computed muted text is `rgb(89,105,128)` with token `#596980`, confirming
+the deployed contrast override, not a new all-screen contrast certification.
+
+#206 portal CI checks/builds pass. Its PR policy failed because its initial body
+omitted the required checklist. Dependency audit separately reports eight Pillow
+12.3.0 advisories with fix 13.0.0; do not call CI green or suppress the audit.
+That backend dependency upgrade has not been made or tested in this UI/evidence
+increment. Logs: run `39537621296`, jobs `119017808667` and `119017808944`.
+
+**CI fix follow-up:** after the requester flagged the failures, the PR body was
+corrected to the required checklist, with actual verification and manual steps.
+Pillow's direct constraint is now `>=13.0.0,<14.0.0`; both locks were regenerated
+using CI's uv 0.9.24, universal Python 3.12 commands. The only resolved package
+change is Pillow 12.3.0 → 13.0.0. Official release/security changes reviewed:
+https://pillow.readthedocs.io/en/stable/releasenotes/13.0.0.html . No ignore list,
+gate weakening or application-code workaround was added.
+
+With Pillow 13.0.0 installed in the existing local Python 3.13.2 backend venv,
+`PYTHONPATH=src .venv/bin/python -m pytest tests/unit/services/test_document_preview_service.py tests/unit/services/document_intelligence --no-cov -q`
+passes **152 tests**. CI-equivalent audit
+`uvx --python 3.12 --from pip-audit==2.10.1 pip-audit -r requirements-dev.txt`
+passes **No known vulnerabilities found**. Full backend/CI checks remain the
+remote acceptance gate after push. No deployed service, clinical record or timed
+patient tab was changed while resolving CI.
+
+### Quiet-session acceptance — October 20 22:45 Pacific
+
+The one-time follow-up actually started at `2026-10-21T05:45:24Z`, after its
+`05:45:17Z` trigger, rather than the hours-late dispatch of the previous run.
+Baseline was `04:41:18Z`: at least **3846 seconds / 64 minutes 6 seconds** elapsed
+before observation. Inventory resolved the same patient URL to user tab 2.
+Before any interaction, it still showed **Connected**, blank composer, no pending
+reply, no visible alert; read-only DOM `visibilityState` was `visible`.
+Visibility throughout the intervening hour is not independently proven. No
+navigation, reload, account change or Wi-Fi interruption was performed by this
+verification run before the observation.
+
+Exactly one authorised nonclinical greeting was sent with the specified synthetic
+QA wording. It progressed through typing/saved-user-message and returned:
+"Hello! I am here and ready to help. Please let me know if you have any questions
+about your care or health records." The original tab received it without reload,
+manual retry or resend. DOM counts were one exact user message and one matching
+reply. Only after observing completion, the first reload restored the same single
+pair and Connected state. No medication, clinical report or plan change requested.
+Screenshot: `/private/tmp/pr206-long-session-reply.png`.
+
+Metadata-only logs identify turn `75d56b39-d67b-4b33-8e29-e2a1d704d9dd`:
+worker claim `05:46:14.584503Z`, model start `05:46:15.621721Z`, complete
+`05:46:27.569709Z`, finished `05:46:27.708932Z`, worker_done attempt **1** at
+`05:46:27.816473Z`. The UI waited through queue/recovery polling before the reply;
+this was not an instant response. No second send was used to unstick it.
+
+Close metadata bounded to `04:41:18Z`–`05:46:00Z` shows one service-wide client
+close/code 1005 at `05:38:58.870123Z`. It is consistent with a quiet renewal near
+the expected boundary but has no per-tab/session identity in the selected output;
+do not call it proof of an uninterrupted socket or attribute it conclusively to
+this tab. The accepted result is the **real elapsed-time user journey beyond
+3500 seconds and persisted single reply**, superseding the earlier inconclusive
+run. The post-fix actual network-outage test and historical intermittent-read
+investigation remain separate, not silently marked Done.

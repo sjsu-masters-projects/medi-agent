@@ -343,7 +343,7 @@ pglast==8.4
     # via -r requirements-dev.in
 phonenumbers==9.0.37
     # via presidio-analyzer
-pillow==12.3.0
+pillow==13.0.0
     # via
     #   -r requirements.in
     #   pytesseract

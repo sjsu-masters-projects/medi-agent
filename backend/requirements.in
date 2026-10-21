@@ -65,7 +65,8 @@ PyMuPDF
 # MedWatch Form 3500 fill path (BSD, pure Python); intentionally not PyMuPDF (AGPL).
 pypdf==6.20.1
 pytesseract
-Pillow
+# Pillow 13 fixes decoder/encoder advisories reported by the blocking dependency audit.
+Pillow>=13.0.0,<14.0.0
 
 # -- PII Redaction --
 presidio-analyzer
