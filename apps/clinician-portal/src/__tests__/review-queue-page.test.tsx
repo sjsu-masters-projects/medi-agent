@@ -26,6 +26,57 @@ describe("ReviewQueuePage", () => {
         vi.mocked(rejectDocumentReview).mockReset();
     });
 
+    it("refreshes shared source state on focus without hiding the list, and retains it on failure", async () => {
+        const item = {
+            id: "shared-doc", patientId: "patient-1", patientFirstName: "Ana", patientLastName: "Lopez",
+            fileName: "shared.pdf", documentType: "other", parseStatus: "completed",
+            createdAt: "2026-10-12T12:00:00Z", uploadedByRole: "patient", reviewStatus: "pending",
+        } as const;
+        vi.mocked(fetchDocumentReviewQueue).mockResolvedValueOnce([item]);
+        render(<Provider store={store}><ReviewQueuePage /></Provider>);
+        expect(await screen.findByText("shared.pdf")).toBeInTheDocument();
+        vi.mocked(fetchDocumentReviewQueue).mockRejectedValueOnce(new Error("Refresh unavailable"));
+        fireEvent(window, new Event("focus"));
+        expect(await screen.findByRole("alert")).toHaveTextContent("Refresh unavailable");
+        expect(screen.getByText("shared.pdf")).toBeInTheDocument();
+        vi.mocked(fetchDocumentReviewQueue).mockResolvedValueOnce([]);
+        fireEvent(window, new Event("focus"));
+        await waitFor(() => expect(screen.queryByText("shared.pdf")).not.toBeInTheDocument());
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("does not refresh a hidden queue and removes focus listeners on unmount", async () => {
+        vi.mocked(fetchDocumentReviewQueue).mockResolvedValue([]);
+        const { unmount } = render(<Provider store={store}><ReviewQueuePage /></Provider>);
+        await screen.findByText("Pending patient uploads");
+        const count = vi.mocked(fetchDocumentReviewQueue).mock.calls.length;
+        const hidden = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+        fireEvent(window, new Event("focus"));
+        expect(fetchDocumentReviewQueue).toHaveBeenCalledTimes(count);
+        hidden.mockRestore();
+        unmount();
+        fireEvent(window, new Event("focus"));
+        expect(fetchDocumentReviewQueue).toHaveBeenCalledTimes(count);
+    });
+
+    it("polls every fifteen visible seconds and cancels the timer when unmounted", async () => {
+        vi.useFakeTimers();
+        let unmount: (() => void) | undefined;
+        try {
+            vi.mocked(fetchDocumentReviewQueue).mockResolvedValue([]);
+            await act(async () => { ({ unmount } = render(<Provider store={store}><ReviewQueuePage /></Provider>)); });
+            expect(fetchDocumentReviewQueue).toHaveBeenCalledTimes(1);
+            await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+            expect(fetchDocumentReviewQueue).toHaveBeenCalledTimes(2);
+            unmount?.();
+            await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+            expect(fetchDocumentReviewQueue).toHaveBeenCalledTimes(2);
+        } finally {
+            unmount?.();
+            vi.useRealTimers();
+        }
+    });
+
     it("links to the common inbox while keeping upload approval separate", async () => {
         vi.mocked(fetchDocumentReviewQueue).mockResolvedValue([]);
         clinicFilterState.clinics = [

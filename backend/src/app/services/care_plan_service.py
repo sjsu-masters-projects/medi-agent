@@ -1223,7 +1223,7 @@ class CarePlanService:
                 cast(
                     list[dict[str, Any]],
                     self.db.table("documents")
-                    .select("id, file_name, uploaded_by_role, review_status")
+                    .select("id, file_name, display_title, uploaded_by_role, review_status")
                     .in_("id", document_ids)
                     .execute()
                     .data
@@ -1257,6 +1257,9 @@ class CarePlanService:
                         {
                             "document_id": document_id,
                             "file_name": document_names.get(str(document_id)),
+                            "display_title": document_reviews.get(str(document_id), {}).get(
+                                "display_title"
+                            ),
                             "upload_review_status": (
                                 document_reviews.get(str(document_id), {}).get("review_status")
                                 or "pending"

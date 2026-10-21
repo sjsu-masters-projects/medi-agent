@@ -760,6 +760,7 @@ export interface CarePlanItem {
         upload_review_status?: string | null;
         document_id?: string;
         file_name?: string | null;
+        display_title?: Partial<Record<CarePlanLocale, string>> | null;
         excerpt?: string;
         location?: { page?: number };
     } | null;
@@ -767,6 +768,7 @@ export interface CarePlanItem {
         upload_review_status?: string | null;
         document_id?: string;
         file_name?: string | null;
+        display_title?: Partial<Record<CarePlanLocale, string>> | null;
         excerpt?: string;
         location?: { page?: number };
     }>;

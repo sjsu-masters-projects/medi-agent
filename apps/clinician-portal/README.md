@@ -21,6 +21,12 @@ Default local URLs:
 - portal: `http://127.0.0.1:3001`
 - backend API: `http://127.0.0.1:8000`
 
+Patient-upload review is separate from the Alerts action inbox. The queue refreshes
+every 15 seconds while visible and on focus, retaining rows if a background read
+fails. Refresh pauses during a review decision; the existing server authorization
+and clinical approval APIs remain authoritative. Care-plan source labels reuse
+grounded English document titles while retaining original filenames and IDs.
+
 Lint, typecheck and tests:
 
 ```bash

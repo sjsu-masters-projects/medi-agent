@@ -50,13 +50,18 @@ export default function ReviewQueuePage() {
     const clinicFilter = useClinicFilter();
     const { clinicId, ready } = clinicFilter;
 
-    const loadQueue = useCallback(async () => {
+    const loadQueue = useCallback(async (background = false) => {
         const sequence = ++requestSequence.current;
-        setLoading(true);
-        setError(null);
+        if (!background) {
+            setLoading(true);
+            setError(null);
+        }
         try {
             const result = await fetchDocumentReviewQueue(clinicId);
-            if (sequence === requestSequence.current) setItems(result);
+            if (sequence === requestSequence.current) {
+                setItems(result);
+                setError(null);
+            }
         } catch (queueError) {
             if (sequence !== requestSequence.current) return;
             setError(
@@ -78,7 +83,25 @@ export default function ReviewQueuePage() {
         return () => { requestSequence.current += 1; };
     }, [loadQueue, ready]);
 
+    useEffect(() => {
+        // Another assigned reviewer may finish this work. Re-read source state without
+        // replacing the list with a spinner or interrupting an open review decision.
+        if (!ready || busyDocumentId || rejectingItem) return;
+        const refresh = () => {
+            if (document.visibilityState === "visible") void loadQueue(true);
+        };
+        const timer = window.setInterval(refresh, 15_000);
+        window.addEventListener("focus", refresh);
+        document.addEventListener("visibilitychange", refresh);
+        return () => {
+            window.clearInterval(timer);
+            window.removeEventListener("focus", refresh);
+            document.removeEventListener("visibilitychange", refresh);
+        };
+    }, [ready, busyDocumentId, rejectingItem, loadQueue]);
+
     async function handleApprove(item: ClinicReviewQueueItem) {
+        requestSequence.current += 1;
         setBusyDocumentId(item.id);
         setError(null);
         try {
@@ -103,6 +126,7 @@ export default function ReviewQueuePage() {
             return;
         }
 
+        requestSequence.current += 1;
         setBusyDocumentId(rejectingItem.id);
         setError(null);
         try {

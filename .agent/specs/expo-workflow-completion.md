@@ -41,7 +41,7 @@ confirmed-intake work. No existing task is removed or declared Done by this audi
    equivalence engine removed from expo scope. Retain unlisted testimony and
    explicit unknown coverage; no automatic medication approval or safety verdict.
 
-The requester accepted all three decisions. Retain existing authorization, audit
+The requester accepted all four decisions. Retain existing authorization, audit
 and clinical review safeguards. OPS-006 closure is bounded worker reliability,
 configuration and security acceptance, not a new transport/counter architecture
 or a commercial-scale performance certification. Historical design details remain
@@ -185,3 +185,49 @@ The `NKDA` absence-of-allergy candidate observed in existing pending source data
 is not a positive-allergen assessment. Do not add it to the canonical allergy
 list as an allergen merely to exercise a test; review its mapping/decision behavior
 in the remaining record lifecycle acceptance.
+
+## Source labels and shared queue follow-up — October 21
+
+Care-plan hydration now includes each linked document's existing grounded
+`display_title`, without renaming `file_name`, changing document IDs or rewriting
+historical evidence. Clinician review shows the English title plus original
+filename in the item list, citation excerpts, source action's accessible name and
+linked-document summary. Missing English wording falls back to the original
+filename, never an invented translation. File-type icons and protected preview
+requests still use the original filename/ID; page navigation is unchanged.
+
+The Patient Upload Review Queue now re-reads authoritative source state every
+15 seconds while visible and on focus/visibility return. Background refresh
+retains prior rows on failure instead of replacing them with a spinner. Polling
+pauses during an open rejection dialog or decision submission; an outstanding
+read is invalidated before a decision so it cannot restore a completed row.
+Timers/listeners are removed on unmount and old-clinic responses remain ignored.
+This is bounded polling, not instantaneous cross-client delivery or a new clinical
+approval workflow. Full action-inbox coverage/source freshness remains open.
+
+Follow-up verification: **48 backend care-plan context/evidence-gate tests** and
+**38 clinician source-label/care-plan/shared-queue tests** pass. Clinician lint
+and typecheck, focused source mypy, Ruff and whitespace checks pass. These counts
+are focused follow-up runs, not additions to the earlier full-suite totals.
+
+The requester separately authorized backend notification-secret configuration.
+This overrides the earlier checkpoint's no-remote-change statement **only** for
+that secret and its runtime binding; it does not authorize a new code image,
+worker change, SQL, clinical action or Supabase login-key change. Deployment uses
+the currently running immutable image digest, not the mutable `latest` tag.
+
+Authorized configuration completed: Secret Manager
+`NOTIFICATION_TOKEN_SIGNING_SECRET`, enabled version **1**, generated directly
+into the service without printing or writing the value locally. Secret-level
+`roles/secretmanager.secretAccessor` was granted to the existing backend runtime
+identity. Backend revision **`mediagent-backend-00176-8zk`** is ready with 100%
+traffic and the version-1 reference. Immutable image SHA-256 remains
+`57b5e3216793822fd48cf0cd84b6a8263e50b8fac9716d774dc395c594e9f354`.
+Timeout 3600s, concurrency 80, maximum 2 instances, CPU settings and service
+identity remain unchanged. Public `/health` returned healthy. The deployment
+workflow's existing `--update-*` forms preserve this reference on later code
+deployments. Supabase login keys, worker and SQL were not changed.
+
+**This prepares configuration; it does not deploy #208's new signing code.**
+Independent-root activation and notification read/cursor acceptance must be checked
+after the reviewed PR is merged/deployed. NOT-003 remains In progress until then.

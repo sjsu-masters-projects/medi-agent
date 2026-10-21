@@ -97,6 +97,13 @@ replica can reject a new snapshot or vice versa; refresh after rollout convergen
 Do not regenerate a clinical event. No remote secret/key/configuration change is
 performed by this code.
 
+October 21 authorized configuration: the backend references Secret Manager
+`NOTIFICATION_TOKEN_SIGNING_SECRET:1`; the existing deployment workflow preserves
+this reference with `--update-*`. This configuration-only revision keeps the
+previous image and does not itself activate new code. Verify notification reads
+after the signing implementation is merged/deployed. Do not rotate Supabase login
+keys or add this server-only secret to either portal.
+
 Clinician accounts referenced by clinical audit/provenance are retained. Permanent
 clinician deletion is not an expo requirement; preserve attribution and existing
 database restrictions instead of nulling or deleting clinical history.
