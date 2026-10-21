@@ -898,3 +898,39 @@ passes **152 tests**. CI-equivalent audit
 passes **No known vulnerabilities found**. Full backend/CI checks remain the
 remote acceptance gate after push. No deployed service, clinical record or timed
 patient tab was changed while resolving CI.
+
+### Quiet-session acceptance — October 20 22:45 Pacific
+
+The one-time follow-up actually started at `2026-10-21T05:45:24Z`, after its
+`05:45:17Z` trigger, rather than the hours-late dispatch of the previous run.
+Baseline was `04:41:18Z`: at least **3846 seconds / 64 minutes 6 seconds** elapsed
+before observation. Inventory resolved the same patient URL to user tab 2.
+Before any interaction, it still showed **Connected**, blank composer, no pending
+reply, no visible alert; read-only DOM `visibilityState` was `visible`.
+Visibility throughout the intervening hour is not independently proven. No
+navigation, reload, account change or Wi-Fi interruption was performed by this
+verification run before the observation.
+
+Exactly one authorised nonclinical greeting was sent with the specified synthetic
+QA wording. It progressed through typing/saved-user-message and returned:
+"Hello! I am here and ready to help. Please let me know if you have any questions
+about your care or health records." The original tab received it without reload,
+manual retry or resend. DOM counts were one exact user message and one matching
+reply. Only after observing completion, the first reload restored the same single
+pair and Connected state. No medication, clinical report or plan change requested.
+Screenshot: `/private/tmp/pr206-long-session-reply.png`.
+
+Metadata-only logs identify turn `75d56b39-d67b-4b33-8e29-e2a1d704d9dd`:
+worker claim `05:46:14.584503Z`, model start `05:46:15.621721Z`, complete
+`05:46:27.569709Z`, finished `05:46:27.708932Z`, worker_done attempt **1** at
+`05:46:27.816473Z`. The UI waited through queue/recovery polling before the reply;
+this was not an instant response. No second send was used to unstick it.
+
+Close metadata bounded to `04:41:18Z`–`05:46:00Z` shows one service-wide client
+close/code 1005 at `05:38:58.870123Z`. It is consistent with a quiet renewal near
+the expected boundary but has no per-tab/session identity in the selected output;
+do not call it proof of an uninterrupted socket or attribute it conclusively to
+this tab. The accepted result is the **real elapsed-time user journey beyond
+3500 seconds and persisted single reply**, superseding the earlier inconclusive
+run. The post-fix actual network-outage test and historical intermittent-read
+investigation remain separate, not silently marked Done.
