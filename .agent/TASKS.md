@@ -1,8 +1,9 @@
 # MediAgent — Project task board
 
 > **Active plan:** [October 18 deployed-verification campaign](../docs/deployed-recheck-2026-10-11.md#october-18-deployed-verification-campaign) for the remaining `Verify deployed` rows, including #191’s merged features; resolve its recorded appointment and provenance defects, then continue CLN-003 slice G, PLAN-002 and DEMO-001 · [accepted PAT-005 contract](specs/pat-005-clinician-approved-today-feed-plan.md)
+> **Current requested completion batch:** [records, medication, review and worker audit/plan](specs/expo-workflow-completion.md) — REC-001/002, NOT-003, OPS-006, MED-001, CLN-001/002. Scope decisions pending; existing work is being verified before replacement.
 >
-> **Updated:** October 20, 2026 · **Feature freeze:** December 4, 2026
+> **Updated:** October 21, 2026 · **Feature freeze:** December 4, 2026
 >
 > **Target:** A working, polished university-expo master's project using fictional patient and clinician accounts. No real-patient or real-clinician recruitment, VC pitch, or production qualification is required.
 
@@ -38,12 +39,7 @@ retain existing deletion safeguards and automated regression coverage.
 
 ## Current release and live status
 
-**Active grouped acceptance PR:** [#207](https://github.com/sjsu-masters-projects/medi-agent/pull/207), `codex/grouped-deployed-acceptance`, from merged
-#206 (`c54c7b5`). All 37 #206 PR checks and main CI passed; both portal deployments
-succeeded, as did its backend rollout. The 64-minute chat journey and post-fix
-real in-flight Wi-Fi recovery are accepted. Remaining focused-document, activity-review,
-scheduling/RCA and session checks are grouped in one PR, with outcomes recorded
-in the [acceptance matrix](../docs/deployed-recheck-2026-10-11.md#grouped-closure-campaign-after-206).
+**Merged grouped acceptance:** [#207](https://github.com/sjsu-masters-projects/medi-agent/pull/207), main `977cf8c`. Main CI, frontend CI, quality checks and backend deployment succeeded. The 64-minute chat journey, real in-flight Wi-Fi recovery, activity-review acceptance and fresh MFA/cross-tab persistence are recorded in the [acceptance matrix](../docs/deployed-recheck-2026-10-11.md#grouped-closure-campaign-after-206). Document-error fix DV-021 is merged; its live correction recheck remains. Historical scheduling RCA and the real idle-warning observation remain separate.
 Physical microphone/playback/real-phone voice acceptance is a separate requester
 task below, not evidence supplied by simulated voice events.
 
@@ -53,9 +49,10 @@ the same single reply automatically after reconnection, retained after reload.
 The first repeat had completed before Wi-Fi loss and is recorded separately as
 idle-reconnection evidence. No uninterrupted socket identity is asserted.
 Focused-document negative testing found **DV-021**: a rejected retained attachment
-hid the specific unavailable-document notice. Local fix and bilingual regressions
-are in this grouped PR; backend rejection remains unchanged and no chart-wide
-fallback is allowed. DV-018–020 broader presentation checks remain bounded.
+hid the specific unavailable-document notice. Fix and bilingual regressions merged
+in #207; both portal deployments report success. Backend rejection is unchanged
+and no chart-wide fallback is allowed. Live DV-021 correction recheck remains;
+DV-018–020 broader presentation checks remain bounded.
 [Evidence](../docs/deployed-recheck-2026-10-11.md#grouped-closure-campaign-after-206).
 
 October 20: #202 merged as `7c4d9f9`; main CI, both Vercel deployments and the
@@ -101,7 +98,7 @@ See [the recorded recheck](../docs/deployed-recheck-2026-10-11.md#pr-196-deploye
 
 | Area | Current state | Remaining boundary |
 | --- | --- | --- |
-| Main deployment | Main `c54c7b5` (#206) merged; all 37 PR checks passed. Main CI, CodeQL, both Vercel deployments and Cloud Run backend deployment succeeded. | Grouped document-error fix DV-021 is local pending review/deployment; wider OPS-005/006 scope is not closed by successful checks. [Evidence](../docs/deployed-recheck-2026-10-11.md#grouped-closure-campaign-after-206). |
+| Main deployment | Main `977cf8c` (#207) merged; main CI, frontend CI, quality checks, both Vercel statuses and Cloud Run backend rollout succeeded. Serving backend `00175-7lt`, worker `00021-s9w`. | DV-021 correction needs its live recheck; broader OPS-005/006 scope is not closed merely by successful deployment. [Current audit](specs/expo-workflow-completion.md). |
 | PAT-005 core | Synthetic Morgan/Elena loop verified live, including V2 continuity, six barriers, audit, Spanish V3 and non-scheduled-day absence. A second loop ran October 13 for the synthetic test patient: a discharge summary was extracted, its draft reviewed (STOP medication removed, changed dose applied, routes chosen, both languages checked) and published, and Today shows the four activities ([deployed recheck](../docs/deployed-recheck-2026-10-11.md#ai-005-production-check-october-13)). | V4 approved October 10 in English and Spanish under LOC-001 after removing a duplicate-upload overlap ([evidence](specs/loc-001-bilingual-approved-wording.md#verification--2026-10-10-synthetic-environment)). Presentation follow-up PAT-005-L passed October 18. |
 | Patient-upload review | [#138](https://github.com/sjsu-masters-projects/medi-agent/pull/138) deployed; pending/rejected exclusion, approval eligibility/queue handoff and exact-document link verified | Negative preview/publication guards have API/PostgreSQL evidence, not a newly repeated live blocked publication. |
 | Human messaging | [#139](https://github.com/sjsu-masters-projects/medi-agent/pull/139) deployed; migration checked; bilingual replies, actual sender/clinic, unread and reload persistence verified | Concurrency/reassignment/multiple-recipient isolation tested in isolated PostgreSQL, not repeated by the four-message live run. |
