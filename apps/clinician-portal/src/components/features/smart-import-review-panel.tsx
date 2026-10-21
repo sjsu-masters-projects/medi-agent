@@ -43,6 +43,8 @@ interface ReconciliationMatch {
 }
 
 interface ReconciliationPreview {
+  review_flags?: string[];
+  safety_coverage?: string | null;
   fact_id: string;
   fact_type: string;
   projectable: boolean;
@@ -1097,6 +1099,10 @@ export function SmartImportReviewPanel({
               values never clear the local chart; this action is recorded with
               the original source version.
             </p>
+            {reconciling.preview.safety_coverage && <section aria-label="Medication comparison coverage" className="rounded-xl border border-warn-line bg-warn-soft p-3 text-sm text-ink-2">
+              <p>{reconciling.preview.safety_coverage}</p>
+              {!!reconciling.preview.review_flags?.length && <ul className="mt-2 list-disc space-y-1 pl-5">{reconciling.preview.review_flags.map((flag) => <li key={flag}>{flag}</li>)}</ul>}
+            </section>}
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-[14px] border border-line bg-surface-2 p-4">
                 <h3 className="text-[13px] font-semibold text-ink">

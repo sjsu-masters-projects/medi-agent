@@ -136,11 +136,16 @@ describe("SMART import review panel", () => {
       candidate_fields: { name: "Metformin", dosage: "500 mg daily" },
       available_fields: ["name", "dosage"],
       matches: [],
+      safety_coverage: "Source text/name comparisons only. Drug interactions are not checked.",
+      review_flags: ["No matching local medication was found. The approved list is unchanged."],
     });
     post.mockResolvedValue({});
     fireEvent.click(screen.getByRole("button", { name: /review changes/i }));
 
     await screen.findByText(/no conservative match was found/i);
+    expect(screen.getByRole("region", { name: "Medication comparison coverage" })).toHaveTextContent("Drug interactions are not checked");
+    expect(screen.getByRole("region", { name: "Medication comparison coverage" })).toHaveTextContent("approved list is unchanged");
+    expect(post).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /add local record/i }));
 
     await waitFor(() => {

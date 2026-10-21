@@ -351,7 +351,7 @@ class ChatService:
         """Return safe portal document metadata for an already-authorized chat patient."""
         result = await self._execute(
             self.db.table("documents")
-            .select("id, file_name, document_type, created_at")
+            .select("id, file_name, document_type, display_title, created_at")
             .eq("patient_id", patient_id)
             .order("created_at", desc=True)
             .limit(limit)

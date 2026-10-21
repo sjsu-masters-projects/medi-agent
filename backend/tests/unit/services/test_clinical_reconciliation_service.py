@@ -33,6 +33,41 @@ def test_medication_matching_prefers_rxnorm_then_normalized_names() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "source,local",
+    [
+        ("Lisinopril 10 mg tablet", "Lisinopril"),
+        ("Metformin 500 mg tablet", "Metformin 1000 mg tablet"),
+    ],
+)
+def test_strength_text_exposes_a_possible_match_without_claiming_equivalence(source, local):
+    service = _service()
+    reason = service._match_reason(
+        fact_type="medication", candidate={"name": source}, record={"name": local}
+    )
+    assert reason.startswith("Possible name match")
+    assert "verify ingredient, dose and formulation" in reason
+
+
+@pytest.mark.parametrize(
+    "source,local",
+    [
+        ("Metformin 500 mg ER tablet", "Metformin"),
+        ("Metformin 500 mg / Sitagliptin 50 mg tablet", "Metformin"),
+        ("Lisinopril hydrochlorothiazide 10 mg tablet", "Lisinopril"),
+        ("Different drug 10 mg tablet", "Lisinopril"),
+        (None, None),
+    ],
+)
+def test_name_matching_preserves_release_salts_combinations_and_missing_identity(source, local):
+    assert (
+        _service()._match_reason(
+            fact_type="medication", candidate={"name": source}, record={"name": local}
+        )
+        is None
+    )
+
+
 def test_condition_and_allergy_matching_are_conservative() -> None:
     service = _service()
 
@@ -203,4 +238,42 @@ def test_preview_exposes_candidate_fields_and_match_context() -> None:
         "candidate_fields": {"name": "Diabetes", "icd10_code": "E11.9"},
         "available_fields": ["icd10_code", "name"],
         "matches": [{"target_id": "local-condition", "match_reason": "Exact ICD-10 code"}],
+        "review_flags": [],
+        "safety_coverage": None,
     }
+
+
+def test_medication_flags_are_source_differences_not_automatic_clinical_decisions() -> None:
+    service = _service()
+    service.db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
+        {"allergen": "Example medicine"}
+    ]
+    candidate = {"name": "Example medicine", "dosage": "20 mg", "is_active": False}
+    matches = [
+        {"record": {"dosage": "10 mg", "is_active": True}},
+        {"record": {"dosage": "10 mg", "is_active": True}},
+    ]
+    flags = service._medication_review_flags(
+        {"patient_id": "synthetic-patient"}, candidate, matches
+    )
+    assert len(flags) == 4
+    assert any("Multiple possible" in flag for flag in flags)
+    assert any("dosage differs" in flag for flag in flags)
+    assert any("active status differs" in flag for flag in flags)
+    assert any("not a confirmed allergy assessment" in flag for flag in flags)
+    service.db.rpc.assert_not_called()
+    service.db.table.assert_called_once_with("allergies")
+    service.db.table.return_value.select.return_value.eq.assert_called_once_with(
+        "patient_id", "synthetic-patient"
+    )
+
+
+def test_unmatched_medication_never_claims_safety_or_changes_approved_list() -> None:
+    service = _service()
+    service.db.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
+    flags = service._medication_review_flags(
+        {"patient_id": "synthetic-patient"}, {"name": "Synthetic supplement"}, []
+    )
+    assert len(flags) == 1
+    assert "approved list is unchanged" in flags[0]
+    service.db.rpc.assert_not_called()

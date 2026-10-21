@@ -18,13 +18,13 @@ confirmed-intake work. No existing task is removed or declared Done by this audi
 | --- | --- | --- |
 | REC-001 | Grounded document titles; format/viewer contract; guarded extraction/retry; candidate correction/review; applied-source withdrawal preserves clinical truth/audit | Verify correction, retry, duplicate/error and withdrawal behavior end to end; inspect title reuse in citations/care-plan review; fix demonstrated gaps. No backfill or deletion of existing cited records without specific authorization. |
 | REC-002 | ClinicalReconciliationService previews matches and explicitly applies add/update/keep/defer/reject via one audited database transaction; source identity binding; dedicated review UI | Verify candidate → selected-field decision → unchanged unrelated medication/reminders → persistent provenance, plus stale/foreign/duplicate negatives. Do not rebuild this service or claim local tests are a deployed journey. |
-| NOT-003 | Actor/role/purpose/audience-bound 15-minute notification snapshots; currently signed using the Supabase JWT secret | Separate token key/domain, test tampering/cross-purpose/actor/expiry behavior and document rollout. Clinician permanent deletion conflicts with retained review/ADR/MedWatch provenance: requester decision pending. No account deletion or FK weakening. |
-| OPS-006 | Durable queue/worker, ordered persisted events, private invoker, recovery/long-session acceptance | Complete bounded permission/configuration/worker tests. Requester decision pending on replacing working sockets with SSE and on large load/cost work; no silent scope removal or unapproved configuration reset. |
+| NOT-003 | Actor/role/purpose/audience-bound 15-minute snapshots, now locally domain-key separated | Independent root configuration and deployed acceptance remain. Permanent deletion excluded by accepted retention decision; preserve all audit references. |
+| OPS-006 | Durable queue/worker and recovery accepted, plus 35 isolated PostgreSQL checks and live read-only configuration/IAM evidence | Amended worker slice complete; no SSE, counter rewrite or load/cost reset required. Historical failure RCA stays OPS-005. |
 | MED-001 | Canonical medication CRUD, conservative candidate matching and clinician-selected updates; RxNorm normalizer exists but no live callers found | Patient-reported unlisted products must remain evidence, not disappear or become approved medication automatically. Add explicit identity/source/conflict review, uncertainty, preserved history. A comprehensive interaction/allergy/duplicate-therapy engine is not already implemented; evidence coverage and clinical-review labeling must be explicit. No model-only assertion that a combination is safe. |
-| CLN-001 | Patient Upload Review Queue with approve/reject and exact-document routes; Alerts has broader action items | Requester decision pending: use Alerts as unified work inbox and keep document approval separate, or build a new combined workspace. Preserve each existing authorized action and approval gate, avoid duplicate inbox items/controls. Verify assigned clinic, priority/age/source/freshness and cross-reviewer refresh. |
+| CLN-001 | Alerts is the accepted action inbox; local cross-links preserve clinic; queue ignores stale responses | Finish age/source/freshness, supported work coverage and shared-review updates; existing authorized review controls stay separate. |
 | CLN-002 | Deterministic threshold-based Risk Radar; adherence/open ADR/recent severity inputs and dashboard explanation; symptom timeline | Add explicit rule version, calculation time/data freshness, reason contributions and a source-linked cross-domain timeline. Unknown/missing data must not mean low risk or missed medication; automation is not a diagnosis. |
 
-## Requested product decisions (not yet approved)
+## Product decisions — approved October 21
 
 1. OPS-006: retain worker reliability/security; remove SSE rewrite and large
    load/cost exercise from required expo scope, rather than rewriting a working
@@ -34,9 +34,15 @@ confirmed-intake work. No existing task is removed or declared Done by this audi
    approval clearly separate from clinical plan publication.
 3. NOT-003: retain accounts referenced by clinical audit history; do not add
    permanent clinician deletion for the expo. Implement token-signing separation.
+4. MED-001: source-based review only; comprehensive interaction/therapeutic-
+   equivalence engine removed from expo scope. Retain unlisted testimony and
+   explicit unknown coverage; no automatic medication approval or safety verdict.
 
-These recommendations are not implemented scope changes. Record the requester's
-decision here and update the original specifications/board together if accepted.
+The requester accepted all three decisions. Retain existing authorization, audit
+and clinical review safeguards. OPS-006 closure is bounded worker reliability,
+configuration and security acceptance, not a new transport/counter architecture
+or a commercial-scale performance certification. Historical design details remain
+identified as superseded rather than silently asserted implemented.
 
 ## Delivery order and acceptance
 
@@ -73,5 +79,106 @@ decision here and update the original specifications/board together if accepted.
   migration checksums, OIDC audience/environment verification or load acceptance.
 - No cloud configuration, queue, SQL, identity, clinical record or secret changed.
 
-Next checkpoint: record requester scope decisions before implementing a new inbox
-or changing OPS-006 scope, then execute the agreed synthetic acceptance matrix.
+## Implementation checkpoint
+
+NOT-003 now has an optional independent `NOTIFICATION_TOKEN_SIGNING_SECRET`
+(minimum 32 characters). A domain-derived key is used in either configuration,
+never the raw Supabase login-signing secret. Without a separately configured root,
+the domain-separated rollout fallback uses the existing auth root; this separates
+token protocols but is not independent root-secret compromise protection.
+Old raw-auth-signed snapshots are rejected; refresh the view after rollout or key
+rotation. No login/session change or remote secret/configuration change occurred.
+
+Medication reconciliation preview now surfaces recorded dosage/frequency/route/
+active-status differences, ambiguous matches and exact recorded allergen-name
+matches as review flags. It explicitly says interactions and therapeutic
+equivalence are not checked. This is a read-only comparison, not clinical advice
+or an automatic approved-list update. The confirmed-report → unlisted-product
+review integration is still unfinished; this preview alone does not close MED-001.
+
+Alerts and patient-upload review link to one another with the current clinic
+filter. The upload queue ignores late responses from previous clinic scopes.
+Risk Radar now offers a versioned explanation with calculation time, data windows
+and unknown-adherence handling. Calculation time is explicitly not source freshness
+or last clinical review. The chronological cross-domain timeline is unfinished.
+
+Verification checkpoint: 57 token/service/API tests; 124 risk/clinician API tests;
+29 existing records/binding/reprojection checks; 19 updated reconciliation/SMART
+checks (batches overlap, not an additive unique count). Clinician full suite 631
+passed; final expanded-suite rerun pending. Ruff and source mypy passed. Production
+build passed with `npm run build -- --webpack`; normal Turbopack compilation was
+blocked by local subprocess/port permission, even on elevated retry. No project
+build script was changed; record default build CI separately.
+
+OPS-006 bounded acceptance: 35 real isolated-PostgreSQL worker-event tests pass
+without skips, covering backend-only permissions, leases, concurrency, attempt/
+event sequencing, outbox/requeue recovery and terminal transitions. The live API
+has CHAT_TURNS_VIA_WORKER=true; worker WORKER_MODE=true. Worker URL and OIDC
+audience match; both use the named task-invoker account. API audience defaults to
+that worker URL in source. Queue enqueue and invoker act-as bindings name the
+runtime service account, and the worker's service policy grants run.invoker only
+to the task invoker. Prior deployed outage/long-session execution passed. These
+checks complete the requester-amended worker slice, not inherited-project IAM,
+hosted checksum reconciliation, a scale certification or historical OPS-005 RCA.
+
+## Live records checkpoint and remaining work
+
+Elena signed in; Rajeev patient `c102f321-a2b6-40e4-95f4-f21390b18e57` has three
+active medicines (atorvastatin, lisinopril 20 mg daily, metformin) and one glucose
+activity, all without configured reminders. The External Records workspace
+loaded 39 pending candidates, four medication candidates; its source/type filters
+and separate preview/decision controls work. Read-only Lisinopril preview exposed
+an actual defect: imported `Lisinopril 10 mg tablet` did not match local
+`Lisinopril`, offering Add rather than side-by-side comparison. Screenshot
+`/private/tmp/rec-lisinopril-unmatched-before-fix.png`. Cancelled; no decision,
+medication edit or publication. Profile remained unchanged afterward; screenshot
+`/private/tmp/rec-unchanged-approved-profile.png`.
+
+Local fix adds a clearly labelled **possible** name match ignoring strength/form
+text, never an equivalence claim; ER/IR/salt/combination words are retained. Seven
+positive/negative regressions accompany it. Source difference and distinct
+recorded RxNorm concepts remain review flags, not automatic reconciliation.
+Deployed recheck still required.
+
+Confirmed unlisted products now survive normalization and appear explicitly as
+patient-reported testimony in the Symptoms view, without an invented medication
+ID or confirmed ADR. Eleven parser tests and a patient-screen test cover malformed,
+unknown/declined/legacy inputs and unlisted product display. Automated ADR creation
+still requires a recorded medication ID; the unlisted-product review/handoff path
+needs completion, so MED-001 is not Done from merely exposing the saved testimony.
+
+Grounded localized display titles now flow into the deterministic chat catalog,
+retaining the original filename and falling back without cross-locale invention.
+43 focused catalog/chat-service/citation tests pass. Citation title reuse was
+already implemented on main and is verified, not rebuilt. Care-plan source-title
+reuse and the full correction/retry/withdrawal acceptance remain REC-001 work.
+
+Completed checks: final backend unit/router sweep **3939 passed**; clinician
+**643**, patient **834**, worker PostgreSQL **35**. Both portals passed lint,
+typecheck and production builds with the supported webpack backend; default
+Turbopack remains locally blocked by subprocess-port permissions, not silently
+reported passing. Source mypy passed 278 files; post-catalog check recorded at
+delivery. Ruff check/format and diff whitespace checked on changed Python/files.
+Installed only the already-locked local missing `google-cloud-tasks==2.23.0`
+with `--no-deps` to collect queue tests; no lockfile change. Fixed logging test
+isolation from LOG_FORMAT/CLOUD_RUN_JOB overrides (test only), then its 13 tests
+and the broad sweep passed. Expected deprecation warnings remain.
+
+Continue in order:
+
+1. Review the saved implementation diff and default-build CI before merge.
+2. Complete REC-001 source-title/retry/correction/withdrawal matrix and REC-002
+   all-decision/replay/permission proof; use isolated fixtures rather than changing
+   Rajeev's active medicines for an unapproved live test.
+3. Complete unlisted product review routing (not automatic ADR/canonical creation)
+   and source freshness/normalization under MED-001's accepted boundaries.
+4. Finish CLN-001 source/age/freshness/shared-review behavior and CLN-002's
+   source-linked cross-domain timeline. Versioned risk modal alone is not closure.
+5. Open/review the completion PR with precise pending deploy/secret/acceptance
+   notes. No deployment, migration, secret configuration or clinical decision has
+   been performed or authorized by this checkpoint.
+
+The `NKDA` absence-of-allergy candidate observed in existing pending source data
+is not a positive-allergen assessment. Do not add it to the canonical allergy
+list as an allergen merely to exercise a test; review its mapping/decision behavior
+in the remaining record lifecycle acceptance.

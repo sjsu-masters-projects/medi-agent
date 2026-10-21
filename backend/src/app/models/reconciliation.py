@@ -64,6 +64,8 @@ class ReconciliationPreviewRead(BaseModel):
     candidate_fields: dict[str, Any]
     available_fields: list[str]
     matches: list[ReconciliationMatchRead] = Field(default_factory=list)
+    review_flags: list[str] = Field(default_factory=list)
+    safety_coverage: str | None = None
 
 
 class ReconciliationDecisionRead(BaseModel):

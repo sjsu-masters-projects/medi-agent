@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     supabase_service_role_key: str
     supabase_jwt_secret: str  # Dashboard → Settings → API → JWT Secret
 
+    # Independent notification snapshot key; never an authentication signing key.
+    # If absent, use a domain-separated derived key during compatible rollout.
+    notification_token_signing_secret: str | None = Field(default=None, min_length=32)
+
     # Google / Gemini (optional until agent work starts)
     google_api_key: str = ""
     google_project_id: str = ""

@@ -586,11 +586,11 @@ cover these tables.
    TRUNCATE on them, so the cascade is the only removal path. *Evidence: Observed. 053 revokes and verifies this for
    conversation history; 048 grants `ALL` on `medwatch_draft_audit_events` to `service_role`, and no backend code
    deletes from either table, so Migration_063 revokes DELETE and TRUNCATE (as 053 did).*
-5. THE clinician side (deleting a clinician who requested information, authored or approved a draft) SHALL remain as
-   today until decision D1 is made, and THE spec SHALL not introduce a policy for it. *Evidence: Observed. 046, 047
+5. THE clinician side SHALL retain accounts referenced by clinical provenance/audit; permanent clinician deletion
+   is outside expo scope (D1, requester approved October 21). Preserve existing restrictions. *Evidence: Observed. 046, 047
    and 048 reference `clinicians(id)` `ON DELETE RESTRICT`: `adr_information_requests.requested_by`,
    `adr_assessment_audit_events.actor_id`, `medwatch_drafts.created_by` / `approved_by`,
-   `medwatch_draft_audit_events.actor_id`; TASKS.md NOT-003 records the open decision.*
+   `medwatch_draft_audit_events.actor_id`; TASKS.md NOT-003 records the accepted retention decision.*
 6. IF the Contract_Test does not reproduce criterion 1, THEN no foreign-key change SHALL ship for it and the
    Migration_063 verification block SHALL omit the foreign-key check (Requirement 14.9). *Evidence: Design.*
 
@@ -995,8 +995,8 @@ that I can approve it without touching a remote environment.
    unassigned clinician). Inferred: a missing draft ID likely returns 500 today, because `.single()` raises an unmapped
    PostgREST error (as in Requirement 6.3).*
 2. THE Migration_064 SHALL make every new table or column holding patient data cascade on patient deletion, as
-   Requirement 12 does, and SHALL reference clinicians (recorder, amender, discarder) with `ON DELETE RESTRICT` until D1
-   is decided, with the new references added to NOT-003. *Evidence: Observed (048 clinician references are RESTRICT;
+   Requirement 12 does, and SHALL retain clinician (recorder, amender, discarder) references with `ON DELETE RESTRICT`
+   under the accepted D1 retention decision. *Evidence: Observed (048 clinician references are RESTRICT;
    NOT-003).*
 3. THE Migration_064 SHALL be one file named `064_<snake_case_name>.sql` that passes
    `backend/scripts/validate_migrations.py`, is ordered after 063 and states in its header that it requires 063. It
@@ -1057,7 +1057,7 @@ to D17 for PR 3 on 2026-10-12, exactly as proposed.
 
 | ID | Status | Decision | Outcome | Affects |
 | --- | --- | --- | --- | --- |
-| **D1** | **Open** | Clinician-deletion policy for MedWatch drafts and ADR audit (TASKS.md NOT-003) | Unchanged by this work. Options remain: (a) keep records, NULL the clinician reference, keep a name snapshot (as 053); (b) delete the clinician's authored drafts and audit; (c) keep blocking deletion until ownership is reassigned. | R12.5, NOT-003 |
+| **D1** | **Decided (2026-10-21)** | Clinician-deletion policy for MedWatch drafts and ADR audit (TASKS.md NOT-003) | Retain clinician accounts referenced by provenance/audit with existing RESTRICT safeguards. Permanent clinician deletion is not expo scope. Do not delete authored records, null attribution or weaken FKs; no account deletion authorized. | R12.5, NOT-003 |
 | **D2** | Decided | Do draft answers persist across reload? | (a) No. Unsent answers live only in component state; the form shows a visible note near Send. | R6.8 |
 | **D3** | Decided | Is the clinician "patient answered" alert actionable? | (b) Informational, History-only, unread in the bell, not in Needs attention. | R11.5 |
 | **D4** | Decided | Do requests expire? | No expiry now. | none |

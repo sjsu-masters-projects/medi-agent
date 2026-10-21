@@ -54,6 +54,7 @@ class ClinicalReconciliationService:
         candidate = self._candidate_fields(fact)
         fact_type = str(fact["fact_type"])
         matches = self._matches(fact=fact, candidate=candidate)
+        medication = fact_type == "medication"
         return {
             "fact_id": str(fact_id),
             "fact_type": fact_type,
@@ -61,7 +62,67 @@ class ClinicalReconciliationService:
             "candidate_fields": candidate,
             "available_fields": sorted(candidate),
             "matches": matches,
+            "review_flags": self._medication_review_flags(fact, candidate, matches)
+            if medication
+            else [],
+            "safety_coverage": (
+                "Source text/name comparisons only. Drug interactions and therapeutic equivalence "
+                "are not checked. No matching flag does not establish safety."
+                if medication
+                else None
+            ),
         }
+
+    def _medication_review_flags(
+        self, fact: dict[str, Any], candidate: dict[str, Any], matches: list[dict[str, Any]]
+    ) -> list[str]:
+        """Conservative source differences, never clinical equivalence or advice."""
+        flags = []
+        if not matches:
+            flags.append(
+                "No matching local medication was found. Review identity before adding; the approved list is unchanged."
+            )
+        if len(matches) > 1:
+            flags.append(
+                "Multiple possible local matches. Review possible duplication; do not merge records automatically."
+            )
+        for match in matches:
+            record = match["record"]
+            if (
+                candidate.get("rxcui")
+                and record.get("rxcui")
+                and candidate["rxcui"] != record["rxcui"]
+            ):
+                flags.append(
+                    "Recorded RxNorm concepts differ. A name match does not verify ingredient, formulation or therapeutic equivalence."
+                )
+            for field in ("dosage", "frequency", "route", "is_active"):
+                if field not in candidate or record.get(field) is None:
+                    continue
+                if self._normal(str(candidate[field])) != self._normal(str(record[field])):
+                    label = "active status" if field == "is_active" else field
+                    message = f"Recorded {label} differs between the source and a possible local match. Review the side-by-side values."
+                    if message not in flags:
+                        flags.append(message)
+        names = {
+            self._normal(str(candidate[key]))
+            for key in ("name", "generic_name")
+            if candidate.get(key)
+        }
+        allergies = cast(
+            list[dict[str, Any]],
+            self.db.table("allergies")
+            .select("allergen")
+            .eq("patient_id", str(fact["patient_id"]))
+            .execute()
+            .data
+            or [],
+        )
+        if any(self._normal(str(row.get("allergen") or "")) in names for row in allergies):
+            flags.append(
+                "A recorded allergen name matches this candidate's recorded name. Clinician review is required; this is not a confirmed allergy assessment."
+            )
+        return flags
 
     def decide(
         self,
@@ -262,18 +323,33 @@ class ClinicalReconciliationService:
     def _normal(value: Any) -> str:
         return re.sub(r"\s+", " ", str(value or "").strip().lower())
 
+    @classmethod
+    def _medication_name_key(cls, value: Any) -> str:
+        """Potential name identity only; preserve ER/IR, salts and combinations."""
+        name = cls._normal(value)
+        name = re.sub(r"\s+\d+(?:\.\d+)?\s*(?:mcg|mg|g|ml|units?)(?=\s|$)", "", name)
+        name = re.sub(r"\s+(?:tablets?|capsules?)$", "", name)
+        return cls._normal(name)
+
     def _match_reason(
         self, *, fact_type: str, candidate: dict[str, Any], record: dict[str, Any]
     ) -> str | None:
         if fact_type == "medication":
             if candidate.get("rxcui") and candidate.get("rxcui") == record.get("rxcui"):
                 return "Exact RxNorm concept"
-            if self._normal(candidate.get("name")) == self._normal(record.get("name")):
+            if (
+                candidate.get("name")
+                and record.get("name")
+                and self._normal(candidate["name"]) == self._normal(record["name"])
+            ):
                 return "Normalized medication name"
             if candidate.get("generic_name") and self._normal(
                 candidate.get("generic_name")
             ) == self._normal(record.get("generic_name")):
                 return "Normalized generic name"
+            candidate_key = self._medication_name_key(candidate.get("name"))
+            if candidate_key and candidate_key == self._medication_name_key(record.get("name")):
+                return "Possible name match ignoring strength/form text — verify ingredient, dose and formulation"
         elif fact_type == "condition":
             if candidate.get("icd10_code") and candidate.get("icd10_code") == record.get(
                 "icd10_code"

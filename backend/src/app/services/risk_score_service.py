@@ -23,7 +23,7 @@ from uuid import UUID
 
 from supabase import Client
 
-from app.models.dashboard import PatientRiskData, RiskLevel
+from app.models.dashboard import PatientRiskData, RiskExplanation, RiskLevel
 from app.models.enums import AdherenceStatus, ADRStatus
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,7 @@ _MEDIUM_ADHERENCE_THRESHOLD = 0.80
 _HIGH_SEVERITY_THRESHOLD = 8
 _MEDIUM_SEVERITY_THRESHOLD = 5
 _RECENT_SYMPTOM_DAYS = 7
+_RULE_VERSION = "outpatient-review-priority-v1"
 
 
 class RiskScoreService:
@@ -90,6 +91,48 @@ class RiskScoreService:
 
         return "low"
 
+    def explain_risk(
+        self,
+        adherence_score: float | None,
+        open_adr_count: int,
+        recent_symptom_severity: int | None,
+    ) -> RiskExplanation:
+        """Describe the existing thresholds without adding a clinical decision."""
+        factors = []
+        if adherence_score is None:
+            factors.append(
+                "No recorded adherence responses in the last 30 days; completion is unknown."
+            )
+        elif adherence_score < _HIGH_ADHERENCE_THRESHOLD:
+            factors.append(
+                "Fewer than 60% of recorded responses were taken/completed in the last 30 days."
+            )
+        elif adherence_score < _MEDIUM_ADHERENCE_THRESHOLD:
+            factors.append(
+                "60% to below 80% of recorded responses were taken/completed in the last 30 days."
+            )
+        else:
+            factors.append(
+                "At least 80% of recorded responses were taken/completed in the last 30 days."
+            )
+        factors.append(
+            f"{open_adr_count} ADR candidate(s) awaiting review; not confirmed adverse reactions."
+            if open_adr_count
+            else "No ADR candidates awaiting review in the available records."
+        )
+        factors.append(
+            "No patient-confirmed severity rating in the last 7 days; symptom severity is unknown."
+            if recent_symptom_severity is None
+            else f"Highest patient-confirmed severity in the last 7 days: {recent_symptom_severity}/10 "
+            "(8–10 raises high priority; 5–7 raises at least medium priority)."
+        )
+        return RiskExplanation(
+            rule_version=_RULE_VERSION,
+            calculated_at=datetime.now(UTC),
+            adherence_available=adherence_score is not None,
+            factors=factors,
+        )
+
     async def get_patient_risk(self, patient_id: UUID) -> PatientRiskData:
         """Fetch signals from DB and compute risk level for a single patient.
 
@@ -141,6 +184,9 @@ class RiskScoreService:
             active_med_count=active_med_count,
             recent_symptom_severity=recent_symptom_severity,
             last_activity=last_activity,
+            risk_explanation=self.explain_risk(
+                adherence_score, open_adr_count, recent_symptom_severity
+            ),
         )
 
     # ── Private helpers ──────────────────────────────────────────────────────

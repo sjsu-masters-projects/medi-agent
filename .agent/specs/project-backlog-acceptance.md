@@ -98,9 +98,17 @@ requirement mentions them; use the current operator guide and explicit approval.
 
 ## MED-001 — Multi-source medication reconciliation
 
+Requester-approved October 21 expo scope: source-based review, not a
+comprehensive drug–drug interaction or therapeutic-equivalence engine. Retain
+unlisted patient-reported products as unreviewed evidence; never create an
+approved medication merely to attach an ADR. Show coverage limitations explicitly.
+
 - Normalize medication identity using RxNorm when possible.
 - Combine patient, clinician, document, and FHIR medication sources.
-- Detect duplicate therapy, dose change, missing medication, status conflict, and allergy conflict.
+- Flag supported possible duplicate identity, recorded dose/status differences,
+  missing medication and exact recorded allergen-name matches for clinician review.
+  Do not equate different text with a clinically confirmed dose conflict or claim
+  unchecked interaction/allergy/therapeutic-equivalence coverage is safe.
 - Attach DailyMed/RxNorm evidence and freshness.
 - Display uncertainty instead of fabricating resolution.
 - Require clinician approval for the canonical medication list.
@@ -252,7 +260,10 @@ requirement mentions them; use the current operator guide and explicit approval.
 
 ## CLN-001 — Consolidated review workspace
 
-- Combine document, medication, symptom, adherence, ADR, and pending-action queues.
+- Alerts is the unified cross-workflow action inbox (requester approved October
+  21); the Patient Upload Review Queue stays dedicated to source approval. Do not
+  duplicate clinical approval controls: open the exact existing authorized review
+  destination for document, medication, symptom, adherence, ADR or pending action.
 - Add explainable priority, age, source, freshness, and assignment filters.
 - Support approve, reject, amend, defer, dismiss, and request-information decisions.
 - Update queue and patient deep dive without manual refresh.

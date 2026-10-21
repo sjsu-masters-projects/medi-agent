@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Provider } from "react-redux";
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 import ReviewQueuePage from "@/app/(dashboard)/review-queue/page";
@@ -20,9 +20,40 @@ vi.mock("@/services/clinicians", () => ({
 
 describe("ReviewQueuePage", () => {
     beforeEach(() => {
+        resetClinicFilter();
         vi.mocked(fetchDocumentReviewQueue).mockReset();
         vi.mocked(approveDocumentReview).mockReset();
         vi.mocked(rejectDocumentReview).mockReset();
+    });
+
+    it("links to the common inbox while keeping upload approval separate", async () => {
+        vi.mocked(fetchDocumentReviewQueue).mockResolvedValue([]);
+        clinicFilterState.clinics = [
+            { clinic_id: "clinic-a", clinic_code: "A", clinic_name: "City Health", role: "admin", status: "active" },
+            { clinic_id: "clinic-b", clinic_code: "B", clinic_name: "Bay Clinic", role: "provider", status: "active" },
+        ] as never;
+        clinicFilterState.clinicId = "clinic-b";
+        render(<Provider store={store}><ReviewQueuePage /></Provider>);
+        await screen.findByText("Pending patient uploads");
+        expect(screen.getByRole("link", { name: "All clinical actions" })).toHaveAttribute("href", "/alerts?clinic=clinic-b");
+        expect(screen.getByText(/Document approval does not publish instructions/)).toBeInTheDocument();
+    });
+
+    it("does not apply a previous clinic's late queue response", async () => {
+        clinicFilterState.clinics = [
+            { clinic_id: "clinic-a", clinic_code: "A", clinic_name: "City Health", role: "admin", status: "active" },
+            { clinic_id: "clinic-b", clinic_code: "B", clinic_name: "Bay Clinic", role: "provider", status: "active" },
+        ] as never;
+        let finishOld!: (items: Awaited<ReturnType<typeof fetchDocumentReviewQueue>>) => void;
+        vi.mocked(fetchDocumentReviewQueue).mockImplementationOnce(() => new Promise((resolve) => { finishOld = resolve; }));
+        vi.mocked(fetchDocumentReviewQueue).mockResolvedValueOnce([]);
+        const { rerender } = render(<Provider store={store}><ReviewQueuePage /></Provider>);
+        clinicFilterState.clinicId = "clinic-b";
+        rerender(<Provider store={store}><ReviewQueuePage /></Provider>);
+        await waitFor(() => expect(fetchDocumentReviewQueue).toHaveBeenLastCalledWith("clinic-b"));
+        await waitFor(() => expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled());
+        await act(async () => { finishOld([{ id: "old-document", patientId: "old-patient", patientFirstName: "Old", patientLastName: "Scope", fileName: "old.pdf", documentType: "lab_report", parseStatus: "pending", createdAt: "2026-04-22T10:00:00Z", uploadedByRole: "patient", reviewStatus: "pending" }]); });
+        expect(screen.queryByText("Old Scope")).not.toBeInTheDocument();
     });
 
     it("shows each upload's clinic and a Clinic filter only with several clinics", async () => {

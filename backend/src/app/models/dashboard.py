@@ -5,6 +5,7 @@ Used by GET /api/v1/clinicians/me/dashboard and patient deep-dive endpoints.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -31,6 +32,17 @@ A2ATaskStatus = Literal[
 # ── Per-patient risk card ────────────────────────────────────────────────────
 
 
+class RiskExplanation(BaseModel):
+    """Reproducible review-priority inputs, not clinical validation/freshness."""
+
+    rule_version: str
+    calculated_at: datetime
+    adherence_available: bool
+    adherence_window_days: int = 30
+    symptom_window_days: int = 7
+    factors: list[str]
+
+
 class PatientRiskData(ClinicTag):
     """Risk snapshot for a single patient — shown on the Risk Radar dashboard."""
 
@@ -45,6 +57,7 @@ class PatientRiskData(ClinicTag):
         default=None, ge=1, le=10, description="Max severity in last 7 days"
     )
     last_activity: str = Field(default="", description="Human-readable last activity string")
+    risk_explanation: RiskExplanation | None = None
 
 
 # ── Dashboard aggregate ──────────────────────────────────────────────────────

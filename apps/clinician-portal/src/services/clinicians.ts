@@ -23,6 +23,7 @@ import {
 } from "@/types";
 import { readStoredSession } from "@/services/auth-session";
 import { ApiClientError } from "@/services/api";
+import { reportedProduct } from "@/utils/reported-product";
 import type {
     MedWatchFormDataV2,
     MedWatchGateIssue,
@@ -93,6 +94,14 @@ export interface PatientRiskData {
     active_med_count: number;
     recent_symptom_severity: number | null;
     last_activity: string;
+    risk_explanation?: {
+        rule_version: string;
+        calculated_at: string;
+        adherence_available: boolean;
+        adherence_window_days: number;
+        symptom_window_days: number;
+        factors: string[];
+    } | null;
     /** The clinic of the clinician's link to this patient. */
     clinic_id?: string | null;
     clinic_name?: string | null;
@@ -947,6 +956,7 @@ function normalizeSymptomReport(raw: Record<string, unknown>): SymptomReport {
         severity: typeof raw.severity === "number" ? raw.severity : null,
         confirmationState: raw.confirmation_state === "patient_confirmed" ? "patient_confirmed" : "legacy_unconfirmed",
         confirmedAt: typeof raw.confirmed_at === "string" ? raw.confirmed_at : undefined,
+        reportedProduct: reportedProduct(raw),
         confirmedSummary: typeof (raw.confirmed_content as Record<string, unknown> | undefined)?.summary === "string"
             ? String((raw.confirmed_content as Record<string, unknown>).summary) : undefined,
         onset: typeof raw.onset === "string" ? raw.onset : undefined,

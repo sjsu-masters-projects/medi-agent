@@ -338,6 +338,36 @@ class TestRiskSignalFetching:
         assert result.adherence_score == 0.0
         assert result.active_med_count == 3
         assert result.last_activity == "Reported 'fatigue' 2h ago"
+        assert result.risk_explanation.rule_version == "outpatient-review-priority-v1"
+        assert result.risk_explanation.adherence_available is False
+        assert result.risk_explanation.calculated_at.utcoffset().total_seconds() == 0
+        assert any("unknown" in factor for factor in result.risk_explanation.factors)
+
+
+@pytest.mark.parametrize(
+    "score,count,severity,level",
+    [
+        (None, 0, None, "unknown"),
+        (None, 1, None, "high"),
+        (0.59, 0, None, "high"),
+        (0.6, 0, 4, "medium"),
+        (0.8, 0, 4, "low"),
+        (0.9, 0, 5, "medium"),
+        (0.9, 0, 8, "high"),
+    ],
+)
+def test_explanation_preserves_existing_rule_and_unknown_data(score, count, severity, level):
+    service = RiskScoreService(db=None)
+    explanation = service.explain_risk(score, count, severity)
+    assert service.calculate_risk_level(score, count, severity) == level
+    assert explanation.adherence_available is (score is not None)
+    assert len(explanation.factors) == 3
+    assert explanation.adherence_window_days == 30
+    assert explanation.symptom_window_days == 7
+    if count:
+        assert "not confirmed adverse reactions" in explanation.factors[1]
+    if severity is None:
+        assert "unknown" in explanation.factors[2]
 
 
 class TestHumanizeDelta:

@@ -79,6 +79,28 @@ See [tests/TESTING_GUIDE.md](tests/TESTING_GUIDE.md) for comprehensive testing d
 
 ## Runtime configuration ownership
 
+### Notification snapshot signing (NOT-003)
+
+`NOTIFICATION_TOKEN_SIGNING_SECRET` is an optional independent server-only root
+of at least 32 random characters, consistent across API replicas. Set it through
+the approved secret/configuration process, never a frontend variable or committed
+file. Notification tokens always use an HMAC-SHA256 purpose-derived key, not the
+raw root or Supabase authentication signing key. If the independent root is absent,
+the purpose-derived rollout fallback uses the auth root; it separates token
+protocols, but does not provide independent root-compromise protection.
+
+Deploying this change or rotating the notification root invalidates earlier
+15-minute notification snapshots/cursors: refresh the view and retry the read
+action. Authentication sessions and stored read state are unchanged. There is no
+legacy raw-auth-key verification fallback. During mixed-version rollout, an older
+replica can reject a new snapshot or vice versa; refresh after rollout convergence.
+Do not regenerate a clinical event. No remote secret/key/configuration change is
+performed by this code.
+
+Clinician accounts referenced by clinical audit/provenance are retained. Permanent
+clinician deletion is not an expo requirement; preserve attribution and existing
+database restrictions instead of nulling or deleting clinical history.
+
 ### Demo follow-ups: activity review and evaluation
 
 COM-002 adds optional `care_plan_item_id` to private conversation sends. Only a

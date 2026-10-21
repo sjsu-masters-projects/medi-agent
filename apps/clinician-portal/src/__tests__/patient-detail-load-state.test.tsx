@@ -34,6 +34,19 @@ function deferred() {
 }
 
 describe("patient detail load states", () => {
+    it("keeps an unlisted confirmed product visible without creating approved medication", async () => {
+        mocks.tab = "symptoms";
+        mocks.fetch.mockResolvedValue({ ...patient(), symptom_reports: [
+            { id: "unlisted-report", patientId: "synthetic-a", symptom: "Synthetic symptom", severity: null,
+                confirmationState: "patient_confirmed", reportedProduct: { name: "Synthetic supplement", concern: true },
+                flaggedForAdr: false, createdAt: "2026-10-21T09:00:00Z" },
+        ] });
+        render(<PatientPage />);
+        expect(await screen.findByText("Patient-reported product: Synthetic supplement")).toBeInTheDocument();
+        expect(screen.getByText(/Not linked to a recorded medication/)).toBeInTheDocument();
+        expect(screen.getByText(/not a confirmed adverse reaction/)).toBeInTheDocument();
+        expect(screen.queryByText("ADR Flagged")).not.toBeInTheDocument();
+    });
     it("distinguishes confirmed testimony, unknown severity and legacy history", async () => {
         mocks.tab = "symptoms";
         mocks.fetch.mockResolvedValue({ ...patient(), symptom_reports: [

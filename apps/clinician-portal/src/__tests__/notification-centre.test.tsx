@@ -57,6 +57,8 @@ describe("clinician notification centre", () => {
   it("shares one cache between bell and Alerts, with no legacy archive on Alerts", async () => {
     render(<NotificationProvider><NotificationBell /><AlertsPage /></NotificationProvider>);
     await screen.findByText("Patient reported a barrier");
+    expect(screen.getByText(/Your clinical action inbox/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Patient upload reviews" })).toHaveAttribute("href", "/review-queue");
     expect(notificationCentre.summary).toHaveBeenCalledTimes(1);
     expect(notificationCentre.list).toHaveBeenCalledTimes(2);
     expect(screen.getByRole("link", { name: "Review barrier" })).toHaveAttribute("href", "/patients/p1?tab=adherence&activity=med-1");

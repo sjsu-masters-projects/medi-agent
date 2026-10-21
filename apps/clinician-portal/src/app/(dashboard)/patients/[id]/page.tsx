@@ -511,6 +511,11 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                                         ? `Patient-confirmed${s.confirmedAt ? ` · ${s.confirmedAt}` : ""}`
                                                         : "Historical report — patient confirmation not recorded"}</p>
                                                     {s.confirmedSummary && <details className="mt-2 text-sm"><summary className="min-h-11 cursor-pointer py-2">Confirmed patient summary</summary><p className="whitespace-pre-wrap">{s.confirmedSummary}</p></details>}
+                                                    {s.reportedProduct && <div className="mt-2 max-w-prose break-words rounded-lg bg-surface-2 p-2 text-xs text-ink-2">
+                                                        <p className="font-medium">Patient-reported product: {s.reportedProduct.name}</p>
+                                                        {!s.relatedMedicationId && <p>Not linked to a recorded medication. Review before linking or adding; this does not approve a medication.</p>}
+                                                        {s.reportedProduct.concern === true && <p>A reported concern is not a confirmed adverse reaction.</p>}
+                                                    </div>}
                                                     {s.onset && (
                                                         <p className="mt-0.5 text-xs text-muted">
                                                             Onset: {s.onset}

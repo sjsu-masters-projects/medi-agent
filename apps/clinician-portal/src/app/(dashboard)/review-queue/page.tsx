@@ -5,7 +5,7 @@ import { SourceFileIcon } from "@/components/features/source-file";
 import { clinicScopeLabel } from "@/hooks/clinic-scope";
 import { useClinicFilter } from "@/hooks/use-clinic-filter";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
     DocumentTypeTile,
@@ -43,6 +43,7 @@ export default function ReviewQueuePage() {
     const [busyDocumentId, setBusyDocumentId] = useState<string | null>(null);
     const [rejectingItem, setRejectingItem] = useState<ClinicReviewQueueItem | null>(null);
     const [rejectNote, setRejectNote] = useState("");
+    const requestSequence = useRef(0);
 
     const pendingCount = useMemo(() => items.length, [items.length]);
 
@@ -50,26 +51,31 @@ export default function ReviewQueuePage() {
     const { clinicId, ready } = clinicFilter;
 
     const loadQueue = useCallback(async () => {
+        const sequence = ++requestSequence.current;
         setLoading(true);
         setError(null);
         try {
             const result = await fetchDocumentReviewQueue(clinicId);
-            setItems(result);
+            if (sequence === requestSequence.current) setItems(result);
         } catch (queueError) {
+            if (sequence !== requestSequence.current) return;
             setError(
                 queueError instanceof Error
                     ? queueError.message
                     : "Unable to load the review queue.",
             );
         } finally {
-            setLoading(false);
+            if (sequence === requestSequence.current) setLoading(false);
         }
     }, [clinicId]);
 
     useEffect(() => {
+        setItems([]);
+        setRejectingItem(null);
         if (ready) {
             void loadQueue();
         }
+        return () => { requestSequence.current += 1; };
     }, [loadQueue, ready]);
 
     async function handleApprove(item: ClinicReviewQueueItem) {
@@ -130,6 +136,7 @@ export default function ReviewQueuePage() {
                     </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                <Link href={clinicId ? `/alerts?clinic=${encodeURIComponent(clinicId)}` : "/alerts"} className="inline-flex min-h-9 items-center rounded-lg border border-line-strong bg-surface px-3 text-sm font-medium text-ink-2 hover:bg-surface-2">All clinical actions</Link>
                 <ClinicFilterField filter={clinicFilter} />
                 <button
                     disabled={loading || busyDocumentId !== null}
