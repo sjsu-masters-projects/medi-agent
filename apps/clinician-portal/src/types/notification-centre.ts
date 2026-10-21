@@ -15,6 +15,8 @@ export interface CentreItem {
   patient_name?: string | null;
   clinic_name?: string | null;
   clinic_id?: string | null;
+  source_label?: string | null;
+  state_checked_at?: string | null;
 }
 
 export interface CentrePage {

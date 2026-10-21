@@ -370,6 +370,92 @@ def test_explanation_preserves_existing_rule_and_unknown_data(score, count, seve
         assert "unknown" in explanation.factors[2]
 
 
+@pytest.mark.asyncio
+async def test_source_freshness_uses_actual_scoped_dates_not_calculation_time():
+    db = MagicMock()
+    service = RiskScoreService(db)
+    service._execute = AsyncMock(
+        side_effect=[
+            _response(data=[{"logged_at": "2026-10-02T10:00:00Z"}]),
+            _response(data=[{"created_at": "2026-10-03T11:00:00Z"}]),
+            _response(data=[{"updated_at": "2026-10-04T12:00:00Z"}]),
+            _response(data=[{"created_at": "2026-09-01T09:00:00Z"}]),
+        ]
+    )
+    patient = uuid4()
+    freshness = await service._fetch_source_freshness(patient)
+    assert [item.latest_at.day for item in freshness] == [2, 3, 4, 1]
+    assert all(item.status == "available" for item in freshness)
+    db.table.assert_any_call("adr_assessments")
+    db.table.return_value.select.return_value.eq.assert_any_call("patient_id", str(patient))
+    assert len(service._execute.await_args_list) == 4
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("data", [[], [{"logged_at": None}], [{}]])
+async def test_missing_source_freshness_is_unknown(data):
+    service = RiskScoreService(MagicMock())
+    service._execute = AsyncMock(return_value=_response(data=data))
+    freshness = await service._fetch_latest_source(uuid4(), ("adherence_logs", "logged_at", 30))
+    assert freshness.status == "unknown"
+    assert freshness.latest_at is None
+
+
+@pytest.mark.asyncio
+async def test_failed_freshness_read_is_explicit_and_other_sources_remain_available():
+    service = RiskScoreService(MagicMock())
+    service._execute = AsyncMock(
+        side_effect=[
+            RuntimeError("private provider detail"),
+            _response(data=[]),
+            _response(data=[{"updated_at": "2026-10-04T12:00:00Z"}]),
+            _response(data=[]),
+        ]
+    )
+    result = await service._fetch_source_freshness(uuid4())
+    assert [item.status for item in result] == ["unavailable", "unknown", "available", "unknown"]
+    assert "private" not in str(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "table,field,days",
+    [
+        ("adherence_logs", "logged_at", 30),
+        ("symptom_reports", "created_at", 7),
+        ("adr_assessments", "updated_at", None),
+        ("medications", "created_at", None),
+    ],
+)
+async def test_freshness_query_matches_signal_scope_and_reads_only_latest_date(table, field, days):
+    query = MagicMock()
+    for method in ("select", "eq", "gte", "order", "limit", "is_"):
+        getattr(query, method).return_value = query
+    query.not_ = query
+    db = MagicMock()
+    db.table.return_value = query
+    service = RiskScoreService(db)
+    service._execute = AsyncMock(return_value=_response(data=[]))
+    patient = uuid4()
+    await service._fetch_latest_source(patient, (table, field, days))
+    db.table.assert_called_once_with(table)
+    query.select.assert_called_once_with(field)
+    query.eq.assert_any_call("patient_id", str(patient))
+    query.order.assert_called_once_with(field, desc=True)
+    query.limit.assert_called_once_with(1)
+    query.is_.assert_any_call(field, "null")
+    assert query.gte.call_count == (1 if days else 0)
+    if days:
+        assert query.gte.call_args.args[0] == field
+    if table == "symptom_reports":
+        query.eq.assert_any_call("confirmation_state", "patient_confirmed")
+        query.is_.assert_any_call("severity", "null")
+    elif table == "adr_assessments":
+        query.eq.assert_any_call("status", "draft")
+    elif table == "medications":
+        query.eq.assert_any_call("is_active", True)
+
+
 class TestHumanizeDelta:
     """Tests for the _humanize_delta helper function."""
 

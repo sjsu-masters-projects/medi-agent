@@ -81,6 +81,17 @@ describe("clinician notification centre", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(); expect(bell).toHaveFocus();
   });
 
+  it("explains the authoritative source and distinguishes a state snapshot from clinical review", async () => {
+    vi.mocked(notificationCentre.list).mockResolvedValue(page([item({
+      source_label: "Confirmed patient symptom report", state_checked_at: "2026-10-21T10:00:00Z",
+    })]));
+    render(<NotificationProvider><NotificationList actions /></NotificationProvider>);
+    fireEvent.click(await screen.findByText("Source and freshness"));
+    expect(screen.getByText("Source: Confirmed patient symptom report")).toBeVisible();
+    expect(screen.getByText(/not the last clinical review/)).toBeVisible();
+    expect(document.querySelector('time[datetime="2026-10-21T10:00:00Z"]')).toBeInTheDocument();
+  });
+
   it("records a note only after explicit acknowledgement and never treats read as acknowledgement", async () => {
     render(<NotificationProvider><NotificationList /><NotificationList actions /></NotificationProvider>);
     fireEvent.click(await screen.findByRole("button", { name: "Mark read: Patient reported a barrier" }));

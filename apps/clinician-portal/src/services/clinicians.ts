@@ -101,6 +101,12 @@ export interface PatientRiskData {
         adherence_window_days: number;
         symptom_window_days: number;
         factors: string[];
+        source_freshness?: Array<{
+            source: string;
+            timestamp_field: string;
+            latest_at: string | null;
+            status: "available" | "unknown" | "unavailable";
+        }> | null;
     } | null;
     /** The clinic of the clinician's link to this patient. */
     clinic_id?: string | null;
@@ -115,6 +121,66 @@ export interface DashboardResponse {
     low_risk: number;
     pending_adr_reviews: number;
     medwatch_pending: number;
+}
+
+export interface PatientTimelineEvent {
+    id: string;
+    domain: string;
+    source_table: string;
+    source_id: string;
+    occurred_at: string;
+    timestamp_label: string;
+    title: string;
+    details: Record<string, string | null>;
+    source_href: string;
+    destination_href: string | null;
+}
+
+export interface PatientTimelineResponse {
+    patient_id: string;
+    retrieved_at: string;
+    events: PatientTimelineEvent[];
+    sources: Array<{
+        source: string;
+        status: "available" | "unavailable";
+        returned: number;
+        limit: number;
+        has_more: boolean | null;
+        omitted_invalid: number;
+        conversation_limit: number | null;
+        conversations_truncated: boolean | null;
+    }>;
+}
+
+export function fetchPatientTimeline(patientId: string): Promise<PatientTimelineResponse> {
+    return apiFetch(`/api/v1/clinicians/me/patients/${encodeURIComponent(patientId)}/timeline`);
+}
+
+export interface ExternalRecordReviewsResponse {
+    items: Array<{
+        patient_id: string;
+        patient_name: string;
+        clinic_id: string | null;
+        clinic_name: string | null;
+        pending_count: number;
+        inspected_candidates: number;
+        oldest_source_captured_at: string | null;
+        source_times_complete: boolean;
+    }>;
+    retrieved_at: string;
+    page: number;
+    page_size: number;
+    assigned_patients: number;
+    patients_examined: number;
+    has_more: boolean;
+    candidate_limit: number;
+    citation_limit: number;
+}
+
+export function fetchExternalRecordReviews(page: number, clinicId?: string | null): Promise<ExternalRecordReviewsResponse> {
+    const params = new URLSearchParams({ page: String(page) });
+    if (clinicId) params.set("clinic_id", clinicId);
+    return apiFetch(`/api/v1/clinicians/me/external-record-reviews?${params}`);
 }
 
 export interface ADRReviewEvidence {

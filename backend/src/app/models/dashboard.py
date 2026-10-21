@@ -32,8 +32,17 @@ A2ATaskStatus = Literal[
 # ── Per-patient risk card ────────────────────────────────────────────────────
 
 
+class RiskSourceFreshness(BaseModel):
+    """Latest recorded source event; absent records are unknown, not fresh."""
+
+    source: str
+    timestamp_field: str
+    latest_at: datetime | None = None
+    status: Literal["available", "unknown", "unavailable"] = "unknown"
+
+
 class RiskExplanation(BaseModel):
-    """Reproducible review-priority inputs, not clinical validation/freshness."""
+    """Versioned review-priority inputs and optional source dates, not clinical validation."""
 
     rule_version: str
     calculated_at: datetime
@@ -41,6 +50,40 @@ class RiskExplanation(BaseModel):
     adherence_window_days: int = 30
     symptom_window_days: int = 7
     factors: list[str]
+    source_freshness: list[RiskSourceFreshness] | None = None
+
+
+class PatientTimelineEvent(BaseModel):
+    """Read-only source projection; no inferred clinical event dates."""
+
+    id: str
+    domain: str
+    source_table: str
+    source_id: UUID
+    occurred_at: datetime
+    timestamp_label: str
+    title: str
+    details: dict[str, str | None] = Field(default_factory=dict)
+    source_href: str
+    destination_href: str | None = None
+
+
+class TimelineSourceCoverage(BaseModel):
+    source: str
+    status: Literal["available", "unavailable"]
+    returned: int = 0
+    limit: int
+    has_more: bool | None = None
+    omitted_invalid: int = 0
+    conversation_limit: int | None = None
+    conversations_truncated: bool | None = None
+
+
+class PatientTimelineResponse(BaseModel):
+    patient_id: UUID
+    retrieved_at: datetime
+    events: list[PatientTimelineEvent]
+    sources: list[TimelineSourceCoverage]
 
 
 class PatientRiskData(ClinicTag):

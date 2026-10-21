@@ -108,6 +108,21 @@ Clinician accounts referenced by clinical audit/provenance are retained. Permane
 clinician deletion is not an expo requirement; preserve attribution and existing
 database restrictions instead of nulling or deleting clinical history.
 
+### Source review and timeline (#208)
+
+The clinician timeline endpoint is assignment-scoped, read-only and bounded to
+40 dated rows per source bucket and ten own conversations. Message reads reuse
+the exact-thread authorization RPC. Source failures and missing dates are explicit;
+calculation/retrieval times are not clinical review dates or a full audit trail.
+
+Migration `079_unlisted_product_review_alerts.sql` adds atomic forward-only review
+capture for newly confirmed unlinked product concerns. It does not approve/add a
+medicine, infer a medication FK from cached context, or create an ADR/Naranjo score.
+Existing authorized notification acknowledgement records seen-for-follow-up only.
+Review the checksum and apply through the ledger only with separate authorization;
+no historical notification backfill is performed. Deploy reviewed code before
+testing a new confirmation, then verify the exact report destination and read audit.
+
 ### Demo follow-ups: activity review and evaluation
 
 COM-002 adds optional `care_plan_item_id` to private conversation sends. Only a
@@ -598,6 +613,15 @@ PYTHONPATH=src .venv/bin/python -m app.workers.health_knowledge_refresh
 ```
 
 Design, checks and failure behaviour: `.agent/specs/nora-002-grounded-answers.md`.
+
+Assigned clinicians may explicitly request
+`GET /smart/patients/{patient_id}/facts/{fact_id}/medication-reference` under
+`/api/v1`. It reuses this cache for the candidate's recorded drug name only, bounds
+official links/excerpts, and returns source check/version/update/stale metadata.
+The ingredient concept is informational and does not update candidate or canonical
+RxNorm values. `GET /api/v1/clinicians/me/external-record-reviews` is a separate
+current-assignment/clinic-scoped, paginated source-work summary, not a notification
+count. Both endpoints preserve existing clinical decision APIs and permission gates.
 
 ## Scheduled jobs
 

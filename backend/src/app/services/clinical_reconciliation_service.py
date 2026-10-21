@@ -16,6 +16,7 @@ from supabase import Client
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models.reconciliation import ReconciliationDecision, ReconciliationDecisionRequest
 from app.services.external_patient_binding_service import ExternalPatientBindingService
+from app.services.smart_launch_service import SmartLaunchService
 
 
 class ClinicalReconciliationService:
@@ -58,7 +59,7 @@ class ClinicalReconciliationService:
         return {
             "fact_id": str(fact_id),
             "fact_type": fact_type,
-            "projectable": fact_type in self.PROJECTABLE_FACT_TYPES,
+            "projectable": self._is_projectable(fact),
             "candidate_fields": candidate,
             "available_fields": sorted(candidate),
             "matches": matches,
@@ -133,13 +134,18 @@ class ClinicalReconciliationService:
         request: ReconciliationDecisionRequest,
     ) -> dict[str, Any]:
         fact = self._fact(fact_id=fact_id, patient_id=patient_id)
+        replay = self._existing_decision(
+            fact_id=fact_id, patient_id=patient_id, actor_id=actor_id, request=request
+        )
+        if replay is not None:
+            return replay
         if fact.get("review_state") != "pending_review":
             raise ValidationError("Only pending imported facts can be reconciled")
         if fact.get("reconciliation_state") not in {None, "not_started", "deferred"}:
             raise ValidationError("Reconciled clinical facts are immutable evidence")
 
         fact_type = str(fact["fact_type"])
-        projectable = fact_type in self.PROJECTABLE_FACT_TYPES
+        projectable = self._is_projectable(fact)
         if request.decision in {ReconciliationDecision.ADD, ReconciliationDecision.UPDATE}:
             if not projectable:
                 raise ValidationError(
@@ -184,6 +190,74 @@ class ClinicalReconciliationService:
         if not isinstance(data, dict):
             raise ValidationError("Could not record reconciliation decision")
         return data
+
+    def _existing_decision(
+        self,
+        *,
+        fact_id: UUID,
+        patient_id: UUID,
+        actor_id: UUID,
+        request: ReconciliationDecisionRequest,
+    ) -> dict[str, Any] | None:
+        """Recover a committed decision after a lost response, before lifecycle guards."""
+        rows = (
+            self.db.table("clinical_fact_reconciliation_events")
+            .select("*")
+            .eq("fact_id", str(fact_id))
+            .eq("patient_id", str(patient_id))
+            .eq("actor_id", str(actor_id))
+            .eq("idempotency_key", str(request.idempotency_key))
+            .execute()
+            .data
+        )
+        if not isinstance(rows, list) or not rows:
+            return None
+        # A committed decision is immutable, but its actor's access can be revoked.
+        # Reuse the route's current-assignment gate before returning any snapshot.
+        authorization = SmartLaunchService(self.db)
+        with authorization.http:
+            authorization.ensure_assignment(clinician_id=actor_id, patient_id=patient_id)
+        event = cast(dict[str, Any], rows[0])
+        if (
+            event["decision"] != request.decision.value
+            or (event.get("note") or None)
+            != ((request.note.strip() or None) if request.note else None)
+            or (
+                request.decision is ReconciliationDecision.UPDATE
+                and (
+                    str(event.get("target_id")) != str(request.target_id)
+                    or sorted(event["selected_fields"]) != sorted(set(request.selected_fields))
+                )
+            )
+        ):
+            raise ValidationError("Idempotency key belongs to another reconciliation decision")
+        return {
+            "fact_id": event["fact_id"],
+            "event_id": event["id"],
+            "decision": event["decision"],
+            "target_type": event.get("target_type"),
+            "target_id": event.get("target_id"),
+            "target_before": event.get("target_before"),
+            "target_after": event.get("target_after"),
+            "replayed": True,
+        }
+
+    @classmethod
+    def _is_projectable(cls, fact: dict[str, Any]) -> bool:
+        # Exact absence statements remain reviewable source evidence. Do not
+        # infer negation from substrings in names or mixed clinical narratives.
+        if fact["fact_type"] == "allergy":
+            allergen = (fact.get("value") or {}).get("allergen")
+            if cls._normal(allergen) in {
+                "nkda",
+                "nka",
+                "no known allergies",
+                "no known drug allergies",
+                "sin alergias conocidas",
+                "sin alergias medicamentosas conocidas",
+            }:
+                return False
+        return fact["fact_type"] in cls.PROJECTABLE_FACT_TYPES
 
     def _require_external_binding_if_fhir(self, *, fact: dict[str, Any], patient_id: UUID) -> None:
         """Require explicit identity confirmation before a FHIR fact changes a chart."""
@@ -249,7 +323,7 @@ class ClinicalReconciliationService:
 
     def _matches(self, *, fact: dict[str, Any], candidate: dict[str, Any]) -> list[dict[str, Any]]:
         fact_type = str(fact["fact_type"])
-        if fact_type not in self.PROJECTABLE_FACT_TYPES:
+        if not self._is_projectable(fact):
             return []
         patient_id = str(fact["patient_id"])
         table_name = self._TARGET_TABLE[fact_type]
@@ -368,6 +442,8 @@ class ClinicalReconciliationService:
         return None
 
     def _candidate_fields(self, fact: dict[str, Any]) -> dict[str, Any]:
+        if not self._is_projectable(fact):
+            return {}
         value = cast(dict[str, Any], fact.get("value") or {})
         fact_type = str(fact["fact_type"])
         if fact_type == "medication":

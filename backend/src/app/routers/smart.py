@@ -29,6 +29,7 @@ from app.models.fhir_import import (
     SmartLaunchRequest,
     SmartLaunchResponse,
 )
+from app.models.medication_reference import MedicationReferenceRead
 from app.models.reconciliation import (
     ReconciliationDecision,
     ReconciliationDecisionRead,
@@ -40,6 +41,7 @@ from app.services.clinical_reconciliation_service import ClinicalReconciliationS
 from app.services.external_patient_binding_service import ExternalPatientBindingService
 from app.services.fhir_audit_export_service import FhirAuditExportService
 from app.services.fhir_import_review_service import FhirImportReviewService
+from app.services.medication_reference_service import MedicationReferenceService
 from app.services.smart_launch_service import (
     SmartLaunchService,
     SmartProviderAuthorizationError,
@@ -63,6 +65,10 @@ def _fhir_import_review_service(db: Client = Depends(get_db)) -> FhirImportRevie
 
 def _clinical_reconciliation_service(db: Client = Depends(get_db)) -> ClinicalReconciliationService:
     return ClinicalReconciliationService(db)
+
+
+def _medication_reference_service(db: Client = Depends(get_db)) -> MedicationReferenceService:
+    return MedicationReferenceService(db)
 
 
 def _external_patient_binding_service(
@@ -308,6 +314,19 @@ async def reconciliation_preview(
     return ReconciliationPreviewRead.model_validate(
         reconciliation.preview(fact_id=fact_id, patient_id=patient_id)
     )
+
+
+@router.get(
+    "/patients/{patient_id}/facts/{fact_id}/medication-reference",
+    response_model=MedicationReferenceRead,
+)
+async def medication_reference(
+    patient_id: UUID,
+    fact_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: MedicationReferenceService = Depends(_medication_reference_service),
+) -> MedicationReferenceRead:
+    return await service.get_reference(user.id, patient_id=patient_id, fact_id=fact_id)
 
 
 @router.post(

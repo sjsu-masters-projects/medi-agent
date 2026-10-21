@@ -3,6 +3,7 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { ClinicFilterField } from "@/components/features/clinic-chip";
+import { ExternalRecordReviews } from "@/components/features/external-record-reviews";
 import { NotificationList } from "@/components/features/notification-centre";
 import { useNotificationCentre } from "@/components/features/notification-provider";
 import { clinicScopeLabel } from "@/hooks/clinic-scope";
@@ -28,6 +29,7 @@ function AlertsContent() {
       {(["actions", "history"] as const).map((value) => <button key={value} type="button" aria-pressed={view === value} onClick={() => setView(value)} className={`min-h-9 rounded-md px-4 text-sm ${view === value ? "bg-surface font-medium text-ink shadow-sm" : "text-muted"}`}>{value === "actions" ? "Needs attention" : "History"}</button>)}
     </div>
     <NotificationList key={view} actions={view === "actions"} clinicFilter={clinicFilter} />
+    {view === "actions" && <ExternalRecordReviews clinicId={clinicFilter.clinicId} ready={clinicFilter.ready} />}
 
   </div>;
 }

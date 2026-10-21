@@ -1,233 +1,228 @@
 # Records, medication and clinician-workflow completion
 
-Requested October 21, 2026 (Pacific). Scope: REC-001, REC-002, NOT-003,
-OPS-006, MED-001, CLN-001 and CLN-002. This plan is linked from TASKS so future
-work does not depend on chat history. Branch: `codex/expo-workflow-completion`.
-Delivery: [draft PR #208](https://github.com/sjsu-masters-projects/medi-agent/pull/208),
-implementation checkpoint `aec00e2`. Do not merge while its explicit workflow
-checklist is incomplete; continue changes on this branch, not merged #207.
+Scope: REC-001/002, NOT-003, OPS-006, MED-001, CLN-001/002.
+Delivery: [PR #208](https://github.com/sjsu-masters-projects/medi-agent/pull/208),
+branch `codex/expo-workflow-completion`, based on merged #207 (`977cf8c`).
+This is the current contract/checkpoint, not a chronological status log.
+Detailed requirements remain in [backlog acceptance](project-backlog-acceptance.md).
 
-## Rules and current position
+## Approved boundaries
 
-Start from merged #207 (`977cf8c`), inspect existing implementation and acceptance
-before adding replacements. Its main CI, frontend CI, quality checks and backend
-deployment succeeded. No remote write, migration, deployment or load generation
-is authorized by this plan. Do not overwrite teammate #203 translation or #193
-confirmed-intake work. No existing task is removed or declared Done by this audit.
+Requester decisions, October 21, 2026:
 
-## Initial evidence and remaining scope
+- Synthetic university-expo workflows, not commercial production certification.
+- OPS-006 retains durable worker/recovery. SSE replacement, counter/stream rewrite
+  and large load/cost reset are excluded. Historical OPS-005 RCA is separate.
+- Alerts is the common action inbox. Patient Upload Review Queue stays source
+  approval only; existing clinical approval screens remain authoritative.
+- Retain audited clinician accounts; permanent deletion is excluded. No FK weakening.
+- MED-001 is source-based review, not comprehensive drug interaction/equivalence
+  checking. Unlisted testimony is not approved medication; flags are not confirmed ADRs.
+- No backfill, active chart write, SQL application, code deployment or merge is
+  authorized by this document. The separately authorized secret configuration below
+  is completed. Requester authorized two implementation/review agents for this PR.
 
-| Task | Existing implementation | Completion work / decision |
+## Task implementation and release acceptance
+
+| Task | Implementation / local acceptance | Release acceptance still required |
 | --- | --- | --- |
-| REC-001 | Grounded document titles; format/viewer contract; guarded extraction/retry; candidate correction/review; applied-source withdrawal preserves clinical truth/audit | Verify correction, retry, duplicate/error and withdrawal behavior end to end; inspect title reuse in citations/care-plan review; fix demonstrated gaps. No backfill or deletion of existing cited records without specific authorization. |
-| REC-002 | ClinicalReconciliationService previews matches and explicitly applies add/update/keep/defer/reject via one audited database transaction; source identity binding; dedicated review UI | Verify candidate → selected-field decision → unchanged unrelated medication/reminders → persistent provenance, plus stale/foreign/duplicate negatives. Do not rebuild this service or claim local tests are a deployed journey. |
-| NOT-003 | Actor/role/purpose/audience-bound 15-minute snapshots, now locally domain-key separated | Independent root configuration and deployed acceptance remain. Permanent deletion excluded by accepted retention decision; preserve all audit references. |
-| OPS-006 | Durable queue/worker and recovery accepted, plus 35 isolated PostgreSQL checks and live read-only configuration/IAM evidence | Amended worker slice complete; no SSE, counter rewrite or load/cost reset required. Historical failure RCA stays OPS-005. |
-| MED-001 | Canonical medication CRUD, conservative candidate matching and clinician-selected updates; RxNorm normalizer exists but no live callers found | Patient-reported unlisted products must remain evidence, not disappear or become approved medication automatically. Add explicit identity/source/conflict review, uncertainty, preserved history. A comprehensive interaction/allergy/duplicate-therapy engine is not already implemented; evidence coverage and clinical-review labeling must be explicit. No model-only assertion that a combination is safe. |
-| CLN-001 | Alerts is the accepted action inbox; local cross-links preserve clinic; queue ignores stale responses | Finish age/source/freshness, supported work coverage and shared-review updates; existing authorized review controls stay separate. |
-| CLN-002 | Deterministic threshold-based Risk Radar; adherence/open ADR/recent severity inputs and dashboard explanation; symptom timeline | Add explicit rule version, calculation time/data freshness, reason contributions and a source-linked cross-domain timeline. Unknown/missing data must not mean low risk or missed medication; automation is not a diagnosis. |
+| REC-001 | Grounded titles in catalog, existing citations and care-plan evidence; original filenames/IDs/pages preserved. Correction, bounded retries and source withdrawal/provenance contracts tested. | Deployed source-title and correction/retry/retained-source UI recheck. |
+| REC-002 | Actual 029–032 RPC contracts for add/update selected fields/keep/defer/reject, binding, replay, stale/foreign sources and unchanged reminders/history. Lost-response retry and exact NKDA absence handling fixed. | Authorized synthetic comparison → explicit decision → reload/provenance journey. |
+| NOT-003 | Purpose-derived signing and independent-root option; actor/role/purpose/expiry/rotation/auth-token isolation tests. Independent root configured. | New-code activation, both portals' notification reads/read-through and stale-cursor refresh. |
+| OPS-006 | Amended worker slice accepted: real outage/long-session delivery, 35 PostgreSQL contracts and bounded runtime/IAM checks. | Already Done for this slice, not blanket inherited-IAM/hosted-checksum or OPS-005 closure. |
+| MED-001 | Source conflict flags, explicit-click public references with source/cache dates, unchecked coverage, conservative matching, preserved testimony and atomic forward-only review capture. No invented medication/ADR/Naranjo for unlinked products. | Separately authorized 079, new synthetic confirmation → exact report alert → audited acknowledgement; reference lookup and approved meds/reminders unchanged. |
+| CLN-001 | Scoped inbox/review links, current external-candidate pages and exact counts, source/age/snapshot context, visible-only refresh and stale-clinic isolation. Existing decision APIs unchanged. | Two-reviewer shared state, clinic/access scope, failure/retry and acknowledgement UI. |
+| CLN-002 | Versioned risk rationale, actual source dates and bounded cross-domain source-linked timeline with explicit unavailable coverage. | Deployed timeline/freshness/links, own-private-thread isolation and keyboard/narrow-layout acceptance. |
 
-## Product decisions — approved October 21
+Implementation/CI review readiness is not deployed acceptance. Do not mark task
+rows Done from local tests, preview deployment or a health check alone.
 
-1. OPS-006: retain worker reliability/security; remove SSE rewrite and large
-   load/cost exercise from required expo scope, rather than rewriting a working
-   transport for its own sake. Existing safety/authorization/backpressure remain.
-2. CLN-001: make Alerts the common action inbox, with exact links into the existing
-   document, ADR, care-plan and patient review destinations. Keep patient-upload
-   approval clearly separate from clinical plan publication.
-3. NOT-003: retain accounts referenced by clinical audit history; do not add
-   permanent clinician deletion for the expo. Implement token-signing separation.
-4. MED-001: source-based review only; comprehensive interaction/therapeutic-
-   equivalence engine removed from expo scope. Retain unlisted testimony and
-   explicit unknown coverage; no automatic medication approval or safety verdict.
+## Records and medication contracts
 
-The requester accepted all four decisions. Retain existing authorization, audit
-and clinical review safeguards. OPS-006 closure is bounded worker reliability,
-configuration and security acceptance, not a new transport/counter architecture
-or a commercial-scale performance certification. Historical design details remain
-identified as superseded rather than silently asserted implemented.
+Original artifacts, storage keys, source IDs, exact excerpts/pages and audit history
+remain intact. Clinician care-plan labels prefer grounded English plus original
+filename; missing wording falls back, never translated or inferred. No backfill.
 
-## Delivery order and acceptance
+Reconciliation changes only explicitly selected nonempty fields through the atomic
+RPC. Existing medication IDs, unrelated rows, reminders, adherence and ADR references
+persist. Imports never create reminders. Lost-response replay is actor/patient/fact/
+decision/target/field/note-bound and rechecks assignment before returning snapshots.
+A replay cannot execute another canonical mutation.
 
-1. Record existing behavior/tests/live evidence and scope decisions first.
-2. Finish records/reconciliation gaps as one vertical journey; use isolated
-   database fixtures for destructive, ownership and race negatives.
-3. Complete medication candidate handling and source-linked conflict review
-   without changing approved clinical truth or reminders automatically.
-4. Integrate the agreed action inbox, then versioned risk rationale/timeline.
-5. Finish token separation and bounded worker acceptance; request exact remote
-   authorization separately if new secret/configuration or SQL is needed.
-6. Focused tests and permission/concurrency tests, lint/typecheck/build for changed
-   surfaces, then synthetic two-portal acceptance after deployment. Mark Done only
-   for agreed scope with evidence; distinguish implementation from rollout.
+Exact NKDA/NKA/known absence statements are evidence, not positive allergens.
+Mixed/unknown narrative is not reclassified by substring inference. Possible-name
+matching ignores strength/form text only to offer comparison; ER/IR, salts and
+combinations remain significant. Source dose/frequency/route/status/RxNorm/allergen
+differences are review flags, not equivalence or safety conclusions. Coverage for
+drug interactions/therapeutic equivalence is explicitly unchecked.
 
-## Audit performed October 21
+An optional explicit-click Medication reference panel reuses the existing public
+reference cache. Only the recorded drug name is looked up. Assignment, patient and
+fact identity are checked before lookup. Up to three official DailyMed/MedlinePlus
+references expose bounded excerpts, source version/update/check dates and stale
+state; unresolved and unavailable are distinct. Date-only updates keep their date.
+The RxNorm ingredient concept is informational, never an automatically applied
+candidate value or proof of formulation equivalence. Source clinical evidence,
+canonical medication decisions and public reference material remain separate.
 
-- Eight focused backend suites: **127 passed**, 3 existing dependency
-  deprecation warnings. Suites: clinical reconciliation, document workflow,
-  document titles, document service, risk score, notification centre, task OIDC
-  auth and chat worker. Mocks/unit tests do not prove hosted permissions or UI.
-- Four focused clinician suites: **36 passed** (SMART import review, patient
-  upload Review Queue, Risk Radar presentation, notification centre). Existing
-  Vite warning retained. Component tests do not prove live clinical decisions.
-- Both patient and clinician Vercel statuses for merged #207 are success.
-- Read-only Cloud Tasks: `nora-turns` RUNNING, 5 dispatches/s, concurrency 8,
-  5 attempts, 2–30s backoff, 300s retry duration, matching setup documentation.
-- Worker IAM: only the named task-invoker service account has `roles/run.invoker`
-  in the returned service policy; no public invoker binding observed there.
-- Backend revision `00175-7lt`, 100% traffic, timeout 3600s, concurrency 80,
-  max instances 2, CPU throttling disabled. Worker `00021-s9w`, 100% traffic,
-  timeout 300s, concurrency 4, max instances 3, request-based CPU.
-  This is metadata evidence, not exhaustive effective/inherited IAM, exact hosted
-  migration checksums, OIDC audience/environment verification or load acceptance.
-- No cloud configuration, queue, SQL, identity, clinical record or secret changed.
+Read-only live baseline: Elena's assigned synthetic Rajeev chart had 39 pending
+facts, four medication candidates and three active medicines. Lisinopril strength/
+form matching failed in the deployed preview; local regression fixes this. Preview
+was cancelled; glucose activity and unconfigured reminders stayed unchanged.
+Proof: `/private/tmp/rec-lisinopril-unmatched-before-fix.png` and
+`/private/tmp/rec-unchanged-approved-profile.png`. No live decision is claimed.
 
-## Implementation checkpoint
+## Unlisted-product review and migration 079
 
-NOT-003 now has an optional independent `NOTIFICATION_TOKEN_SIGNING_SECRET`
-(minimum 32 characters). A domain-derived key is used in either configuration,
-never the raw Supabase login-signing secret. Without a separately configured root,
-the domain-separated rollout fallback uses the existing auth root; this separates
-token protocols but is not independent root-secret compromise protection.
-Old raw-auth-signed snapshots are rejected; refresh the view after rollout or key
-rotation. No login/session change or remote secret/configuration change occurred.
+`079_unlisted_product_review_alerts.sql` captures a shared safety-review event
+atomically with a newly confirmed report only for an explicitly answered true
+product concern, nonempty name and no unique canonical medication link. Drafts,
+unknown/declined/false concerns and linked products do not create this item.
+No historical notifications are regenerated.
 
-Medication reconciliation preview now surfaces recorded dosage/frequency/route/
-active-status differences, ambiguous matches and exact recorded allergen-name
-matches as review flags. It explicitly says interactions and therapeutic
-equivalence are not checked. This is a read-only comparison, not clinical advice
-or an automatic approved-list update. The confirmed-report → unlisted-product
-review integration is still unfinished; this preview alone does not close MED-001.
+Only source identifiers/review kind enter event metadata. Existing current
+assignment/clinic authorization, open-work delivery, per-recipient acknowledgement
+and immutable audit are reused. No human message is impersonated. The alert opens
+and focuses the exact report, including outside the ten-row preview; the clinician
+can compare the recorded medication list. Acknowledge means seen for follow-up,
+not resolved, approved medication or confirmed ADR. Cached context cannot replace
+a missing canonical medication FK.
 
-Alerts and patient-upload review link to one another with the current clinic
-filter. The upload queue ignores late responses from previous clinic scopes.
-Risk Radar now offers a versioned explanation with calculation time, data windows
-and unknown-adherence handling. Calculation time is explicitly not source freshness
-or last clinical review. The chronological cross-domain timeline is unfinished.
+The worker completes an unlinked-product screen with a reconciliation requirement,
+not repeated ADR creation failures or an invented Naranjo score. Linked-product
+ADR processing and urgent/emergency guidance are unchanged.
 
-Verification checkpoint: 57 token/service/API tests; 124 risk/clinician API tests;
-29 existing records/binding/reprojection checks; 19 updated reconciliation/SMART
-checks (batches overlap, not an additive unique count). Clinician full suite 631
-passed; final expanded-suite rerun pending. Ruff and source mypy passed. Production
-build passed with `npm run build -- --webpack`; normal Turbopack compilation was
-blocked by local subprocess/port permission, even on elevated retry. No project
-build script was changed; record default build CI separately.
+079 is re-runnable and ends with RLS/browser-access checks, preserving existing
+clinic authorization functions. No remote SQL applied. SHA-256:
+`6b781b77e48d41f618d131d33fd0a710af5cd585a6172fdd42eb56bee92a947e`.
+The local Supabase CLI is unavailable: use this repository's filename/checksum
+ledger, parser and real PostgreSQL contracts, not improvised hosted SQL.
 
-OPS-006 bounded acceptance: 35 real isolated-PostgreSQL worker-event tests pass
-without skips, covering backend-only permissions, leases, concurrency, attempt/
-event sequencing, outbox/requeue recovery and terminal transitions. The live API
-has CHAT_TURNS_VIA_WORKER=true; worker WORKER_MODE=true. Worker URL and OIDC
-audience match; both use the named task-invoker account. API audience defaults to
-that worker URL in source. Queue enqueue and invoker act-as bindings name the
-runtime service account, and the worker's service policy grants run.invoker only
-to the task invoker. Prior deployed outage/long-session execution passed. These
-checks complete the requester-amended worker slice, not inherited-project IAM,
-hosted checksum reconciliation, a scale certification or historical OPS-005 RCA.
+## Inbox, timeline and freshness
 
-## Live records checkpoint and remaining work
+Upload review refreshes every 15 seconds while visible and on focus, retaining
+rows on background failure. Refresh pauses during decisions; old reads cannot
+restore completed rows, old-clinic responses are ignored and timers are removed
+on unmount. Source-state retrieval time is not the last clinical review. Reading
+a notification never completes its underlying work.
 
-Elena signed in; Rajeev patient `c102f321-a2b6-40e4-95f4-f21390b18e57` has three
-active medicines (atorvastatin, lisinopril 20 mg daily, metformin) and one glucose
-activity, all without configured reminders. The External Records workspace
-loaded 39 pending candidates, four medication candidates; its source/type filters
-and separate preview/decision controls work. Read-only Lisinopril preview exposed
-an actual defect: imported `Lisinopril 10 mg tablet` did not match local
-`Lisinopril`, offering Add rather than side-by-side comparison. Screenshot
-`/private/tmp/rec-lisinopril-unmatched-before-fix.png`. Cancelled; no decision,
-medication edit or publication. Profile remained unchanged afterward; screenshot
-`/private/tmp/rec-unchanged-approved-profile.png`.
+External record review work is read directly from currently assigned patients'
+pending imported candidates, not regenerated as notifications. Each clinic-scoped
+page examines ten assigned patients; exact per-patient counts are separate from
+unread counts. At most 200 candidates and 20 citations per candidate contribute
+source capture-time coverage. Incomplete coverage is labelled; capture time is not
+clinical event time or last review. Rejected, withdrawn, uncited and private-report
+sources do not enter this queue. Rows open existing External Records controls.
 
-Local fix adds a clearly labelled **possible** name match ignoring strength/form
-text, never an equivalence claim; ER/IR/salt/combination words are retained. Seven
-positive/negative regressions accompany it. Source difference and distinct
-recorded RxNorm concepts remain review flags, not automatic reconciliation.
-Deployed recheck still required.
+`GET /api/v1/clinicians/me/patients/{patient_id}/timeline` checks assignment before
+reads. Twelve buckets cover uploads/reviews, medication recording, confirmed
+symptoms, adherence, own private messages, appointment recording/actions and
+care-plan/clinical-fact/ADR/clinical-action events. At most 40 newest dated rows
+per bucket, with deterministic ordering, lookahead and explicit invalid/failure
+coverage. Undated records do not receive invented dates.
 
-Confirmed unlisted products now survive normalization and appear explicitly as
-patient-reported testimony in the Symptoms view, without an invented medication
-ID or confirmed ADR. Eleven parser tests and a patient-screen test cover malformed,
-unknown/declined/legacy inputs and unlisted product display. Automated ADR creation
-still requires a recorded medication ID; the unlisted-product review/handoff path
-needs completion, so MED-001 is not Done from merely exposing the saved testimony.
+Messages are restricted to the actor's ten most recently active patient threads;
+the existing RPC verifies each exact conversation's clinic, assignment and active
+membership. Other clinicians' private history, bodies, raw audit payloads and
+private reasoning are excluded. Exact source links expose selected record fields;
+supported source workspaces get exact IDs. Missing bounded results are explained.
+This is not a full audit trail: current fields are not historical snapshots,
+medication recording is not a dose change and appointment creation is not visit time.
 
-Grounded localized display titles now flow into the deterministic chat catalog,
-retaining the original filename and falling back without cross-locale invention.
-43 focused catalog/chat-service/citation tests pass. Citation title reuse was
-already implemented on main and is verified, not rebuilt. Care-plan source-title
-reuse and the full correction/retry/withdrawal acceptance remain REC-001 work.
+Risk thresholds are unchanged. Explanations include rule version/calculation time,
+recorded-response versus expected-dose adherence, unknown inputs and latest source
+dates. Freshness reads are bounded but not an atomic scoring snapshot or proof of
+clinical currency. Missing dates remain unknown; failed reads are unavailable.
 
-Completed checks: final backend unit/router sweep **3939 passed**; clinician
-**643**, patient **834**, worker PostgreSQL **35**. Both portals passed lint,
-typecheck and production builds with the supported webpack backend; default
-Turbopack remains locally blocked by subprocess-port permissions, not silently
-reported passing. Final source mypy passed 278 files. Ruff check/format and diff
-whitespace passed on changed Python/files; commit hooks repeated source checks.
-Installed only the already-locked local missing `google-cloud-tasks==2.23.0`
-with `--no-deps` to collect queue tests; no lockfile change. Fixed logging test
-isolation from LOG_FORMAT/CLOUD_RUN_JOB overrides (test only), then its 13 tests
-and the broad sweep passed. Expected deprecation warnings remain.
+Timeline schema/privacy follow-up: sender names/text and related-record ID detail
+fields are excluded; only each patient-authorized event identity and exact local
+navigation links remain. An available source date means a dated record was read,
+not that it is clinically fresh or reviewed. In offline PostgreSQL 16,
+`tests/integration/test_patient_timeline_postgres.py` executes selected columns,
+filters, actual FK joins, ordering and limits as `service_role`; every one of the
+twelve source buckets returns real events and all four freshness probes return
+dated sources. It also runs the actual conversation RPC to exclude another
+clinician's thread and deny stale membership, suspended clinic, mismatched
+conversation clinic and revoked exact assignment despite another patient assignment.
+Synthetic symptoms use the real preview/confirmation path, retaining its guards.
 
-Continue in order:
+No new migration/configuration is needed for the timeline; deploy its backend
+endpoint before the UI on the existing confirmed-symptom/clinic-conversation
+migration baseline. The SQL transport does not exercise hosted PostgREST HTTP
+or schema-cache behavior. Its six cases run in CI's explicit no-skip Docker group.
+External record query embedding/counts are additionally exercised against actual
+PostgREST v14.1 over migration-led PostgreSQL, in an isolated local network namespace.
 
-1. Review the saved implementation diff and default-build CI before merge.
-2. Complete REC-001 source-title/retry/correction/withdrawal matrix and REC-002
-   all-decision/replay/permission proof; use isolated fixtures rather than changing
-   Rajeev's active medicines for an unapproved live test.
-3. Complete unlisted product review routing (not automatic ADR/canonical creation)
-   and source freshness/normalization under MED-001's accepted boundaries.
-4. Finish CLN-001 source/age/freshness/shared-review behavior and CLN-002's
-   source-linked cross-domain timeline. Versioned risk modal alone is not closure.
-5. Open/review the completion PR with precise pending deploy/secret/acceptance
-   notes. No deployment, migration, secret configuration or clinical decision has
-   been performed or authorized by this checkpoint.
+## Authorized notification-secret configuration
 
-The `NKDA` absence-of-allergy candidate observed in existing pending source data
-is not a positive-allergen assessment. Do not add it to the canonical allergy
-list as an allergen merely to exercise a test; review its mapping/decision behavior
-in the remaining record lifecycle acceptance.
-
-## Source labels and shared queue follow-up — October 21
-
-Care-plan hydration now includes each linked document's existing grounded
-`display_title`, without renaming `file_name`, changing document IDs or rewriting
-historical evidence. Clinician review shows the English title plus original
-filename in the item list, citation excerpts, source action's accessible name and
-linked-document summary. Missing English wording falls back to the original
-filename, never an invented translation. File-type icons and protected preview
-requests still use the original filename/ID; page navigation is unchanged.
-
-The Patient Upload Review Queue now re-reads authoritative source state every
-15 seconds while visible and on focus/visibility return. Background refresh
-retains prior rows on failure instead of replacing them with a spinner. Polling
-pauses during an open rejection dialog or decision submission; an outstanding
-read is invalidated before a decision so it cannot restore a completed row.
-Timers/listeners are removed on unmount and old-clinic responses remain ignored.
-This is bounded polling, not instantaneous cross-client delivery or a new clinical
-approval workflow. Full action-inbox coverage/source freshness remains open.
-
-Follow-up verification: **48 backend care-plan context/evidence-gate tests** and
-**38 clinician source-label/care-plan/shared-queue tests** pass. Clinician lint
-and typecheck, focused source mypy, Ruff and whitespace checks pass. These counts
-are focused follow-up runs, not additions to the earlier full-suite totals.
-
-The requester separately authorized backend notification-secret configuration.
-This overrides the earlier checkpoint's no-remote-change statement **only** for
-that secret and its runtime binding; it does not authorize a new code image,
-worker change, SQL, clinical action or Supabase login-key change. Deployment uses
-the currently running immutable image digest, not the mutable `latest` tag.
-
-Authorized configuration completed: Secret Manager
-`NOTIFICATION_TOKEN_SIGNING_SECRET`, enabled version **1**, generated directly
-into the service without printing or writing the value locally. Secret-level
-`roles/secretmanager.secretAccessor` was granted to the existing backend runtime
-identity. Backend revision **`mediagent-backend-00176-8zk`** is ready with 100%
-traffic and the version-1 reference. Immutable image SHA-256 remains
+Independent root generated directly into Secret Manager, never printed/written
+locally. Enabled `NOTIFICATION_TOKEN_SIGNING_SECRET:1` is bound to backend
+`mediagent-backend-00176-8zk`, healthy at 100% traffic. Existing runtime identity
+has secret-level accessor access. Same immutable image:
 `57b5e3216793822fd48cf0cd84b6a8263e50b8fac9716d774dc395c594e9f354`.
-Timeout 3600s, concurrency 80, maximum 2 instances, CPU settings and service
-identity remain unchanged. Public `/health` returned healthy. The deployment
-workflow's existing `--update-*` forms preserve this reference on later code
-deployments. Supabase login keys, worker and SQL were not changed.
+Timeout 3600s, concurrency 80, max 2 and CPU/identity settings retained. Deployment
+uses preserving `--update-*` forms. Login keys, worker and SQL were not changed.
 
-**This prepares configuration; it does not deploy #208's new signing code.**
-Independent-root activation and notification read/cursor acceptance must be checked
-after the reviewed PR is merged/deployed. NOT-003 remains In progress until then.
+This configuration revision does not deploy #208's new signing code. New code
+derives a notification-specific key, never uses the raw login key. Without an
+independent root, the domain-derived fallback does not protect against compromise
+of the shared root. Deployment/rotation invalidates old 15-minute snapshots/cursors:
+refresh after replicas converge, never recreate clinical events or change sessions.
+
+## Verification and CI
+
+October 21 combined runs:
+
+- Backend unit/router sweep: **4,030 passed** with `PYTHONPATH=src .venv/bin/pytest tests/unit tests/integration/routers --no-cov -q --tb=short`.
+- Clinician full suite: **675 tests / 76 files passed** with `npm run test`.
+- Previously failed email/scheduling/grants PostgreSQL group: **60 passed**.
+- New unlisted-product PostgreSQL suite: **10 passed**, no skips: atomic capture
+  rollback/retry, new-reviewer shared access, revocation, audited acknowledgement,
+  duplicate confirmation, unchanged canonical truth, rerun and browser denials.
+- Combined unlisted-product/timeline PostgreSQL lane: **16 passed**, no skips,
+  including **6 timeline** source/RPC cases; the earlier one-case projection check
+  was expanded, not counted as a separate final test. Command:
+  `NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER=1 PYTHONPATH=src .venv/bin/pytest tests/integration/test_unlisted_product_review_postgres.py tests/integration/test_patient_timeline_postgres.py --no-cov -q --tb=short -x`.
+- Actual external-review PostgREST contract: **1 passed**, zero skips with
+  `EXTERNAL_REVIEW_TEST_POSTGREST_DOCKER=1 PYTHONPATH=src .venv/bin/pytest tests/integration/test_external_record_reviews_postgrest.py --no-cov -q`.
+  Exact count 39 survives duplicate citations and excludes rejected, withdrawn,
+  private-report, foreign-patient and uncited candidates.
+- Timeline/risk follow-up: **68 passed** with `PYTHONPATH=src .venv/bin/pytest tests/unit/services/test_patient_timeline_service.py tests/unit/test_risk_score_service.py --no-cov -q`, including two explicit API role/assignment denial tests. These overlap the prior broad run.
+- Timeline/risk UI follow-up: **8 passed** with `DEBUG_PRINT_LIMIT=300 npm run test -- src/__tests__/patient-timeline.test.tsx src/__tests__/risk-explanation.test.tsx`; clinician lint/typecheck, focused Ruff/format, source mypy and whitespace checks pass.
+- Reconciliation: **44 real PostgreSQL contracts** passed, including replay after
+  revocation being denied without returning snapshots; **41 focused service checks** pass.
+- Migration parser: **95 files valid**; required source Ruff/format, changed-test
+  Ruff/format and source mypy **283 files** pass. A wider optional all-tests Ruff
+  scan found five pre-existing findings in untouched files; none are new-file findings.
+- Unchanged patient portal prior run: **834 passed**. Final-head CI remains required.
+- Clinician lint/typecheck and webpack production build pass; local default Turbopack had
+  subprocess-port restrictions earlier. Default CI/preview builds are not bypassed.
+
+The failed CI job on `f96514a` had two Docker subprocess setup timeouts (18s
+migration command; 10s database creation) and 58 passed assertions. Process/setup
+budgets are now 60s, retaining PostgreSQL's 12s statement limit, race assertions
+and no-skip requirements. This adds host scheduling headroom; it is not a wider
+infrastructure RCA. New contract suites have explicit CI minimum counts.
+
+CI on the superseded `1b306c4`: all 38 non-summary/scanner checks passed, including
+new PostgreSQL/timeline, reconciliation, actual PostgREST, coverage and frontend
+checks. Secret scanning flagged the
+deliberately invalid URL-userinfo fixture in the reference rejection test (not a
+live credential). A runtime-constructed synthetic fixture passes all 29 reference
+tests locally, without changing scanner rules. The requester authorized replacing
+only that latest commit using an explicit expected-commit lease; earlier commits
+are retained. The replacement head still requires its own CI results.
+
+## Release checklist (separate remote authority)
+
+1. Merge/deploy reviewed code. Verify independent-root notification reads and
+   read-through in both portals; refresh old snapshots without changing sessions.
+2. Apply exact reviewed 079 only after explicit authorization and verify checksum,
+   RLS and grants. Capture is forward-only; use a new synthetic confirmation.
+3. Demonstrate report → assigned alert → exact report → audited acknowledgement,
+   with no medication, ADR, reminder or clinical approval mutation.
+4. Recheck record lifecycle and explicit reconciliation on an authorized synthetic
+   fixture, preserving active demo history.
+5. Verify timeline/freshness, private-thread isolation, shared reviewer refresh,
+   source failures, keyboard focus and narrow layout in deployed UI.
+6. Record actual evidence, then move eligible Verify deployed rows to Done.

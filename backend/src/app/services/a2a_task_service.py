@@ -223,7 +223,9 @@ class A2ATaskService:
             task_type = str(task.get("task_type") or "")
             if task_type == "symptom_adr_screen":
                 output_payload = self._build_pharmacovigilance_result(input_payload)
-                if output_payload["requires_clinician_review"]:
+                if output_payload["requires_clinician_review"] and not output_payload.get(
+                    "requires_medication_reconciliation"
+                ):
                     assessment = await self._persist_adr_assessment(
                         patient_id=str(task.get("patient_id") or ""),
                         payload=input_payload,
@@ -329,7 +331,9 @@ class A2ATaskService:
                 payload = working["input_payload"]
 
             output_payload = self._build_pharmacovigilance_result(payload)
-            if output_payload["requires_clinician_review"]:
+            if output_payload["requires_clinician_review"] and not output_payload.get(
+                "requires_medication_reconciliation"
+            ):
                 assessment = await self._persist_adr_assessment(
                     patient_id=patient_id,
                     payload=payload,
@@ -656,11 +660,20 @@ class A2ATaskService:
         naranjo = score_naranjo(raw_answers)
 
         requires_review = flagged_for_adr
+        requires_reconciliation = (
+            A2ATaskService.confirmed_product_concern(report)
+            and not A2ATaskService.confirmed_medication(report)[0]
+        )
         priority = (
             "high" if (severity is not None and severity >= 8) or flagged_for_adr else "medium"
         )
 
-        if requires_review:
+        if requires_reconciliation:
+            recommendation = (
+                "Review the confirmed patient-reported product and compare the recorded medication "
+                "list before any linkage or addition. No medication or adverse reaction is confirmed."
+            )
+        elif requires_review:
             recommendation = (
                 "Open clinician ADR review queue entry and evaluate suspect medication linkage."
             )
@@ -669,11 +682,14 @@ class A2ATaskService:
 
         return {
             "requires_clinician_review": requires_review,
+            "requires_medication_reconciliation": requires_reconciliation,
             "priority": priority,
             "symptom": symptom,
             "severity": severity,
             "recommendation": recommendation,
-            "naranjo_assistance": naranjo.model_dump(mode="json"),
+            "naranjo_assistance": None
+            if requires_reconciliation
+            else naranjo.model_dump(mode="json"),
         }
 
     @staticmethod
@@ -701,6 +717,10 @@ class A2ATaskService:
         product = answers.get("product") if isinstance(answers, dict) else None
         value = product.get("value") if isinstance(product, dict) else None
         reported_name = str(value.get("name") or "").strip() if isinstance(value, dict) else ""
+        if report.get("confirmation_state") == "patient_confirmed":
+            # Only the canonical FK established at confirmation links an approved
+            # medicine. Cached preview context is evidence, not a replacement FK.
+            return "", medication_name or reported_name
         context = content.get("context") if isinstance(content, dict) else None
         medications = context.get("medications") if isinstance(context, dict) else None
         if not isinstance(medications, list):

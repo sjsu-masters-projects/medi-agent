@@ -148,6 +148,15 @@ assignment and source state. Signed bulk-read snapshots exclude later arrivals.
 Merged in #148 and #149 and deployed; `051_notification_centre.sql` and 052–056 were
 applied October 11. See `.agent/specs/not-001-notification-centre.md` for the contract.
 
+The workflow completion increment separates notification signing from login JWT
+signing and supports an independent server-only root. Migration 079 captures new
+confirmed unlisted-product concerns atomically as shared review work; it never
+creates medication/ADR truth. Alerts also reads current external-candidate work
+directly, separately from unread counts. Its clinic-scoped pages retain failed
+same-scope snapshots but never reuse old-clinic rows. Patient Timeline is a bounded,
+read-only source projection; private messages still use exact-conversation RPC
+authorization. See `.agent/specs/expo-workflow-completion.md` for rollout and tests.
+
 ## Evidence, FHIR, and safety
 
 The codebase validates a supported import subset with maintained FHIR R4B models and

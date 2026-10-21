@@ -132,7 +132,9 @@ def sql(postgres, request):
         check=True,
         capture_output=True,
         text=True,
-        timeout=10,
+        # Docker exec/start scheduling can stall on a busy hosted runner. This
+        # setup-only budget must not become the SQL statement/lock budget below.
+        timeout=60,
     )
     command = postgres + ["-d", database]
     children = []
@@ -143,7 +145,9 @@ def sql(postgres, request):
             input="SET statement_timeout='12s';\n" + statement,
             capture_output=True,
             text=True,
-            timeout=18,
+            # Preserve PostgreSQL's 12s statement limit, but allow host process
+            # scheduling time before psql starts (the observed CI setup failure).
+            timeout=60,
         )
         assert (result.returncode == 0) is succeeds, result.stderr
         return result.stdout.strip() if succeeds else result.stderr

@@ -786,6 +786,14 @@ class ClinicianService:
         risk = await risk_service.get_patient_risk(patient_id)
         return risk.model_dump()
 
+    async def get_patient_timeline(self, clinician_id: UUID, patient_id: UUID) -> Any:
+        """Read bounded source events after checking current patient assignment."""
+        from app.services.patient_timeline_service import PatientTimelineService
+
+        return await PatientTimelineService(self.db, self._assert_patient_assignment).get_timeline(
+            clinician_id, patient_id
+        )
+
     async def get_patient_deep_dive(self, clinician_id: UUID, patient_id: UUID) -> Any:
         """Aggregate all patient data for the Patient Deep Dive view.
 
