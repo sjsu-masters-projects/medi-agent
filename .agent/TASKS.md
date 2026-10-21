@@ -38,7 +38,7 @@ retain existing deletion safeguards and automated regression coverage.
 
 ## Current release and live status
 
-**Active grouped acceptance PR:** `codex/grouped-deployed-acceptance`, from merged
+**Active grouped acceptance PR:** [#207](https://github.com/sjsu-masters-projects/medi-agent/pull/207), `codex/grouped-deployed-acceptance`, from merged
 #206 (`c54c7b5`). All 37 #206 PR checks and main CI passed; both portal deployments
 succeeded, as did its backend rollout. The 64-minute chat journey and post-fix
 real in-flight Wi-Fi recovery are accepted. Remaining focused-document, activity-review,

@@ -1102,6 +1102,13 @@ An extra strict mypy invocation on the standalone PostgreSQL test module is not
 clean (209 errors across its existing untyped fixture/helper/test surface); this
 is outside the configured source-only mypy lane and is not reported as passing.
 No typing configuration was weakened to hide it.
+The configured CI command, `.venv/bin/mypy src/ --ignore-missing-imports`, passes
+all 278 source files. Without that existing CI option the local untyped
+`google.cloud` package produces one import-stub error; no configuration change.
+
+Delivery: [PR #207](https://github.com/sjsu-masters-projects/medi-agent/pull/207),
+initial commit `e2bc42c`; no merge/deployment performed. Continue its explicit
+remaining checks rather than reopening already accepted recovery/review slices.
 
 **Closure boundaries:** PAT-001-A and COM-002 Done; PAT-004 awaits deployment and
 live DV-021 correction recheck. PAT-002-B retains wider private-intake UI checks;
