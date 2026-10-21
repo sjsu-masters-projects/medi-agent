@@ -140,8 +140,10 @@ describe("My schedule", () => {
     clinicFilterState.clinics = TWO;
     clinicFilterState.clinicId = "c2";
     render(<AppointmentsPage />);
-    await screen.findByText("Your visits and appointment offers · Willow Terrace");
-    fireEvent.click(screen.getByRole("radio", { name: "This week" }));
+    // The clinic heading renders before the initial asynchronous schedule load.
+    // Wait for the actual range control rather than treating that heading as ready.
+    fireEvent.click(await screen.findByRole("radio", { name: "This week" }));
+    expect(screen.getByText("Your visits and appointment offers · Willow Terrace")).toBeInTheDocument();
     await waitFor(() => expect(mocks.schedule).toHaveBeenCalledTimes(2));
     const call = mocks.schedule.mock.calls[1]!;
     expect(call[3]).toBe("c2");

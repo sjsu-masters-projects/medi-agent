@@ -801,3 +801,52 @@ was detected and replaced by clean lockfile installation before final checks.
 No package/lockfile change was needed. `git diff --check` passes. No new backend
 code or database change in this increment; prior backend evidence is not described
 as a fresh rerun. DV-017–020 fixes require #205 merge/deployment and live recheck.
+
+### Post-205 merge and delayed renewal observation
+
+#205 merged October 20 at `20:54:59Z` as
+`fb7fb33d16faffd26952caeddc2e72ae7582dcbc`. GitHub commit statuses confirm both
+Vercel portal deployments succeeded; Frontend CI and both CodeQL workflows passed.
+Main CI run `39496052965` failed only the clinician test
+`shows a week on request and passes the clinic filter to the server`
+(626/627 clinician tests passed). It awaited a heading that renders before the
+schedule request finishes, then synchronously queried the not-yet-mounted radio.
+Follow-up waits for the actual `This week` radio before clicking; no production
+scheduling logic, timing delay or weaker assertion is introduced.
+
+**Real-time check is inconclusive:** the one-time follow-up was scheduled for
+`21:25Z` (14:25 Pacific), but the resumed inspection occurred much later; tool
+clock was `2026-10-21T03:12:13Z` (October 20, 20:12 Pacific). Do not present the
+scheduled trigger time as an actual observation. Original user-owned patient tab
+1 was inspected before any navigation/reload/send and showed `/login` with the
+original day-session return path. Temporary tab 5 separately showed
+`reason=session_expired`. No greeting was submitted and no account was changed.
+Screenshot: `/private/tmp/pr205-long-session-signin.png`.
+
+Content-free backend close logs bounded to the intended observation window
+`20:20:29Z`–`21:25:05Z` show client/code pairs at `20:35:17.935418Z` (1005),
+`20:43:53.218473Z` (1001), `20:58:19.989292Z` (1005) and `21:18:32.435804Z`
+(1005). These are service-wide metadata without per-tab attribution; temporary
+tabs also existed. None establishes the watched socket's identity, renewal or
+sign-out cause. An initially unbounded query included later closes and is not
+used as evidence for the intended window. This is an interrupted acceptance
+run, not a demonstrated renewal regression or success.
+
+DV-017–020 fixes are now deployed. Before session expiry, a separate Records
+tab showed the actual two-record count, no unnamed or sub-44px controls, and
+scroll width equal to its actual 1280px viewport. This does not exercise pending
+or failed network reads, nor finish the full mobile acceptance matrix. Remaining:
+requester re-login; fresh timed renewal with recorded observation time; one
+harmless saved reply; post-fix outage recovery; deployed full-chat/agenda target
+and clinician contrast checks. Do not repeat the Mac-wide outage without fresh
+specific authorization, or during an uninterrupted renewal observation.
+
+**Follow-up verification:** clinician `npm run lint`, `npm run typecheck`,
+`npm run test` pass (70 files / 627 tests); focused schedule suite passes
+(28 tests). `git diff --check` passes. Only a test synchronization and evidence
+documents changed; no new application bundle, auth setting or database change.
+Clinician tab independently reports sign-out after two hours of inactivity;
+that visible reason does not establish the separate patient session's cause.
+Continuation branch: `codex/post-205-live-checks`, from merged main, rather than
+adding code to an already-merged #205. Both existing user tabs are preserved;
+temporary tab 5 is closed after observation.
