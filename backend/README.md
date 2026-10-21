@@ -30,6 +30,12 @@ The universal lock omits the legacy `google-generativeai` SDK on Python 3.14: it
 `protobuf<6` pin cannot coexist with a patched Vertex AI SDK there, and Docker and CI
 run 3.12.
 
+Pillow is floored at `>=13.0.0,<14.0.0` for the image-decoder/encoder security
+fixes in [Pillow 13.0.0](https://pillow.readthedocs.io/en/stable/releasenotes/13.0.0.html).
+Both generated locks retain the same patched version. Document preview, raster
+preprocessing and OCR regression tests cover this upgrade; never bypass the
+dependency audit to retain an affected image-processing library.
+
 ## Run
 
 ```bash

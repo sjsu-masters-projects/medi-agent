@@ -49,7 +49,9 @@ whether the 3500-second renewal succeeded or caused the interruption. After
 requester re-login, a fresh Connected baseline was recorded October 20 at
 21:41 Pacific; one-time recheck is scheduled 22:45 Pacific, before navigation or
 send. No renewal result is claimed yet. #206 fixes the schedule test; its portal
-checks pass, but PR checklist and a newly reported Pillow dependency audit fail.
+checks pass. Follow-up corrects the missing PR checklist and upgrades Pillow to
+13.0.0 in both locks: 152 focused document tests and the Python 3.12 dependency
+audit pass locally. New remote CI must confirm the pushed revision.
 Disposable-account deletion remains excluded. [Evidence](../docs/deployed-recheck-2026-10-11.md#post-205-merge-and-delayed-renewal-observation).
 
 October 20: #202 merged as `7c4d9f9`; main CI, both Vercel deployments and the

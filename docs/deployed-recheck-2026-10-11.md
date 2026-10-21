@@ -882,3 +882,19 @@ omitted the required checklist. Dependency audit separately reports eight Pillow
 12.3.0 advisories with fix 13.0.0; do not call CI green or suppress the audit.
 That backend dependency upgrade has not been made or tested in this UI/evidence
 increment. Logs: run `39537621296`, jobs `119017808667` and `119017808944`.
+
+**CI fix follow-up:** after the requester flagged the failures, the PR body was
+corrected to the required checklist, with actual verification and manual steps.
+Pillow's direct constraint is now `>=13.0.0,<14.0.0`; both locks were regenerated
+using CI's uv 0.9.24, universal Python 3.12 commands. The only resolved package
+change is Pillow 12.3.0 → 13.0.0. Official release/security changes reviewed:
+https://pillow.readthedocs.io/en/stable/releasenotes/13.0.0.html . No ignore list,
+gate weakening or application-code workaround was added.
+
+With Pillow 13.0.0 installed in the existing local Python 3.13.2 backend venv,
+`PYTHONPATH=src .venv/bin/python -m pytest tests/unit/services/test_document_preview_service.py tests/unit/services/document_intelligence --no-cov -q`
+passes **152 tests**. CI-equivalent audit
+`uvx --python 3.12 --from pip-audit==2.10.1 pip-audit -r requirements-dev.txt`
+passes **No known vulnerabilities found**. Full backend/CI checks remain the
+remote acceptance gate after push. No deployed service, clinical record or timed
+patient tab was changed while resolving CI.
