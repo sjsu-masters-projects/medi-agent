@@ -1223,6 +1223,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     }, []);
 
     function dismissDocumentContext(): void {
+        if (documentUnavailable) dispatch(setChatError(null));
         setActiveDocumentId(null);
         setDocumentContext(null);
         setDocumentDismissed(true);

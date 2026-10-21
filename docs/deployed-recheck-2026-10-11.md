@@ -934,3 +934,177 @@ this tab. The accepted result is the **real elapsed-time user journey beyond
 3500 seconds and persisted single reply**, superseding the earlier inconclusive
 run. The post-fix actual network-outage test and historical intermittent-read
 investigation remain separate, not silently marked Done.
+
+### Grouped closure campaign after #206
+
+Requester scope: one PR for the remaining bounded checks, bug fixes and tracker
+corrections. Physical voice is separately tracked as VOI-001-M for the requester.
+Start branch `codex/grouped-deployed-acceptance` at main `c54c7b5`; working tree
+was clean. #206's 37 PR checks and main CI pass; both portals deployed. No remote
+migrations/configuration/deployment or clinical publication authorised here.
+
+| Lane | Acceptance path | Evidence level / initial state |
+| --- | --- | --- |
+| PAT-001-A | One nonclinical turn → approved brief real outage → automatic reconnection → one saved reply, reload persistence; retry limit and legacy contract tests | Long-session already passes; post-fix outage pending; no intentional retry exhaustion against a clinical action |
+| PAT-002-B | Existing private draft → unchanged consent/history across reload/offline; deterministic microphone denial/text fallback; mobile 360/390/430 layouts | Physical audio/phone acceptance remains VOI-001-M; no new clinical confirmation without exact approval |
+| PAT-004 | Spanish question on selected synthetic document → correct source; unavailable/deleted/foreign source refuses without chart-wide fallback | Use isolated contract fixtures for deletion/foreign negatives; do not delete existing cited live records merely to manufacture a test |
+| COM-002 | Existing attached approved activity → same draft on replay → audit/ownership/clinic checks → approved plan/reminders unchanged | Compare scoped read-only state; no draft edit/publication or revoked assignments in live shared accounts |
+| SCH-001-V / OPS-005 | Repeated scope-matched schedule/timezone/export reads and bounded metadata correlation | Preserve distinction between successful journeys and unexplained historical intermittent errors |
+| AUTH-002 | Two authorised clinician tabs → refresh continuity → approved sign-out in one → both signed out; MFA/idle warning tests | Real MFA re-login requires requester; simulated expiry/warning tests cannot be described as a real two-hour observation |
+| Tracker cleanup | Reconcile merged/deployed #206 and observed worker attempt; keep unfinished OPS-006 phases open | No implication that one worker reply proves the entire worker/load/rollout matrix |
+
+Requester expressly approved one ~20-second Mac-wide Wi-Fi interruption and
+Elena sign-out propagation testing followed by requester re-login. Perform
+sign-out last so it does not invalidate the other clinician checks. No password,
+OTP, token or clinical body belongs in diagnostic output.
+
+#### Recorded grouped outcomes
+
+**Real outage:** first cut was observed off `2026-10-21T06:09:28.736Z`, on
+`06:09:54.425Z`; turn `f86d1d10-36f9-497f-8349-21fcf7b47d3f` had already
+completed at `06:09:19.459806Z`, attempt 1. It is only idle-reconnection evidence.
+The requester then expressly approved one immediate-toggle repeat. Second cut:
+off `06:18:41.794Z`, restored on `06:19:09.203Z`; worker claimed turn
+`dfc7922d-4245-422a-a539-c599e0383e9a` at `06:18:41.303112Z`, completed at
+`06:18:59.506911Z` **during the outage**, worker_done attempt 1 at `06:18:59.718334Z`.
+Original tab delivered one bookshelf-answer automatically without reload/resend;
+one exact prompt and one reply were counted. The subsequent first reload restored
+the same pair and Connected state. Wi-Fi on verified; System Settings closed.
+Screenshot: `/private/tmp/grouped-inflight-outage-pass.png`. The observed off/on
+interval includes UI inspection overhead, not precisely 20 seconds. No more
+Mac-wide interruption is authorised by these two specific approvals.
+
+**PAT-004 / DV-021:** Hannah's metadata-only lab document
+`b38a622d-8ee2-47b1-8666-5668b8f162e8`, focused session
+`chat-787dfc96-3078-4a32-b6d4-4c5ab89109aa`, was rejected safely at begin with
+`CHAT_DOCUMENT_UNAVAILABLE` (`06:15:37.281431Z`, 311ms). It did not start a general
+chart answer. The composer restored the unsaved Spanish question and disabled
+send, but the retained attachment hid the specific unavailable notice; only a
+generic connection/action error appeared. Screenshot:
+`/private/tmp/grouped-unavailable-document-before-fix.png`.
+Local fix hides the invalid attachment card, always shows the existing localized
+document-unavailable explanation and one explicit Dismiss, suppresses redundant
+generic feedback while invalid, and clears that stale feedback on dismissal.
+No automatic resend or backend rejection change. Four regressions cover both
+document codes in both locales. This fix awaits review/merge/deployment.
+
+**COM-002:** replayed the original Rajeev message
+`b2ca9e36-c715-4e24-ab49-1913ab8bf815`, thread
+`accc6e08-bd27-4531-97a0-168025106d62`, source item
+`af9c341e-8cc8-40fc-aea3-8480829b0f31`. It reused draft
+`f80fe99f-1d60-4ac2-806d-d75889b1bd3f`, focusing item
+`252f3605-631d-4cd4-82b5-3de16cab2407`. Existing audit
+`bbd60f04-74bf-4e6e-a76f-04a45e1695eb` stayed the sole message-review audit,
+actor Elena `74225aad-52c7-4b51-be36-9500d4f0e864`. No edit, attestation or
+publication. V1 still approved, V2 draft, 0/4 verified, publication disabled.
+Read-only, target-pinned privileged metadata reads before/after (not an RLS proof)
+returned identical approved-plan/items, medications, obligations and reminder
+fingerprints. Counts: 1 approved plan, 5 approved items including removed history,
+3 medications, 1 obligation, 0 reminder rows. Empty live reminders alone are not
+proof: strengthened the actual full-migration-chain PostgreSQL test with one
+obligation, enabled Pacific 09:00 reminder and completed adherence row; repeated
+attach/review must preserve their exact complete JSON and one audit. That test
+passes. Screenshot `/private/tmp/grouped-activity-draft-replay.png`.
+
+**Scheduling/RCA:** live Today → week displayed loading before showing Rajeev
+October 20 10:00 and Morgan October 22 09:00; Willow showed loading, then its
+correct empty result; Show all restored those same visits. No offer/visit write.
+Bounded 30-row request sample `06:17:07Z`–`06:21:55Z` for appointment/notification/
+ADR reads returned all 200, 0.002–1.277 seconds. Example slow trace
+`3a7fcc531201c2a2006a79bf501ad051` at `06:17:07.211235Z`, 1.2765s. This does not
+meet a universal sub-0.5s claim or explain historical DV-006; do not close that
+RCA on this sample. The document rejection above is a known domain outcome, not
+evidence of that historical transport failure.
+
+**Automated checks:** patient initial batch 147 tests; clinician auth batch 35;
+backend service/router batches 128 + 41. Isolated PostgreSQL: conversations 45,
+chat turns 47, no skips. The strengthened full-chain reminder test passes again.
+New microphone-denial cases (ordinary/private × en-US/es-MX) leave typed input
+usable and send no audio/user message/intake mutation. Confirmation lost-response
+replay now runs in both locales, reusing exact identity/consent/preview hash and
+never resubmitting merely on reload. Mocks are not physical audio evidence.
+
+**Spanish source acceptance:** Rajeev's original lipid report
+`e007ffcf-3224-4c8c-b8ed-2a9a19506561`, session
+`chat-611caf56-f3bf-403b-a197-893716246e3a`, answered the single labelled
+synthetic Spanish question in Spanish. It retained total cholesterol 242, LDL
+164, triglycerides 201, non-HDL 204, HDL 38 and estimated average glucose 186
+mg/dL from that original, not the replacement report. It cited the exact report,
+page 1, warned that extracted information needs care-team review, and proposed
+no treatment/plan change. One saved answer and selected context survived reload.
+Saved Profile remained English, so interface controls correctly stayed English.
+Screenshots: `/private/tmp/grouped-spanish-grounded-answer.png` and
+`/private/tmp/grouped-spanish-actual-360.png`.
+
+Measured viewport matrix (actual dimensions, after compensating for browser zoom):
+
+| Width × height | Document width | Composer bottom | Verdict |
+| --- | --- | --- | --- |
+| 360 × 800 | 360 | 781.45 | No horizontal overflow; composer within viewport |
+| 390 × 844 | 390 | 825.89 | Same |
+| 430 × 889 | 430 | 870.34 | Same |
+
+Viewport override reset. This proves chat layout, not every private intake form.
+Opening Report a symptom reached its unsubmitted entry; no symptom answer or
+confirmation was sent. Wider private-intake acceptance remains separate from
+the measured chat screen and permission-denial/lost-response automated tests.
+
+**COM-002 wording:** nonclinical activity attachment/status/retry and explicit
+no-plan-or-reminder-change messages passed English/es-MX LLM meaning-and-safety
+review under the requester's accepted expo standard. See the retained string
+inventory in the feature specification. No professional validation or new clinical
+translation is asserted. With live audit/replay/state comparison and isolated
+authorization/nonempty-reminder preservation, this scoped task is Done.
+
+**AUTH-002:** both clinician tabs were authenticated. The second tab's MFA page
+offered Begin setup: no enrolled authenticator was demonstrated. Using the
+specifically approved Logout in that tab, Elena's original care-plan tab changed
+automatically to login with `reason=logged_out` and its original return path,
+without reload. Rajeev's patient tab remained authenticated. Screenshot:
+`/private/tmp/grouped-clinician-signout-sync.png`. Temporary clinician tab closed;
+the user-owned clinician tab is left at sign-in for the requester. No MFA factor,
+credential, session limit or external configuration changed. The 35-test clinician
+auth suite covers aal2 preservation and inactivity warning timers, but live MFA
+and actual idle-warning observation remain unperformed, not silently closed.
+
+Requester then independently enrolled one authenticator for clinician Rajeev
+Ranjan Chaurasia (not Elena). The live MFA page and a new second tab both showed
+MFA enabled, one authenticator; concurrent reloads retained authenticated identity
+and that status in both tabs. Screenshot `/private/tmp/grouped-mfa-two-tabs.png`.
+Temporary tab closed. This proves enabled-factor persistence, not inspection of
+token assurance or a freshly challenged sign-in. Requester was asked to perform
+the fresh sign-out/password/TOTP sign-in directly on the site; no code requested
+in chat. The earlier no-enrolled-factor observation applies only to Elena.
+
+**Final verification:** patient full suite 834 tests / 75 files; clinician full
+suite 627 / 70. Both portals passed lint, typecheck and production build (patient
+build preceded the final test-only locale expansion; final focused typecheck and
+full suite passed afterward). Backend focused suites 128 + 41; isolated
+PostgreSQL conversations 45 and chat turns 47 with no skips, followed by the
+strengthened full-chain reminder test passing again. Changed Python test passes
+Ruff check and format. Existing Vite, Sentry and deprecation warnings remain;
+no clean-warning claim. No deployment, remote SQL or configuration changes.
+
+Reproducible commands (run in the corresponding portal/backend directory):
+
+```sh
+npm test -- --run
+npm run lint
+npx tsc --noEmit
+npm run build
+CARE_CONVERSATION_TEST_POSTGRES_DOCKER=1 PYTHONPATH=src .venv/bin/python -m pytest tests/integration/test_care_conversation_postgres.py --no-cov -q
+CHAT_TURN_TEST_POSTGRES_DOCKER=1 PYTHONPATH=src .venv/bin/python -m pytest tests/integration/test_chat_turn_postgres.py --no-cov -q
+.venv/bin/ruff check tests/integration/test_care_conversation_postgres.py
+.venv/bin/ruff format --check tests/integration/test_care_conversation_postgres.py
+```
+
+An extra strict mypy invocation on the standalone PostgreSQL test module is not
+clean (209 errors across its existing untyped fixture/helper/test surface); this
+is outside the configured source-only mypy lane and is not reported as passing.
+No typing configuration was weakened to hide it.
+
+**Closure boundaries:** PAT-001-A and COM-002 Done; PAT-004 awaits deployment and
+live DV-021 correction recheck. PAT-002-B retains wider private-intake UI checks;
+VOI-001-M owns physical voice. AUTH-002 retains enrolled-MFA/real-idle observation.
+SCH-001-V successful scoped transitions do not explain OPS-005 historical
+intermittent failures; bounded logs found no reproduced transport failure.

@@ -52,8 +52,9 @@ These rules are acceptance criteria. Reviews check them.
 
 ## Phase 1 — Traceability and the current expiry (small)
 
-**Status (branch `feature/ops-006-phase-1`, not merged or deployed):** implemented and locally
-verified; the production check below is still required.
+**Status:** merged in #194. October 20 bounded logs show actual worker turn
+completion and patient recovery; the full production-check list below remains
+the contract, not an implication that every trace/pool/poller scenario passed.
 
 - Done: migration `077` (rejection `reason`, per-function `lock_timeout` 5 s and
   `statement_timeout` 8 s); structured JSON logging, request and websocket middleware; turn
@@ -96,10 +97,12 @@ verified; the production check below is still required.
 
 ## Phase 2 — Worker service and turn events (large)
 
-**Status (branch `feature/ops-006-phase-2`, based on the phase 1 branch; not merged, not
-deployed, nothing external created):** implemented and locally verified behind
-`CHAT_TURNS_VIA_WORKER` (default false) and `WORKER_MODE`. Rollout needs the requester's
-authorization step by step: [docs/chat-worker-setup.md](../../docs/chat-worker-setup.md).
+**Status:** merged in #195. Deployed worker execution is observed: October 20's
+quiet-session and real in-flight outage checks completed on worker attempt 1
+and reached the patient. Hosted migration identities, queue/OIDC configuration,
+retry/load matrix and every rule are not independently certified by those two
+turns. Flags remain default-off in source; changing any deployed setting still
+requires exact authorisation under [the setup guide](../../docs/chat-worker-setup.md).
 
 As built:
 

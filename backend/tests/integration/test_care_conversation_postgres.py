@@ -1001,7 +1001,7 @@ def full_chain_sql(postgres):
 def test_activity_attach_and_review_work_on_the_full_migration_chain(full_chain_sql):
     """Notification triggers (051 to 075) must coexist with the activity operations."""
     sql = full_chain_sql
-    plan, item = str(uuid4()), str(uuid4())
+    plan, item, obligation = str(uuid4()), str(uuid4()), str(uuid4())
     sql(f"""
       INSERT INTO care_plan_versions(id,patient_id,version_number,status)
         VALUES('{plan}','{PATIENT}',1,'draft');
@@ -1012,7 +1012,18 @@ def test_activity_attach_and_review_work_on_the_full_migration_chain(full_chain_
       UPDATE care_plan_versions SET status='approved',approved_by='{CLINICIAN}',approved_at=now()
         WHERE id='{plan}';
       ALTER TABLE care_plan_versions ENABLE TRIGGER care_plan_aaa_document_review_guard;
+      INSERT INTO obligations(id,patient_id,obligation_type,description,frequency,care_plan_item_id)
+        VALUES('{obligation}','{PATIENT}','custom','Synthetic approved hydration','daily','{item}');
+      INSERT INTO reminder_schedules(patient_id,target_type,target_id,timezone,times_of_day)
+        VALUES('{PATIENT}','obligation','{obligation}','America/Los_Angeles','["09:00"]');
+      INSERT INTO adherence_logs(patient_id,target_type,target_id,status)
+        VALUES('{PATIENT}','obligation','{obligation}','completed');
     """)
+    protected_state_sql = """SELECT jsonb_build_object(
+      'reminders',(SELECT jsonb_agg(to_jsonb(r) ORDER BY id) FROM reminder_schedules r),
+      'obligations',(SELECT jsonb_agg(to_jsonb(o) ORDER BY id) FROM obligations o),
+      'adherence',(SELECT jsonb_agg(to_jsonb(a) ORDER BY id) FROM adherence_logs a));"""
+    protected_before = sql(protected_state_sql)
     thread = json.loads(sql(operation("open", {"recipient_id": CLINICIAN})))
     payload = {
         "conversation_id": thread["id"],
@@ -1034,3 +1045,21 @@ def test_activity_attach_and_review_work_on_the_full_migration_chain(full_chain_
     )
     assert sql(f"SELECT status FROM care_plan_versions WHERE id='{review['plan_id']}'") == "draft"
     assert sql("SELECT count(*) FROM care_conversation_messages") == "1"
+    replay = json.loads(
+        sql(
+            activity_operation(
+                "review",
+                {"conversation_id": thread["id"], "message_id": message["id"]},
+                actor=CLINICIAN,
+                role="clinician",
+            )
+        )
+    )
+    assert replay == review
+    assert sql(protected_state_sql) == protected_before
+    assert sql("SELECT count(*) FROM reminder_schedules") == "1"
+    assert sql(f"SELECT status FROM care_plan_versions WHERE id='{plan}'") == "approved"
+    assert (
+        sql("SELECT count(*) FROM care_plan_audit_events WHERE event_type='message_review_opened'")
+        == "1"
+    )

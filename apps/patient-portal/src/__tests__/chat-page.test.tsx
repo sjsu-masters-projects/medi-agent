@@ -1280,6 +1280,37 @@ describe("Patient chat page", () => {
         expect(MockWebSocket.instances).toHaveLength(1);
     });
 
+    it.each([
+        [Language.EN, "CHAT_DOCUMENT_UNAVAILABLE"], [Language.ES, "CHAT_DOCUMENT_UNAVAILABLE"],
+        [Language.EN, "CHAT_DOCUMENT_CHANGED"], [Language.ES, "CHAT_DOCUMENT_CHANGED"],
+    ] as const)("explains rejected attached context and preserves the unsent question (%s, %s)", async (locale, code) => {
+        profile.preferredLanguage = locale;
+        searchParamsValue = new URLSearchParams("document=stale-document");
+        storePendingChatDocumentContext({ documentId: "stale-document", documentName: "Synthetic lab.pdf",
+            documentType: "lab_report", preferredLanguage: locale, provider: "Care team",
+            suggestedQuestion: "Synthetic source question", summary: "Synthetic summary" });
+        renderPage();
+        await screen.findByText("Synthetic lab.pdf");
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.emitOpen(); });
+        const controls = getChatControlsCopy(locale);
+        fireEvent.click(screen.getByRole("button", { name: controls.send }));
+        const sent = socket.sent.map((frame) => JSON.parse(frame)).find((frame) => frame.type === "user_message");
+        await act(async () => { socket.emitMessage({ type: "error", code, message: "Document context rejected",
+            client_message_id: sent.client_message_id }); });
+        expect(await screen.findByText(controls.documentUnavailable)).toBeInTheDocument();
+        expect(screen.queryByText(controls.chatError)).not.toBeInTheDocument();
+        expect(screen.queryByText(controls.recordContext)).not.toBeInTheDocument();
+        expect(screen.getByRole("textbox", { name: controls.message })).toHaveValue("Synthetic source question");
+        expect(screen.getByRole("button", { name: controls.send })).toBeDisabled();
+        expect(screen.getAllByRole("button", { name: controls.dismiss })).toHaveLength(1);
+        fireEvent.click(screen.getByRole("button", { name: controls.dismiss }));
+        expect(screen.queryByText(controls.chatError)).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: controls.send })).toBeEnabled();
+        expect(socket.sent.map((frame) => JSON.parse(frame)).filter((frame) => frame.type === "user_message")).toHaveLength(1);
+        expect(socket.sent.map((frame) => JSON.parse(frame))).toContainEqual({ type: "document_focus", document_id: null });
+    });
+
     it("shows the unavailable-document note in Spanish", async () => {
         profile.preferredLanguage = Language.ES;
         renderPage();
@@ -1753,6 +1784,35 @@ describe("Patient chat page", () => {
             expect(vi.mocked(mutateIntake).mock.calls[0][2]).toBe("reply");
             expect(vi.mocked(mutateIntake).mock.calls[0][3]).toMatchObject({ text: "I feel dizzy", input_mode: "voice", question_id: "severity" });
             expect(chatSocket.sent.some((frame) => JSON.parse(frame).type === "user_message")).toBe(false);
+        }
+    });
+
+    it.each([
+        [Language.EN, false], [Language.ES, false],
+        [Language.EN, true], [Language.ES, true],
+    ] as const)("keeps typed input usable after microphone denial (%s, private=%s)", async (locale, privateIntake) => {
+        if (privateIntake) vi.mocked(fetchActiveIntake).mockResolvedValue(privateDraft);
+        getVoiceCapabilities.mockReturnValue({ recording: true, recognition: false, synthesis: true });
+        const getUserMedia = vi.fn().mockRejectedValue(new DOMException("Permission denied", "NotAllowedError"));
+        vi.stubGlobal("navigator", { ...window.navigator, mediaDevices: { getUserMedia } });
+        vi.stubGlobal("MediaRecorder", class { static isTypeSupported = () => true; });
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        await act(async () => { MockWebSocket.instances[0].emitOpen(); });
+        changePreferredLanguage(locale);
+        const controls = getChatControlsCopy(locale);
+        fireEvent.click(screen.getByRole("button", { name: controls.speak }));
+        await waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
+        expect(await screen.findByRole("alert")).toHaveTextContent(controls.voiceError);
+        const input = screen.getByRole("textbox", { name: controls.message });
+        expect(input).toBeEnabled();
+        fireEvent.change(input, { target: { value: "Synthetic typed fallback" } });
+        expect(input).toHaveValue("Synthetic typed fallback");
+        expect(screen.getByRole("button", { name: controls.send })).toBeEnabled();
+        expect(mutateIntake).not.toHaveBeenCalled();
+        for (const socket of MockWebSocket.instances) {
+            const frames = socket.sent.map((frame) => JSON.parse(frame));
+            expect(frames.some((frame) => ["user_message", "audio_start", "audio_chunk"].includes(frame.type))).toBe(false);
         }
     });
 
