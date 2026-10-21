@@ -79,6 +79,50 @@ See [tests/TESTING_GUIDE.md](tests/TESTING_GUIDE.md) for comprehensive testing d
 
 ## Runtime configuration ownership
 
+### Notification snapshot signing (NOT-003)
+
+`NOTIFICATION_TOKEN_SIGNING_SECRET` is an optional independent server-only root
+of at least 32 random characters, consistent across API replicas. Set it through
+the approved secret/configuration process, never a frontend variable or committed
+file. Notification tokens always use an HMAC-SHA256 purpose-derived key, not the
+raw root or Supabase authentication signing key. If the independent root is absent,
+the purpose-derived rollout fallback uses the auth root; it separates token
+protocols, but does not provide independent root-compromise protection.
+
+Deploying this change or rotating the notification root invalidates earlier
+15-minute notification snapshots/cursors: refresh the view and retry the read
+action. Authentication sessions and stored read state are unchanged. There is no
+legacy raw-auth-key verification fallback. During mixed-version rollout, an older
+replica can reject a new snapshot or vice versa; refresh after rollout convergence.
+Do not regenerate a clinical event. No remote secret/key/configuration change is
+performed by this code.
+
+October 21 authorized configuration: the backend references Secret Manager
+`NOTIFICATION_TOKEN_SIGNING_SECRET:1`; the existing deployment workflow preserves
+this reference with `--update-*`. This configuration-only revision keeps the
+previous image and does not itself activate new code. Verify notification reads
+after the signing implementation is merged/deployed. Do not rotate Supabase login
+keys or add this server-only secret to either portal.
+
+Clinician accounts referenced by clinical audit/provenance are retained. Permanent
+clinician deletion is not an expo requirement; preserve attribution and existing
+database restrictions instead of nulling or deleting clinical history.
+
+### Source review and timeline (#208)
+
+The clinician timeline endpoint is assignment-scoped, read-only and bounded to
+40 dated rows per source bucket and ten own conversations. Message reads reuse
+the exact-thread authorization RPC. Source failures and missing dates are explicit;
+calculation/retrieval times are not clinical review dates or a full audit trail.
+
+Migration `079_unlisted_product_review_alerts.sql` adds atomic forward-only review
+capture for newly confirmed unlinked product concerns. It does not approve/add a
+medicine, infer a medication FK from cached context, or create an ADR/Naranjo score.
+Existing authorized notification acknowledgement records seen-for-follow-up only.
+Review the checksum and apply through the ledger only with separate authorization;
+no historical notification backfill is performed. Deploy reviewed code before
+testing a new confirmation, then verify the exact report destination and read audit.
+
 ### Demo follow-ups: activity review and evaluation
 
 COM-002 adds optional `care_plan_item_id` to private conversation sends. Only a
@@ -202,7 +246,7 @@ runtime, and checked against its SHA-256, page and field inventory and every map
 on every export. Re-pin steps (download into an empty directory outside the repository,
 compare size and SHA-256 and stop on a difference, repeat the copyright check, regenerate the
 record with `scripts/generate_form_3500_template_record.py`) are in
-[`src/app/assets/fda/README.md`](src/app/assets/fda/README.md). The fill uses `pypdf==6.20.1`
+[`src/app/assets/fda/README.md`](src/app/assets/fda/README.md). The fill uses `pypdf==6.21.1`
 (pinned in `requirements.in`; BSD), not PyMuPDF, writes the AcroForm fields and the XFA
 `datasets` packet, keeps the form fillable and re-encrypts it with the template's
 permissions.
@@ -569,6 +613,15 @@ PYTHONPATH=src .venv/bin/python -m app.workers.health_knowledge_refresh
 ```
 
 Design, checks and failure behaviour: `.agent/specs/nora-002-grounded-answers.md`.
+
+Assigned clinicians may explicitly request
+`GET /smart/patients/{patient_id}/facts/{fact_id}/medication-reference` under
+`/api/v1`. It reuses this cache for the candidate's recorded drug name only, bounds
+official links/excerpts, and returns source check/version/update/stale metadata.
+The ingredient concept is informational and does not update candidate or canonical
+RxNorm values. `GET /api/v1/clinicians/me/external-record-reviews` is a separate
+current-assignment/clinic-scoped, paginated source-work summary, not a notification
+count. Both endpoints preserve existing clinical decision APIs and permission gates.
 
 ## Scheduled jobs
 

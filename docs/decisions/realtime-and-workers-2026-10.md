@@ -3,6 +3,13 @@
 **Status:** Accepted October 19, 2026. Delivery is phased; see
 [OPS-006 specification](../../.agent/specs/ops-006-workers-and-event-stream.md).
 
+**October 21 requester amendment:** retain and verify the deployed durable worker
+and recovery system. SSE/websocket replacement, a new notification-counter/stream
+architecture and the proposed large load/cost exercise are not expo requirements.
+The original design below is historical where it conflicts. No runtime CPU,
+queue, IAM or database setting is changed by this decision. Safety, authorization,
+duplicate prevention, bounded work and evidence remain acceptance requirements.
+
 ## Context
 
 Production checks from October 16 to 19 showed that the backend's structure, not one defect,

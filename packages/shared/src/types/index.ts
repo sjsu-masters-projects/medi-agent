@@ -566,6 +566,8 @@ export interface SymptomReport {
     confirmationState?: "legacy_unconfirmed" | "patient_confirmed";
     confirmedAt?: string;
     confirmedSummary?: string;
+    /** Patient-confirmed testimony, not a canonical/approved medication. */
+    reportedProduct?: { name: string; concern: boolean | null };
     onset?: string;
     duration?: string;
     relatedMedicationId?: string;

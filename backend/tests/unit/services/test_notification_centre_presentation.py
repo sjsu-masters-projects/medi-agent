@@ -67,6 +67,25 @@ def test_untrusted_url_is_never_used_as_destination():
     assert present_item(raw, "patient", "en-US").action_url is None
 
 
+def test_unlisted_product_review_names_testimony_and_links_the_exact_report():
+    raw = item(
+        event_type="safety_flag",
+        category="safety",
+        source_type="symptom_reports",
+        can_acknowledge=True,
+    )
+    shown = present_item(raw, "clinician", "en-US")
+    assert shown.title == "Patient-reported product needs review"
+    assert "not a confirmed ADR" in shown.body
+    assert (
+        shown.action_url == f"/patients/{raw['patient_id']}?tab=symptoms#symptom-{raw['source_id']}"
+    )
+    assert shown.action_label == "Review reported product"
+    assert shown.can_acknowledge
+    assert shown.source_label == "Confirmed patient symptom report"
+    assert shown.state_checked_at is not None
+
+
 def test_stale_activity_has_no_action_and_read_is_not_acknowledgment():
     raw = item(event_type="barrier_reported", category="follow_up", actionable=False, is_read=True)
     result = present_item(raw, "clinician", "en-US")

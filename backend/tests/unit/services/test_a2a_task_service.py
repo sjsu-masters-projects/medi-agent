@@ -1,7 +1,7 @@
 """Unit tests for A2A task lifecycle persistence."""
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -247,6 +247,73 @@ def test_confirmed_product_concern_uses_owned_active_medication_context(mock_db)
 
     assert result["requires_clinician_review"] is True
     assert service.confirmed_medication(report) == (medication_id, "Metformin")
+
+
+def test_confirmed_unlisted_product_routes_to_identity_review_without_an_adr_score(mock_db):
+    report = {
+        "confirmation_state": "patient_confirmed",
+        "symptom": "Synthetic concern",
+        "severity": None,
+        "confirmed_content": {
+            "answers": {
+                "product": {
+                    "state": "answered",
+                    "value": {
+                        "concern": True,
+                        "name": "Synthetic supplement",
+                    },
+                }
+            },
+            # A retrieval snapshot cannot manufacture the missing canonical FK.
+            "context": {
+                "medications": [{"source_id": str(uuid4()), "name": "Synthetic supplement"}]
+            },
+        },
+    }
+    service = A2ATaskService(mock_db)
+    result = service._build_pharmacovigilance_result({"symptom_report": report})
+    assert result["requires_clinician_review"] is True
+    assert result["requires_medication_reconciliation"] is True
+    assert result["naranjo_assistance"] is None
+    assert "No medication or adverse reaction is confirmed" in result["recommendation"]
+    assert service.confirmed_medication(report) == ("", "Synthetic supplement")
+
+
+@pytest.mark.asyncio
+async def test_retry_finishes_unlisted_product_screen_without_attempting_adr_creation(mock_db):
+    service = A2ATaskService(mock_db)
+    report = {
+        "confirmation_state": "patient_confirmed",
+        "symptom": "Synthetic concern",
+        "confirmed_content": {
+            "answers": {
+                "product": {
+                    "state": "answered",
+                    "value": {"concern": True, "name": "Synthetic supplement"},
+                }
+            }
+        },
+    }
+    working = {
+        "id": str(uuid4()),
+        "status": "working",
+        "patient_id": str(uuid4()),
+        "task_type": "symptom_adr_screen",
+        "input_payload": {"symptom_report": report},
+    }
+    service._get_task = AsyncMock(return_value={**working, "status": "retrying"})
+    service._claim_task = AsyncMock(return_value=(working, True))
+    service._persist_adr_assessment = AsyncMock(
+        side_effect=AssertionError("Must not invent an ADR")
+    )
+    service.mark_completed = AsyncMock(return_value={"status": "completed"})
+    service.mark_failed = AsyncMock()
+    assert (await service.retry_task(working["id"]))["status"] == "completed"
+    service._persist_adr_assessment.assert_not_called()
+    service.mark_failed.assert_not_called()
+    assert service.mark_completed.call_args.kwargs["output_payload"][
+        "requires_medication_reconciliation"
+    ]
 
 
 @pytest.mark.parametrize("answers", [[], "yes", 3])

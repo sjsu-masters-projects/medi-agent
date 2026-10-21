@@ -199,7 +199,14 @@ def test_hydrated_item_retains_every_supporting_document() -> None:
             {"id": "source-2", "document_id": "document-2", "document_location": {}},
         ],
         "documents": [
-            {"id": "document-1", "file_name": "first.pdf"},
+            {
+                "id": "document-1",
+                "file_name": "first.pdf",
+                "display_title": {
+                    "en-US": "Walking instructions",
+                    "es-MX": "Indicaciones para caminar",
+                },
+            },
             {"id": "document-2", "file_name": "second.pdf"},
         ],
     }
@@ -221,6 +228,11 @@ def test_hydrated_item_retains_every_supporting_document() -> None:
         "second.pdf",
     ]
     assert plan["items"][0]["source"]["excerpt"] == "first"
+    assert plan["items"][0]["source"]["display_title"] == {
+        "en-US": "Walking instructions",
+        "es-MX": "Indicaciones para caminar",
+    }
+    assert plan["items"][0]["sources"][1]["display_title"] is None
 
 
 def test_medication_decision_requires_explicit_match_or_new_name() -> None:

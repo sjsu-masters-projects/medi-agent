@@ -39,6 +39,28 @@ vi.mock("@/components/features/document-source-viewer", () => ({
 }));
 
 describe("CarePlanPanel", () => {
+    it("shows grounded source titles while preserving document identity and page navigation", async () => {
+        const source = { document_id: "document-title", file_name: "scan-01.pdf",
+            display_title: { "en-US": "Walking instructions", "es-MX": "Indicaciones para caminar" },
+            excerpt: "Walk for 20 minutes.", location: { page: 2 } };
+        vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({ latest: {
+            id: "plan-title", patient_id: "patient-1", version_number: 1, status: "approved", items: [{
+                id: "item-title", category: "movement", ...verified("Walk", "Walk for 20 minutes.", "daily"),
+                schedule: {}, medication: {}, uncertainty: [], conflict: {}, is_removed: false, source,
+            }],
+        }, active: null, patient_locale: "en-US", active_medications: [] });
+        vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
+        vi.mocked(fetchClinicianDocumentSource).mockResolvedValue({ file_name: "scan-01.pdf",
+            file_url: "https://signed.test/source", mime_type: "application/pdf" });
+        render(<CarePlanPanel patientId="patient-1" />);
+        const review = await screen.findByRole("button", { name: "Review source: Walking instructions (scan-01.pdf)" });
+        fireEvent.click(screen.getByText("Source excerpts and confidence (1)"));
+        expect(screen.getByText("Walking instructions (scan-01.pdf) · page 2")).toBeVisible();
+        fireEvent.click(review);
+        await waitFor(() => expect(fetchClinicianDocumentSource).toHaveBeenCalledWith("patient-1", "document-title"));
+        expect(await screen.findByText("Preview: scan-01.pdf (page 2)")).toBeInTheDocument();
+    });
+
     it("focuses a message-linked activity once without stealing focus during edits", async () => {
         const previous = window.location.href;
         window.history.replaceState(null, "", "/patients/patient-1?tab=care-plan#care-plan-item-item-1");

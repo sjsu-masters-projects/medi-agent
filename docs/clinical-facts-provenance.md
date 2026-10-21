@@ -53,6 +53,20 @@ and ADR references remain attached. Imports never create reminders. Allergy seve
 `unknown` unless the source supplies a reaction severity; FHIR criticality is retained
 as evidence and is not treated as severity.
 
+Lost-response reconciliation replay remains bound to the original actor, patient,
+candidate, decision and selected update fields, and rechecks current assignment
+before returning saved snapshots. Exact recorded absence statements (for example
+NKDA) remain evidence rather than becoming positive allergen records.
+
+The optional Medication reference lookup uses only the recorded drug name with
+the existing public reference service. Its RxNorm ingredient concept, source
+version/check date and bounded DailyMed/MedlinePlus excerpts are informational,
+not patient-specific evidence, proof of product equivalence or permission to update
+the candidate. Stale/missing/unavailable coverage is explicit; nothing is applied
+automatically. A confirmed unlisted product likewise remains patient testimony:
+migration 079 adds forward-only shared review capture, not a medication or ADR.
+Acknowledging that alert records follow-up awareness, not clinical resolution.
+
 An external FHIR patient is bound to one local patient by issuer and external patient
 ID only after a clinician confirms the comparison identity. A mismatch requires a
 reason and a binding already attached to another local patient is blocked. A later

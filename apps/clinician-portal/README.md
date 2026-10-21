@@ -21,6 +21,12 @@ Default local URLs:
 - portal: `http://127.0.0.1:3001`
 - backend API: `http://127.0.0.1:8000`
 
+Patient-upload review is separate from the Alerts action inbox. The queue refreshes
+every 15 seconds while visible and on focus, retaining rows if a background read
+fails. Refresh pauses during a review decision; the existing server authorization
+and clinical approval APIs remain authoritative. Care-plan source labels reuse
+grounded English document titles while retaining original filenames and IDs.
+
 Lint, typecheck and tests:
 
 ```bash
@@ -372,3 +378,22 @@ required. Unknown severity is labelled and is a gap in the chart, never a zero o
 rating. Confirmation records testimony for clinician review, not causality or a clinical
 verdict. The full symptom timeline/detail expansion remains PAT-002-C; see the
 [PAT-002-B acceptance record](../../docs/pat-002-b-acceptance-2026-10-12.md).
+
+### Timeline and review context
+
+The patient Timeline tab displays bounded recent source records with real event
+dates, explicit per-source coverage/failure states and source-workspace links.
+Only the signed-in clinician's authorized private conversations are included.
+Current field values are not reconstructed historical snapshots. Risk explanations
+show source dates separately from calculation time; unknown/unavailable freshness
+never implies a recent clinical review. Alerts source details similarly distinguish
+retrieval time from source event time and clinician decisions.
+
+Alerts includes a separate External record reviews section, paginated over current
+assigned patients, with exact pending candidate counts and explicitly bounded source
+capture-time coverage. It opens the existing External Records workspace; no duplicate
+approval controls or unread-count inflation. Visible-only refresh retains same-scope
+rows on failure and clears old scope immediately. Medication comparison includes an
+explicit-click public reference lookup: only the drug name is looked up, references
+show cache/source dates, and neither the RxNorm ingredient nor reference text is
+automatically applied to clinical records. Deploy the backend endpoints before UI.

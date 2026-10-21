@@ -441,7 +441,7 @@ pymupdf==1.28.2
     # via -r requirements.in
 pyparsing==3.3.2 ; python_full_version < '3.14'
     # via httplib2
-pypdf==6.20.1
+pypdf==6.21.1
     # via -r requirements.in
 pytesseract==0.3.13
     # via -r requirements.in
