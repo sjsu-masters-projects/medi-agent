@@ -241,7 +241,7 @@ export default function ChatPage() {
                     followLatestRef.current = container.scrollHeight - container.clientHeight - container.scrollTop <= 80;
                 }} className="min-h-0 flex-1 space-y-3 overflow-y-auto">
             <p className="flex items-start gap-2 rounded-2xl bg-danger-tint px-3.5 py-2.5 text-[13px] leading-snug text-danger-ink"><Icon name="alert" className="mt-px h-4 w-4 shrink-0" />{controls.caution}</p>
-            {documentContext && <section className="flex items-start gap-3 rounded-[22px] bg-brand-tint p-3.5">
+            {documentContext && !documentUnavailable && <section className="flex items-start gap-3 rounded-[22px] bg-brand-tint p-3.5">
                 <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-brand"><Icon name="note" className="h-5 w-5" /></span>
                 <div className="min-w-0 flex-1">
                     <p className="text-xs font-semibold text-brand-ink">{controls.recordContext}</p>
@@ -250,8 +250,8 @@ export default function ChatPage() {
                 </div>
                 <button className="ma-press min-h-11 shrink-0 rounded-xl px-3 text-sm font-semibold text-brand-ink hover:bg-surface/70" onClick={dismissDocumentContext} type="button">{controls.dismiss}</button>
             </section>}
-            {!documentContext && documentUnavailable && <div className="rounded-2xl bg-surface px-3.5 py-2.5 text-[13px] text-ink-2" role="status"><p>{controls.documentUnavailable}</p><button type="button" className="min-h-11 px-3 font-semibold text-brand-ink" onClick={dismissDocumentContext}>{controls.dismiss}</button></div>}
-            {error && <div className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">
+            {documentUnavailable && <div className="rounded-2xl bg-surface px-3.5 py-2.5 text-[13px] text-ink-2" role="status"><p>{controls.documentUnavailable}</p><button type="button" className="min-h-11 px-3 font-semibold text-brand-ink" onClick={dismissDocumentContext}>{controls.dismiss}</button></div>}
+            {error && !documentUnavailable && <div className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">
                 <p>{error === "CHAT_TURN_BUSY" ? recoveryCopy.busy : error === "CHAT_TURN_EXPIRED" ? recoveryCopy.expired : error === "CHAT_STARTUP_UNAVAILABLE" ? recoveryCopy.unavailable : controls.chatError}</p>
                 {error === "CHAT_STARTUP_UNAVAILABLE" && <button type="button" className="mt-2 min-h-11 rounded-xl bg-surface px-3 font-semibold" onClick={reconnectChat}>{recoveryCopy.reconnect}</button>}
             </div>}
