@@ -1076,6 +1076,19 @@ token assurance or a freshly challenged sign-in. Requester was asked to perform
 the fresh sign-out/password/TOTP sign-in directly on the site; no code requested
 in chat. The earlier no-enrolled-factor observation applies only to Elena.
 
+**Fresh MFA follow-up — October 20 (Pacific):** requester confirmed completion
+of the requested sign-out/password/TOTP sign-in and supplied screenshots of the
+Verify MFA challenge and subsequent authenticated MFA-enabled page for clinician
+Rajeev. No code/credential was received or entered by the verifier. The original
+live tab was authenticated as that clinician; a new second tab reached the same
+page/identity. Concurrent reloads of both retained the authenticated identity and
+one enabled authenticator, with no sign-in redirect or error. Saved proof:
+`/private/tmp/grouped-fresh-mfa-reload-pass.png`; temporary tab closed. This
+closes the fresh MFA sign-in and second-tab continuity acceptance using requester
+challenge evidence plus observed post-login persistence, not a raw-token aal2
+inspection or a deliberately forced refresh-token race. AUTH-002 now retains only
+the real inactivity-warning observation; its timer/modal tests already pass.
+
 **Final verification:** patient full suite 834 tests / 75 files; clinician full
 suite 627 / 70. Both portals passed lint, typecheck and production build (patient
 build preceded the final test-only locale expansion; final focused typecheck and
