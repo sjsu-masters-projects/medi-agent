@@ -246,7 +246,7 @@ runtime, and checked against its SHA-256, page and field inventory and every map
 on every export. Re-pin steps (download into an empty directory outside the repository,
 compare size and SHA-256 and stop on a difference, repeat the copyright check, regenerate the
 record with `scripts/generate_form_3500_template_record.py`) are in
-[`src/app/assets/fda/README.md`](src/app/assets/fda/README.md). The fill uses `pypdf==6.20.1`
+[`src/app/assets/fda/README.md`](src/app/assets/fda/README.md). The fill uses `pypdf==6.21.1`
 (pinned in `requirements.in`; BSD), not PyMuPDF, writes the AcroForm fields and the XFA
 `datasets` packet, keeps the form fillable and re-encrypts it with the template's
 permissions.

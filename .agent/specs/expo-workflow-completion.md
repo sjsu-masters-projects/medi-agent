@@ -213,6 +213,15 @@ tests locally, without changing scanner rules. The requester authorized replacin
 only that latest commit using an explicit expected-commit lease; earlier commits
 are retained. The replacement head still requires its own CI results.
 
+The replacement passed secret scanning. Its dependency audit then reported newly
+published CVE-2026-113786 in locked `pypdf==6.20.1`. The narrow follow-up pins
+`6.21.1` and regenerates both locks with CI's uv 0.9.24; no unrelated dependency
+versions changed. The repeated compile is stable and pip-audit 2.10.1 reports no
+known vulnerabilities. This matches the [upstream security release](https://github.com/py-pdf/pypdf/releases/tag/6.21.1)
+and [advisory](https://github.com/advisories/GHSA-5hx5-vpf9-5wcv). The backend
+unit/router sweep, including MedWatch PDF regressions, passes **4,030 tests** on
+installed pypdf 6.21.1. Final-head CI remains distinct from deployed acceptance.
+
 ## Release checklist (separate remote authority)
 
 1. Merge/deploy reviewed code. Verify independent-root notification reads and
