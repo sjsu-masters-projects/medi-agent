@@ -111,15 +111,15 @@ export function getPatientChatCopy(locale: Locale): PatientChatCopy {
   return resolveLocaleResource(locale, PATIENT_CHAT_COPY);
 }
 
-/** PAT-001-A interface wording; es-MX candidates are tracked for bilingual review. */
+/** PAT-001-A wording: project-scope review in docs/evidence/spanish-interface-wording-2026-10-22.md. */
 export function getChatRecoveryCopy(locale: Locale) {
   return locale === "es-MX" ? {
     interrupted: "La respuesta quedó incompleta",
     uncertain: "Es posible que se haya registrado una acción. No la repetiremos automáticamente. Si necesitas ayuda, contacta a tu equipo de atención.",
-    // DRAFT es-MX, pending bilingual review.
+    // Reviewed es-MX interface copy; acceptance is bound to the source snapshot.
     leaveAndReturn: "Puedes salir; la respuesta aparecerá aquí.",
     safeRetry: "Puedes reintentar el mismo mensaje sin enviarlo dos veces.",
-    noRetry: "No volveremos a ejecutar este mensaje. Puedes continuar con una pregunta nueva.",
+    noRetry: "No volveremos a procesar este mensaje. Puedes continuar con una pregunta nueva.",
     retry: "Reintentar mensaje",
     leaveUnfinished: "Dejar esta respuesta incompleta",
     reconnectBeforeRetry: "Vuelve a conectar el chat para reintentar este mensaje.",
@@ -128,7 +128,7 @@ export function getChatRecoveryCopy(locale: Locale) {
     expired: "Esa respuesta tardó demasiado y no se guardó. Tu mensaje está guardado: usa Reintentar mensaje más abajo.",
     unavailable: "Nora no está disponible en este momento. No se enviará ningún mensaje hasta que el chat vuelva a conectarse. Puedes reintentar la conexión.",
     reconnect: "Volver a conectar",
-    replyUnavailable: "La respuesta de esta conversación ya no está disponible. No la volveremos a ejecutar. Puedes continuar con una pregunta nueva.",
+    replyUnavailable: "La respuesta a este mensaje ya no está disponible. No volveremos a procesarlo. Puedes continuar con una pregunta nueva.",
   } : {
     interrupted: "The reply was interrupted",
     uncertain: "An action may already have been recorded. We will not repeat it automatically. Contact your care team if you need help.",
@@ -154,11 +154,11 @@ export function getChatControlsCopy(locale: Locale) {
     loading: "Cargando conversación…", recordContext: "Registro adjunto", dismiss: "Cerrar", message: "Mensaje para Nora", send: "Enviar mensaje",
     documentUnavailable: "Este documento no está disponible o cambió. Desvincúlalo antes de hacer una pregunta sobre el resto de tu expediente.",
     speak: "Toca para hablar", stopVoice: "Detener grabación de voz", interrupt: "Interrumpir y hablar", listening: "Escuchando…", transcribing: "Transcribiendo…",
-    handsFreeOn: "Manos libres: activado", handsFreeOff: "Activar manos libres", autoPlay: "Las respuestas de voz se reproducirán automáticamente.",
+    handsFreeOn: "Manos libres activado. Toca para desactivarlo.", handsFreeOff: "Activar manos libres", autoPlay: "Las respuestas de voz se reproducirán automáticamente.",
     chatError: "No se pudo cargar o completar la conversación. Revisa la conexión y vuelve a intentarlo.", voiceError: "No se pudo completar la función de voz. Puedes escribir tu mensaje.",
     original: "Idioma original", originalUnknown: "Mensaje original · idioma no registrado", live: "Respuesta en curso", listen: "Escuchar",
     humanOriginal: "Los mensajes se muestran tal como se escribieron, sin traducción automática.",
-    // DRAFT es-MX, pending bilingual review (LOC-001).
+    // LOC-001 project-scope interface review recorded October 22.
     sending: "Enviando…", notSent: "No se envió", retrySend: "Reintentar", removeUnsent: "Quitar",
     profileRequired: "Necesitamos cargar tu idioma preferido antes de enviar. Si tarda demasiado, vuelve a abrir Chat.",
   } : {
@@ -214,13 +214,13 @@ export function getChatResultsCopy(locale: Locale) {
 }
 
 /**
- * VOICE-001 live voice mode wording. The es-MX strings are DRAFTS pending bilingual review
- * (LOC-001): they are listed in the VOICE-001 specification and must not be marked approved
- * until both languages are approved together.
+ * VOICE-001 live voice mode wording. The es-MX strings have a project-scope review
+ * (LOC-001), recorded in docs/evidence/spanish-interface-wording-2026-10-22.md.
+ * This accepts interface wording, not physical voice behavior or clinical plan text.
  */
 export function getVoiceModeCopy(locale: Locale) {
   return locale === "es-MX" ? {
-    // DRAFT es-MX, pending bilingual review (LOC-001).
+    // LOC-001 project-scope interface review recorded October 22.
     start: "Conversación por voz",
     panel: "Conversación por voz con Nora",
     status: {

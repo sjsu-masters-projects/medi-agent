@@ -88,7 +88,7 @@ const es: typeof en = {
     lastName: "Apellidos",
     language: "Idioma preferido",
     languageHelp:
-        "Al guardarlo cambia el idioma de la aplicación. Tu plan de atención y tus actividades de hoy también cambian, porque tu equipo de atención los aprueba en inglés y en español.",
+        "Al guardarlo cambia el idioma de la aplicación. Tu plan de atención y tus actividades de Hoy también se muestran en ese idioma, con el texto que tu equipo aprueba en inglés y en español.",
     gender: "Género",
     optional: "(opcional)",
     unspecified: "Sin especificar",

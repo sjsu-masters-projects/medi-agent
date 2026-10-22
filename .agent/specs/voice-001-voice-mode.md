@@ -213,6 +213,11 @@ only; this is not a statement of HIPAA or production readiness.
 
 ## es-MX wording drafts — not approved
 
+October 22 update: current paired interface copy is accepted for synthetic-project
+use in the [dated review](../../docs/evidence/spanish-interface-wording-2026-10-22.md).
+The original table below is historical draft context; the source-linked pack owns
+the exact accepted text. No physical voice/device acceptance is inferred.
+
 Source: `getVoiceModeCopy` in `apps/patient-portal/src/content/chat-copy.ts`. Every row is
 **Draft; pending LOC-001 bilingual review**, to be approved with the English together.
 

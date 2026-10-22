@@ -164,6 +164,12 @@ answer; clinical actions and escalation remain the existing workflow.
 
 ## Pending es-MX interface wording drafts — not approved
 
+October 22 update: the current runtime pairs have a
+[recorded project-scope meaning-and-safety review](../../docs/evidence/spanish-interface-wording-2026-10-22.md).
+The table below preserves the initial draft record, including superseded keys and
+wording; use the source-linked review pack for accepted current text. This does not
+approve stored clinical instructions or establish deployed acceptance.
+
 Source: `apps/patient-portal/src/content/chat-copy.ts` (`getChatRecoveryCopy` and
 `getChatControlsCopy.documentUnavailable`). Every row is **Draft; pending LOC-001
 bilingual review**, not clinician-approved clinical instructions. Emergency/crisis

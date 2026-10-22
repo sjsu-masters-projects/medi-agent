@@ -1,6 +1,7 @@
-# English / Mexican Spanish draft review pack
+# English / Mexican Spanish interface wording review pack
 
-Status: pending meaning-and-safety review. This inventory is not approval.
+Status: accepted for synthetic-project interface use at the recorded snapshot.
+See the [dated review record](evidence/spanish-interface-wording-2026-10-22.md).
 
 This pack collects the source files named by LOC-001 draft markers and linked
 requirements, including recovery, voice, care-team ownership/privacy, symptoms,
@@ -23,35 +24,39 @@ instructions in this document. No patient-authored text or clinical record is in
    deleting a draft comment alone. Clinical plan text still uses in-app bilingual approval.
 
 A documented demo meaning-and-safety review is sufficient for this project;
-a separate fluent reviewer is not required. This pack itself makes no completed
-review or professional translation/clinical-validation claim.
+a separate fluent reviewer is not required. Acceptance is limited to the exact
+paired interface copy; it is not professional translation or clinical validation.
+The receipt becomes invalid if the reviewed sources or pairs change. Regenerating
+this pack alone never renews acceptance. Clinician-only English title/description
+tuples are excluded; they are not translations.
 
 ## Source snapshot
 
 Regenerate with `python backend/scripts/build_spanish_review_pack.py`;
-check freshness with `python backend/scripts/build_spanish_review_pack.py --check`.
+check freshness with `python backend/scripts/build_spanish_review_pack.py --check --require-reviewed`.
 Install the clinician portal's locked dependencies first for the TypeScript parser.
 
 | Source | SHA-256 |
 | --- | --- |
-| [apps/patient-portal/src/content/chat-copy.ts](../apps/patient-portal/src/content/chat-copy.ts) | `31bd1be5ff9dd325a01edf0c53aa0b389c3b658ec66f62784715f1e95b7e8235` |
-| [apps/patient-portal/src/content/care-team-copy.ts](../apps/patient-portal/src/content/care-team-copy.ts) | `559128145fc3956a70a30144c163f21dde8aff3cfd391447900bbcac47a84516` |
-| [apps/patient-portal/src/content/symptom-history-copy.ts](../apps/patient-portal/src/content/symptom-history-copy.ts) | `77d93668d076c631a424eedb177c4434a1d05f56231639977f49dace937c2d80` |
-| [apps/patient-portal/src/content/visits-copy.ts](../apps/patient-portal/src/content/visits-copy.ts) | `473bf24a2347c7b7efbfd0b61c585ffe4fdd471040c88c3caa29ae06610ddce1` |
-| [apps/patient-portal/src/app/(app)/profile/profile-copy.ts](../apps/patient-portal/src/app/%28app%29/profile/profile-copy.ts) | `d8e10c28f5049e376086e0e43f8b61ad8170718df958bedf993be950ae05a2cb` |
-| [apps/patient-portal/src/components/features/nora-conversations.tsx](../apps/patient-portal/src/components/features/nora-conversations.tsx) | `1729c35806a0d9a489d7e644514a9cc22f3524dd781cbe7fc1cd6a0a78bf548b` |
-| [packages/shared/src/utils/care-conversations.ts](../packages/shared/src/utils/care-conversations.ts) | `20393b78de1b1a624850312819d83ce7d2f4a42987458c0e7573847ef3c185e5` |
-| [backend/src/app/services/notification_centre_presentation.py](../backend/src/app/services/notification_centre_presentation.py) | `f784083104f61418c693cc3a7ecdd9c3dd2ee70668b5a375e58bccfcdefb7e0b` |
-| [backend/src/app/services/symptom_report_presenter.py](../backend/src/app/services/symptom_report_presenter.py) | `54d138ddc73295d7b30e47243c3dca465eecfd1ab1622ace909c16d32b160fb9` |
-| [backend/src/app/services/appointment_calendar.py](../backend/src/app/services/appointment_calendar.py) | `0fda2abbdcc3892af1efe35d492b30e9ee88993e20602ef5078d4075a06e6831` |
-| [backend/src/app/services/email_service.py](../backend/src/app/services/email_service.py) | `40d958ff295d93dccd6243912eb59a04d4cfe5abf0f9e92e5aee91611c2eec77` |
+| [apps/patient-portal/src/content/chat-copy.ts](../apps/patient-portal/src/content/chat-copy.ts) | `68a36cfc9b2fd6a4724fb0f60b3f29ae0f66d83bc367d332363db6192af39d9a` |
+| [apps/patient-portal/src/content/care-team-copy.ts](../apps/patient-portal/src/content/care-team-copy.ts) | `043b9a1eb79c7803a2f2e581463ac018fbf5917a34dc15713cdc6d8247eaedd9` |
+| [apps/patient-portal/src/content/symptom-history-copy.ts](../apps/patient-portal/src/content/symptom-history-copy.ts) | `ba6a78638dd125919467d021b4a3cc35168937b84dee74c4c523353309a4f02e` |
+| [apps/patient-portal/src/content/visits-copy.ts](../apps/patient-portal/src/content/visits-copy.ts) | `f757d83730909d6a74f3ec372db59a018d9c522e7b351680042f53e4e3efca41` |
+| [apps/patient-portal/src/app/(app)/profile/profile-copy.ts](../apps/patient-portal/src/app/%28app%29/profile/profile-copy.ts) | `a8df7495058e93e633c6adb8f75bc7958c7226dbe72820d7734f70ba1a0e2bcc` |
+| [apps/patient-portal/src/components/features/nora-conversations.tsx](../apps/patient-portal/src/components/features/nora-conversations.tsx) | `017df3a9f82e7ff9eaf1910f08129969133aba6e8cd7e0f03a85558f14a9d3c9` |
+| [packages/shared/src/utils/care-conversations.ts](../packages/shared/src/utils/care-conversations.ts) | `283f87a82d5ba91f6e0430b1a9a37e25f874197105661317a8089f798b6010b5` |
+| [backend/src/app/services/notification_centre_presentation.py](../backend/src/app/services/notification_centre_presentation.py) | `2ee382468d66325a99685ed9fc489bc414008845a12ce6e4e2a853dbe2fbabc2` |
+| [backend/src/app/services/symptom_report_presenter.py](../backend/src/app/services/symptom_report_presenter.py) | `0933ef4a7c4ad8b67120be941b9661105f081b01696f82c8c6e3ccefc00284f6` |
+| [backend/src/app/services/appointment_calendar.py](../backend/src/app/services/appointment_calendar.py) | `321826d7839e1e15f867e02cebfc8555c71a95cf9ff030825f5ea4d7ed7bb569` |
+| [backend/src/app/services/email_service.py](../backend/src/app/services/email_service.py) | `8ff3f52ed394057bfb4e9121b2fb65523939ec5cc5a18de97b0770a049b328bb` |
 
-## Review list (562 paired rows)
+## Review list (553 paired rows)
 
-Every row is pending review in this pack. Use the source key to identify duplicates
+Every listed pair is covered by the matching project-scope review receipt.
+Use the source key to identify duplicate declaration/accessor entries
 across screens; do not infer that similar strings have the same clinical context.
 
-| Source/key | English (US) | Español (México), draft |
+| Source/key | English (US) | Español (México) |
 | --- | --- | --- |
 | apps/patient-portal/src/content/chat-copy.ts:83 / `PATIENT_CHAT_COPY.safetySaveUncertain` | We could not verify that your message or care-team alert was saved. | No pudimos verificar que se guardara tu mensaje o la alerta para tu equipo clínico. |
 | apps/patient-portal/src/content/chat-copy.ts:84 / `PATIENT_CHAT_COPY.safetyAlertPending` | The care-team alert is pending delivery. | La alerta para tu equipo clínico está pendiente de entrega. |
@@ -74,7 +79,7 @@ across screens; do not infer that similar strings have the same clinical context
 | apps/patient-portal/src/content/chat-copy.ts:118 / `getChatRecoveryCopy.uncertain` | An action may already have been recorded. We will not repeat it automatically. Contact your care team if you need help. | Es posible que se haya registrado una acción. No la repetiremos automáticamente. Si necesitas ayuda, contacta a tu equipo de atención. |
 | apps/patient-portal/src/content/chat-copy.ts:120 / `getChatRecoveryCopy.leaveAndReturn` | You can leave; the reply will appear here. | Puedes salir; la respuesta aparecerá aquí. |
 | apps/patient-portal/src/content/chat-copy.ts:121 / `getChatRecoveryCopy.safeRetry` | You can retry the same message without sending it twice. | Puedes reintentar el mismo mensaje sin enviarlo dos veces. |
-| apps/patient-portal/src/content/chat-copy.ts:122 / `getChatRecoveryCopy.noRetry` | We will not rerun this message. You can continue with a new question. | No volveremos a ejecutar este mensaje. Puedes continuar con una pregunta nueva. |
+| apps/patient-portal/src/content/chat-copy.ts:122 / `getChatRecoveryCopy.noRetry` | We will not rerun this message. You can continue with a new question. | No volveremos a procesar este mensaje. Puedes continuar con una pregunta nueva. |
 | apps/patient-portal/src/content/chat-copy.ts:123 / `getChatRecoveryCopy.retry` | Retry message | Reintentar mensaje |
 | apps/patient-portal/src/content/chat-copy.ts:124 / `getChatRecoveryCopy.leaveUnfinished` | Leave this reply unfinished | Dejar esta respuesta incompleta |
 | apps/patient-portal/src/content/chat-copy.ts:125 / `getChatRecoveryCopy.reconnectBeforeRetry` | Reconnect chat before retrying this message. | Vuelve a conectar el chat para reintentar este mensaje. |
@@ -83,7 +88,7 @@ across screens; do not infer that similar strings have the same clinical context
 | apps/patient-portal/src/content/chat-copy.ts:128 / `getChatRecoveryCopy.expired` | That reply took too long and was not kept. Your message is saved: use Retry message below. | Esa respuesta tardó demasiado y no se guardó. Tu mensaje está guardado: usa Reintentar mensaje más abajo. |
 | apps/patient-portal/src/content/chat-copy.ts:129 / `getChatRecoveryCopy.unavailable` | Nora is temporarily unavailable. No message will be sent until chat reconnects. You can retry the connection. | Nora no está disponible en este momento. No se enviará ningún mensaje hasta que el chat vuelva a conectarse. Puedes reintentar la conexión. |
 | apps/patient-portal/src/content/chat-copy.ts:130 / `getChatRecoveryCopy.reconnect` | Reconnect chat | Volver a conectar |
-| apps/patient-portal/src/content/chat-copy.ts:131 / `getChatRecoveryCopy.replyUnavailable` | The reply for this message is no longer available. We will not rerun it. You can continue with a new question. | La respuesta de esta conversación ya no está disponible. No la volveremos a ejecutar. Puedes continuar con una pregunta nueva. |
+| apps/patient-portal/src/content/chat-copy.ts:131 / `getChatRecoveryCopy.replyUnavailable` | The reply for this message is no longer available. We will not rerun it. You can continue with a new question. | La respuesta a este mensaje ya no está disponible. No volveremos a procesarlo. Puedes continuar con una pregunta nueva. |
 | apps/patient-portal/src/content/chat-copy.ts:152 / `getChatControlsCopy.connection.idle` | Offline | Sin conexión |
 | apps/patient-portal/src/content/chat-copy.ts:152 / `getChatControlsCopy.connection.connected` | Connected | Conectado |
 | apps/patient-portal/src/content/chat-copy.ts:152 / `getChatControlsCopy.connection.connecting` | Connecting… | Conectando… |
@@ -102,7 +107,7 @@ across screens; do not infer that similar strings have the same clinical context
 | apps/patient-portal/src/content/chat-copy.ts:156 / `getChatControlsCopy.interrupt` | Interrupt and speak | Interrumpir y hablar |
 | apps/patient-portal/src/content/chat-copy.ts:156 / `getChatControlsCopy.listening` | Listening… | Escuchando… |
 | apps/patient-portal/src/content/chat-copy.ts:156 / `getChatControlsCopy.transcribing` | Transcribing… | Transcribiendo… |
-| apps/patient-portal/src/content/chat-copy.ts:157 / `getChatControlsCopy.handsFreeOn` | Hands-free mode is on. Tap to turn off. | Manos libres: activado |
+| apps/patient-portal/src/content/chat-copy.ts:157 / `getChatControlsCopy.handsFreeOn` | Hands-free mode is on. Tap to turn off. | Manos libres activado. Toca para desactivarlo. |
 | apps/patient-portal/src/content/chat-copy.ts:157 / `getChatControlsCopy.handsFreeOff` | Turn on hands-free mode | Activar manos libres |
 | apps/patient-portal/src/content/chat-copy.ts:157 / `getChatControlsCopy.autoPlay` | Voice replies will play automatically. | Las respuestas de voz se reproducirán automáticamente. |
 | apps/patient-portal/src/content/chat-copy.ts:158 / `getChatControlsCopy.chatError` | Could not load or complete the conversation. Check your connection and try again. | No se pudo cargar o completar la conversación. Revisa la conexión y vuelve a intentarlo. |
@@ -226,7 +231,7 @@ across screens; do not infer that similar strings have the same clinical context
 | apps/patient-portal/src/content/symptom-history-copy.ts:80 / `copy.events.reported` | You confirmed this report | Confirmaste este reporte |
 | apps/patient-portal/src/content/symptom-history-copy.ts:81 / `copy.events.shared_with_care_team` | Sent to your care team | Enviado a tu equipo de atención |
 | apps/patient-portal/src/content/symptom-history-copy.ts:83 / `copy.events.not_sent_no_care_team` | Not sent: you have no care team yet. Contact your clinic. | No enviado: aún no tienes un equipo de atención. Comunícate con tu clínica. |
-| apps/patient-portal/src/content/symptom-history-copy.ts:84 / `copy.events.flagged_urgent` | Marked for urgent review by your care team | Tu equipo de atención lo marcó para revisión urgente |
+| apps/patient-portal/src/content/symptom-history-copy.ts:84 / `copy.events.flagged_urgent` | Marked for urgent review by your care team | Marcado para que tu equipo de atención lo revise con urgencia |
 | apps/patient-portal/src/content/symptom-history-copy.ts:85 / `copy.events.reviewed` | (name: string &#124; null) =&gt; name ? `Reviewed by ${name}` : "Reviewed by your care team" | (name) =&gt; name ? `Revisado por ${name}` : "Revisado por tu equipo de atención" |
 | apps/patient-portal/src/content/symptom-history-copy.ts:89 / `copy.disclaimer` | This is a record of what you reported. It is not a diagnosis. In an emergency, call 911. | Este es un registro de lo que reportaste. No es un diagnóstico. En una emergencia, llama al 911. |
 | apps/patient-portal/src/content/symptom-history-copy.ts:90 / `copy.retry` | Try again | Intentar de nuevo |
@@ -257,7 +262,7 @@ across screens; do not infer that similar strings have the same clinical context
 | apps/patient-portal/src/content/symptom-history-copy.ts:80 / `getSymptomHistoryCopy.events.reported` | You confirmed this report | Confirmaste este reporte |
 | apps/patient-portal/src/content/symptom-history-copy.ts:81 / `getSymptomHistoryCopy.events.shared_with_care_team` | Sent to your care team | Enviado a tu equipo de atención |
 | apps/patient-portal/src/content/symptom-history-copy.ts:83 / `getSymptomHistoryCopy.events.not_sent_no_care_team` | Not sent: you have no care team yet. Contact your clinic. | No enviado: aún no tienes un equipo de atención. Comunícate con tu clínica. |
-| apps/patient-portal/src/content/symptom-history-copy.ts:84 / `getSymptomHistoryCopy.events.flagged_urgent` | Marked for urgent review by your care team | Tu equipo de atención lo marcó para revisión urgente |
+| apps/patient-portal/src/content/symptom-history-copy.ts:84 / `getSymptomHistoryCopy.events.flagged_urgent` | Marked for urgent review by your care team | Marcado para que tu equipo de atención lo revise con urgencia |
 | apps/patient-portal/src/content/symptom-history-copy.ts:85 / `getSymptomHistoryCopy.events.reviewed` | (name: string &#124; null) =&gt; name ? `Reviewed by ${name}` : "Reviewed by your care team" | (name) =&gt; name ? `Revisado por ${name}` : "Revisado por tu equipo de atención" |
 | apps/patient-portal/src/content/symptom-history-copy.ts:89 / `getSymptomHistoryCopy.disclaimer` | This is a record of what you reported. It is not a diagnosis. In an emergency, call 911. | Este es un registro de lo que reportaste. No es un diagnóstico. En una emergencia, llama al 911. |
 | apps/patient-portal/src/content/symptom-history-copy.ts:90 / `getSymptomHistoryCopy.retry` | Try again | Intentar de nuevo |
@@ -273,7 +278,7 @@ across screens; do not infer that similar strings have the same clinical context
 | apps/patient-portal/src/content/visits-copy.ts:122 / `copy.types.routine` | Routine check | Revisión de rutina |
 | apps/patient-portal/src/content/visits-copy.ts:123 / `copy.types.urgent` | Urgent | Urgente |
 | apps/patient-portal/src/content/visits-copy.ts:124 / `copy.types.pre_op` | Pre-operative | Preoperatoria |
-| apps/patient-portal/src/content/visits-copy.ts:126 / `copy.offerTitle` | Your clinician offered these times | Tu equipo de atención ofreció estos horarios |
+| apps/patient-portal/src/content/visits-copy.ts:126 / `copy.offerTitle` | Your clinician offered these times | Tu profesional clínico ofreció estos horarios |
 | apps/patient-portal/src/content/visits-copy.ts:127 / `copy.choose` | Choose this time | Elegir este horario |
 | apps/patient-portal/src/content/visits-copy.ts:129 / `copy.offerDecline.label` | Reason for declining (optional) | Motivo del rechazo (opcional) |
 | apps/patient-portal/src/content/visits-copy.ts:130 / `copy.offerDecline.placeholder` | Let your care team know why | Explica el motivo a tu equipo de atención |
@@ -298,7 +303,7 @@ across screens; do not infer that similar strings have the same clinical context
 | apps/patient-portal/src/content/visits-copy.ts:157 / `copy.refreshVisits` | Refresh visits | Actualizar citas |
 | apps/patient-portal/src/content/visits-copy.ts:159 / `copy.fallback` | Your saved timezone is unavailable. Times are shown in UTC. | Tu zona horaria guardada no está disponible. Los horarios se muestran en UTC. |
 | apps/patient-portal/src/content/visits-copy.ts:160 / `copy.emptyTitle` | No visits yet | Aún no tienes citas |
-| apps/patient-portal/src/content/visits-copy.ts:162 / `copy.emptyDetail` | When your clinician proposes a visit, it will appear here for you to accept, decline, or request a different time. | Cuando tu equipo de atención proponga una cita, aparecerá aquí para que la aceptes, la rechaces o solicites otro horario. |
+| apps/patient-portal/src/content/visits-copy.ts:162 / `copy.emptyDetail` | When your clinician proposes a visit, it will appear here for you to accept, decline, or request a different time. | Cuando tu profesional clínico proponga una cita, aparecerá aquí para que la aceptes, la rechaces o solicites otro horario. |
 | apps/patient-portal/src/content/visits-copy.ts:163 / `copy.proposed` | Awaiting your response | Esperando tu respuesta |
 | apps/patient-portal/src/content/visits-copy.ts:164 / `copy.upcoming` | Upcoming | Próximas citas |
 | apps/patient-portal/src/content/visits-copy.ts:165 / `copy.waiting` | Waiting on your care team | Esperando a tu equipo de atención |
@@ -351,7 +356,7 @@ across screens; do not infer that similar strings have the same clinical context
 | apps/patient-portal/src/app/(app)/profile/profile-copy.ts:87 / `copy.firstName` | First name | Nombre |
 | apps/patient-portal/src/app/(app)/profile/profile-copy.ts:88 / `copy.lastName` | Last name | Apellidos |
 | apps/patient-portal/src/app/(app)/profile/profile-copy.ts:89 / `copy.language` | Preferred language | Idioma preferido |
-| apps/patient-portal/src/app/(app)/profile/profile-copy.ts:91 / `copy.languageHelp` | Saving this changes the app language. Your care plan and Today list switch too, because your care team approves them in English and Spanish. | Al guardarlo cambia el idioma de la aplicación. Tu plan de atención y tus actividades de hoy también cambian, porque tu equipo de atención los aprueba en inglés y en español. |
+| apps/patient-portal/src/app/(app)/profile/profile-copy.ts:91 / `copy.languageHelp` | Saving this changes the app language. Your care plan and Today list switch too, because your care team approves them in English and Spanish. | Al guardarlo cambia el idioma de la aplicación. Tu plan de atención y tus actividades de Hoy también se muestran en ese idioma, con el texto que tu equipo aprueba en inglés y en español. |
 | apps/patient-portal/src/app/(app)/profile/profile-copy.ts:92 / `copy.gender` | Gender | Género |
 | apps/patient-portal/src/app/(app)/profile/profile-copy.ts:93 / `copy.optional` | (optional) | (opcional) |
 | apps/patient-portal/src/app/(app)/profile/profile-copy.ts:94 / `copy.unspecified` | Not specified | Sin especificar |
@@ -410,7 +415,7 @@ across screens; do not infer that similar strings have the same clinical context
 | apps/patient-portal/src/app/(app)/profile/profile-copy.ts:87 / `profileCopy.firstName` | First name | Nombre |
 | apps/patient-portal/src/app/(app)/profile/profile-copy.ts:88 / `profileCopy.lastName` | Last name | Apellidos |
 | apps/patient-portal/src/app/(app)/profile/profile-copy.ts:89 / `profileCopy.language` | Preferred language | Idioma preferido |
-| apps/patient-portal/src/app/(app)/profile/profile-copy.ts:91 / `profileCopy.languageHelp` | Saving this changes the app language. Your care plan and Today list switch too, because your care team approves them in English and Spanish. | Al guardarlo cambia el idioma de la aplicación. Tu plan de atención y tus actividades de hoy también cambian, porque tu equipo de atención los aprueba en inglés y en español. |
+| apps/patient-portal/src/app/(app)/profile/profile-copy.ts:91 / `profileCopy.languageHelp` | Saving this changes the app language. Your care plan and Today list switch too, because your care team approves them in English and Spanish. | Al guardarlo cambia el idioma de la aplicación. Tu plan de atención y tus actividades de Hoy también se muestran en ese idioma, con el texto que tu equipo aprueba en inglés y en español. |
 | apps/patient-portal/src/app/(app)/profile/profile-copy.ts:92 / `profileCopy.gender` | Gender | Género |
 | apps/patient-portal/src/app/(app)/profile/profile-copy.ts:93 / `profileCopy.optional` | (optional) | (opcional) |
 | apps/patient-portal/src/app/(app)/profile/profile-copy.ts:94 / `profileCopy.unspecified` | Not specified | Sin especificar |
@@ -521,7 +526,7 @@ across screens; do not infer that similar strings have the same clinical context
 | packages/shared/src/utils/care-conversations.ts:219 / `getConversationCopy.translationAsk` | If anything is unclear, ask your care team. | Si algo no te queda claro, pregúntale a tu equipo de atención. |
 | packages/shared/src/utils/care-conversations.ts:220 / `getConversationCopy.close` | Close | Cerrar |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.legacy_update.0` | Earlier notification | Notificación anterior |
-| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.legacy_update.1` | From the previous inbox; not a new task. | De tu buzón anterior. |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.legacy_update.1` | From the previous inbox; not a new task. | De tu buzón anterior; no es una tarea nueva. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.message_received.0` | New care-team message | Nuevo mensaje del equipo de atención |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.message_received.1` | Open the conversation to read it. | Abre la conversación para leerlo. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.appointment_offered.0` | Appointment offered | Propuesta de cita |
@@ -530,36 +535,36 @@ across screens; do not infer that similar strings have the same clinical context
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.appointment_changed.1` | See the current time in Visits. | Consulta el horario actual en Citas. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.appointment_cancelled.0` | Appointment cancelled | Cita cancelada |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.appointment_cancelled.1` | Your clinician cancelled this visit. See the reason in Visits. | Tu profesional clínico canceló esta cita. Consulta el motivo en Citas. |
-| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.appointment_response.0` | Patient responded to an appointment | Respuesta a la cita |
-| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.appointment_response.1` | Review the saved patient response. | Revisa la respuesta guardada. |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.appointment_response.0` | Patient responded to an appointment | El paciente respondió a una cita |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.appointment_response.1` | Review the saved patient response. | Revisa la respuesta guardada del paciente. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.appointment_reminder.0` | Appointment reminder | Recordatorio de cita |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.appointment_reminder.1` | Time and place are in Visits. | El horario y el lugar están en Citas. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.care_plan_published.0` | Your care plan was updated | Tu plan de cuidado se actualizó |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.care_plan_published.1` | Your care team approved changes. See Today. | Tu equipo de atención aprobó cambios. Consulta Hoy. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.care_plan_draft.0` | Care-plan draft ready for review | Borrador del plan listo para revisión |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.care_plan_draft.1` | This draft is not published. Review sources, wording and blockers. | Este borrador no está publicado. Revisa las fuentes, el texto y los bloqueos. |
-| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.document_review.0` | Patient document awaiting review | Documento pendiente de revisión |
-| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.document_review.1` | Parsing and clinical review are separate. Open the exact document. | El procesamiento y la revisión clínica son pasos distintos. |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.document_review.0` | Patient document awaiting review | Documento del paciente pendiente de revisión |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.document_review.1` | Parsing and clinical review are separate. Open the exact document. | El procesamiento y la revisión clínica son pasos distintos. Abre el documento correspondiente. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.document_processed.0` | Document processing completed | Documento procesado |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.document_processed.1` | See it in Records. | Consúltalo en Registros. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.document_failed.0` | Document needs attention | El documento necesita atención |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.document_failed.1` | Processing didn't finish. Open it for next steps. | El procesamiento no terminó. Ábrelo para ver los siguientes pasos. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.document_reviewed.0` | Document review updated | Revisión del documento actualizada |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.document_reviewed.1` | Your care team reviewed it. See Records. | Tu equipo de atención lo revisó. Consulta Registros. |
-| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.barrier_reported.0` | Care-plan barrier reported | Dificultad reportada |
-| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.barrier_reported.1` | A patient reported difficulty with an activity. This is not a confirmed adverse drug reaction. | Se reportó una dificultad con una actividad. Esto no confirma una reacción adversa a un medicamento. |
-| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.adr_review.0` | Medication-safety review needed | Revisión de seguridad pendiente |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.barrier_reported.0` | Care-plan barrier reported | Dificultad con el plan de atención reportada |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.barrier_reported.1` | A patient reported difficulty with an activity. This is not a confirmed adverse drug reaction. | Un paciente reportó una dificultad con una actividad. Esto no confirma una reacción adversa a un medicamento. |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.adr_review.0` | Medication-safety review needed | Se necesita una revisión de seguridad de medicamentos |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.adr_review.1` | A candidate finding needs clinician review; it is not a confirmed diagnosis. | Un hallazgo candidato necesita revisión clínica; no es un diagnóstico confirmado. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.adr_information_requested.0` | Your care team requested information | Tu equipo de atención solicita información |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.adr_information_requested.1` | Answer a few questions in the app about a symptom you already reported. Describe only what already happened. | Responde en la app unas preguntas sobre un síntoma que ya reportaste. Describe solo lo que ya pasó. |
-| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.adr_information_answered.0` | Patient answered medication-safety follow-up | El paciente respondió el seguimiento de seguridad |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.adr_information_answered.0` | Patient answered medication-safety follow-up | El paciente respondió al seguimiento de seguridad de medicamentos |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.adr_information_answered.1` | A patient sent answers to follow-up questions. Review the updated evidence; this is not a clinical decision. | Un paciente envió respuestas a preguntas de seguimiento. Revisa la evidencia actualizada; esto no es una decisión clínica. |
-| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.critical_result.0` | Critical test result reported | Resultado crítico reportado |
-| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.critical_result.1` | A patient's document reports a result the laboratory marked critical. Open the document to review it. | Un documento informa un resultado que el laboratorio marcó como crítico. Ábrelo para revisarlo. |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.critical_result.0` | Critical test result reported | Resultado crítico de laboratorio reportado |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.critical_result.1` | A patient's document reports a result the laboratory marked critical. Open the document to review it. | Un documento del paciente informa un resultado que el laboratorio marcó como crítico. Ábrelo para revisarlo. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.care_plan_review.0` | Care-team work item | Tarea del equipo de atención |
-| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.care_plan_review.1` | A care-plan item needs your care team. Open the patient to see it. | Un elemento del plan de cuidado necesita a tu equipo. Abre al paciente para verlo. |
-| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.safety_flag.0` | Patient safety flag needs review | Aviso de seguridad para revisión |
-| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.safety_flag.1` | An automated flag was saved. Review the original conversation; this is not a clinical decision. | Se guardó un aviso automático. Requiere revisión; no es una decisión clínica. |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.care_plan_review.1` | A care-plan item needs your care team. Open the patient to see it. | Un elemento del plan de atención requiere la atención de tu equipo. Abre el expediente del paciente para verlo. |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.safety_flag.0` | Patient safety flag needs review | Aviso de seguridad del paciente pendiente de revisión |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.safety_flag.1` | An automated flag was saved. Review the original conversation; this is not a clinical decision. | Se guardó un aviso automático. Revisa la conversación original; esto no es una decisión clínica. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.med_reminder.0` | Medication reminder | Recordatorio de medicamento |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.med_reminder.1` | It's on your Today list. | Está en tu lista de Hoy. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.obligation_reminder.0` | Care-plan reminder | Recordatorio del plan de cuidado |
@@ -567,15 +572,6 @@ across screens; do not infer that similar strings have the same clinical context
 | backend/src/app/services/notification_centre_presentation.py:155 / `_QUESTION_WORDING.reappeared_on_rechallenge.0` | Whether the symptom came back after restarting this medicine | Si el síntoma volvió después de reiniciar este medicamento |
 | backend/src/app/services/notification_centre_presentation.py:155 / `_QUESTION_WORDING.dose_response.0` | Whether the symptom changed after a dose change your clinician directed | Si el síntoma cambió después de un cambio de dosis indicado por tu profesional de salud |
 | backend/src/app/services/notification_centre_presentation.py:155 / `_QUESTION_WORDING.similar_previous_reaction.0` | Whether you have had a similar reaction to this medicine before | Si has tenido antes una reacción similar a este medicamento |
-| backend/src/app/services/notification_centre_presentation.py:233 / `_REVIEW_COPY.unowned_plan.0` | A care plan has no care team | A care team that ended left approved activities in this patient's Today. Adopt the plan or retire items. Nothing was removed. |
-| backend/src/app/services/notification_centre_presentation.py:233 / `_REVIEW_COPY.unassigned_legacy_plan.0` | A care plan needs an owner | An older care plan could not be assigned to one care team. Adopt it or retire items. Nothing was removed. |
-| backend/src/app/services/notification_centre_presentation.py:233 / `_REVIEW_COPY.cross_plan_conflict.0` | Another care team asks about a conflict | Another care team's plan has an instruction that conflicts with yours. Open the patient to read the question and reply. |
-| backend/src/app/services/notification_centre_presentation.py:233 / `_REVIEW_COPY.conflict_acknowledged.0` | A conflict with your plan was acknowledged | Another care team kept both instructions for a medicine on your plan and recorded a reason. Open the patient to read it. |
-| backend/src/app/services/notification_centre_presentation.py:233 / `_REVIEW_COPY.conflict_published_without.0` | A conflicting item was left out of another plan | Another care team published its plan without an item that conflicts with yours. |
-| backend/src/app/services/notification_centre_presentation.py:233 / `_REVIEW_COPY.conflict_reply.0` | Your question about a conflict was answered | The other care team replied. Open the patient to read the reply. |
-| backend/src/app/services/notification_centre_presentation.py:233 / `_REVIEW_COPY.unowned_clinical_record.0` | A reviewed record needs a care team | A reviewed record could not be assigned to one care team. Take it up from the patient's page if it is yours. |
-| backend/src/app/services/notification_centre_presentation.py:271 / `_CLINIC_REVIEW_COPY.unowned_plan.0` | A care plan at your clinic has no care team | A care team that ended left approved activities in a patient's Today. Open the clinic review page to see who can adopt it. Nothing was removed. |
-| backend/src/app/services/notification_centre_presentation.py:271 / `_CLINIC_REVIEW_COPY.unassigned_legacy_plan.0` | A care plan at your clinic needs an owner | An older care plan could not be assigned to one care team. Open the clinic review page. Nothing was removed. |
 | backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.description` | What happened | Qué pasó |
 | backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.location` | Where | Dónde |
 | backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.onset` | When it started | Cuándo empezó |
@@ -602,7 +598,7 @@ across screens; do not infer that similar strings have the same clinical context
 | backend/src/app/services/symptom_report_presenter.py:78 / `_YES_NO.0` | Yes | Sí |
 | backend/src/app/services/symptom_report_presenter.py:78 / `_YES_NO.1` | No | No |
 | backend/src/app/services/appointment_calendar.py:12 / `_COPY.0` | MediAgent appointment | Cita de MediAgent |
-| backend/src/app/services/appointment_calendar.py:12 / `_COPY.1` | This is a one-time calendar copy. Changes and cancellations do not sync. Check MediAgent for the latest appointment details. | Esta es una copia del calendario. Los cambios y las cancelaciones no se sincronizan. Consulta MediAgent para ver los datos actuales de la cita. |
+| backend/src/app/services/appointment_calendar.py:12 / `_COPY.1` | This is a one-time calendar copy. Changes and cancellations do not sync. Check MediAgent for the latest appointment details. | Esta es una copia única para tu calendario. Los cambios y las cancelaciones no se sincronizan. Consulta MediAgent para ver los datos actuales de la cita. |
 | backend/src/app/services/appointment_calendar.py:12 / `_COPY.2` | Clinic | Clínica |
 | backend/src/app/services/email_service.py:28 / `_COPY.message_received.0` | New care-team messages | Nuevos mensajes del equipo de atención |
 | backend/src/app/services/email_service.py:28 / `_COPY.appointment_offered.0` | Appointment choices available | Horarios de cita disponibles |

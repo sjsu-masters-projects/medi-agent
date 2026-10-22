@@ -2,9 +2,9 @@ import { normalizeLocale, resolveLocaleResource, type Locale, type LocaleResourc
 
 /**
  * PLAN-002 patient wording: care-team owners, the Today filter, the upload picker and
- * condition privacy. Every es-MX string here is a DRAFT pending bilingual review
- * (LOC-001); the list is kept in `.agent/specs/plan-002-care-plans-per-care-team.md`
- * and none of it may be marked approved before that review.
+ * condition privacy. Project-scope es-MX review is recorded in
+ * `docs/evidence/spanish-interface-wording-2026-10-22.md` (LOC-001).
+ * Interface acceptance does not approve stored clinical plan wording.
  */
 const english = {
     locale: "en-US" as Locale,

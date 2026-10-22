@@ -1,6 +1,6 @@
 import type { Locale } from "@/types";
 
-// New Spanish wording is a draft pending LOC-001 review.
+// Project-scope es-MX review: docs/evidence/spanish-interface-wording-2026-10-22.md.
 const english = {
   heading: "My symptoms",
   loading: "Loading your symptom reports…",
@@ -81,7 +81,7 @@ const spanish: Copy = {
     shared_with_care_team: "Enviado a tu equipo de atención",
     not_sent_no_care_team:
       "No enviado: aún no tienes un equipo de atención. Comunícate con tu clínica.",
-    flagged_urgent: "Tu equipo de atención lo marcó para revisión urgente",
+    flagged_urgent: "Marcado para que tu equipo de atención lo revise con urgencia",
     reviewed: (name) =>
       name ? `Revisado por ${name}` : "Revisado por tu equipo de atención",
   },
