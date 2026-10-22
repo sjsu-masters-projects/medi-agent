@@ -127,29 +127,42 @@ class ClinicalActionService:
         self._require_assignment(clinician_id, UUID(str(recommendation["patient_id"])))
         if recommendation.get("state") != ClinicalActionState.APPROVED.value:
             raise ValidationError("Clinical action requires an approved recommendation")
-        existing = (
+        # The unique constraint owns concurrency. Ignore a duplicate insert without
+        # updating a saved outcome, then read the winner after its transaction commits.
+        result = (
             self.db.table("action_envelopes")
-            .select("*")
-            .eq("recommendation_id", str(recommendation_id))
-            .eq("idempotency_key", envelope.idempotency_key)
+            .upsert(
+                {
+                    "recommendation_id": str(recommendation_id),
+                    "idempotency_key": envelope.idempotency_key,
+                    "state": ClinicalActionState.APPROVED.value,
+                },
+                on_conflict="recommendation_id,idempotency_key",
+                ignore_duplicates=True,
+            )
             .execute()
         )
-        rows = cast(list[dict[str, Any]], existing.data or [])
-        if rows:
-            return rows[0]
-        created = self._insert(
-            "action_envelopes",
-            {
-                "recommendation_id": str(recommendation_id),
-                "idempotency_key": envelope.idempotency_key,
-                "state": ClinicalActionState.APPROVED.value,
-            },
-            "action envelope",
-        )
+        rows = cast(list[dict[str, Any]], result.data or [])
+        if not rows:
+            return self._existing_envelope(recommendation_id, envelope.idempotency_key)
+        created = rows[0]
         self._audit(
             recommendation_id, clinician_id, "execution_requested", {"envelope_id": created["id"]}
         )
         return created
+
+    def _existing_envelope(self, recommendation_id: UUID, key: str) -> dict[str, Any]:
+        result = (
+            self.db.table("action_envelopes")
+            .select("*")
+            .eq("recommendation_id", str(recommendation_id))
+            .eq("idempotency_key", key)
+            .execute()
+        )
+        rows = cast(list[dict[str, Any]], result.data or [])
+        if not rows:
+            raise ValidationError("Could not retrieve the saved action envelope")
+        return rows[0]
 
     def record_outcome(
         self,
@@ -191,6 +204,14 @@ class ClinicalActionService:
         return rows[0]
 
     def _require_assignment(self, clinician_id: UUID, patient_id: UUID) -> None:
+        clinician = self.db.table("clinicians").select("id").eq("id", str(clinician_id)).execute()
+        if not clinician.data:
+            raise AuthorizationError(
+                "A clinician profile is required for this action",
+                reason_code=reasons.ROLE_LACKS_CLINICAL_SCOPE,
+                actor_id=str(clinician_id),
+                target_type="clinical_recommendation",
+            )
         response = (
             self.db.table("care_teams")
             .select("id")

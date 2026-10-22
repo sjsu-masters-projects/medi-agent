@@ -7,6 +7,11 @@ its source IDs and display labels replace the previous hand-authored demo person
 
 ## University-expo scenario
 
+Use the [presentation script](expo-demo-script.md),
+[limitations brief](project-limitations.md) and [recovery notes](expo-recovery.md)
+to prepare the run. These documents do not establish that provisioning or a
+rehearsal has happened.
+
 The current delivery is a master's-project expo, not a commercial pilot. The
 presenter operates both fictional roles; no real patients, healthcare-professional
 recruitment, real medical records or investor materials are required. See
