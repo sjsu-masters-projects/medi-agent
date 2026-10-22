@@ -42,12 +42,21 @@ gcloud run deploy mediagent-backend \
   --cpu 1 --memory 2Gi \
   --min-instances 0 --max-instances 2 \
   --allow-unauthenticated \
-  --service-account github-actions-deployer@medi-agent-490106.iam.gserviceaccount.com \
-  --update-env-vars VERTEX_AI_LOCATION=global,GEMINI_VERTEX_AI_LOCATION=global,GEMINI_*_MODEL=...,CHAT_TURN_TIMEOUT_SECONDS=30,MODEL_CIRCUIT_BREAKER_COOLDOWN_SECONDS=60 \
+  --service-account "${CLOUD_RUN_API_RUNTIME_SA:-github-actions-deployer@medi-agent-490106.iam.gserviceaccount.com}" \
+  --update-env-vars VERTEX_AI_LOCATION=global,GEMINI_VERTEX_AI_LOCATION=global,GEMINI_*_MODEL=...,CHAT_TURN_TIMEOUT_SECONDS=30,MODEL_CIRCUIT_BREAKER_COOLDOWN_SECONDS=60,CLOUD_TASKS_*=...,CHAT_WORKER_*=...,CHAT_TURNS_VIA_WORKER=... \
+  --update-secrets SUPABASE_*=...,GOOGLE_API_KEY=...,DEEPGRAM_API_KEY=...,... \
   --port 8080 --timeout 300
 ```
 
-The service uses `--update-env-vars` and never `--set-env-vars` or `--set-secrets`: the
+The Nora worker settings (`CLOUD_TASKS_*`, `CHAT_WORKER_*`, `CHAT_TURNS_VIA_WORKER`) come from
+GitHub repository variables and the 11 secret references from Secret Manager; a first workflow
+step fails the run if a required variable is missing. The runtime identity is the least-privilege
+`mediagent-api-runtime` (worker: `mediagent-worker-runtime`) once the repository variables
+`CLOUD_RUN_API_RUNTIME_SA` / `CLOUD_RUN_WORKER_RUNTIME_SA` are set; until then the services keep
+`github-actions-deployer`. Variable table, per-account roles, setup script and rollback:
+[`docs/chat-worker-setup.md`](../docs/chat-worker-setup.md).
+
+The service uses `--update-env-vars` and `--update-secrets` and never `--set-env-vars` or `--set-secrets`: the
 `--set-*` forms replace the whole set and would wipe the variables and secret references
 (Supabase, Sentry, SMART, Deepgram, Resend, cron) configured out of band. Memory is pinned
 in the workflow because a console change would revert on the next deploy.
