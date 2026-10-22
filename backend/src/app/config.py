@@ -194,6 +194,12 @@ class Settings(BaseSettings):
     ai_availability_enabled: bool = True
     ai_availability_flush_seconds: float = Field(default=30.0, ge=5.0, le=600.0)
 
+    # Longest an interactive model call waits for a free slot before it is shed (OPS-006 rule 14).
+    model_admission_wait_seconds: float = Field(default=5.0, ge=0.5, le=30.0)
+    # A reply that fails after text was shown tries the backup model only if at least this much
+    # of the reply budget is left; otherwise the reviewed unavailable message is used.
+    reply_fallback_min_seconds: float = Field(default=2.0, ge=0.5, le=10.0)
+
     # Internal cron auth
     cron_auth_token: str = ""
 

@@ -1,5 +1,5 @@
 -- AI-003: bounded model availability counters.
--- Re-runnable. Apply after 087 (88 and 89 belong to sibling branches). Inert until the backend
+-- Re-runnable. Apply after 088 (89 belongs to a sibling branch). Inert until the backend
 -- flushes counters (AI_AVAILABILITY_ENABLED, default on); nothing else reads or writes it.
 --
 -- One row per hour, workload, model, outcome and route (primary or fallback) holds counts and a
@@ -7,7 +7,9 @@
 -- only the registry workload, the configured model id, a closed outcome vocabulary and numbers.
 -- Cardinality is bounded three ways: CHECKed value shapes, a closed outcome set, and a cap of
 -- 400 distinct keys per hour inside the write function (a new key past it is dropped, counted in
--- the 'overflow' row). Rows older than 14 days are deleted by the same function, a few at a time.
+-- the 'overflow' row). Rows older than 14 days are deleted by the same function, a few at a time;
+-- it also deletes model_invocation_events rows older than 30 days (200 per call), which had no
+-- retention at all.
 --
 -- Counts are approximate by design: a flush whose acknowledgement is lost may be applied twice.
 -- Rollback: stop the flag; drop the table and functions (nothing depends on them).
@@ -16,7 +18,7 @@ CREATE TABLE IF NOT EXISTS public.ai_availability_buckets (
  bucket_start timestamptz NOT NULL,
  workload text NOT NULL CHECK(workload ~ '^[a-z0-9_]{1,40}$'),
  model text NOT NULL CHECK(char_length(model) BETWEEN 1 AND 80 AND model ~ '^[A-Za-z0-9._/:-]+$'),
- outcome text NOT NULL CHECK(outcome IN ('success','timeout','rate_limited','server_error','client_error','circuit_open','cancelled','other','overflow')),
+ outcome text NOT NULL CHECK(outcome IN ('success','timeout','rate_limited','server_error','client_error','circuit_open','shed','cancelled','other','overflow')),
  fallback boolean NOT NULL DEFAULT false,
  attempts bigint NOT NULL DEFAULT 0 CHECK(attempts>=0),
  latency_sum_ms bigint NOT NULL DEFAULT 0 CHECK(latency_sum_ms>=0),
@@ -45,7 +47,7 @@ BEGIN
   k_workload:=r->>'workload'; k_model:=r->>'model'; k_outcome:=r->>'outcome'; k_fb:=coalesce((r->>'fallback')::boolean,false);
   IF k_workload IS NULL OR k_model IS NULL OR k_outcome IS NULL
      OR k_workload !~ '^[a-z0-9_]{1,40}$' OR k_model !~ '^[A-Za-z0-9._/:-]{1,80}$'
-     OR k_outcome NOT IN ('success','timeout','rate_limited','server_error','client_error','circuit_open','cancelled','other') THEN
+     OR k_outcome NOT IN ('success','timeout','rate_limited','server_error','client_error','circuit_open','shed','cancelled','other') THEN
    dropped:=dropped+coalesce((r->>'attempts')::bigint,0); CONTINUE;
   END IF;
   SELECT array_agg(least(greatest(coalesce(v::int,0),0),1000000)) INTO b FROM jsonb_array_elements_text(coalesce(r->'bins','[]'::jsonb)) AS t(v);
@@ -73,6 +75,12 @@ BEGIN
  -- Retention: a bounded batch per call; the table never grows past about 14 days of buckets.
  DELETE FROM public.ai_availability_buckets WHERE ctid IN (
   SELECT ctid FROM public.ai_availability_buckets WHERE bucket_start<hour_start-interval '14 days' LIMIT 200);
+ -- model_invocation_events (035) was append-only with no retention: 30 days are kept, a bounded
+ -- batch is removed per call. Rows carry no patient data; this only stops unbounded growth.
+ IF to_regclass('public.model_invocation_events') IS NOT NULL THEN
+  DELETE FROM public.model_invocation_events WHERE id IN (
+   SELECT id FROM public.model_invocation_events WHERE created_at<clock_timestamp()-interval '30 days' LIMIT 200);
+ END IF;
  RETURN jsonb_build_object('accepted',true,'applied',applied,'dropped',dropped);
 END;
 $$;

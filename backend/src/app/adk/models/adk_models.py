@@ -27,7 +27,7 @@ from google.adk.models import BaseLlm, FallbackModel, Gemini
 from google.adk.models.lite_llm import LiteLlm
 from pydantic import PrivateAttr
 
-from app.adk.models.resilient import ResilientLlm
+from app.adk.models.resilient import ReplyRoute, ResilientLlm
 from app.adk.models.vertex_maas import litellm_model_id, vertex_openapi_base_url
 from app.adk.registry import ModelSpec, Transport, Workload, route_for
 from app.clients.vertex_auth import google_adc_bearer
@@ -155,6 +155,8 @@ def adk_model_for_workload(workload: Workload) -> BaseLlm:
         workload=workload,
         stream_text=stream_text,
     )
+    if stream_text and isinstance(primary, ResilientLlm) and isinstance(fallback, ResilientLlm):
+        return ReplyRoute(model=primary.model, candidates=[primary, fallback])
     return FallbackModel(models=[primary, fallback])
 
 

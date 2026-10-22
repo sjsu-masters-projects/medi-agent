@@ -13,6 +13,7 @@ import time
 
 from app.adk.models.factory import provider_for
 from app.adk.registry import Workload, route_for
+from app.core.model_traffic import use_workload
 from app.models.generation import (
     GenerationErrorCode,
     GenerationProviderError,
@@ -33,6 +34,27 @@ def _failure_telemetry(*, provider: str, model: str, started: float) -> Generati
 
 
 async def generate_for_workload(
+    workload: Workload,
+    *,
+    prompt: str,
+    system_instruction: str | None = None,
+    temperature: float = 0.2,
+    response_schema: dict[str, object] | None = None,
+    record_telemetry: bool = True,
+) -> GenerationResponse:
+    """Run one workload with every provider attempt inside it labelled with that workload."""
+    with use_workload(workload.value):
+        return await _generate_for_workload(
+            workload,
+            prompt=prompt,
+            system_instruction=system_instruction,
+            temperature=temperature,
+            response_schema=response_schema,
+            record_telemetry=record_telemetry,
+        )
+
+
+async def _generate_for_workload(
     workload: Workload,
     *,
     prompt: str,

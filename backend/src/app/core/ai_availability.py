@@ -38,6 +38,7 @@ OUTCOMES = (
     "server_error",
     "client_error",
     "circuit_open",
+    "shed",
     "cancelled",
     "other",
 )
@@ -50,6 +51,8 @@ def classify_outcome(status: int | None, cause: str) -> str:
     """Map a transport attempt to the closed outcome vocabulary."""
     if cause == "circuit_open":
         return "circuit_open"
+    if cause == "admission_timeout":
+        return "shed"
     if cause in {"deadline", "cancelled_or_deadline"} or status == 504:
         return "timeout"
     if cause == "cancelled":

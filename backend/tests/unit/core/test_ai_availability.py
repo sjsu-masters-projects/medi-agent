@@ -29,6 +29,7 @@ from app.models.auth import CurrentUser
         (None, "cancelled_or_deadline", "timeout"),
         (None, "cancelled", "cancelled"),
         (503, "circuit_open", "circuit_open"),
+        (503, "admission_timeout", "shed"),
         (404, "provider_error", "client_error"),
         (None, "provider_error", "other"),
     ],

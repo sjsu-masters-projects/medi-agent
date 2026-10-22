@@ -40,9 +40,12 @@ from threading import Lock
 from typing import Any, ClassVar
 
 from google.adk.models import BaseLlm
+from google.adk.models.llm_response import LlmResponse
+from google.genai import types
 from pydantic import Field
 
-from app.core.model_traffic import model_slot, record_attempt
+from app.config import settings
+from app.core.model_traffic import ModelAdmissionError, model_slot, record_attempt
 
 _RETRIABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
 
@@ -131,6 +134,12 @@ class ResilientLlm(BaseLlm):
     async def generate_content_async(
         self, llm_request: Any, stream: bool = False
     ) -> AsyncGenerator[Any, None]:
+        async for response in self.generate_bounded(llm_request, stream, self.timeout_seconds):
+            yield response
+
+    async def generate_bounded(
+        self, llm_request: Any, stream: bool, timeout_seconds: float
+    ) -> AsyncGenerator[Any, None]:
         """Return one complete attempt or a retriable failure, never a partial answer.
 
         The exception is a ``stream_text`` route: its text is yielded as it arrives once the
@@ -143,18 +152,18 @@ class ResilientLlm(BaseLlm):
         # asyncio timeout must be relative: `timeout_at` reads the event loop's clock, which
         # under uvloop (uvicorn's loop) is not time.monotonic(), so an absolute monotonic
         # deadline expired instantly and cancelled every chat model call in the server.
-        deadline = time.monotonic() + self.timeout_seconds
+        deadline = time.monotonic() + timeout_seconds
         try:
             if stream and self.stream_text:
                 async for response in self._streamed_attempts(llm_request, deadline):
                     yield response
                 self._close_circuit()
                 return
-            async with asyncio.timeout(self.timeout_seconds):
+            async with asyncio.timeout(timeout_seconds):
                 buffered = await self._attempts(llm_request, stream, deadline)
         except TimeoutError as error:
             self._open_circuit()
-            raise ModelAttemptDeadlineError(self.model, self.timeout_seconds) from error
+            raise ModelAttemptDeadlineError(self.model, timeout_seconds) from error
         except Exception as error:
             if self._status_code(error) in _RETRIABLE_STATUS_CODES:
                 self._open_circuit()
@@ -231,7 +240,9 @@ class ResilientLlm(BaseLlm):
                     and delay + 0.5 < deadline - time.monotonic()
                 )
                 cause = "provider_error"
-                if status == 429:
+                if isinstance(error, ModelAdmissionError):
+                    cause = "admission_timeout"
+                elif status == 429:
                     cause = "retry_exhausted" if retry else "retry_delay_exceeds_budget"
                 self._record(status, retry, "retry_429" if can_retry else cause, started)
                 if not can_retry:
@@ -304,7 +315,9 @@ class ResilientLlm(BaseLlm):
                     and delay + 0.5 < deadline - time.monotonic()
                 )
                 cause = "provider_error"
-                if committed:
+                if isinstance(error, ModelAdmissionError):
+                    cause = "admission_timeout"
+                elif committed:
                     cause = "failed_after_text"
                 elif status == 429:
                     cause = "retry_exhausted" if retry else "retry_delay_exceeds_budget"
@@ -316,6 +329,65 @@ class ResilientLlm(BaseLlm):
                 self._record(200, retry, "none", started)
                 return
         raise AssertionError("Unreachable retry state")
+
+
+DRAFT_RESET_KEY = "draft_reset"
+
+
+def _reset_marker() -> LlmResponse:
+    """An empty partial response that tells the runtime the text shown so far is withdrawn."""
+    return LlmResponse(
+        content=types.Content(role="model", parts=[]),
+        partial=True,
+        custom_metadata={DRAFT_RESET_KEY: True},
+    )
+
+
+class ReplyRoute(BaseLlm):
+    """The patient-reply route: primary, then the backup model, with text shown in between.
+
+    ADK's ``FallbackModel`` cannot leave a model once it has yielded. A reply is yielded as it is
+    written, so a failure after text was shown needs more: the text is withdrawn (a reset
+    marker response), then the backup model answers from the same request, once, inside what is
+    left of the reply budget (the sum of both attempts' budgets, never more than the turn
+    ceiling that the runtime enforces around the whole stream). Failure before any text falls
+    back exactly as before. If the backup also fails, or too little budget is left, the error
+    reaches the runtime, which uses the reviewed unavailable message.
+    """
+
+    candidates: list[ResilientLlm]
+
+    @property
+    def capabilities(self) -> Any:
+        return self.candidates[0].capabilities
+
+    async def generate_content_async(
+        self, llm_request: Any, stream: bool = False
+    ) -> AsyncGenerator[Any, None]:
+        started = time.monotonic()
+        total = sum(candidate.timeout_seconds for candidate in self.candidates)
+        pristine = deepcopy(llm_request)
+        for index, candidate in enumerate(self.candidates):
+            last = index == len(self.candidates) - 1
+            request = llm_request if index == 0 else deepcopy(pristine)
+            request.model = candidate.model
+            remaining = total - (time.monotonic() - started)
+            shown = False
+            try:
+                async for response in candidate.generate_bounded(
+                    request, stream, min(candidate.timeout_seconds, max(remaining, 0.001))
+                ):
+                    shown = shown or _has_visible_text(response)
+                    yield response
+                return
+            except Exception as error:
+                left = total - (time.monotonic() - started)
+                if last or ResilientLlm._status_code(error) not in _RETRIABLE_STATUS_CODES:
+                    raise
+                if shown and left < settings.reply_fallback_min_seconds:
+                    raise
+                if shown:
+                    yield _reset_marker()
 
 
 def _has_visible_text(response: Any) -> bool:

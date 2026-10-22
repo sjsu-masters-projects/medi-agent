@@ -21,6 +21,8 @@ BINS = [0, 3, 0, 0, 0, 0, 0, 0, 0, 0]
 
 @pytest.fixture
 def db(sql):
+    for path in sorted(MIGRATIONS.glob("*_model_invocation_telemetry.sql")):
+        sql(path.read_text())
     for path in sorted(MIGRATIONS.glob("*_ai_availability_rollup.sql")):
         sql(path.read_text())
     return sql
@@ -159,3 +161,28 @@ def test_row_level_security_is_enabled(db):
         )
         == "t"
     )
+
+
+def test_invocation_events_older_than_thirty_days_are_removed_a_batch_at_a_time(db):
+    db(
+        "INSERT INTO public.model_invocation_events(workload,provider,model,succeeded,latency_ms,created_at) "
+        "SELECT 'reply','adk','m',true,1,now()-interval '40 days'-(g||' seconds')::interval FROM generate_series(1,250) g;"
+        "INSERT INTO public.model_invocation_events(workload,provider,model,succeeded,latency_ms) "
+        "VALUES('reply','adk','m',true,1);"
+    )
+    record(db, [row()])
+    assert (
+        int(
+            db(
+                "SELECT count(*) FROM public.model_invocation_events WHERE created_at<now()-interval '30 days';"
+            )
+        )
+        == 50
+    )
+    record(db, [row()])
+    assert int(db("SELECT count(*) FROM public.model_invocation_events;")) == 1
+
+
+def test_a_shed_attempt_is_a_valid_outcome(db):
+    assert record(db, [row(outcome="shed", attempts=2)])["applied"] == 1
+    assert rows(db, "WHERE outcome='shed'")[0]["attempts"] == 2

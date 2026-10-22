@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+import time
 from collections.abc import AsyncGenerator
 from typing import Any
 from unittest.mock import MagicMock
@@ -26,7 +27,10 @@ from tests.unit.adk.test_chat_runtime import (
 
 from app.adk.chat_runtime import CareCoordinatorRuntime
 from app.adk.grounding import StreamingReplyFilter, plain_reply, without_source_lines
-from app.adk.models.resilient import ResilientLlm
+from app.adk.models.resilient import DRAFT_RESET_KEY, ReplyRoute, ResilientLlm
+from app.config import settings
+from app.core.ai_availability import classify_outcome
+from app.core.model_traffic import ModelAdmissionError, model_slot, use_workload
 from app.services import chat_turn_worker as worker
 from app.services.chat_turn_events import event_to_messages
 from app.services.voice_live import SentenceChunker
@@ -406,3 +410,187 @@ def test_an_epoch_bump_resets_the_viewer_before_the_replacement() -> None:
     )
     assert [m["type"] for m in out] == ["assistant_reset", "assistant_chunk"]
     assert PATIENT_ID  # imported fixture constant keeps the module's shared setup referenced
+
+
+# -- backup model after text was shown -----------------------------------------------------------
+
+
+def _reply_route(primary_script: list[Any], backup_script: list[Any], **kw: Any) -> ReplyRoute:
+    primary = ResilientLlm(
+        model="a",
+        delegate=_Script(model="a", script=primary_script),
+        timeout_seconds=kw.get("timeout", 5),
+        stream_text=True,
+    )
+    backup = ResilientLlm(
+        model="b",
+        delegate=_Script(model="b", script=backup_script),
+        timeout_seconds=kw.get("timeout", 5),
+        stream_text=True,
+    )
+    return ReplyRoute(model="a", candidates=[primary, backup])
+
+
+async def _collect(route: BaseLlm) -> tuple[list[LlmResponse], BaseException | None]:
+    out: list[LlmResponse] = []
+    try:
+        async for response in route.generate_content_async(_request(), True):
+            out.append(response)
+    except Exception as error:
+        return out, error
+    return out, None
+
+
+def _kinds(responses: list[LlmResponse]) -> list[str]:
+    return [
+        "reset" if (r.custom_metadata or {}).get(DRAFT_RESET_KEY) else r.content.parts[0].text
+        for r in responses
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_failure_after_text_withdraws_it_and_the_backup_answers_from_the_start() -> None:
+    route = _reply_route(
+        [_text("Half. ", partial=True), _StatusError(503)],
+        [_text("Whole ", partial=True), _text("answer.")],
+    )
+    out, error = await _collect(route)
+    assert error is None
+    assert _kinds(out) == ["Half. ", "reset", "Whole ", "answer."]
+
+
+@pytest.mark.asyncio
+async def test_a_failure_before_any_text_still_falls_back_without_a_reset() -> None:
+    out, error = await _collect(_reply_route([_StatusError(429)], [_text("From backup.")]))
+    assert error is None and _kinds(out) == ["From backup."]
+
+
+@pytest.mark.asyncio
+async def test_when_the_backup_also_fails_the_error_reaches_the_runtime() -> None:
+    route = _reply_route(
+        [_text("Half. ", partial=True), _StatusError(503)],
+        [_text("Other half. ", partial=True), _StatusError(500)],
+    )
+    out, error = await _collect(route)
+    assert isinstance(error, _StatusError) and _kinds(out) == ["Half. ", "reset", "Other half. "]
+
+
+@pytest.mark.asyncio
+async def test_a_spent_budget_skips_the_backup(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        settings, "reply_fallback_min_seconds", 10.0
+    )  # more than is left of both budgets
+    route = _reply_route([_text("Half. ", partial=True), _StatusError(503)], [_text("Never.")])
+    backup = route.candidates[1].delegate
+    out, error = await _collect(route)
+    assert isinstance(error, _StatusError) and _kinds(out) == ["Half. "]
+    assert backup.calls == 0  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_a_non_retriable_failure_never_reaches_the_backup() -> None:
+    route = _reply_route([_text("Half. ", partial=True), ValueError("bad")], [_text("Never.")])
+    out, error = await _collect(route)
+    assert isinstance(error, ValueError) and _kinds(out) == ["Half. "]
+
+
+@pytest.mark.asyncio
+async def test_the_runtime_streams_the_backup_as_a_new_draft_and_saves_its_reply() -> None:
+    from tests.unit.adk import test_chat_runtime as base
+
+    class _Routed(base._Responder):
+        async def generate_content_async(
+            self, llm_request: Any, stream: bool = False
+        ) -> AsyncGenerator[LlmResponse, None]:
+            route = _reply_route(
+                [_text("Half an answer. ", partial=True), _StatusError(503)],
+                [_text("Backup ", partial=True), _text("Backup answer.")],
+            )
+            async for response in route.generate_content_async(llm_request, stream):
+                yield response
+
+    runtime = CareCoordinatorRuntime(runner=_build_runner(decision=base.STANDARD_DECISION))
+    runtime.runner.agent.sub_agents[1].model = _Routed(model="stub-responder")
+    events = await _turn(runtime, "when do I take it")
+    kinds = [e["type"] for e in events]
+    assert kinds.count("chunk_reset") == 1
+    after = "".join(
+        e["content"] for e in events[kinds.index("chunk_reset") :] if e["type"] == "chunk"
+    )
+    assert after == "Backup"
+    complete = _first(events, "complete")
+    assert complete["response_text"] == "Backup answer." and complete["fallback_used"] is False
+
+
+# -- admission, labels ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_call_with_no_free_slot_is_shed_inside_the_admission_wait(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "model_max_concurrency", 1)
+    monkeypatch.setattr(settings, "model_admission_wait_seconds", 0.05)
+    monkeypatch.setattr(settings, "model_min_start_interval_seconds", 0.0)
+    async with model_slot("m-shed", "global"):
+        started = time.monotonic()
+        with pytest.raises(ModelAdmissionError) as raised:
+            async with model_slot("m-shed", "global"):
+                pytest.fail("must not be admitted")
+        assert time.monotonic() - started < 0.5
+        assert raised.value.status_code == 503
+    async with model_slot("m-shed", "global"):  # the slot came back
+        pass
+
+
+@pytest.mark.asyncio
+async def test_a_shed_call_moves_to_the_backup_and_is_counted_as_shed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "model_max_concurrency", 1)
+    monkeypatch.setattr(settings, "model_admission_wait_seconds", 0.05)
+    monkeypatch.setattr(settings, "model_min_start_interval_seconds", 0.0)
+    primary = ResilientLlm(
+        model="busy",
+        delegate=_Script(model="busy", script=[_text("x")]),
+        timeout_seconds=1,
+        stream_text=True,
+    )
+    backup = ResilientLlm(
+        model="free",
+        delegate=_Script(model="free", script=[_text("from backup")]),
+        timeout_seconds=1,
+        stream_text=True,
+    )
+    route = ReplyRoute(model="busy", candidates=[primary, backup])
+    async with model_slot("busy", settings.gemini_vertex_ai_location):
+        out, error = await _collect(route)
+    assert error is None and _kinds(out) == ["from backup"]
+    assert classify_outcome(503, "admission_timeout") == "shed"
+
+
+@pytest.mark.asyncio
+async def test_background_attempts_carry_the_workload_that_asked() -> None:
+    from app.core import model_traffic
+
+    seen: list[str] = []
+    original = model_traffic.availability.record
+    model_traffic.availability.record = lambda **kw: seen.append(kw["workload"])  # type: ignore[method-assign]
+    try:
+        import time as _t
+
+        model_traffic.record_attempt(
+            model="m", endpoint="e", status=200, retry_count=0, cause="none", started=_t.monotonic()
+        )
+        with use_workload("extraction"):
+            model_traffic.record_attempt(
+                model="m",
+                endpoint="e",
+                status=200,
+                retry_count=0,
+                cause="none",
+                started=_t.monotonic(),
+            )
+    finally:
+        model_traffic.availability.record = original  # type: ignore[method-assign]
+    assert seen == [] or seen[-1] == "extraction"

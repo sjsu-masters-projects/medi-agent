@@ -71,8 +71,12 @@ production turn wrote a useful draft.
 
 Now: the patient-reply model route (`stream_text`, responder only) holds the response only until
 its first visible text, then passes text through; tool rounds are still held and can still fall
-back. After that point the turn belongs to that model (ADK's own rule): a later failure is raised,
-withdrawn (`chunk_reset` / `assistant_reset`) and replaced by the reviewed localized message.
+back. If the model fails after text was shown, `ReplyRoute` withdraws that text (a reset marker,
+`chunk_reset` then `assistant_reset`, a new draft `epoch`) and runs the backup model once, from the
+same request, as a new draft, only if at least `REPLY_FALLBACK_MIN_SECONDS` (2) of the reply budget
+(both attempts' budgets together, always under the turn ceiling) is left. Only if the backup also
+fails, or the budget is spent, is the reviewed localized unavailable message used. Voice treats a
+reset like any mismatch: audio stops and the saved reply is spoken whole.
 
 Post-model checks, and where each runs:
 

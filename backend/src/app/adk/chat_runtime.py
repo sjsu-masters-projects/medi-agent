@@ -60,7 +60,7 @@ from app.adk.grounding import (
     unsupported_doses,
     without_source_lines,
 )
-from app.adk.models.resilient import ResilientLlm
+from app.adk.models.resilient import DRAFT_RESET_KEY, ResilientLlm
 from app.adk.plugins import LOCALE_STATE_KEY
 from app.adk.runner import build_runner
 from app.adk.tools import (
@@ -116,6 +116,11 @@ def _text_of(event: Any) -> str:
     content = getattr(event, "content", None)
     parts = getattr(content, "parts", None) or []
     return "".join(part.text or "" for part in parts if getattr(part, "text", None))
+
+
+def _is_draft_reset(event: Any) -> bool:
+    metadata = getattr(event, "custom_metadata", None)
+    return isinstance(metadata, dict) and bool(metadata.get(DRAFT_RESET_KEY))
 
 
 def _decision_from(event: Any) -> dict[str, Any] | None:
@@ -263,6 +268,16 @@ class CareCoordinatorRuntime:
                         intent, urgency, reason, escalate = _apply_floor_rules(decision, text)
                         classified = True
                         yield _classification(intent, urgency, reason, escalate)
+
+                    if _is_draft_reset(event):
+                        # The model failed after text was shown and the backup is answering
+                        # from the start: withdraw what was shown, then stream the new reply.
+                        reply_filter = StreamingReplyFilter()
+                        if shown:
+                            yield {"type": "chunk_reset"}
+                        shown.clear()
+                        streamed = False
+                        continue
 
                     used = sources_from_event(event)
                     if used is not None:

@@ -337,11 +337,11 @@ Gaps found by reading the code against this contract, and what was done:
 | Gap | Result |
 | --- | --- |
 | Patient-reply text never streamed: every model attempt was buffered, so worker draft checkpoints were empty in production and a second tab or reload saw nothing until completion | Fixed. The reply route releases text after its first visible text; tool rounds stay buffered and fall back as before; the deadline still bounds the whole attempt |
-| A stream that failed after text had been shown completed with an empty reply | Fixed. The text is withdrawn and the reviewed localized unavailable message is the reply |
+| A stream that failed after text had been shown completed with an empty reply | Fixed. The text is withdrawn and the backup model answers once from the start as a new draft (inside what is left of the reply budget, at least `REPLY_FALLBACK_MIN_SECONDS`); only if that also fails is the reviewed localized unavailable message the reply |
 | Draft text differed from the saved reply (Markdown, model-written source lines) | Fixed. A line-aware stream filter produces the final form as text arrives |
 | A re-claimed turn (worker redelivery) or a withdrawn draft left viewers on the old, longer draft, which was then ignored as "not an extension" | Fixed. `started.run` and `draft.epoch` reset viewers; checkpoints are idempotent per seq |
-| Attempt outcomes (429, 5xx, timeout, fallback) existed only in logs; `model_invocation_events` records the ADK final per agent with an exception class as `error_code`, an empty `fallback_path`, and has no retention (no DELETE grant) | Added bounded counters (below). `model_invocation_events` retention is **not** changed here |
-| Model admission waits (`model_slot`) have no bound of their own (OPS-006 rule 14) | Not changed: bounded only by the attempt/turn deadline |
+| Attempt outcomes (429, 5xx, timeout, fallback) existed only in logs; `model_invocation_events` records the ADK final per agent with an exception class as `error_code`, an empty `fallback_path`, and has no retention (no DELETE grant) | Added bounded counters (below). Retention: migration 090's write function also deletes `model_invocation_events` rows older than 30 days, 200 per call |
+| Model admission waits (`model_slot`) have no bound of their own (OPS-006 rule 14) | Fixed for interactive calls: shed after `MODEL_ADMISSION_WAIT_SECONDS` (5) with a retriable 503, so the backup model or the unavailable reply takes over; counted as outcome `shed`. Background calls still wait (their callers own longer deadlines) |
 | Conversation recap is three turns of 280 characters; the stored `summary` is not read by the model; `patient_context` omits care teams (appointment proposals only come from the legacy path) | Not changed: context quality needs a clinical evaluation, not a code edit |
 | Structured evidence (which sources backed a reply) is persisted only as the source line in the message text and document cards | Not changed: needs a schema decision |
 
@@ -357,10 +357,9 @@ most 300 keys) and flushes at most every `AI_AVAILABILITY_FLUSH_SECONDS` (30) fr
 background task on a one-thread pool with a 5 s limit; a failed flush keeps its counts. Counts
 are approximate. No patient identifier, prompt, response or exception text is stored.
 Outcomes: success, timeout, rate_limited (429), server_error (5xx), client_error, circuit_open,
-cancelled, other. Attempts on the fallback route are counted with `fallback=true`.
+shed (no slot in time), cancelled, other. Attempts on the fallback route are counted with `fallback=true`.
 
 Read: `GET /api/v1/ops/ai-availability?hours=24` (1 to 336), clinic admins only: per workload
 and model, attempts, outcome counts, fallback attempts, success rate, mean and p50/p95/p99 latency
-(the upper edge of the histogram bin). Background Gemini text calls are counted under workload
-`unknown` until they pass their workload. `AI_AVAILABILITY_ENABLED=false` stops counting and
+(the upper edge of the histogram bin). Background Gemini text calls are labelled with the workload that asked (`generate_for_workload`); direct callers outside it still count as `unknown`. `AI_AVAILABILITY_ENABLED=false` stops counting and
 flushing. This is availability evidence for the September routing, not a clinical measure.

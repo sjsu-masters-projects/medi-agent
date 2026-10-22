@@ -19,7 +19,7 @@ from google.adk.models import FallbackModel, Gemini
 from google.adk.models.lite_llm import LiteLlm
 
 from app.adk.models.adk_models import BearerLiteLlm, adk_model_for, adk_model_for_workload
-from app.adk.models.resilient import ResilientLlm
+from app.adk.models.resilient import ReplyRoute, ResilientLlm
 from app.adk.registry import FLASH, GPT_OSS, TRIAGE_LITE, ModelSpec, Transport, Workload
 from app.config import settings
 
@@ -238,9 +238,14 @@ def test_reply_timeout_leaves_room_for_its_fallback() -> None:
     with _capturing_genai_client():
         model = adk_model_for_workload(Workload.REPLY)
 
-    assert isinstance(model, FallbackModel)
-    assert all(candidate.timeout_seconds == 10.0 for candidate in model.models)
-    assert [candidate.model for candidate in model.models] == [
+    # The reply route can leave its primary even after text was shown, so it is not ADK's
+    # FallbackModel (which never does).
+    assert isinstance(model, ReplyRoute)
+    assert all(candidate.timeout_seconds == 10.0 for candidate in model.candidates)
+    assert all(
+        candidate.stream_text and candidate.workload == "reply" for candidate in model.candidates
+    )
+    assert [candidate.model for candidate in model.candidates] == [
         "gemini-3.8-flash",
         "gemini-3.5-flash",
     ]
