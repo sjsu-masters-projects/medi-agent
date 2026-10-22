@@ -1,4 +1,4 @@
-"""Care-team plan ownership contracts in a disposable PostgreSQL 16 (PLAN-002, migration 084).
+"""Care-team plan ownership contracts in a disposable PostgreSQL 16 (PLAN-002, migration 083).
 
 Covers the lineage move (backfill, ambiguity, identity preservation), per-plan versions and
 drafts, the end of a care team, adoption and retirement, append-only audit, and grants.
@@ -47,7 +47,7 @@ OBLIGATION = "00000000-0000-0000-0000-0000000000c2"
 
 
 def seed_legacy_lineage(sql, *, approver: str, patient: str = PATIENT, projected_team: str | None):
-    """A pre-084 approved version with one medication and one obligation projection."""
+    """A pre-083 approved version with one medication and one obligation projection."""
     team = f"'{projected_team}'" if projected_team else "NULL"
     sql(f"""
       SET session_replication_role = replica;

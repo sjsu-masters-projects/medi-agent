@@ -734,8 +734,8 @@ audit rows, logs or fixtures; synthetic data only.
 | D | Per-clinic roles, settings and invitations (same branch) |
 | E | Cross-clinic scheduling and conflict checks (branch `feature/clinic-scheduling-and-tags`) |
 | F | Clinic tags in notifications, email and audit (same branch) |
-| G | Shared clinical core (medications, allergies, conditions, critical alerts) with per-team ownership of everything else, and the patient's visibility control. **Backend in review on PR #210** (migrations 085 and 087; portals pending); see the [read-path audit and API contract](plan-002-care-plans-per-care-team.md#read-path-audit-clinician-reads-of-owned-or-sensitive-data) |
-| H | Care plans per care team (PLAN-002). **Backend in review on PR #210** (migrations 084 and 086); portals pending |
+| G | Shared clinical core (medications, allergies, conditions, critical alerts) with per-team ownership of everything else, and the patient's visibility control. **Backend in review on PR #210** (migrations 084 and 086; portals pending); see the [read-path audit and API contract](plan-002-care-plans-per-care-team.md#read-path-audit-clinician-reads-of-owned-or-sensitive-data) |
+| H | Care plans per care team (PLAN-002). **Backend in review on PR #210** (migrations 083 and 085); portals pending |
 
 
 ## Slices G and H: review checklist proofs (PR #210, backend)

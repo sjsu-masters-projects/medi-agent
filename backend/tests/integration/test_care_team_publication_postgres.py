@@ -1,4 +1,4 @@
-"""Cross-plan checks and atomic publication in a disposable PostgreSQL 16 (migration 086).
+"""Cross-plan checks and atomic publication in a disposable PostgreSQL 16 (migration 085).
 
 Publishing one care team's plan never changes another's activities. Duplicates, conflicting
 instructions and stop-versus-continue block until the clinician who owns the draft resolves
