@@ -366,6 +366,20 @@ task keeps CPU after its socket closes. Cloud Run bills an instance for the whol
 while CPU is always allocated, not only during requests. `--min-instances 0` is unchanged, so
 an idle service still scales to zero, and the jobs are unchanged.
 
+## Live voice mode (VOICE-001)
+
+`/ws/voice/{patient_id}` carries binary 16-bit mono PCM microphone frames (default
+16 kHz) to a Deepgram live session (`services/voice_live.py`, `voice_connection.py`) and
+streams sentence-by-sentence Aura-2 speech back. The socket authenticates the same patient
+the path names and never creates chat messages: the portal sends each `utterance_final`
+through the normal chat turn. Bounds (all optional, defaults in `app/config.py`):
+`VOICE_LIVE_ENABLED`, `VOICE_TTS_STREAM_ENABLED`, `VOICE_LIVE_MAX_SESSION_SECONDS` (900),
+`VOICE_LIVE_IDLE_TIMEOUT_SECONDS` (60), `VOICE_LIVE_MAX_SESSIONS` (20 per process, one
+per patient), plus frame, queue, utterance and speech-length limits. Only
+`DEEPGRAM_API_KEY` is required, on the API service; the chat worker does not use it.
+Voice logs carry lengths and ids, never transcript or reply text. Protocol, failure modes
+and the acceptance path: [VOICE-001](../.agent/specs/voice-001-voice-mode.md).
+
 ## Package Layout
 
 PAT-002-B B2 checks the shared deterministic safety floor before turn-specific
