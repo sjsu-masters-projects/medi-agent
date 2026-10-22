@@ -597,3 +597,25 @@ async def test_a_second_session_is_refused_and_an_oversized_frame_is_dropped() -
     await settle(10)
     assert live_c.connection.media == [b"ok"]
     await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_one_patient_cannot_stream_two_sessions_and_the_process_is_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_sink, second_sink, other_sink = Sink(), Sink(), Sink()
+    first = VoiceConnection(first_sink, live_connector=FakeConnector(), owner="patient-a")
+    second = VoiceConnection(second_sink, live_connector=FakeConnector(), owner="patient-a")
+    other = VoiceConnection(other_sink, live_connector=FakeConnector(), owner="patient-b")
+    await first.handle_event("voice_session_start", {})
+    await second.handle_event("voice_session_start", {})
+    assert second_sink.of("voice_error")[0]["code"] == "voice_live_busy"
+    # A different patient is unaffected until the process-wide bound is reached.
+    monkeypatch.setattr(settings, "voice_live_max_sessions", 1)
+    await other.handle_event("voice_session_start", {})
+    assert other_sink.of("voice_error")[0]["code"] == "voice_live_busy"
+    await first.close()
+    await other.handle_event("voice_session_start", {})
+    assert other_sink.of("voice_session_started")
+    await other.close()
+    await second.close()

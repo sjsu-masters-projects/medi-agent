@@ -111,6 +111,8 @@ class Settings(BaseSettings):
     voice_live_max_utterance_chars: int = Field(default=2000, ge=50, le=8000)
     voice_live_max_session_seconds: float = Field(default=900.0, gt=0, le=3600)
     voice_live_idle_timeout_seconds: float = Field(default=60.0, gt=0, le=600)
+    # Streaming sessions at once in this process (a bulkhead on provider cost and sockets).
+    voice_live_max_sessions: int = Field(default=20, ge=1, le=500)
     voice_live_audio_queue_frames: int = Field(default=64, ge=4, le=512)
     voice_live_max_frame_bytes: int = Field(default=32 * 1024, ge=512, le=256 * 1024)
     voice_live_connect_timeout_seconds: float = Field(default=8.0, gt=0, le=30)

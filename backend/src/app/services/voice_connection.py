@@ -12,6 +12,7 @@ import asyncio
 import contextlib
 import logging
 import re
+import weakref
 from collections.abc import Awaitable, Callable, Coroutine
 from typing import Any
 
@@ -32,6 +33,10 @@ logger = logging.getLogger(__name__)
 _SPEECH_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _CLIENT_STATES = {"listening", "thinking", "speaking", "paused"}
 Send = Callable[[dict[str, Any]], Awaitable[None]]
+
+# Every connection in this process, so the live-session bulkhead can count the sessions that
+# are streaming right now without a registry that must be kept in sync (OPS-006 rule 14).
+_CONNECTIONS: weakref.WeakSet[VoiceConnection] = weakref.WeakSet()
 
 
 def live_voice_available() -> bool:
@@ -63,8 +68,11 @@ class VoiceConnection:
         *,
         live_connector: Connector = deepgram_live_connector,
         speak_connector: Connector = deepgram_speak_connector,
+        owner: str = "",
     ) -> None:
         self._send = send
+        self.owner = owner
+        _CONNECTIONS.add(self)
         self._live_connector = live_connector
         self._speak_connector = speak_connector
         self._send_lock = asyncio.Lock()
@@ -92,12 +100,26 @@ class VoiceConnection:
 
     # -- the microphone ------------------------------------------------------------------
 
+    @property
+    def live_active(self) -> bool:
+        return (self._live is not None and self._live.active) or self._starting_live
+
+    def _live_capacity_exhausted(self) -> bool:
+        others = [c for c in list(_CONNECTIONS) if c is not self and c.live_active]
+        if len(others) >= settings.voice_live_max_sessions:
+            return True
+        # One streaming session per patient: a second tab cannot double the provider cost.
+        return bool(self.owner) and any(c.owner == self.owner for c in others)
+
     async def start_live(self, payload: dict[str, Any]) -> None:
         if not live_voice_available():
             await self._error("voice_live_unavailable", "Voice mode is not available right now.")
             return
         if self._live is not None and self._live.active or self._starting_live:
             await self._error("voice_stream_active", "A voice session is already active")
+            return
+        if self._live_capacity_exhausted():
+            await self._error("voice_live_busy", "Voice mode is busy. Try again in a moment.")
             return
         self._starting_live = True
         session = LiveSttSession(

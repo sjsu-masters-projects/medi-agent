@@ -48,7 +48,7 @@ async def voice_websocket_endpoint(
             **voice_limits(),
         }
     )
-    connection = VoiceConnection(websocket.send_json)
+    connection = VoiceConnection(websocket.send_json, owner=str(patient_id))
 
     stream_active = False
     stream_private = False
