@@ -5,6 +5,7 @@ import { useSelector } from "react-redux";
 import { Card, Modal, Skeleton } from "@/components/ui";
 import { ApprovalSeal } from "@/components/ui/approval-seal";
 import { Icon } from "@/components/ui/icons";
+import { MedicationConfirmationRequest } from "@/components/features/medication-confirmation-request";
 import { api } from "@/services/api";
 import type { RootState } from "@/store/store";
 
@@ -1334,6 +1335,7 @@ export function SmartImportReviewPanel({
                 ))}
               </div>
             </fieldset>
+            {reconciling.fact.fact_type === "medication" && token && <MedicationConfirmationRequest key={`${patientId}:${reconciling.fact.id}:${token}`} patientId={patientId} factId={reconciling.fact.id} token={token} candidate={reconciling.preview.candidate_fields} matches={reconciling.preview.matches} />}
             <label className="block text-[13px] font-medium text-ink-2">
               Decision note (required for defer or reject)
               <textarea

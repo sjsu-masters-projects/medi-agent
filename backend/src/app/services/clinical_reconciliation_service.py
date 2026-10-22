@@ -478,6 +478,10 @@ class ClinicalReconciliationService:
             return "Normalized allergen"
         return None
 
+    def candidate_for(self, fact: dict[str, Any]) -> dict[str, Any]:
+        """The candidate fields a clinician would be asked to reconcile (read-only)."""
+        return self._candidate_fields(fact)
+
     def _candidate_fields(self, fact: dict[str, Any]) -> dict[str, Any]:
         if not self._is_projectable(fact):
             return {}

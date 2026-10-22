@@ -29,6 +29,7 @@ vi.mock("@/hooks/use-patient-profile", () => ({
 vi.mock("@/hooks/use-pending-adr-follow-ups", () => ({
     usePendingADRFollowUps: () => ({ count: pending.count, loaded: pending.loaded }),
 }));
+vi.mock("@/hooks/use-medication-questions", () => ({ useMedicationQuestions: () => ({ items: [], loaded: true, refresh: () => {} }) }));
 
 function mockFeedData(overrides: Partial<ReturnType<typeof baseFeedData>> = {}) {
     useFeedData.mockReturnValue({ ...baseFeedData(), ...overrides });

@@ -36,6 +36,7 @@ from app.routers import (
     feed,
     handoff_summaries,
     internal_tasks,
+    medication_confirmations,
     medications,
     mfa,
     notification_centre,
@@ -263,6 +264,16 @@ def create_app() -> FastAPI:
     application.include_router(staff.router, prefix=f"{api}/staff", tags=["Staff"])
     application.include_router(ops.router, prefix=f"{api}/ops", tags=["Operations"])
     application.include_router(smart.router, prefix=f"{api}/smart", tags=["SMART on FHIR"])
+    application.include_router(
+        medication_confirmations.clinician_router,
+        prefix=f"{api}/smart",
+        tags=["Medication confirmations"],
+    )
+    application.include_router(
+        medication_confirmations.patient_router,
+        prefix=f"{api}/patients/me",
+        tags=["Medication confirmations"],
+    )
     application.add_api_websocket_route("/ws/chat/{patient_id}", chat.chat_websocket_endpoint)
     application.add_api_websocket_route("/ws/voice/{patient_id}", voice.voice_websocket_endpoint)
 
