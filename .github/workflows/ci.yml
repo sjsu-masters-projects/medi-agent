@@ -412,9 +412,9 @@ jobs:
             files: tests/integration/test_chat_turn_postgres.py
             minimums: test_chat_turn_postgres=47
           - name: chat-turn-events
-            # The worker queue, events and claim (078).
-            files: tests/integration/test_chat_turn_events_postgres.py
-            minimums: test_chat_turn_events_postgres=35
+            # The worker queue, events and claim (078) and the AI availability counters (090).
+            files: tests/integration/test_chat_turn_events_postgres.py tests/integration/test_ai_availability_postgres.py
+            minimums: test_chat_turn_events_postgres=35 test_ai_availability_postgres=10
           - name: care-team-plans
             # Plan ownership, routed documents, shared core, cross-plan publication and
             # notification scoping and record owners (083-087). Disposable containers, no remote database.

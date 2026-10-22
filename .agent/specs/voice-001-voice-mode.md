@@ -1,6 +1,6 @@
 # VOICE-001 — Live voice mode
 
-Status: **In review** (branch `feature/voice-mode-and-chat-polish`). Builds on VOI-001
+Status: **In review** (branches `feature/voice-mode-and-chat-polish`, then `feature/nora-recovery-and-early-speech` for early speech). Builds on VOI-001
 (transcription language, Spanish voice) and PAT-001-A (durable chat turns). Physical
 phone acceptance stays under VOI-001-M; nothing here is verified on a real device yet.
 
@@ -43,8 +43,11 @@ Key decisions:
   The voice socket never creates, reads or writes chat messages, so it cannot act for another
   patient; it only authenticates the same patient the path names.
 - The Deepgram key stays on the server. The browser talks to our websocket only.
-- The reply is spoken from the **final** chat message, not from the draft, so what is heard
-  equals what is saved. The backend splits it into sentences and starts audio after the first.
+- The reply is spoken as it is written (see "Early speech" below) only when every check that
+  applies to the final reply has already run on the text, and is corrected from the saved
+  message whenever the two differ. Otherwise it is spoken from the **final** chat message, so
+  what is heard equals what is saved. The backend splits text into sentences and starts audio
+  after the first.
 - Barge-in works in two places: the backend cancels the speech stream when the provider
   reports `speech_started`, and the browser stops playback at once on `speech_started` or
   after sustained loud input (about 240 ms above a level floor) and sends `tts_cancel`.
@@ -58,6 +61,50 @@ Code map: `backend/src/app/routers/voice.py`, `services/voice_connection.py`,
 `services/voice_live.py`; portal `services/pcm-audio.ts`, `services/live-voice.ts`,
 `hooks/use-voice-mode.ts`, `components/features/voice-mode-panel.tsx`, copy in
 `content/chat-copy.ts` (`getVoiceModeCopy`).
+
+## Early speech (starts before the whole reply exists)
+
+Before: audio began after the entire reply was saved (7 to 22 s). Cause found on the way:
+`ResilientLlm` buffered each model attempt to the end (so a timeout could fall back cleanly), so
+the responder's text reached the draft checkpointer in one burst just before completion and no
+production turn wrote a useful draft.
+
+Now: the patient-reply model route (`stream_text`, responder only) holds the response only until
+its first visible text, then passes text through; tool rounds are still held and can still fall
+back. After that point the turn belongs to that model (ADK's own rule): a later failure is raised,
+withdrawn (`chunk_reset` / `assistant_reset`) and replaced by the reviewed localized message.
+
+Post-model checks, and where each runs:
+
+| Check | Where it runs | Early speech |
+| --- | --- | --- |
+| Emergency/crisis floor, urgency escalation | Before the model (floor) and on the triage decision, which is made before any reply text exists; monotonic | Urgent or emergency turns, and the guided symptom flow, are **never** spoken early: the saved reply is spoken once, whole, not interruptible |
+| Model-written `Source:`/`Fuente:` lines | `StreamingReplyFilter` (line-aware; a line that may become a source line is held back) | Yes: already removed from the draft; the voice chunker drops them by line too (a title with a full stop is not read out) |
+| Markdown marks, headings, bullets (`plain_reply`) | Same filter | Yes: draft is a prefix of the saved reply (property test over random chunkings) |
+| Server-written source line | Appended after the reply | Not spoken; it arrives only in the saved message |
+| Unsupported-dose check | Full reply, **log only** today | Does not block. If it ever becomes blocking, early speech must be disabled for those turns |
+| Symptom route / outer fallback / model failure replacing the text | Router and runtime | The replacement is a different text: audio stops and the saved reply is spoken |
+
+Browser rules (`LiveVoiceController.speakDraft` / `speakReply`): speech starts at the first draft
+text of a routine, non-symptom reply; only text beyond what was already handed on is sent
+(idempotent for repeated or re-ordered drafts); a draft that stops being an extension or restarts
+(generation changed) stops audio and disables early speech for the turn; when the saved reply
+arrives, if it starts with what was handed on (and is not urgent and is in the same language) the
+same stream is finished with the remainder, otherwise audio stops at once and the saved reply is
+spoken from the start. A patient who talks over early speech is not talked over by the saved
+reply. If the saved reply does not arrive in 120 s, speech stops with the usual "reply failed"
+notice. A reload ends voice mode; the chat replays the draft from the event log and shows one
+bubble, ending with the saved message.
+
+Server side: `DraftCheckpointer` writes the whole draft so far at most every 0.4 s (first one
+within 0.1 s), at most 120 draft writes per turn, ordered by `seq`, repeat-safe (`append_event`
+treats a repeated seq as a no-op), never blocking the model stream. A reset bumps `epoch`; a
+re-claimed turn (`run`) restarts the viewer's draft. Viewers poll every 0.3 s while events flow
+(1 s idle ceiling). No new tables.
+
+Measure (manual, deployed): time from the end of the patient's utterance to the first audio, in
+`voice.tts_first_audio` plus the browser's `utterance_final` to first `tts_audio`; compare a
+routine question before (final-only: expect the 7 to 22 s above) and after this change.
 
 ## Protocol
 

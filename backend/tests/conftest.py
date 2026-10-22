@@ -86,6 +86,16 @@ class _OfflineProvider:
 
 
 @pytest.fixture(autouse=True)
+def no_availability_flush(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Model attempts in tests never schedule a database flush of the availability counters.
+
+    The AI-003 tests enable the setting and inject their own client."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "ai_availability_enabled", False)
+
+
+@pytest.fixture(autouse=True)
 def no_real_model_calls(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
     """No test reaches a real model, whatever credentials (ADC, keys, HOME) the machine has.
 

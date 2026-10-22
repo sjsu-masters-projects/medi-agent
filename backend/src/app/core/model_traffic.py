@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from weakref import WeakKeyDictionary
 
 from app.config import settings
+from app.core.ai_availability import classify_outcome
+from app.core.ai_availability import recorder as availability
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +68,19 @@ def record_attempt(
     cause: str,
     started: float,
     fallback_candidate: bool = False,
+    workload: str = "unknown",
 ) -> None:
     """Allowlisted metadata only: no exception text, prompt, identifiers or URL."""
+    latency = round((time.monotonic() - started) * 1000)
+    if settings.ai_availability_enabled:
+        # Bounded in-memory counters (AI-003); the attempt is never delayed by them.
+        availability.record(
+            workload=workload,
+            model=model,
+            outcome=classify_outcome(status, cause),
+            fallback=fallback_candidate,
+            latency_ms=latency,
+        )
     logger.info(
         "model_attempt model=%s endpoint=%s status=%s retry_count=%d "
         "fallback_cause=%s fallback_candidate=%s latency_ms=%d",
@@ -86,7 +99,9 @@ def record_attempt(
                 "retry_count": retry_count,
                 "fallback_cause": cause,
                 "fallback_candidate": fallback_candidate,
-                "latency_ms": round((time.monotonic() - started) * 1000),
+                "workload": workload,
+                "outcome": classify_outcome(status, cause),
+                "latency_ms": latency,
             }
         },
     )

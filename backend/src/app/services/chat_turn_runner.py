@@ -174,6 +174,8 @@ class TurnRunner:
             run.start_event, run.draft = event, []
         elif kind == "assistant_chunk":
             run.draft.append(str(event.get("content") or ""))
+        elif kind == "assistant_reset":
+            run.draft = []
         elif kind == "assistant_complete":
             run.start_event, run.draft = None, []
         if origin_only:

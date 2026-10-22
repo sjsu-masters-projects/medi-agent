@@ -10,7 +10,12 @@ would corrupt the response.
 
 * every attempt has a hard wall-clock deadline;
 * responses are buffered until that attempt completes, so a timeout can still move to
-  the declared fallback without exposing half an answer;
+  the declared fallback without exposing half an answer. A route that sets ``stream_text``
+  (the patient reply) buffers only until its first visible text, then passes the rest through
+  as it arrives. Tool-call rounds, which carry no text, are still buffered and can still fall
+  back; once text has been shown the turn belongs to that model, which is also ADK's own rule
+  (``FallbackModel`` never falls back after a first response), and a later failure reaches the
+  caller as an error instead of a spliced answer;
 * managed open-weight models can use a short process-local circuit breaker, turning a
   burst of 429s into immediate fallback instead of repeating the same failed request.
 
@@ -22,6 +27,7 @@ snapshot and rollback logic here.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import math
 import random
 import time
@@ -69,6 +75,11 @@ class ResilientLlm(BaseLlm):
     retry_429: bool = False
     endpoint: str = "global"
     fallback_candidate: bool = False
+    # Pass visible text through as it is produced (after the first text part) instead of
+    # buffering the whole attempt. Only for routes whose prose is shown to the patient.
+    stream_text: bool = False
+    # The registry workload this route serves, for the availability counters.
+    workload: str = "unknown"
 
     _open_until: ClassVar[dict[str, float]] = {}
     _circuit_lock: ClassVar[Lock] = Lock()
@@ -120,7 +131,10 @@ class ResilientLlm(BaseLlm):
     async def generate_content_async(
         self, llm_request: Any, stream: bool = False
     ) -> AsyncGenerator[Any, None]:
-        """Return one complete attempt or a retriable failure—never a partial answer."""
+        """Return one complete attempt or a retriable failure, never a partial answer.
+
+        The exception is a ``stream_text`` route: its text is yielded as it arrives once the
+        attempt has produced some, and a failure after that point is raised, not retried."""
         if self._is_open():
             self._record(503, 0, "circuit_open", time.monotonic())
             raise ModelCircuitOpenError(self.model)
@@ -131,6 +145,11 @@ class ResilientLlm(BaseLlm):
         # deadline expired instantly and cancelled every chat model call in the server.
         deadline = time.monotonic() + self.timeout_seconds
         try:
+            if stream and self.stream_text:
+                async for response in self._streamed_attempts(llm_request, deadline):
+                    yield response
+                self._close_circuit()
+                return
             async with asyncio.timeout(self.timeout_seconds):
                 buffered = await self._attempts(llm_request, stream, deadline)
         except TimeoutError as error:
@@ -154,6 +173,7 @@ class ResilientLlm(BaseLlm):
             cause=cause,
             started=started,
             fallback_candidate=self.fallback_candidate,
+            workload=self.workload,
         )
 
     @staticmethod
@@ -221,3 +241,86 @@ class ResilientLlm(BaseLlm):
                 self._record(200, retry, "none", started)
                 return buffered
         raise AssertionError("Unreachable retry state")
+
+    async def _streamed_attempts(self, request: Any, deadline: float) -> AsyncGenerator[Any, None]:
+        """Like ``_attempts``, but text is released as it is produced.
+
+        Everything before the first visible text is held (so a 429, a timeout or a 5xx in the
+        tool rounds still retries or falls back cleanly). From that response on, the attempt is
+        committed: responses are yielded as they arrive and the one deadline still bounds the
+        whole attempt, measured per wait so a slow consumer never counts against the model."""
+        original = deepcopy(request)
+        for retry in range(2 if self.retry_429 else 1):
+            started = time.monotonic()
+            held: list[Any] = []
+            committed = False
+            try:
+                async with contextlib.AsyncExitStack() as stack:
+                    async with asyncio.timeout(max(0.0, deadline - time.monotonic())):
+                        await stack.enter_async_context(model_slot(self.model, self.endpoint))
+                    responses = await stack.enter_async_context(
+                        aclosing(
+                            self.delegate.generate_content_async(
+                                request if retry == 0 else deepcopy(original), stream=True
+                            )
+                        )
+                    )
+                    iterator = responses.__aiter__()
+                    while True:
+                        try:
+                            async with asyncio.timeout(max(0.0, deadline - time.monotonic())):
+                                response = await iterator.__anext__()
+                        except StopAsyncIteration:
+                            break
+                        if committed:
+                            yield response
+                            continue
+                        held.append(response)
+                        if _has_visible_text(response):
+                            committed = True
+                            for item in held:
+                                yield item
+                            held = []
+                    for item in held:  # an attempt that never produced text (a tool round)
+                        yield item
+            except asyncio.CancelledError:
+                expired = time.monotonic() >= deadline
+                self._record(
+                    504 if expired else None, retry, "deadline" if expired else "cancelled", started
+                )
+                raise
+            except TimeoutError:
+                self._record(504, retry, "deadline", started)
+                raise
+            except Exception as error:
+                status = self._status_code(error)
+                delay = self._retry_delay(error) if status == 429 else 0
+                can_retry = (
+                    self.retry_429
+                    and not committed
+                    and retry == 0
+                    and status == 429
+                    and delay <= 1.0
+                    and delay + 0.5 < deadline - time.monotonic()
+                )
+                cause = "provider_error"
+                if committed:
+                    cause = "failed_after_text"
+                elif status == 429:
+                    cause = "retry_exhausted" if retry else "retry_delay_exceeds_budget"
+                self._record(status, retry, "retry_429" if can_retry else cause, started)
+                if not can_retry:
+                    raise
+                await asyncio.sleep(delay)
+            else:
+                self._record(200, retry, "none", started)
+                return
+        raise AssertionError("Unreachable retry state")
+
+
+def _has_visible_text(response: Any) -> bool:
+    """Whether a response carries answer text the patient would see (thoughts do not count)."""
+    parts = getattr(getattr(response, "content", None), "parts", None) or []
+    return any(
+        getattr(part, "text", None) and not getattr(part, "thought", False) for part in parts
+    )

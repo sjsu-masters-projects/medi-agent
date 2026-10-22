@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { LiveVoiceController, type SocketLike, type UtteranceResult, type VoiceModeSnapshot } from "@/services/live-voice";
+import { LiveVoiceController, type DraftToSpeak, type SocketLike, type UtteranceResult, type VoiceModeSnapshot } from "@/services/live-voice";
 import { BrowserAudioPort, type AudioPort } from "@/services/pcm-audio";
 import { buildVoiceWebSocketUrl } from "@/services/voice-api";
 import { socketAuthProtocols } from "@/services/ws-auth";
@@ -27,6 +27,8 @@ interface Options {
     locale: ChatLocale;
     sendUtterance: (text: string, language: ChatLocale) => UtteranceResult;
     reply: VoiceReply | null;
+    /** The reply as written so far, so speech can start before it is complete. */
+    draft?: DraftToSpeak | null;
     /** Set when a chat turn fails, so voice mode stops waiting for a reply. */
     chatError: string | null;
     /** Test seam. */
@@ -97,6 +99,12 @@ export function useVoiceMode(options: Options) {
         seenReply.current = reply.seq;
         controllerRef.current?.speakReply({ text: reply.text, language: reply.language, urgent: reply.urgent });
     }, [options.reply]);
+
+    // Text that is still being written is handed on as it grows; the controller decides whether
+    // it may be spoken (routine replies only) and what to do if the saved reply differs.
+    useEffect(() => {
+        if (options.draft) controllerRef.current?.speakDraft(options.draft);
+    }, [options.draft]);
 
     useEffect(() => {
         if (options.chatError) controllerRef.current?.noReply();

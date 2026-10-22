@@ -16,7 +16,8 @@ MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "src" / "app" / "db" / "m
 # extending this grandfathered list or changing applied migration bytes.
 # Numbers reserved for another open pull request (LOC-003, #203) whose migrations land first.
 # They may be absent on a branch that has not merged it; the entry is removed once they exist.
-RESERVED_SEQUENCES = frozenset({80, 81, 82})
+# 88 and 89 belong to sibling branches that are open at the same time as this one.
+RESERVED_SEQUENCES = frozenset({80, 81, 82, 88, 89})
 LEGACY_SHARED_SEQUENCES = frozenset({11, 38, 39, 40, 41, 42, 43, 47, 48, 51, 67})
 LEGACY_SHARED_FILENAME_GROUPS = frozenset(
     {

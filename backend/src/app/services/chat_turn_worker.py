@@ -46,9 +46,13 @@ from app.services.explanation_service import normalize_patient_summary
 
 logger = logging.getLogger(__name__)
 
-DRAFT_INTERVAL_SECONDS = 1.0  # at most one draft checkpoint per second (rule: bounded writes)
-DRAFT_TICK_SECONDS = 0.25  # how often the checkpointer looks for new text
+# At most one draft checkpoint per interval (rule: bounded writes). Short enough that a spoken
+# reply can start within about half a second of its first sentence being written, long enough
+# that a 20-second reply costs a few dozen small writes, not one per token.
+DRAFT_INTERVAL_SECONDS = 0.4
+DRAFT_TICK_SECONDS = 0.1  # how often the checkpointer looks for new text
 DRAFT_MAX_CHARS = 30000
+MAX_DRAFT_APPENDS = 120  # per turn; past it the draft stops and the final reply still arrives
 MAX_DRAFT_FAILURES = 3
 NOTICE_TYPES = {"a2a_task_status", "appointment_proposal", "escalation_recommended"}
 RETRYABLE_REFUSALS = {"lease_active"}
@@ -82,6 +86,10 @@ class DraftCheckpointer:
     def __init__(self, ops: TurnQueueOps, turn_id: str, lease: str, next_seq: int) -> None:
         self.ops, self.turn_id, self.lease, self.next_seq = ops, turn_id, lease, next_seq
         self.text, self.intent, self.urgency = "", "general", "routine"
+        # Counts withdrawals of already-shown text (the model failed after it began). A viewer
+        # that sees a higher epoch than it has shown clears its draft before applying this one.
+        self.epoch = 0
+        self.draft_appends = 0
         self.dirty = False
         self.notices: list[dict[str, Any]] = []
         self.failures = 0
@@ -99,6 +107,9 @@ class DraftCheckpointer:
         elif kind == "assistant_chunk":
             self.text = (self.text + str(event.get("content") or ""))[:DRAFT_MAX_CHARS]
             self.dirty = True
+        elif kind == "assistant_reset":
+            self.text, self.dirty = "", True
+            self.epoch += 1
         elif kind in NOTICE_TYPES and len(self.notices) < 20:
             self.notices.append(event)
 
@@ -149,10 +160,18 @@ class DraftCheckpointer:
             if not await self._append("notice", self.notices[0]):
                 return
             self.notices.pop(0)
-        if self.dirty and not self.stopped:
-            payload = {"content": self.text, "intent": self.intent, "urgency": self.urgency}
+        if self.dirty and not self.stopped and self.draft_appends < MAX_DRAFT_APPENDS:
+            payload: dict[str, Any] = {
+                "content": self.text,
+                "intent": self.intent,
+                "urgency": self.urgency,
+            }
+            if self.epoch:
+                payload["epoch"] = self.epoch
             self.dirty = False
-            if not await self._append("draft", payload):
+            if await self._append("draft", payload):
+                self.draft_appends += 1
+            else:
                 self.dirty = True
 
     async def _run(self) -> None:

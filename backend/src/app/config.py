@@ -189,6 +189,11 @@ class Settings(BaseSettings):
     # Tasks one worker instance runs at once; more are refused with 503 so the queue retries.
     chat_worker_max_concurrency: int = Field(default=4, ge=1, le=32)
 
+    # AI-003: bounded per-workload/model availability counters (migration 090). Off stops both
+    # the in-memory counting and the flush; the read endpoint then reports an empty window.
+    ai_availability_enabled: bool = True
+    ai_availability_flush_seconds: float = Field(default=30.0, ge=5.0, le=600.0)
+
     # Internal cron auth
     cron_auth_token: str = ""
 

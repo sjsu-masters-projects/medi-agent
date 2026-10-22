@@ -196,3 +196,98 @@ _HEADING = re.compile(r"^\s*#{1,6}\s*", re.M)
 def plain_reply(text: str) -> str:
     """The chat shows plain text: drop Markdown emphasis and headings, keep bullets as •."""
     return _HEADING.sub("", _BULLET.sub("• ", _EMPHASIS.sub("", text)))
+
+
+# The characters a Markdown marker is made of: two in a row are removed, so one at the end of
+# the text so far may still become half of a pair.
+_PAIR_CHARS = "*_"
+_SOURCE_WORDS = ("source", "sources", "fuente", "fuentes")
+_SOURCE_HEAD = re.compile(r"(?:\*\*)?(?:sources?|fuentes?)\s*:", re.I)
+_BULLET_PENDING = re.compile(r"^\s*[*-]$")
+
+
+def _line_head(head: str) -> str:
+    """Whether a line's start (leading space removed, lower case) is a source line
+    (``"source"``), could still become one (``"maybe"``) or cannot (``"text"``)."""
+    if _SOURCE_HEAD.match(head):
+        return "source"
+    for prefix in ("", "**"):
+        for word in _SOURCE_WORDS:
+            target = prefix + word
+            if target.startswith(head):
+                return "maybe"
+            if head.startswith(target) and not head[len(target) :].strip():
+                return "maybe"
+    return "text"
+
+
+def _transform_line(line: str) -> str:
+    return plain_reply(line)
+
+
+class StreamingReplyFilter:
+    """The patient-facing form of a reply, produced while it is still being written.
+
+    ``feed`` returns only text that ``plain_reply(without_source_lines(reply))`` would also
+    contain at that position: a line that is, or may still turn out to be, a source line is held
+    back until it is known not to be one, Markdown marks are removed as in the final reply, and
+    whitespace is released only when text follows it. So a draft, and anything spoken from it, is
+    a prefix of the saved reply (apart from the source line the server appends afterwards) and
+    never shows what the final cleanup would remove. The model's own source lines are dropped
+    here, line by line, exactly as the final reply drops them.
+    """
+
+    def __init__(self) -> None:
+        self._tail = ""  # the current, unfinished line (raw)
+        self._emitted = 0  # characters of this line's cleaned text already released
+        self._pending = ""  # newlines waiting for text to follow them
+        self._started = False
+
+    def _release(self, text: str) -> str:
+        if not text:
+            return ""
+        lead = ""
+        if self._started:
+            newlines = self._pending.count("\n")
+            lead = "\n" * min(newlines, 2)
+        self._pending = ""
+        self._started = True
+        return lead + text
+
+    def _line_text(self, line: str, *, complete: bool) -> str:
+        """The cleaned text of this line that is safe to release now."""
+        if _SOURCE_HEAD.match(line.lstrip().lower()):
+            return ""
+        if not complete:
+            if _line_head(line.lstrip().lower()) != "text":
+                return ""
+            if _BULLET_PENDING.match(line):
+                return ""
+            line = line.rstrip(_PAIR_CHARS)
+        return _transform_line(line).rstrip()
+
+    def _drain(self, line: str, *, complete: bool) -> str:
+        text = self._line_text(line, complete=complete)
+        fresh = text[self._emitted :]
+        if fresh:
+            self._emitted = len(text)
+        return self._release(fresh)
+
+    def feed(self, delta: str) -> str:
+        if not delta:
+            return ""
+        *lines, self._tail = (self._tail + delta).split("\n")
+        out: list[str] = []
+        for line in lines:
+            out.append(self._drain(line, complete=True))
+            self._pending += "\n"
+            self._emitted = 0
+        out.append(self._drain(self._tail, complete=False))
+        return "".join(out)
+
+    def finish(self) -> str:
+        """The held end of the reply once it is complete."""
+        tail, self._tail = self._tail, ""
+        text = self._drain(tail, complete=True)
+        self._emitted = 0
+        return text

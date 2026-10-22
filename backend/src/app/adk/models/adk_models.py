@@ -138,17 +138,33 @@ def adk_model_for_workload(workload: Workload) -> BaseLlm:
     independently by the next patient turn.
     """
     route = route_for(workload)
-    primary = _bounded_model(route.primary, timeout_seconds=route.budget_seconds)
+    # Only the patient's reply is shown while it is written; every other route stays whole.
+    stream_text = workload is Workload.REPLY
+    primary = _bounded_model(
+        route.primary,
+        timeout_seconds=route.budget_seconds,
+        workload=workload,
+        stream_text=stream_text,
+    )
     if route.fallback is None:
         return primary
     fallback = _bounded_model(
-        route.fallback, timeout_seconds=route.budget_seconds, fallback_candidate=True
+        route.fallback,
+        timeout_seconds=route.budget_seconds,
+        fallback_candidate=True,
+        workload=workload,
+        stream_text=stream_text,
     )
     return FallbackModel(models=[primary, fallback])
 
 
 def _bounded_model(
-    spec: ModelSpec, *, timeout_seconds: float | None, fallback_candidate: bool = False
+    spec: ModelSpec,
+    *,
+    timeout_seconds: float | None,
+    fallback_candidate: bool = False,
+    workload: Workload | None = None,
+    stream_text: bool = False,
 ) -> BaseLlm:
     delegate = adk_model_for(spec)
     if timeout_seconds is None:
@@ -166,4 +182,6 @@ def _bounded_model(
             else settings.vertex_ai_location
         ),
         fallback_candidate=fallback_candidate,
+        stream_text=stream_text,
+        workload=workload.value if workload is not None else "unknown",
     )
