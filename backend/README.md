@@ -753,9 +753,9 @@ A care plan belongs to one care-team link (patient, clinician, clinic). Specific
 decisions, lock order, read-path audit and the API contract:
 [PLAN-002](../.agent/specs/plan-002-care-plans-per-care-team.md).
 
-- **Migrations 083-086** (unapplied; never apply remote SQL without explicit authorization):
+- **Migrations 083-087** (unapplied; never apply remote SQL without explicit authorization):
   plan ownership and per-plan versions (083), owned records, routed documents and the shared
-  core (084), cross-plan publication (085), notification scoping (086). Each ends with a
+  core (084), cross-plan publication (085), notification scoping (086), record owners and care-team work items in the notification centre (087). Each ends with a
   verification block that fails if a grant or RLS setting is wrong.
 - **Ownership is enforced in Python** because the backend uses the service role. The rules are
   in `services/care_team_access.py`; every clinician read of documents, facts, plans, SOAP

@@ -158,6 +158,39 @@ class CarePlanReviewService:
             raise ValidationError(str(error.message)[:300]) from None
         return cast(dict[str, Any], result.data or {})
 
+    def take_record(
+        self,
+        clinician_id: UUID,
+        record: str,
+        record_id: UUID,
+        *,
+        care_team_id: UUID,
+    ) -> dict[str, Any]:
+        """Take up a reviewed ADR assessment or MedWatch draft that has no care team.
+
+        Exactly one team can: a second caller gets 409 RECORD_ALREADY_TAKEN. Until then the
+        record is visible to no clinician; the patient's care teams were each asked.
+        """
+        try:
+            result = self.db.rpc(
+                "assign_clinical_record_owner",
+                {
+                    "p_record": record,
+                    "p_record_id": str(record_id),
+                    "p_actor_id": str(clinician_id),
+                    "p_care_team_id": str(care_team_id),
+                },
+            ).execute()
+        except APIError as error:
+            if str(error.code) == "40001":
+                raise ConflictError(
+                    "Another care team already took this record", code="RECORD_ALREADY_TAKEN"
+                ) from None
+            if str(error.code) == "42501":
+                raise NotFoundError("Record", str(record_id)) from None
+            raise ValidationError(str(error.message)[:300]) from None
+        return cast(dict[str, Any], result.data or {})
+
     def _require_own_link(self, clinician_id: UUID, care_plan_id: UUID, care_team_id: UUID) -> None:
         """The named link must be the caller's own, at the plan's patient (neutral otherwise)."""
         plan = self.lineage.plan(care_plan_id)

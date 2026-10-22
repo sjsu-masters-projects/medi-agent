@@ -27,6 +27,7 @@ BOUNDARIES = {
     "before_care_team_plans": "083",
     "before_owned_records": "084",
     "before_cross_plan_publication": "085",
+    "before_clinical_record_owner": "087",
 }
 FIRST_PLAN_MIGRATION = "083_care_team_plan_ownership.sql"
 # Ledger files the stand-in platform cannot run: pgvector, and the seed-ledger reader.

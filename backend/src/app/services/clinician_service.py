@@ -758,21 +758,14 @@ class ClinicianService:
                     "p_requested_information": [
                         item.value for item in decision.requested_information
                     ],
+                    # The database writes the owner in the same transaction as the review.
+                    "p_care_team_id": team_id,
                 },
             )
         )
         rows = cast(list[dict[str, Any]], result.data or [])
         if not rows:
             raise ValidationError("ADR assessment review could not be saved")
-        # The reviewed assessment now belongs to the reviewing team. Until this lands the
-        # reviewer's own id keeps it visible to them alone.
-        await self._execute(
-            self.db.table("adr_assessments")
-            .update({"reviewed_by_care_team_id": team_id})
-            .eq("id", str(assessment_id))
-            .eq("reviewed_by", str(clinician_id))
-            .is_("reviewed_by_care_team_id", "null")
-        )
         return rows[0]
 
     @staticmethod

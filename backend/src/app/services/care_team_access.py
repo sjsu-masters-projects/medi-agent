@@ -83,14 +83,14 @@ class PatientAccess:
             return False
         if not assessment.get("reviewed_by"):
             return True
-        if assessment.get("reviewed_by_care_team_id"):
-            return self.owns(assessment["reviewed_by_care_team_id"])
-        return _text(assessment.get("reviewed_by")) == self.clinician_id
+        # A reviewed assessment with no recorded team is unassigned: visible to no clinician
+        # until one team takes it (never guessed from the reviewer).
+        return self.owns(assessment.get("reviewed_by_care_team_id"))
 
     def can_see_medwatch_draft(self, draft: Mapping[str, Any]) -> bool:
         if not self.team_ids:
             return False
-        return not draft.get("care_team_id") or self.owns(draft["care_team_id"])
+        return self.owns(draft.get("care_team_id"))
 
     def can_see_condition(self, condition: Mapping[str, Any]) -> bool:
         """A sensitive condition reaches only its recording team; none recorded means none."""

@@ -245,3 +245,7 @@ class BackTranslationResponse(BaseModel):
 
     back_translation: BackTranslationWording
     guards: BackTranslationGuards
+
+
+class TakeRecordRequest(BaseModel):
+    care_team_id: UUID

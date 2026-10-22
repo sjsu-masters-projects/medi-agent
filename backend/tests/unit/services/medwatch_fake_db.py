@@ -167,13 +167,14 @@ class FakeDB:
             "discard_reason": None,
             "revision": 1,
             "export_version": "fda-3500-2025-09",
-            "care_team_id": None,
+            "care_team_id": p.get("p_care_team_id"),
             "created_at": now,
             "updated_at": now,
         }
         self.tables.setdefault("medwatch_drafts", []).append(row)
         assessment["status"] = "reviewed"
         assessment["reviewed_by"] = p["p_actor_id"]
+        assessment["reviewed_by_care_team_id"] = p.get("p_care_team_id")
         self.audit(row["id"], "created", {"revision": 1})
         return row
 

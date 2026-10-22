@@ -740,22 +740,11 @@ class MedWatchService:
                 "p_source_evidence": source_evidence,
                 "p_reportability_rationale": request.reportability_rationale,
                 "p_draft_id": str(draft_id),
+                # Written with the draft, in the same transaction.
+                "p_care_team_id": team_id,
             },
             failure="MedWatch draft could not be created",
             resource=("ADR assessment", assessment_id),
-        )
-        await self._execute(
-            self.db.table("adr_assessments")
-            .update({"reviewed_by_care_team_id": team_id})
-            .eq("id", str(assessment_id))
-            .eq("reviewed_by", str(clinician_id))
-            .is_("reviewed_by_care_team_id", "null")
-        )
-        await self._execute(
-            self.db.table("medwatch_drafts")
-            .update({"care_team_id": team_id})
-            .eq("id", str(row.get("id") or draft_id))
-            .is_("care_team_id", "null")
         )
         row = {**row, "care_team_id": team_id}
         return (await self._read_models([row]))[0]

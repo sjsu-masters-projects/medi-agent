@@ -211,7 +211,11 @@ def adr_world() -> FakeDB:
 
     def review(params: dict[str, Any]) -> list[dict[str, Any]]:
         row = next(r for r in db.tables["adr_assessments"] if r["id"] == params["p_assessment_id"])
-        row.update(status="reviewed", reviewed_by=params["p_actor_id"])
+        row.update(
+            status="reviewed",
+            reviewed_by=params["p_actor_id"],
+            reviewed_by_care_team_id=params["p_care_team_id"],
+        )
         return [dict(row)]
 
     db.rpc_handlers["review_adr_assessment"] = review
@@ -356,7 +360,8 @@ async def test_dashboard_counts_leave_out_other_teams_owned_items() -> None:
         }
     )
     service = service_for(db)
-    for clinician, adr_count, draft_count in ((CLINICIAN, 1, 2), (OTHER, 2, 2)):
+    # m3 has no owner: unassigned, so no clinician's count includes it.
+    for clinician, adr_count, draft_count in ((CLINICIAN, 1, 1), (OTHER, 2, 1)):
         links = service.care_access.for_clinician(clinician)
         assert await service._get_pending_adr_review_count([UUID(PATIENT)], links) == adr_count
         assert await service._get_pending_medwatch_count([UUID(PATIENT)], links) == draft_count
@@ -641,7 +646,7 @@ def mw_service(db: FakeDB) -> MedWatchService:
 
 
 @pytest.mark.asyncio
-async def test_medwatch_list_shows_a_draft_to_its_team_and_unowned_ones_to_all() -> None:
+async def test_medwatch_list_shows_a_draft_to_its_team_and_an_unowned_one_to_nobody() -> None:
     mine = _draft_row(care_team_id="team-1")
     theirs = _draft_row(care_team_id=MW_OTHER_TEAM)
     unowned = _draft_row(care_team_id=None)
@@ -653,8 +658,8 @@ async def test_medwatch_list_shows_a_draft_to_its_team_and_unowned_ones_to_all()
     ):
         first = await mw_service(db).list_drafts(UUID(mw.CLINICIAN_ID))
         second = await mw_service(db).list_drafts(UUID(mw.OTHER_CLINICIAN_ID))
-    assert {i["id"] for i in first["items"]} == {mine["id"], unowned["id"]}
-    assert {i["id"] for i in second["items"]} == {theirs["id"], unowned["id"]}
+    assert {i["id"] for i in first["items"]} == {mine["id"]}
+    assert {i["id"] for i in second["items"]} == {theirs["id"]}
 
 
 @pytest.mark.asyncio

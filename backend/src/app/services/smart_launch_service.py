@@ -453,9 +453,22 @@ class SmartLaunchService:
 
     def _import_care_team(self, clinician_id: UUID, patient_id: UUID) -> UUID:
         """The clinician's own link an import belongs to (CARE_TEAM_REQUIRED when ambiguous)."""
-        return UUID(
-            DocumentRoutingService(self.db).resolve_clinician_link(clinician_id, patient_id)
-        )
+        try:
+            return UUID(
+                DocumentRoutingService(self.db).resolve_clinician_link(clinician_id, patient_id)
+            )
+        except ValidationError as error:
+            if error.code != "CARE_TEAM_REQUIRED":
+                raise
+            # Known limitation: a launch session does not yet record which link it is for.
+            raise ValidationError(
+                "External record import is not available while you hold more than one "
+                "care-team link to this patient (for example at two clinics). Nothing was "
+                "started or imported. Upload the records as documents instead, or ask your "
+                "administrator.",
+                code="CARE_TEAM_REQUIRED",
+                details={"limitation": "smart_launch_single_link_only"},
+            ) from None
 
     def _create_import(
         self, *, session: dict[str, Any], context: dict[str, str | None], care_team_id: UUID

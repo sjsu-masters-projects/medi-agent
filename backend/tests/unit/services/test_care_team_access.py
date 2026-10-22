@@ -72,14 +72,15 @@ def test_adr_assessments_are_open_while_pending_then_the_reviewing_teams() -> No
     assert MINE.can_see_adr({"reviewed_by": None}) and THEIRS.can_see_adr({"reviewed_by": None})
     reviewed = {"reviewed_by": OTHER, "reviewed_by_care_team_id": OTHER_TEAM}
     assert THEIRS.can_see_adr(reviewed) and not MINE.can_see_adr(reviewed)
-    legacy = {"reviewed_by": CLINICIAN, "reviewed_by_care_team_id": None}
-    assert MINE.can_see_adr(legacy) and not THEIRS.can_see_adr(legacy)
+    # Reviewed with no recorded team: unassigned, visible to nobody (not even the reviewer).
+    unassigned = {"reviewed_by": CLINICIAN, "reviewed_by_care_team_id": None}
+    assert not MINE.can_see_adr(unassigned) and not THEIRS.can_see_adr(unassigned)
 
 
 def test_medwatch_drafts_and_imports_follow_their_team() -> None:
     assert MINE.can_see_medwatch_draft({"care_team_id": TEAM})
     assert not MINE.can_see_medwatch_draft({"care_team_id": OTHER_TEAM})
-    assert MINE.can_see_medwatch_draft({"care_team_id": None})
+    assert not MINE.can_see_medwatch_draft({"care_team_id": None})  # unassigned: nobody
     assert MINE.can_see_import({"care_team_id": TEAM, "clinician_id": OTHER})
     assert not MINE.can_see_import({"care_team_id": OTHER_TEAM, "clinician_id": CLINICIAN})
     assert MINE.can_see_import({"care_team_id": None, "clinician_id": CLINICIAN})

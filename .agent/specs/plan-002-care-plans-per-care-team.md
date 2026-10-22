@@ -193,10 +193,11 @@ Migrations (unapplied; no remote SQL is authorized):
 | `083_care_team_plan_ownership.sql` | `care_plans` (one plan per care-team link, owner, `ownership_state`, last-owner snapshot); per-plan versions, one open draft and one approved version per plan (replaces the per-patient constraints); per-plan generation requests, claim, completion and publication guard; legacy backfill (approver's only link, then the link the activities were projected for, then the patient's only care team; ambiguous becomes `unassigned_legacy` and opens a review item, never guessed); team-ends trigger (plan becomes `unowned`, activities and medications untouched, review items to the remaining teams and, without patient detail, the clinic's admins); `adopt_care_plan` and `retire_care_plan_items` (patient-wide lock, exactly one adoption winner); append-only ownership trail; plan RLS follows the owning link. |
 | `084_care_team_owned_records.sql` | Document owner and routing (`routed`/`unrouted` = "Not sure"), atomic `claim_document`, drafting only from the plan's own routed sources (`care_plan_source_fact_ids`); provenance, import, SOAP, ADR-review and MedWatch owner columns; recording-team stamping for medications, allergies and conditions; patient-controlled `conditions.is_sensitive` with an audited RPC and the `shared_clinical_summary` RPC; clinician-session RLS and the storage policy follow ownership; browser writes to conditions and allergies revoked. |
 | `085_cross_plan_publication.sql` | The only cross-plan comparison (`care_plan_cross_conflicts`), resolutions, review-item replies, `publish_care_plan_version` (authorization, patient advisory lock, idempotency record, current-state conflict check, exclusions carried to the next draft, per-plan supersession; publishing never deactivates another plan's activities); conversation activity context and review restricted to the conversation's own team. |
+| `087_clinical_record_owner_and_review_notifications.sql` | ADR review and MedWatch creation take the acting care team and write the owner in the same transaction (the old bodies are wrapped; the ownerless signatures leave the Data API schema; a deferred constraint trigger refuses a new review or draft without an owner); backfill assigns only the unambiguous, otherwise the record is unassigned (visible to no clinician) with an `unowned_clinical_record` review item to each active team and `assign_clinical_record_owner` (one winner); care-team review items are captured as notification-centre items (`care_plan_review`) for the addressed team's clinician. |
 | `086_care_team_notification_scope.sql` | Notification fan-out and "open an item" follow record ownership; critical results stay shared with a neutral copy for teams that do not hold the document. |
 
 Contract tests (disposable PostgreSQL 16, CI shard `care-team-plans`): 25 ownership and
-backfill, 35 shared core and records, 38 publication, 24 notification cases.
+backfill, 35 shared core and records, 38 publication, 24 notification, 14 record-owner cases.
 
 ### Lock order
 
@@ -267,6 +268,11 @@ version routes is the VERSION id (unchanged for compatibility).
   `details: {conflicts, interaction_coverage}`; same key with a different request: 409
   `IDEMPOTENCY_KEY_REUSED`; already published: 409 `CONFLICT`. Nothing is published on any
   error. `warnings` lists non-blocking overlaps.
+- Notification centre: a review item addressed to a care team appears in that team's clinician
+  list and action count as `event_type: "care_plan_review"` (`metadata.review_kind`, link
+  `/patients/{id}?tab=care-plan&review={item_id}`), only for the addressed team's clinician; it
+  stops being actionable when resolved. `POST /care-plans/clinician/records/{adr_assessment|medwatch_draft}/{id}/take`
+  `{care_team_id}` (409 `RECORD_ALREADY_TAKEN`) takes up a record that has no care team.
 - `GET /care-plans/clinician/review-items?status=open` -> `{items, clinic_items}`;
   `POST .../review-items/{id}/reply` `{note?}` (a reply informs the asker; it never clears the
   blocker).
@@ -308,29 +314,46 @@ version routes is the VERSION id (unchanged for compatibility).
 - Nora's context carries `plan` provenance on each medication and activity and a `care_plans`
   list; she cites the plan owner.
 
-## Open questions (conservative behaviour chosen; please decide)
+## Decided by existing rule (revisit before real use)
 
-1. **Visits within a clinic.** `AppointmentService` lets a colleague with a link at the same
-   clinic list, edit and export another team's visit (the October 17 decision). That conflicts
-   with "visit details are owned by one care team". Left unchanged; tell us to narrow it to
-   the visit's own link.
-2. **Confirmed-symptom hand-off** (071) messages every assigned clinician with the symptom
-   name and severity. Treated as shared safety information; confirm.
-3. **Nora chat, symptom reports and adherence rows** remain patient-wide tables. Clinician
+- **Visits within a clinic.** A colleague with a link at the same clinic can list, edit and
+  export another team's visit (the October 17 decision, kept as is). It differs from
+  "visit details are owned by one care team"; revisit before real use.
+- **Confirmed-symptom hand-off** (071) messages every assigned clinician with the symptom name
+  and severity. Kept shared as safety information; revisit before real use.
+
+## Known limitations
+
+- **SMART launch with two links to one patient** (for example the same clinician at two
+  clinics) is refused, fail-closed, with `422 CARE_TEAM_REQUIRED` and
+  `details.limitation = "smart_launch_single_link_only"`; the message tells the clinician
+  nothing was started and to upload the records as documents instead. Follow-up: a team
+  column on `smart_launch_sessions` and an optional `care_team_id` on the launch request.
+- **Combined Today entries and reminders.** The dispatcher sends one reminder per entry
+  (keyed on the entry's id; deterministic, idempotent, safe under concurrent runs because the
+  existing unique notification key decides). If grouping cannot be read it logs and sends
+  ungrouped rather than lose a reminder.
+- **Clinic-admin work items** carry no patient, and a notification-centre item always names
+  its patient, so they stay on `GET /care-plans/clinician/review-items` (`clinic_items`).
+- **Storage policy evidence.** `ALTER POLICY ... ON storage.objects` runs as the migration
+  role that already created that policy: `003_storage_and_auth.sql` creates
+  `documents_read_clinician` on `storage.objects`, and `020_harden_database_security.sql`
+  alters every `storage.objects` policy with `ALTER POLICY` in a loop; both are applied
+  hosted. Migration 084 uses the same statement for the same object.
+
+## Other open questions
+
+1. **Nora chat, symptom reports and adherence rows** remain patient-wide tables. Clinician
    reads of adherence for another team's activities are filtered in the API, not the table.
-4. **Orphaned documents** (owner link deleted) stay routed to nobody and are hidden from every
+2. **Orphaned documents** (owner link deleted) stay routed to nobody and are hidden from every
    clinician; the evidence behind approved activities is not reachable. A re-route tool is out
    of scope.
-5. **SMART launch for a clinician with two links to one patient** is refused
-   (`CARE_TEAM_REQUIRED`); `smart_launch_sessions` has no team column.
-6. **ADR review and MedWatch creation stamp the team in a second statement** (the older RPCs
-   cannot take it). Until it lands, or if it fails, the row is visible to its reviewer only
-   (ADR) or to all assigned teams (MedWatch draft, legacy rule).
-7. **Reminder dispatch** still reads per-item schedules; a combined Today entry shows one
-   reminder, but the dispatcher may still send one per underlying item. Follow-up.
-8. **Review items in the notification centre.** They have their own list endpoint; surfacing
-   them as receipts needs a decision on patient-less items.
-9. **Legacy documents** that cannot be attributed (patient with several teams) become
+3. **Reviewed records with no determinable team** (older ADR reviews and MedWatch drafts) are
+   unassigned: visible to no clinician until one care team takes them
+   (`POST /care-plans/clinician/records/{adr_assessment|medwatch_draft}/{id}/take`; each active
+   team of the patient gets an `unowned_clinical_record` item). New reviews and drafts can no
+   longer be written without an owner.
+4. **Legacy documents** that cannot be attributed (patient with several teams) become
    "Not sure" (visible to each team that could see them before) until claimed.
-10. **Portals** (picker, owner chips, conflict screens, adopt/retire, sensitive toggle, claim
+5. **Portals** (picker, owner chips, conflict screens, adopt/retire, sensitive toggle, claim
     queue) are the follow-up pass; this API is their contract.
