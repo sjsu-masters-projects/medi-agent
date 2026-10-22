@@ -109,7 +109,12 @@ jobs:
           uv pip compile requirements-dev.in --universal --python-version 3.12 --output-file requirements-dev.txt
           git diff --exit-code -- requirements.txt requirements-dev.txt
       - name: Audit locked Python dependencies
-        run: uvx --from pip-audit==2.10.1 pip-audit -r requirements-dev.txt
+        # GHSA-xcq7-p3pf-p88h (CVE-2026-114603, opentelemetry-api tracestate parsing) is
+        # accepted until google-adk allows opentelemetry-api>=1.45.1 (2.12.0 still caps it at
+        # 1.42.1). It is reachable only when inbound request headers are extracted by an
+        # OpenTelemetry propagator; the app installs no instrumentation package and never
+        # imports opentelemetry, which tests/unit/test_dependency_audit_exceptions.py enforces.
+        run: uvx --from pip-audit==2.10.1 pip-audit -r requirements-dev.txt --ignore-vuln GHSA-xcq7-p3pf-p88h
 
   production-placeholder-check:
     name: Production Placeholder Check
