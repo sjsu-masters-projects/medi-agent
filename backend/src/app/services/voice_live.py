@@ -26,6 +26,7 @@ import contextlib
 import logging
 import re
 import time
+from abc import abstractmethod
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
@@ -51,18 +52,43 @@ FORCE_FLUSH_GRACE_SECONDS = 1.0
 
 
 class LiveConnection(Protocol):
-    async def send_media(self, data: bytes) -> None: ...
-    async def send_finalize(self) -> None: ...
-    async def send_close_stream(self) -> None: ...
-    def __aiter__(self) -> AsyncIterator[Any]: ...
+    @abstractmethod
+    async def send_media(self, data: bytes) -> None:
+        pass
+
+    @abstractmethod
+    async def send_finalize(self) -> None:
+        pass
+
+    @abstractmethod
+    async def send_close_stream(self) -> None:
+        pass
+
+    @abstractmethod
+    def __aiter__(self) -> AsyncIterator[Any]:
+        pass
 
 
 class SpeakConnection(Protocol):
-    async def send_text(self, text: str) -> None: ...
-    async def send_flush(self) -> None: ...
-    async def send_clear(self) -> None: ...
-    async def send_close(self) -> None: ...
-    def __aiter__(self) -> AsyncIterator[Any]: ...
+    @abstractmethod
+    async def send_text(self, text: str) -> None:
+        pass
+
+    @abstractmethod
+    async def send_flush(self) -> None:
+        pass
+
+    @abstractmethod
+    async def send_clear(self) -> None:
+        pass
+
+    @abstractmethod
+    async def send_close(self) -> None:
+        pass
+
+    @abstractmethod
+    def __aiter__(self) -> AsyncIterator[Any]:
+        pass
 
 
 Connector = Callable[[dict[str, Any]], AbstractAsyncContextManager[Any]]
