@@ -2,13 +2,14 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { getSymptomIntakeCopy, intakeErrorCopy, intakeValueCopy } from "@/content/symptom-intake-copy";
+import { getSymptomIntakeCopy, intakeErrorCopy, intakeValueCopy, offerAnswer } from "@/content/symptom-intake-copy";
 import { useSymptomIntake } from "@/hooks/use-symptom-intake";
 import type { PrivateReplyHandler } from "@/hooks/use-patient-chat-session";
 import { IntakeAnswerForm } from "@/components/features/intake-answer-form";
 import { ChatBubble } from "@/components/features/chat-bubble";
 import { buildRecordsDocumentHref } from "@/components/features/chat-results-card";
 import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icons";
 import type { Locale } from "@/types";
 
 export type IntakeComposerState = { active: boolean; busy: boolean; revision: string; locale?: Locale; accepting?: boolean };
@@ -19,6 +20,11 @@ type Props = {
     onRestoreInput?: (text: string) => void;
     onReadAloud?: (text: string, locale: Locale) => void;
     handsFree?: boolean;
+    /** The newest unanswered symptom-note offer: a typed or spoken yes/no answers it. */
+    offerSourceId?: string;
+    /** The patient answered (or started) this offer, so it is not asked again. */
+    onOfferAnswered?: (sourceMessageId: string) => void;
+    onFocusComposer?: () => void;
 };
 
 function recordValue(value: unknown): string {
@@ -28,8 +34,8 @@ function recordValue(value: unknown): string {
         .map(([key, item]) => `${key.replaceAll("_", " ")}: ${item}`).join(" · ");
 }
 
-export function SymptomIntakePanel({ locale: appLocale, sourceMessageId, sessionId = "default",
-    registerReply, onComposerState, onRestoreInput, onReadAloud, handsFree = false }: Props) {
+export function SymptomIntakePanel({ locale: appLocale, sessionId = "default",
+    registerReply, onComposerState, onRestoreInput, onReadAloud, handsFree = false, offerSourceId, onOfferAnswered, onFocusComposer }: Props) {
     const intake = useSymptomIntake(sessionId);
     const draft = intake.draft;
     const locale = draft?.locale ?? appLocale;
@@ -41,6 +47,30 @@ export function SymptomIntakePanel({ locale: appLocale, sourceMessageId, session
     }
     const [consent, setConsent] = useState<string | null>(null);
     const [hint, setHint] = useState(false);
+    const [starting, setStarting] = useState(false);
+    const [reloading, setReloading] = useState(false);
+    const [reportedOpen, setReportedOpen] = useState(false);
+    const answered = useRef(onOfferAnswered);
+    const focusComposer = useRef(onFocusComposer);
+    useLayoutEffect(() => { answered.current = onOfferAnswered; focusComposer.current = onFocusComposer; }, [onOfferAnswered, onFocusComposer]);
+    const startDraft = intake.start;
+    const startLatest = useRef(startDraft);
+    useLayoutEffect(() => { startLatest.current = startDraft; }, [startDraft]);
+    function beginFrom(sourceId: string) {
+        setStarting(true);
+        void Promise.resolve(startLatest.current(sourceId)).then((result) => { if (result) answered.current?.(sourceId); })
+            .finally(() => setStarting(false));
+    }
+    const beginRef = useRef(beginFrom);
+    useLayoutEffect(() => { beginRef.current = beginFrom; });
+    useEffect(() => {
+        const onStart = (event: Event) => {
+            const id = (event as CustomEvent<{ sourceMessageId?: string }>).detail?.sourceMessageId;
+            if (id) beginRef.current(id);
+        };
+        window.addEventListener("symptom-intake-start", onStart);
+        return () => window.removeEventListener("symptom-intake-start", onStart);
+    }, []);
     const [unsaved, setUnsaved] = useState<{ text: string; intakeId: string; questionId: string; revision: number } | null>(null);
     const reader = useRef(onReadAloud);
     useLayoutEffect(() => { reader.current = onReadAloud; }, [onReadAloud]);
@@ -49,7 +79,7 @@ export function SymptomIntakePanel({ locale: appLocale, sourceMessageId, session
     const question = editing ? draft?.questions?.find((q) => q.id === editing) : draft?.current_question;
     const disabled = intake.busy || intake.pending || !draft?.library_available;
     const consentKey = `${draft?.intake_id}:${draft?.revision}:${draft?.preview_hash}:${locale}`;
-    const button = "ma-press min-h-11 rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm font-medium text-ink hover:bg-surface-2 disabled:opacity-50";
+    const button = "ma-press min-h-11 rounded-full border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-ink-2 hover:border-brand/40 hover:text-brand-ink disabled:opacity-50";
     const suggestion = question && draft?.suggestions?.[question.id];
     const prompt = draft?.preview && !editing ? `${copy.summary}. ${draft.preview.summary}. ${copy.reviewFirst}`
         : question ? `${question.wording[locale]} ${suggestion !== undefined ? `${copy.suggestion}: ${suggestion}. ${copy.useSuggestion}. ` : ""}${copy.answerPrompt}` : copy.reviewFirst;
@@ -62,7 +92,13 @@ export function SymptomIntakePanel({ locale: appLocale, sourceMessageId, session
 
     useLayoutEffect(() => {
         registerReply?.((text, mode, spokenLocale) => {
-            if (!active || !draft) return "unhandled";
+            if (!active || !draft) {
+                const reply = offerSourceId ? offerAnswer(text) : null;
+                if (!offerSourceId || !reply) return "unhandled";
+                if (intake.busy || intake.pending || starting) return "blocked";
+                if (reply === "yes") beginFrom(offerSourceId); else answered.current?.(offerSourceId);
+                return "handled";
+            }
             if (disabled) return "blocked";
             const command = text.trim().toLocaleLowerCase().replace(/[.!?]+$/, "");
             if (["cancel draft", "cancelar borrador"].includes(command)) {
@@ -97,59 +133,69 @@ export function SymptomIntakePanel({ locale: appLocale, sourceMessageId, session
         }
     }, [active, handsFree, disabled, draft?.intake_id, draft?.revision, draft?.preview_hash, question?.id, locale, prompt]);
 
+    const questionKey = active ? `${draft?.intake_id}:${question?.id}:${draft?.preview_hash ?? ""}` : "";
+    const previousKey = useRef("");
+    useEffect(() => {
+        if (questionKey && questionKey !== previousKey.current) focusComposer.current?.();
+        previousKey.current = questionKey;
+    }, [questionKey]);
+
+    if (!draft && !intake.error && !intake.pending && !starting && !(reloading && intake.busy)) return null;
     const title = draft?.status === "confirmed" ? copy.saved : draft?.status === "cancelled" ? copy.cancelled
         : draft?.status === "interrupted_safety" ? copy.interrupted : copy.title;
-    return <section className="space-y-3 break-words rounded-2xl border border-line bg-surface-2 p-4" aria-label={title} lang={locale}>
-        {intake.busy && <p role="status">{copy.loading}</p>}
-        {intake.error && <div role="alert"><p>{intakeErrorCopy(String(intake.error), locale)}</p><button className={button} disabled={intake.busy} onClick={() => void intake.reload()}>{copy.reload}</button></div>}
+    return <section className="flex min-w-0 max-w-full flex-col items-start gap-2.5 break-words" aria-label={title} lang={locale}>
+        {intake.busy && (draft || starting || reloading) && <p role="status" className="text-sm text-muted">{copy.loading}</p>}
+        {intake.error && <div role="alert"><p>{intakeErrorCopy(String(intake.error), locale)}</p><button className={button} disabled={intake.busy} onClick={() => { setReloading(true); void intake.reload(); }}>{copy.reload}</button></div>}
         {intake.pending && <button className={button} disabled={intake.busy} onClick={intake.retry}>{copy.retry}</button>}
-        {(!draft || !active) && !intake.busy && !intake.error && <button className={button} disabled={!sourceMessageId || intake.pending}
-            onClick={() => sourceMessageId && void intake.start(sourceMessageId)}>{copy.start}</button>}
         {draft && <>
-            <h2 className="text-base font-semibold text-ink">{title}</h2>
-            {active && <p className="text-sm text-ink-2">{copy.intro}</p>}
+            <div className="flex flex-wrap items-center gap-2">
+                <h2 className="inline-flex items-center gap-1.5 rounded-full bg-brand-tint px-2.5 py-1 text-xs font-semibold text-brand-ink">
+                    {active && <Icon name="lock" className="h-3.5 w-3.5" aria-hidden="true" />}{title}</h2>
+                {active && <span className="text-xs text-muted">{copy.privateTag}</span>}
+            </div>
+            {active && <p className="text-xs text-muted">{copy.intro}</p>}
             {draft.existing_draft && active && <p role="status">{copy.existingDraft}</p>}
             {draft.review_requested && <p role="status" className="rounded-xl bg-note-tint p-3 text-note-ink">{copy.urgentReview}</p>}
             {draft.safety && <div role="alert" className="rounded-xl bg-danger-tint p-3 text-danger-ink"><p>{draft.safety.response_text}</p>
                 {draft.persistence_status === "uncertain" && <p>{copy.pending}</p>}</div>}
             {active && !draft.library_available && <p role="status">{copy.unavailable}</p>}
-            {active && question && <>
+            {active && question && <div className="flex min-w-0 max-w-full flex-col items-start gap-2.5" aria-live="polite">
                 {registerReply ? <>
                     <ChatBubble role="assistant" timestamp="" content={question.wording[locale]} locale={locale} language={locale}
                         onPlayAudio={onReadAloud ? () => onReadAloud(prompt, locale) : undefined} />
-                    <p className="text-sm text-ink-2">{copy.answerPrompt}</p>
+                    <p className="px-1 text-xs text-muted">{copy.answerPrompt}</p>
                     <div className="flex flex-wrap gap-2">
                         <button className={button} disabled={disabled} onClick={() => save("unknown", null)}>{copy.unknown}</button>
                         <button className={button} disabled={disabled} onClick={() => save("declined", null)}>{copy.declined}</button>
                     </div>
-                    <details><summary className="min-h-11 cursor-pointer py-2 text-sm font-medium">{copy.detailEntry}</summary>
+                    <details className="px-1"><summary className="min-h-11 cursor-pointer py-2 text-sm font-medium text-ink-2">{copy.detailEntry}</summary>
                         <IntakeAnswerForm key={`${draft.intake_id}:${draft.revision}:${question.id}`} question={question} locale={locale}
                             answer={draft.answers[question.id]} disabled={disabled} save={save} />
                     </details>
                 </> : <IntakeAnswerForm key={`${draft.intake_id}:${draft.revision}:${question.id}`} question={question} locale={locale}
                     answer={draft.answers[question.id]} disabled={disabled} save={save} />}
-                {suggestion !== undefined && !(question.id in draft.answers) && <div className="rounded-xl border border-line bg-surface p-3">
+                {suggestion !== undefined && !(question.id in draft.answers) && <div className="rounded-2xl border border-line bg-surface p-3">
                     <p className="text-xs font-semibold text-muted">{copy.suggestion}</p><p className="whitespace-pre-wrap">{suggestion}</p>
                     <button className={button} disabled={disabled} onClick={() => save("answered", suggestion, String(suggestion))}>{copy.useSuggestion}</button>
                 </div>}
-            </>}
-            {active && unsaved?.intakeId === draft.intake_id && unsaved.questionId === question?.id && unsaved.revision === draft.revision && <div className="rounded-xl border border-line p-3">
+            </div>}
+            {active && unsaved?.intakeId === draft.intake_id && unsaved.questionId === question?.id && unsaved.revision === draft.revision && <div className="rounded-2xl bg-brand-tint/60 p-3">
                 <p className="text-xs text-muted">{copy.pendingAnswer}</p><p>{unsaved.text}</p>
                 {intake.error && !intake.pending && <button className={button} onClick={() => onRestoreInput?.(unsaved.text)}>{copy.editReply}</button>}
             </div>}
-            {active && <details><summary className="min-h-11 cursor-pointer py-2 font-medium">{copy.reported}</summary>
+            {active && <details className="w-full px-1" open={reportedOpen} onToggle={(event) => setReportedOpen(event.currentTarget.open)}><summary className="min-h-11 cursor-pointer py-2 text-sm font-medium text-ink-2">{copy.reported}</summary>
                 <p className="text-xs text-muted">{copy.timezone}: {draft.timezone}{draft.timezone_fallback ? ` (${copy.fallback})` : ""}</p>
                 <dl className="space-y-3">{Object.entries(draft.answers).map(([id, answer]) => <div key={id}>
                     <dt className="text-sm font-medium">{draft.questions?.find((q) => q.id === id)?.wording[locale] ?? copy.value}</dt>
                     <dd className="text-sm" lang={answer.locale}>{answer.state === "answered" ? intakeValueCopy(answer.value, locale) : copy.states[answer.state]}</dd>
                     <button className={button} disabled={disabled} onClick={() => { setEditing(id); setConsent(null); }}>{copy.edit}</button>
                 </div>)}</dl></details>}
-            {active && <div className="flex flex-wrap gap-2">
+            {active && !draft.preview && <div className="flex flex-wrap gap-2">
                 <button className={button} disabled={disabled || Boolean(editing) || !draft.can_review} onClick={() => { setConsent(null); intake.mutate("preview", {}); }}>{copy.review}</button>
                 <button className={button} disabled={intake.busy || intake.pending} onClick={() => intake.mutate("cancel", { mutation_id: crypto.randomUUID() })}>{copy.cancel}</button>
             </div>}
             {hint && <p role="status">{copy.reviewFirst}</p>}
-            {active && draft.preview && <section className="space-y-3 rounded-xl border border-line bg-surface p-3">
+            {active && draft.preview && <section className="w-full max-w-[92%] space-y-3 rounded-[20px_20px_20px_6px] bg-surface p-4 shadow-[0_1px_0_rgba(16,32,43,.04)]" aria-live="polite">
                 <h3 className="font-semibold">{copy.summary}</h3><p className="whitespace-pre-line" lang={draft.locale}>{draft.preview.summary}</p>
                 {onReadAloud && <button className={button} onClick={() => onReadAloud(prompt, locale)}>{copy.listen}</button>}
                 <p className="text-sm text-ink-2">{copy.productReported}</p>
@@ -164,6 +210,10 @@ export function SymptomIntakePanel({ locale: appLocale, sourceMessageId, session
                     onChange={(e) => setConsent(e.target.checked ? consentKey : null)} />{copy.consent}</label>
                 <Button fullWidth disabled={disabled || Boolean(editing) || !draft.can_confirm || consent !== consentKey}
                     onClick={() => intake.mutate("confirm", { confirmation_id: crypto.randomUUID(), preview_hash: draft.preview_hash, consent: true })}>{copy.confirm}</Button>
+                <div className="flex flex-wrap gap-2">
+                    <button className={button} type="button" disabled={disabled} onClick={() => { setReportedOpen(true); setConsent(null); }}>{copy.edit}</button>
+                    <button className={button} type="button" disabled={intake.busy || intake.pending} onClick={() => intake.mutate("cancel", { mutation_id: crypto.randomUUID() })}>{copy.cancel}</button>
+                </div>
             </section>}
         </>}
     </section>;

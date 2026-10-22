@@ -316,6 +316,11 @@ def _is_negated_signal(text: str, index: int) -> bool:
     return _CLAUSE_BREAK.search(tail) is None
 
 
+def is_negated_signal(text: str, index: int) -> bool:
+    """Public wrapper: whether a clear denial immediately governs the term at `index`."""
+    return _is_negated_signal(text, index)
+
+
 def contains_adverse_effect_signal(text: str) -> bool:
     """Detect reported or ambiguous adverse signals, not explicit term education.
 

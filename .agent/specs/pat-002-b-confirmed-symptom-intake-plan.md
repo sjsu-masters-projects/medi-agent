@@ -1306,3 +1306,36 @@ Decisions:
 
 Verification receipts are in the pull request.
 
+## 27. October 22 — offer first, then a conversation (decision)
+
+Production feedback: a "Start a symptom draft" card appeared under every Nora chat, and a
+reportable symptom opened a draft without being asked. The requester approved changing the
+flow. This supersedes section 25's presentation (the grey panel and the always-visible start
+control) and B5's "Nora starts a draft"; B2 safety, drafts, recovery, idempotency, revisions
+and the explicit **Confirm and share** are unchanged. The intake API is reused, not forked.
+
+- **Offer only on a reportable symptom.** The server decides per turn
+  (`app/safety/symptom_offer.py`). Order: (1) `urgency == emergency` or any reviewed
+  safety-floor match (emergency, self-harm, medication error) never offers and keeps its
+  reviewed escalation; (2) a deterministic, negation-aware first-person symptom or possible
+  side-effect detector in en-US and es-MX offers; (3) the model's `symptom` route can add an
+  offer only when the message names a symptom and is not an information question. Medication
+  list, appointment and greeting messages never offer. The offer also requires
+  `SYMPTOM_INTAKE_ENABLED`.
+- **Typed signal.** The assistant message carries a `symptom_intake_offer` attachment
+  (`source_message_id` = the patient's message). It is persisted with the message (no
+  migration), so history and reconnect restore it; it is not a form field and starts nothing.
+  A model `symptom` route now streams only an acknowledgement ("Nothing is shared unless you
+  choose to"); a deterministic offer on another route keeps the model's normal reply.
+- **Conversation.** The portal renders the offer under Nora's newest reply ("Yes, let's do it" /
+  "Not now"). Yes, or a typed/spoken "yes"/"sí", calls the existing start endpoint; Not now
+  or "no" dismisses it per message (browser storage, per patient). Each approved question is a
+  Nora-style bubble tagged "Private until you confirm", answered in the normal composer or by
+  voice (hands-free still reads the question), with "I don't know"/"Prefer not to answer"
+  accepted by chip or text. The review is a summary bubble with consent, **Confirm and share**,
+  Edit and Cancel; nothing is submitted by text, voice or auto-confirmation.
+- **Copy status.** Offer, tag and acknowledgement wording (both languages) is draft pending
+  LOC-001; it is not approved copy.
+- **Known follow-ups.** Hands-free mode does not read the offer line aloud (a patient can still
+  answer yes by voice). The offer is not recomputed for messages saved before this change.
+

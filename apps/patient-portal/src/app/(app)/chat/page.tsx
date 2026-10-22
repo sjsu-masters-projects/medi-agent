@@ -13,6 +13,8 @@ import { CareConversations } from "@/components/features/care-conversations";
 import { NoraConversations } from "@/components/features/nora-conversations";
 import { NotificationBell } from "@/components/features/notification-centre";
 import { SymptomIntakePanel, type IntakeComposerState } from "@/components/features/symptom-intake-panel";
+import { SymptomOffer } from "@/components/features/symptom-offer";
+import { useSymptomOfferDismissals } from "@/hooks/use-symptom-offer-dismissals";
 import { ADRFollowUpEntryRow } from "@/components/features/adr-follow-up-entry-row";
 import { ADRFollowUpView } from "@/components/features/adr-follow-up-view";
 import { getADRFollowUpCopy } from "@/content/adr-follow-up-copy";
@@ -141,6 +143,16 @@ export default function ChatPage() {
         .map((message) => message.id === "welcome-message"
             ? { ...message, content: copy.welcomeMessage, language: locale, audioUrl: undefined }
             : message);
+    const { dismissed: dismissedOffers, dismiss: dismissOffer } = useSymptomOfferDismissals(user?.id);
+    const lastVisible = visibleMessages[visibleMessages.length - 1];
+    const offerAttachment = lastVisible?.role === ChatRole.ASSISTANT
+        ? lastVisible.attachments?.find((attachment) => attachment.type === "symptom_intake_offer") : undefined;
+    // Only the newest Nora reply can carry a live offer, and never while a private draft is open.
+    const pendingOffer = offerAttachment?.type === "symptom_intake_offer" && lastVisible && !intakeComposer.active
+        && !dismissedOffers.has(offerAttachment.sourceMessageId) && !assistantDraft
+        ? { messageId: lastVisible.id, sourceMessageId: offerAttachment.sourceMessageId } : null;
+    const composerForm = useRef<HTMLFormElement>(null);
+    const focusComposer = useCallback(() => composerForm.current?.querySelector("textarea")?.focus(), []);
     const voiceBusy = ["listening", "processing", "playing"].includes(voiceStatus) || voiceMode.active;
     const back = locale === "es-MX" ? "Volver a mensajes" : "Back to messages";
     const threadOpen = (!inbox && conversation === "assistant") || Boolean(humanThreadId) || followUpMode;
@@ -282,6 +294,9 @@ export default function ChatPage() {
                 {loading && <p className="text-center text-sm text-muted" role="status">{controls.loading}</p>}
                 {visibleMessages.map((message) => <ChatBubble key={message.clientMessageId ?? message.id} attachments={message.role === ChatRole.ASSISTANT ? message.attachments : undefined} content={message.content}
                     language={message.language} locale={locale} role={message.role === ChatRole.USER ? "user" : "assistant"}
+                    offer={pendingOffer?.messageId === message.id ? <SymptomOffer locale={locale}
+                        onYes={() => window.dispatchEvent(new CustomEvent("symptom-intake-start", { detail: { sourceMessageId: pendingOffer.sourceMessageId } }))}
+                        onNo={() => dismissOffer(pendingOffer.sourceMessageId)} /> : undefined}
                     delivery={message.delivery} onRetrySend={message.clientMessageId ? () => retryUnsentMessage(message.clientMessageId!) : undefined}
                     onRemoveUnsent={message.clientMessageId ? () => removeUnsentMessage(message.clientMessageId!) : undefined}
                     timestamp={message.createdAt} onPlayAudio={message.role === ChatRole.ASSISTANT && (Boolean(message.audioUrl) || canPlayAssistantAudio) ? () => handlePlayAssistantMessage(message) : undefined} />)}
@@ -294,14 +309,15 @@ export default function ChatPage() {
                 {showTyping && <div className="ma-bubble flex items-center gap-2 self-start rounded-[20px_20px_20px_6px] bg-surface px-4 py-3" role="status"><ProcessingDots /><span className="text-[13px] text-muted">{copy.typingMessage}</span></div>}
                 {showSlowNote && <p className="-mt-1 self-start px-1 text-xs text-muted">{recoveryCopy.leaveAndReturn}</p>}
                 <ChatTurnRecovery turns={recoveryTurns} locale={locale} connected={connectionStatus === "connected"} onRetry={retryTurn} onDismiss={dismissTurn} />
-                <SymptomIntakePanel locale={locale} sessionId={sessionId} sourceMessageId={visibleMessages.findLast((message) => message.role === ChatRole.USER)?.id}
+                <SymptomIntakePanel locale={locale} sessionId={sessionId} offerSourceId={pendingOffer?.sourceMessageId}
+                    onOfferAnswered={dismissOffer} onFocusComposer={focusComposer}
                     registerReply={registerPrivateReply} onComposerState={updateIntakeComposer} onRestoreInput={setInput} handsFree={handsFreeMode}
                     onReadAloud={(text, language) => handlePlayAssistantMessage({ content: text, language })} />
             </div>
             </div>
             {voiceMode.snapshot && <VoiceModePanel snapshot={voiceMode.snapshot} locale={locale} remainingSeconds={voiceMode.remainingSeconds} ringRef={voiceMode.ringRef}
                 onTogglePause={voiceMode.togglePause} onEnd={voiceMode.end} onRetry={voiceMode.start} onUseText={voiceMode.end} />}
-            <form hidden={voiceMode.active} className="shrink-0 -mx-4 mt-auto space-y-1.5 bg-background/95 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+12px)] backdrop-blur-md" onSubmit={(event) => { followLatestRef.current = true; handleSend(event); }}>
+            <form ref={composerForm} hidden={voiceMode.active} className="shrink-0 -mx-4 mt-auto space-y-1.5 bg-background/95 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+12px)] backdrop-blur-md" onSubmit={(event) => { followLatestRef.current = true; handleSend(event); }}>
                 <div className="flex items-end gap-2">
                     <div className="flex min-h-[52px] min-w-0 flex-1 items-end rounded-[26px] border border-line-strong bg-surface pr-1.5 pb-1.5 transition focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/12">
                         <ChatTextarea aria-label={controls.message} className="pl-[18px]" onChange={(event) => setInput(event.target.value)}
