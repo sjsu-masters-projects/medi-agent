@@ -305,6 +305,12 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                             <dd className={`font-mono text-lg font-medium ${adrFlags > 0 ? "text-risk" : "text-ink"}`}>{adrFlags}</dd>
                         </div>
                     </dl>
+                    <Link
+                        className="ma-press inline-flex h-[34px] items-center gap-2 rounded-[9px] border border-line-strong bg-surface px-3 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink"
+                        href={`/patients/${encodeURIComponent(patientId)}/handoff`}
+                    >
+                        Handoff summary
+                    </Link>
                     <button
                         aria-label="Refresh patient data"
                         className="ma-press inline-flex h-[34px] items-center gap-2 rounded-[9px] border border-line-strong bg-surface px-3 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink"

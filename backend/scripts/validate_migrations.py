@@ -17,8 +17,8 @@ MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "src" / "app" / "db" / "m
 # Applied 067 filenames stay immutable. Only that exact historical pair is allowed;
 # an additional file at 067 must still fail rather than silently changing history.
 LEGACY_SHARED_SEQUENCES = frozenset({11, 38, 39, 40, 41, 42, 43, 47, 48, 51})
-# 89 and 90 belong to sibling branches that have not merged yet; remove each once its file exists.
-RESERVED_SEQUENCES = frozenset({89, 90})
+# 90 belongs to an open sibling branch (PR #215); remove it once its file exists.
+RESERVED_SEQUENCES = frozenset({90})
 LEGACY_SHARED_FILENAME_GROUPS = frozenset(
     {
         frozenset(
