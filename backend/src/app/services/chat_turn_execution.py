@@ -17,6 +17,7 @@ class TurnChatService(ChatService):
         super().__init__(original.db)
         self.execution, self.user = execution, user
         self.reply: dict[str, Any] | None = None
+        self.evidence: dict[str, Any] | None = None
         self.pending_state: dict[str, Any] | None = None
         self.pending_state_version: str | None = None
 
@@ -25,8 +26,10 @@ class TurnChatService(ChatService):
             return self.user
         if self.reply is not None:
             raise RuntimeError("Only one reply can be staged per turn")
+        evidence = data.get("evidence")
+        self.evidence = evidence if isinstance(evidence, dict) else None
         self.reply = {
-            **data,
+            **{key: value for key, value in data.items() if key != "evidence"},
             "id": str(uuid4()),
             "patient_id": patient_id,
             "role": self._coerce_role(data.get("role")),

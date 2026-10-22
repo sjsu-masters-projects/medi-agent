@@ -585,8 +585,10 @@ def test_recap_keeps_recent_patient_and_nora_text_without_tool_traffic() -> None
         "Patient: And what does it do?"
     )
     long_history = [_event("user", f"message {i} " + "x" * 400) for i in range(10)]
-    recap = recent_conversation(long_history).splitlines()
-    assert len(recap) == 6 and recap[-1].startswith("Patient: message 9") and len(recap[-1]) <= 289
+    recap = recent_conversation(long_history)
+    # Whole turns under a character budget (AI-003), not three turns of 280 characters.
+    assert recap.splitlines()[-1].startswith("Patient: message 9") and len(recap) <= 6000
+    assert len(recap.splitlines()) > 6
 
 
 @pytest.mark.asyncio
@@ -724,6 +726,13 @@ async def test_the_server_writes_the_source_line_and_drops_the_models_own() -> N
         "La metformina baja el azúcar.\n\n"
         "Fuente: MedlinePlus: Metformina (consultado el 10 oct 2026)"
     )
+    # The same grounding is kept as structured evidence for the saved reply (AI-003).
+    evidence = complete["evidence"]
+    assert evidence["version"] == 1
+    assert evidence["tools"] == ["submit_triage_decision", "get_medication_information"]
+    assert [(s["kind"], s["source"], s["title"]) for s in evidence["sources"]] == [
+        ("reference", "medlineplus", "Metformina")
+    ]
 
     # The next turn uses no reference, so it carries no source line.
     later = await _turn(
@@ -762,7 +771,9 @@ async def test_a_model_written_source_line_is_removed_even_when_no_tool_was_used
         tool_allowlist=TOOL_ALLOWLIST,
     )
     events = await _turn(CareCoordinatorRuntime(runner=runner), "What does metformin do?")
-    assert _first(events, "complete")["response_text"] == "Metformin lowers sugar."
+    complete = _first(events, "complete")
+    assert complete["response_text"] == "Metformin lowers sugar."
+    assert complete["evidence"]["sources"] == [] and "made-up" not in str(complete["evidence"])
 
 
 class _DocumentCoordinator(BaseLlm):
@@ -884,3 +895,28 @@ async def test_a_document_answer_ends_with_the_server_written_document_source(
     # Only the page of the item the reply talks about; the model's own line is gone.
     assert _first(events, "complete")["response_text"] == f"{reply}\n\n{line}"
     assert _chunks(events).endswith(f"\n\n{line}")
+
+
+@pytest.mark.asyncio
+async def test_the_stored_summary_reaches_the_model_context_with_the_recent_turns() -> None:
+    runner = MagicMock()
+    runner.session_service.get_session = AsyncMock(return_value=None)
+    runner.session_service.create_session = AsyncMock()
+    runner.run_async.return_value = _empty_stream()
+    runtime = CareCoordinatorRuntime(runner=runner)
+
+    await anext(
+        runtime.process_stream(
+            patient_id=PATIENT_ID,
+            user_id="user-1",
+            session_id="day-2026-10-22",
+            message="And with food?",
+            language=Language.EN.value,
+            earlier_messages=[{"role": "user", "content": "Why metformin?"}],
+            conversation_summary="Earlier the patient asked about metformin timing.",
+        )
+    )
+
+    recap = runner.run_async.call_args.kwargs["state_delta"][RECENT_CONVERSATION_STATE_KEY]
+    assert "Earlier the patient asked about metformin timing." in recap
+    assert recap.endswith("Most recent messages:\nPatient: Why metformin?")

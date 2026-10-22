@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     care_plan_ai_enabled: bool = True
     care_plan_translation_ai_enabled: bool = True
     soap_ai_enabled: bool = True
+    conversation_summary_ai_enabled: bool = True
     # Operational ceiling per SOAP attempt, not measured task performance.
     soap_generation_timeout_seconds: float = Field(default=90.0, gt=0, le=300)
 
