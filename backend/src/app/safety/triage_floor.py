@@ -265,6 +265,16 @@ _ADVERSE_REPORT_LANGUAGE = re.compile(
 )
 
 
+# Every rule `deterministic_safety_floor` can emit, with the urgency it carries. The
+# persistence layer (record_chat_safety_turn, migration 097) must accept exactly these; a
+# unit and a PostgreSQL guard test enumerate this table so a new rule cannot ship unsaved.
+FLOOR_RULE_URGENCY: dict[str, str] = {
+    "emergency_mental_health_keyword": "emergency",
+    "emergency_symptom_keyword": "emergency",
+    "urgent_medication_error": "urgent",
+}
+
+
 @dataclass(frozen=True)
 class SafetyVerdict:
     """A classification the floor decided, with the rule that decided it.

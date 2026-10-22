@@ -56,6 +56,16 @@ def apply_safety_override(
     return intent, _as_urgency(urgency), reason
 
 
+def override_rule_id(message: str, model_urgency: str, final_urgency: str) -> str | None:
+    """The rule that raised `model_urgency` to `final_urgency`, or None if nothing was raised."""
+    if not is_escalation(model_urgency, final_urgency):
+        return None
+    floor = deterministic_safety_floor(message)
+    if floor is not None and floor.urgency == final_urgency:
+        return floor.safety_rule
+    return "adverse_effect_signal"
+
+
 def verdict_to_tuple(verdict: SafetyVerdict) -> tuple[str, UrgencyType, str]:
     return verdict.intent, verdict.urgency, verdict.reason
 
