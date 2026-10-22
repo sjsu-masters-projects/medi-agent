@@ -57,6 +57,33 @@ class ChatSafetyService:
             },
         }
 
+    async def record_audit_safely(
+        self, patient_id: str, turn_id: str, payload: dict[str, Any]
+    ) -> bool:
+        """SAFE-002 audit for a raised or escalated turn. Idempotent per turn id, so the one
+        immediate retry (and any later redelivery of the turn) cannot duplicate a row. An
+        audit outage never blocks or alters the patient's answer."""
+        for _attempt in range(2):
+            try:
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        self.db.rpc(
+                            "record_chat_turn_safety_audit",
+                            {
+                                "p_patient_id": patient_id,
+                                "p_turn_id": turn_id,
+                                "p_payload": payload,
+                            },
+                        ).execute
+                    ),
+                    timeout=5,
+                )
+                if isinstance(result.data, dict):
+                    return True
+            except Exception:
+                logger.warning("Safety audit persistence unavailable; turn answer unaffected")
+        return False
+
     async def deliver_safely(self, record: dict[str, Any]) -> dict[str, Any]:
         if record["persistence_status"] != "saved":
             return {"delivery_state": "unavailable", "clinicians_notified": 0}

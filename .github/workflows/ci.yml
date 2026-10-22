@@ -434,6 +434,11 @@ jobs:
             image: postgres:16-alpine
             files: tests/integration/test_symptom_intake_postgres.py tests/integration/test_symptom_handoff_postgres.py tests/integration/test_symptom_report_history_postgres.py
             minimums: test_symptom_intake_postgres=17 test_symptom_handoff_postgres=8 test_symptom_report_history_postgres=11
+          - name: chat-safety
+            # Safety-floor alerts: every floor rule is accepted, typed and delivered (059, 097),
+            # plus the per-turn safety audit. Disposable containers, no remote database.
+            files: tests/integration/test_chat_safety_postgres.py
+            minimums: test_chat_safety_postgres=27
           - name: care-handoff
             # Reviewed care-handoff summaries (089): ownership, append-only versions, approval
             # and export gating, concurrency. Opt-in env is set by the job.
@@ -472,6 +477,7 @@ jobs:
           LOC003_TEST_POSTGRES_DOCKER: "1"
           CARE_TEAM_PLANS_TEST_POSTGRES_DOCKER: "1"
           SYMPTOM_INTAKE_TEST_POSTGRES: "1"
+          CHAT_SAFETY_TEST_POSTGRES: "1"
           CHAT_SAFETY_TEST_POSTGRES_DOCKER: "1"
           EXTERNAL_REVIEW_TEST_POSTGREST_DOCKER: "1"
         run: |

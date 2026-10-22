@@ -47,6 +47,7 @@ from app.models.enums import Language
 from app.routers.chat import _send_safety_turn
 from app.safety import TRIAGE_COPY
 from app.safety.intake_gate import evaluate_intake_safety
+from app.services.chat_safety_service import ChatSafetyService
 
 EN_COPY = TRIAGE_COPY[Language.EN.value]
 ES_COPY = TRIAGE_COPY[Language.ES.value]
@@ -546,3 +547,125 @@ def test_urgent_symptom_keeps_care_team_escalation_when_draft_starts(
 
     assert result["start"]["urgency"] == "urgent"
     assert result["complete"]["escalation_required"] is True
+
+
+# ---------------------------------------------------------------------------
+# SAFE-002: a medication error is saved, alerted and typed urgent (not emergency)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "locale,message",
+    [
+        ("en-US", "I took my metformin twice"),
+        ("es-MX", "tomé dos veces mi metformina"),
+    ],
+)
+def test_a_medication_error_is_saved_alerted_and_urgent(
+    client, override_db, patient_id, monkeypatch, locale, message
+) -> None:
+    _patch_chat_runtime(monkeypatch, patient_id)
+    recorded: list[dict[str, Any]] = []
+    fake_store = ChatSafetyService.record_turn  # installed by _patch_chat_runtime
+
+    async def _spy(self, patient_id, payload):
+        recorded.append(payload)
+        return await fake_store(self, patient_id, payload)
+
+    delivered = AsyncMock(return_value=[{"delivery_state": "delivered", "clinicians_notified": 1}])
+    monkeypatch.setattr("app.routers.chat.ChatSafetyService.record_turn", _spy)
+    monkeypatch.setattr("app.routers.chat.ChatSafetyService.deliver_pending", delivered)
+
+    result = _run_turn(client, patient_id, message, locale)
+
+    assert result["start"]["urgency"] == "urgent"
+    assert result["complete"]["urgency"] == "urgent"
+    assert result["complete"]["intent"] == "medication_question"
+    assert result["complete"]["persistence_status"] == "saved"
+    assert result["complete"]["safety_rule"] == "urgent_medication_error"
+    assert (
+        result["complete"]["message"]["content"] == TRIAGE_COPY[locale]["medication_error_response"]
+    )
+    assert [payload["safety_rule"] for payload in recorded] == ["urgent_medication_error"]
+    delivered.assert_awaited_once()
+
+
+def _stub_classification(monkeypatch: pytest.MonkeyPatch, **fields: Any) -> None:
+    async def _process_stream(_self, **_kwargs):
+        yield {
+            "type": "classification",
+            "intent": "general",
+            "route": "triage",
+            "classification_reason": "stubbed",
+            **fields,
+        }
+        yield {"type": "complete", "response_text": "Stub reply.", "fallback_used": False}
+
+    monkeypatch.setattr(CareCoordinatorRuntime, "process_stream", _process_stream)
+
+
+def test_a_raised_urgency_is_audited_without_message_text(
+    client, override_db, patient_id, monkeypatch
+) -> None:
+    _patch_chat_runtime(monkeypatch, patient_id)
+    _stub_classification(
+        monkeypatch,
+        urgency="urgent",
+        model_urgency="routine",
+        override_rule="adverse_effect_signal",
+        escalation_required=True,
+    )
+    audit = AsyncMock(return_value=True)
+    monkeypatch.setattr("app.routers.chat.ChatSafetyService.record_audit_safely", audit)
+
+    _run_turn(client, patient_id, "My ankle feels a bit odd today")
+
+    audit.assert_awaited_once()
+    _patient, turn_id, payload = audit.await_args.args
+    assert turn_id
+    assert payload == {
+        "safety_rule": "adverse_effect_signal",
+        "rule_version": "triage-floor/1",
+        "model_urgency": "routine",
+        "final_urgency": "urgent",
+        "outcome": "urgency_raised",
+        "escalation_required": True,
+    }
+
+
+def test_a_model_escalation_is_audited_as_model_classification(
+    client, override_db, patient_id, monkeypatch
+) -> None:
+    _patch_chat_runtime(monkeypatch, patient_id)
+    _stub_classification(
+        monkeypatch,
+        urgency="urgent",
+        model_urgency="urgent",
+        override_rule=None,
+        escalation_required=True,
+    )
+    audit = AsyncMock(return_value=True)
+    monkeypatch.setattr("app.routers.chat.ChatSafetyService.record_audit_safely", audit)
+
+    _run_turn(client, patient_id, "My ankle feels a bit odd today")
+
+    payload = audit.await_args.args[2]
+    assert payload["safety_rule"] == "model_classification"
+    assert payload["outcome"] == "model_escalated"
+
+
+def test_a_clean_turn_is_not_audited(client, override_db, patient_id, monkeypatch) -> None:
+    _patch_chat_runtime(monkeypatch, patient_id)
+    _stub_classification(
+        monkeypatch,
+        urgency="routine",
+        model_urgency="routine",
+        override_rule=None,
+        escalation_required=False,
+    )
+    audit = AsyncMock(return_value=True)
+    monkeypatch.setattr("app.routers.chat.ChatSafetyService.record_audit_safely", audit)
+
+    _run_turn(client, patient_id, "What time does the clinic open?")
+
+    audit.assert_not_awaited()

@@ -18,7 +18,8 @@ MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "src" / "app" / "db" / "m
 # an additional file at 067 must still fail rather than silently changing history.
 LEGACY_SHARED_SEQUENCES = frozenset({11, 38, 39, 40, 41, 42, 43, 47, 48, 51})
 # 91 belongs to open PR #214, whose migration lands before 092; remove it once its file exists.
-RESERVED_SEQUENCES = frozenset({91})
+# 93-96 are held for sibling branches; SAFE-002's migration is 097.
+RESERVED_SEQUENCES = frozenset({91, 93, 94, 95, 96})
 LEGACY_SHARED_FILENAME_GROUPS = frozenset(
     {
         frozenset(

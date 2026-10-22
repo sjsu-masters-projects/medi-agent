@@ -29,7 +29,11 @@ from app.models.auth import CurrentUser
 from app.models.chat import ChatConversation
 from app.models.enums import ChatRole, Language
 from app.models.symptom_intake import IntakeStart
-from app.safety.intake_gate import IntakeSafetyDecision, evaluate_intake_safety
+from app.safety.intake_gate import (
+    SAFETY_RULE_VERSION,
+    IntakeSafetyDecision,
+    evaluate_intake_safety,
+)
 from app.services.chat_document_catalog import (
     build_document_catalog_reply,
     is_document_catalog_question,
@@ -120,12 +124,37 @@ def _safety_turn_payload(options: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _turn_audit_payload(
+    *,
+    model_urgency: str,
+    urgency: str,
+    override_rule: str | None,
+    escalation_required: bool,
+) -> dict[str, Any] | None:
+    """SAFE-002: a turn is audited only when urgency was raised or the model escalated it.
+    Rule id, version, urgencies and outcome only; never message text."""
+    if override_rule is not None:
+        outcome, rule = "urgency_raised", override_rule
+    elif escalation_required and urgency in {"urgent", "emergency"}:
+        outcome, rule = "model_escalated", "model_classification"
+    else:
+        return None
+    return {
+        "safety_rule": rule,
+        "rule_version": SAFETY_RULE_VERSION,
+        "model_urgency": model_urgency,
+        "final_urgency": urgency,
+        "outcome": outcome,
+        "escalation_required": escalation_required,
+    }
+
+
 def _safety_completion(record: dict[str, Any], decision: IntakeSafetyDecision) -> dict[str, Any]:
     return {
         "type": "assistant_complete",
         "message": _serialize_chat_message(record["assistant_message"]),
         "intent": decision.verdict.intent,
-        "urgency": "emergency",
+        "urgency": decision.verdict.urgency,
         "escalation_required": True,
         "persistence_status": record["persistence_status"],
         "safety_rule": decision.verdict.safety_rule,
@@ -135,7 +164,11 @@ def _safety_completion(record: dict[str, Any], decision: IntakeSafetyDecision) -
 
 async def _send_safety_direction(websocket: WebSocket, decision: IntakeSafetyDecision) -> None:
     await websocket.send_json(
-        {"type": "assistant_start", "intent": decision.verdict.intent, "urgency": "emergency"}
+        {
+            "type": "assistant_start",
+            "intent": decision.verdict.intent,
+            "urgency": decision.verdict.urgency,
+        }
     )
     for chunk in _chunk_text(decision.response_text):
         await websocket.send_json({"type": "assistant_chunk", "content": chunk})
@@ -949,6 +982,8 @@ async def _process_chat_message(
     assistant_intent = "general"
     assistant_urgency = "routine"
     escalation_required = False
+    model_urgency = "routine"
+    override_rule: object = None
     route = "triage"
     assistant_start_sent = False
     streamed_response = False
@@ -975,6 +1010,8 @@ async def _process_chat_message(
                 assistant_urgency = str(event.get("urgency", "routine"))
                 route = str(event.get("route", "triage"))
                 escalation_required = bool(event.get("escalation_required", False))
+                model_urgency = str(event.get("model_urgency") or assistant_urgency)
+                override_rule = event.get("override_rule")
 
                 await websocket.send_json(
                     {
@@ -1034,6 +1071,7 @@ async def _process_chat_message(
         assistant_intent = "general"
         assistant_urgency = "routine"
         escalation_required = False
+        override_rule = None
         route = "triage"
 
     delegation_events: list[dict[str, Any]] = []
@@ -1160,6 +1198,16 @@ async def _process_chat_message(
                 }
             )
     if escalation_required:
+        audit = _turn_audit_payload(
+            model_urgency=model_urgency,
+            urgency=assistant_urgency,
+            override_rule=override_rule if isinstance(override_rule, str) else None,
+            escalation_required=escalation_required,
+        )
+        if audit is not None:
+            await ChatSafetyService(service.db).record_audit_safely(
+                str(patient_id), str(user_message["id"]), audit
+            )
         clinicians_notified = await service.notify_assigned_clinicians(
             patient_id=str(patient_id),
             payload={

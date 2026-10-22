@@ -77,6 +77,7 @@ from app.core.observability import record_chat_fallback
 from app.core.structured_logging import log_event
 from app.models.generation import GenerationErrorCode, GenerationProviderError
 from app.safety import TRIAGE_COPY, apply_safety_override, deterministic_safety_floor
+from app.safety.escalation import override_rule_id
 from app.utils.localization import resolve_locale_resource
 
 logger = logging.getLogger(__name__)
@@ -267,7 +268,15 @@ class CareCoordinatorRuntime:
                     if decision is not None and not classified:
                         intent, urgency, reason, escalate = _apply_floor_rules(decision, text)
                         classified = True
-                        yield _classification(intent, urgency, reason, escalate)
+                        model_urgency = str(decision.get("urgency") or "routine")
+                        yield _classification(
+                            intent,
+                            urgency,
+                            reason,
+                            escalate,
+                            model_urgency=model_urgency,
+                            override_rule=override_rule_id(text, model_urgency, urgency),
+                        )
 
                     if _is_draft_reset(event):
                         # The model failed after text was shown and the backup is answering
@@ -481,8 +490,19 @@ def _apply_floor_rules(decision: dict[str, Any], message: str) -> tuple[str, str
     return intent, urgency, reason, urgency in {"urgent", "emergency"}
 
 
-def _classification(intent: str, urgency: str, reason: str, escalate: bool) -> dict[str, Any]:
+def _classification(
+    intent: str,
+    urgency: str,
+    reason: str,
+    escalate: bool,
+    *,
+    model_urgency: str | None = None,
+    override_rule: str | None = None,
+) -> dict[str, Any]:
+    """`model_urgency` and `override_rule` feed the SAFE-002 audit; no message text."""
     return {
+        "model_urgency": model_urgency or urgency,
+        "override_rule": override_rule,
         "type": "classification",
         "intent": intent,
         "urgency": urgency,
