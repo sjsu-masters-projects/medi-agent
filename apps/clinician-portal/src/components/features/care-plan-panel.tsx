@@ -11,6 +11,10 @@ import { Icon } from "@/components/ui/icons";
 import { Popover } from "@/components/ui/popover";
 import { SourceFileIcon, sourceDocumentLabel } from "@/components/features/source-file";
 import { formatClinicianDateTime } from "@/utils/dates";
+import { InteractionCoverageNote, ItemCrossPlanSection, PublishWithoutDialog, otherPlanLabel, unresolvedBlockers, useCrossPlanReview, type ResolveOutcome } from "@/components/features/cross-plan-conflicts";
+import { ApiClientError } from "@/services/api";
+import { crossPlanConflictsFrom, errorCode, newIdempotencyKey, resolveConflict } from "@/services/care-team-plans";
+import type { CarePlanScope, CrossPlanConflict, CrossPlanResolutionRequest } from "@/types";
 import { ApprovedWording, BilingualWording, LOCALE_LABEL, otherLocale, verificationBlocker, wordingComplete, type BackCheck } from "@/components/features/care-plan-wording";
 import {
     approveClinicianCarePlan,
@@ -32,6 +36,8 @@ import {
 interface CarePlanPanelProps {
     patientId: string;
     onPublished?: () => void;
+    /** Which of my plans to review when I hold several links to this patient (PLAN-002). */
+    scope?: CarePlanScope;
 }
 
 type EditableItem = CarePlanItem & { clinician_confirmed: boolean };
@@ -94,7 +100,7 @@ function displaySource(item: CarePlanItem): string {
 }
 
 /** Clinician-controlled publication surface. No browser mutation bypasses this API. */
-export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
+export function CarePlanPanel({ patientId, onPublished, scope }: CarePlanPanelProps) {
     const [plan, setPlan] = useState<CarePlanVersion | null>(null);
     const [activePlan, setActivePlan] = useState<CarePlanVersion | null>(null);
     const [patientLocale, setPatientLocale] = useState("en-US");
@@ -124,6 +130,15 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
     const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
     const [reviewTarget, setReviewTarget] = useState("");
     const [justApproved, setJustApproved] = useState(false);
+    const cross = useCrossPlanReview(patientId, plan?.status === "draft" ? plan.id : null, true);
+    const [publishMessage, setPublishMessage] = useState<string | null>(null);
+    const [publishNotice, setPublishNotice] = useState<string | null>(null);
+    const [confirmingWithout, setConfirmingWithout] = useState(false);
+    const [ackedByItem, setAckedByItem] = useState<Record<string, string[]>>({});
+    // One idempotency key per publish attempt; a retry of the same request reuses it.
+    const publishAttempt = useRef<{ signature: string; key: string } | null>(null);
+    const careTeamId = scope?.careTeamId;
+    const carePlanId = scope?.carePlanId;
 
     useEffect(() => {
         const syncTarget = () => setReviewTarget(window.location.hash.slice(1));
@@ -160,9 +175,10 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
         setLoading(true);
         setError(null);
         try {
+            const planScope = careTeamId || carePlanId ? { careTeamId, carePlanId } : undefined;
             const [context, nextGeneration] = await Promise.all([
-                fetchClinicianCarePlanReviewContext(patientId),
-                fetchClinicianCarePlanGeneration(patientId),
+                planScope ? fetchClinicianCarePlanReviewContext(patientId, planScope) : fetchClinicianCarePlanReviewContext(patientId),
+                planScope ? fetchClinicianCarePlanGeneration(patientId, planScope) : fetchClinicianCarePlanGeneration(patientId),
             ]);
             const next = context.latest;
             setPlan(next);
@@ -179,7 +195,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
         } finally {
             setLoading(false);
         }
-    }, [patientId]);
+    }, [patientId, careTeamId, carePlanId]);
 
     useEffect(() => { void load(); }, [load]);
 
@@ -319,21 +335,77 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
             setPlan(saved);
             setItems(saved.items.map((item) => ({ ...item, clinician_confirmed: false })));
             setHasUnsavedChanges(false);
+            void cross.refresh();
         } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to save the draft."); }
         finally { setSaving(false); }
     }
 
-    async function approve() {
+    async function publish(excludedItemIds: string[] = []) {
         if (!plan || generationBlocked || overlapping.size || unresolved.length || unverified.length || undecidedMedications.length || !note.trim() || hasUnsavedChanges) return;
-        setSaving(true); setError(null);
-        try { await approveClinicianCarePlan(patientId, plan.id, note); setJustApproved(true); await load(); onPublished?.(); }
-        catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to approve this care plan."); }
+        const signature = JSON.stringify([plan.id, note, [...excludedItemIds].sort()]);
+        if (publishAttempt.current?.signature !== signature) publishAttempt.current = { signature, key: newIdempotencyKey() };
+        setSaving(true); setError(null); setPublishMessage(null); setPublishNotice(null);
+        try {
+            const result = await approveClinicianCarePlan(patientId, plan.id, note, { idempotencyKey: publishAttempt.current.key, excludedItemIds });
+            publishAttempt.current = null;
+            setConfirmingWithout(false);
+            setJustApproved(true);
+            const held = result.excluded_item_ids?.length ?? 0;
+            const warned = result.warnings?.length ?? 0;
+            setPublishNotice([
+                held ? `Published without ${held} item${held === 1 ? "" : "s"}. ${held === 1 ? "It stays" : "They stay"} in your next draft as pending.` : null,
+                warned ? `${warned} non-blocking overlap${warned === 1 ? "" : "s"} with other care teams ${warned === 1 ? "was" : "were"} noted.` : null,
+                result.replayed ? "This publish had already been recorded; nothing was published twice." : null,
+            ].filter(Boolean).join(" ") || null);
+            await load(); onPublished?.();
+        } catch (cause) {
+            const conflicts = crossPlanConflictsFrom(cause);
+            if (conflicts) {
+                publishAttempt.current = null;
+                setConfirmingWithout(false);
+                setPublishMessage(`Nothing was published. ${conflicts.length === 1 ? "A conflict with another care team's plan needs" : `${conflicts.length} conflicts with other care teams' plans need`} your attention; the list below is refreshed.`);
+                void cross.refresh();
+            } else if (errorCode(cause) === "IDEMPOTENCY_KEY_REUSED") {
+                publishAttempt.current = null;
+                setPublishMessage("Nothing was published. This publish attempt was already used for different content. Review the plan and publish again.");
+            } else {
+                // A definite refusal ends the attempt; an unknown outcome keeps the key so a retry cannot publish twice.
+                if (cause instanceof ApiClientError && cause.status >= 400 && cause.status < 500) publishAttempt.current = null;
+                const message = cause instanceof Error ? cause.message : "Unable to approve this care plan.";
+                if (confirmingWithout) setPublishMessage(message); else setError(message);
+            }
+        }
         finally { setSaving(false); }
+    }
+    const approve = () => publish([]);
+
+    function focusItemEditor(itemId: string) {
+        const field = document.getElementById(`care-plan-item-${itemId}`)?.closest("article")?.querySelector<HTMLElement>("textarea, input[type='text'], input:not([type])");
+        field?.scrollIntoView?.({ block: "center" });
+        field?.focus();
+    }
+
+    async function resolveCrossConflict(conflict: CrossPlanConflict, body: CrossPlanResolutionRequest): Promise<ResolveOutcome> {
+        if (!plan) return { ok: false, message: "The draft is not available." };
+        try {
+            await resolveConflict(patientId, plan.id, conflict.fingerprint, body);
+            if (body.resolution === "keep_both") {
+                setAckedByItem((current) => ({ ...current, [conflict.draft_item_id]: [...(current[conflict.draft_item_id] ?? []), conflict.fingerprint] }));
+            }
+            await cross.refresh();
+            return { ok: true };
+        } catch (cause) {
+            if (errorCode(cause) === "CONFLICT_CHANGED" || (cause instanceof ApiClientError && cause.status === 409)) {
+                await cross.refresh();
+                return { ok: false, stale: true, message: "This conflict changed since you opened it, so nothing was recorded. The comparison is refreshed; choose again." };
+            }
+            return { ok: false, message: cause instanceof Error ? cause.message : "Unable to record your decision." };
+        }
     }
 
     async function retry() {
         setSaving(true); setError(null);
-        try { await retryClinicianCarePlanGeneration(patientId); await load(); }
+        try { await (careTeamId || carePlanId ? retryClinicianCarePlanGeneration(patientId, { careTeamId, carePlanId }) : retryClinicianCarePlanGeneration(patientId)); await load(); }
         catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to retry draft generation."); }
         finally { setSaving(false); }
     }
@@ -345,13 +417,20 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
     const pendingUploadReview = (item: CarePlanItem) => (item.sources ?? (item.source ? [item.source] : [])).some((citation) => citation.upload_review_status && citation.upload_review_status !== "approved");
     const retained = items.filter((item) => !item.is_removed);
     const verifiedCount = retained.filter((item) => item.wording_verified && wordingComplete(item)).length;
-    const blockerCount = unresolved.length + overlapping.size + undecidedMedications.length;
+    const crossBlockers = unresolvedBlockers(cross.state.review);
+    const crossBlockedIds = new Set(crossBlockers.map((conflict) => conflict.draft_item_id).filter((id) => items.some((item) => item.id === id && !item.is_removed)));
+    const blockerCount = unresolved.length + overlapping.size + undecidedMedications.length + crossBlockedIds.size;
     const pendingUploads = retained.some(pendingUploadReview);
     const reviewReady = !saving && !generationBlocked && !hasUnsavedChanges && blockerCount === 0 && unverified.length === 0;
-    const canApprove = !(saving || generationBlocked || overlapping.size > 0 || hasUnsavedChanges || unresolved.length > 0 || unverified.length > 0 || undecidedMedications.length > 0 || !note.trim());
+    const canApproveIgnoringConflicts = !(saving || generationBlocked || overlapping.size > 0 || hasUnsavedChanges || unresolved.length > 0 || unverified.length > 0 || undecidedMedications.length > 0 || !note.trim());
+    const canApprove = canApproveIgnoringConflicts && crossBlockedIds.size === 0;
+    const withoutItems = items.filter((item) => crossBlockedIds.has(item.id)).map((item) => ({
+        id: item.id, title: englishTitle(item),
+        reason: `Conflicts with ${otherPlanLabel(crossBlockers.find((conflict) => conflict.draft_item_id === item.id)?.other_plan ?? null)}`,
+    }));
     function itemState(item: EditableItem): "verified" | "blocker" | "unverified" | "removed" {
         if (item.is_removed) return "removed";
-        if (unresolvedIds.has(item.id) || overlapping.has(item.id) || undecidedIds.has(item.id) || pendingUploadReview(item)) return "blocker";
+        if (unresolvedIds.has(item.id) || overlapping.has(item.id) || undecidedIds.has(item.id) || crossBlockedIds.has(item.id) || pendingUploadReview(item)) return "blocker";
         return item.wording_verified && wordingComplete(item) ? "verified" : "unverified";
     }
     const positionOf = (id: string) => visibleItems.findIndex((item) => item.id === id) + 1;
@@ -369,7 +448,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
     const steps: { label: string; state: "done" | "current" | "blocked" | "todo" }[] = [
         { label: "Sources", state: pendingUploads ? "blocked" : "done" },
         { label: `Wording EN · ES ${verifiedCount}/${retained.length}`, state: unverified.length === 0 ? "done" : pendingUploads ? "todo" : "current" },
-        { label: `Resolve blockers ${Math.max(0, retained.length - new Set([...unresolvedIds, ...overlapping.keys(), ...undecidedIds]).size)}/${retained.length}`, state: blockerCount === 0 && !generationBlocked ? "done" : "blocked" },
+        { label: `Resolve blockers ${Math.max(0, retained.length - new Set([...unresolvedIds, ...overlapping.keys(), ...undecidedIds, ...crossBlockedIds]).size)}/${retained.length}`, state: blockerCount === 0 && !generationBlocked ? "done" : "blocked" },
         { label: "Preview Today", state: reviewReady ? "current" : "todo" },
         { label: "Approve", state: reviewReady && note.trim() ? "current" : "todo" },
     ];
@@ -403,6 +482,9 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
                 {isTranslatedFromSpanish(item) ? <p className="flex items-center gap-1.5 text-xs text-ai-ink"><Icon name="spark" className="h-3 w-3" />English translated from Spanish source</p> : null}
                 {isDraft && overlapping.has(item.id) ? <p className="text-sm text-warn-ink">Overlapping proposals — review before choosing. Compare their sources and keep one reviewed proposal per activity or medication.</p> : null}
             </header>
+
+            {isDraft && !item.is_removed ? <ItemCrossPlanSection acknowledged={new Set(ackedByItem[item.id] ?? [])} busy={saving} itemId={item.id} onChangeItem={() => focusItemEditor(item.id)}
+                onRemoveItem={() => patchItem(item.id, { is_removed: true })} onResolve={resolveCrossConflict} onRetry={() => void cross.refresh()} review={cross.state.review} status={cross.state.status} unsaved={hasUnsavedChanges} /> : null}
 
             {changes.get(item.id) === "edited" && previousByFact.get(item.source_fact_id) ? <div className="rounded-xl border border-line bg-surface-2 p-3 text-xs text-ink-2"><p className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Approved version {activePlan?.version_number} wording</p><p className="mt-1 text-sm">{previousByFact.get(item.source_fact_id)?.title} — {previousByFact.get(item.source_fact_id)?.instructions} · {previousByFact.get(item.source_fact_id)?.frequency}</p></div> : null}
 
@@ -522,6 +604,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
                     </div>
                     {generation?.status === "failed" ? <button className="ma-press h-[34px] shrink-0 rounded-[9px] border border-line-strong bg-surface px-3 text-[13px] font-semibold text-ink-2 hover:bg-surface-2" disabled={saving} onClick={() => void retry()} type="button">Retry generation</button> : null}
                 </div> : null}
+                {publishNotice ? <p className="flex items-start gap-2 rounded-xl border border-ok-line bg-ok-soft px-4 py-3 text-sm text-ok-ink" role="status"><Icon name="check" className="mt-0.5 h-4 w-4 shrink-0" />{publishNotice}</p> : null}
                 {error ? <p className="flex items-start gap-2 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink" role="alert"><Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />{error}</p> : null}
                 {isDraft && importedItems.length ? <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary-line bg-primary-tint px-4 py-3 text-sm text-ink-2">
                     <div className="min-w-0 flex-1 basis-[420px]">
@@ -548,15 +631,17 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
                         <p className="mt-2 text-xs text-muted">“New evidence” means a new source fact, not a verified new therapy. Reconcile overlapping medication instructions before approval.</p>
                     </Popover>
                 </div>
-                {(hasUnsavedChanges || unresolved.length || unverified.length || untranslated.length || undecidedMedications.length || overlapping.size || !note.trim()) ? <ul className="mt-2.5 grid gap-x-6 gap-y-1 text-[13px] leading-snug text-ink-2 lg:grid-cols-2">
+                {(hasUnsavedChanges || unresolved.length || unverified.length || untranslated.length || undecidedMedications.length || overlapping.size || crossBlockedIds.size || !note.trim()) ? <ul className="mt-2.5 grid gap-x-6 gap-y-1 text-[13px] leading-snug text-ink-2 lg:grid-cols-2">
                     {hasUnsavedChanges ? <li className="flex items-start gap-2 text-warn-ink"><Icon name="alert" className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>Save your edits before approving. New evidence may have changed the draft while you reviewed it.</span></li> : null}
                     {unresolved.length ? <li className="flex items-start gap-2 text-warn-ink"><Icon name="alert" className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>{unresolved.length} unresolved item{unresolved.length === 1 ? "" : "s"} block whole-plan approval. Supply missing instructions or remove incomplete items. Confirm uncertainty only after reviewing the evidence.</span></li> : null}
                     {untranslated.length ? <li className="flex items-start gap-2 text-warn-ink"><Icon name="alert" className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>{untranslated.length} item{untranslated.length === 1 ? " needs" : "s need"} wording in both English and Spanish. Draft a translation or write it yourself.</span></li> : null}
                     {unverified.length > untranslated.length ? <li className="flex items-start gap-2"><span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" /><span>Check the English and Spanish wording of {unverified.length - untranslated.length} item{unverified.length - untranslated.length === 1 ? "" : "s"} before approval. AI translations are drafts until you check them.</span></li> : null}
                     {undecidedMedications.length ? <li className="flex items-start gap-2 text-warn-ink"><Icon name="alert" className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>Choose whether each medication updates a matching active record or creates a new record. Remove an unchanged proposal rather than publishing a duplicate.</span></li> : null}
                     {overlapping.size ? <li className="flex items-start gap-2 text-warn-ink"><Icon name="alert" className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>{overlapping.size} items overlap. Compare their sources and keep one reviewed proposal per activity or medication before publication. Different wording is not proof of a different therapy.</span></li> : null}
+                    {crossBlockedIds.size ? <li className="flex items-start gap-2 text-risk-ink"><Icon name="alert" className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>{crossBlockedIds.size} conflict{crossBlockedIds.size === 1 ? "" : "s"} to resolve with other care teams&apos; plans. Change or remove the item, keep both with a reason, ask the other care team, or publish without {crossBlockedIds.size === 1 ? "it" : "them"}.</span></li> : null}
                     {!note.trim() ? <li className="flex items-start gap-2"><span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#94A3B8]" /><span>Add an approval note describing the basis for your decision.</span></li> : null}
                 </ul> : null}
+                {cross.state.review ? <InteractionCoverageNote className="mt-2.5" /> : null}
             </section> : null}
 
             {/* Three panes: items | editor | protected source */}
@@ -620,6 +705,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
             <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-2 xl:grid-cols-[minmax(170px,220px)_minmax(220px,1fr)_auto_auto]">
                 <div className="min-w-0 xl:col-start-1 xl:row-start-1">
                     <p className="font-mono text-xs text-ink-2">{verifiedCount} of {retained.length} verified{blockerCount ? ` · ${blockerCount} blocker${blockerCount === 1 ? "" : "s"}` : ""}</p>
+                    {crossBlockedIds.size ? <p className="mt-0.5 text-xs font-semibold text-risk-ink" data-testid="conflict-summary">{crossBlockedIds.size} conflict{crossBlockedIds.size === 1 ? "" : "s"} to resolve</p> : null}
                     <p className="mt-0.5 text-xs leading-snug text-muted">{activePlan ? `v${activePlan.version_number} stays live in Today until you approve.` : "Nothing is visible to the patient until approval."}</p>
                 </div>
                 <label className="col-span-3 row-start-2 min-w-0 xl:col-span-1 xl:col-start-2 xl:row-start-1">
@@ -628,7 +714,10 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
                 </label>
                 <button className="ma-press inline-flex h-[42px] items-center whitespace-nowrap rounded-[10px] border border-line-strong bg-surface px-4 text-sm font-semibold text-ink-2 hover:bg-surface-2 hover:text-ink disabled:opacity-60" disabled={saving} onClick={() => void save()} type="button">{saving ? "Saving…" : "Save review"}</button>
                 <button className="ma-press inline-flex h-[42px] items-center gap-2 whitespace-nowrap rounded-[10px] bg-primary px-[18px] text-sm font-semibold text-white shadow-[0_1px_2px_rgba(37,99,235,.3)] hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-track disabled:text-[#94A3B8] disabled:shadow-none" disabled={!canApprove} onClick={() => void approve()} type="button"><Icon name="check" className="h-4 w-4" strokeWidth={2.4} />Approve and publish plan</button>
+                {crossBlockedIds.size ? <button className="ma-press col-span-3 inline-flex h-[38px] items-center justify-center gap-2 whitespace-nowrap rounded-[10px] border border-risk-line bg-surface px-4 text-sm font-semibold text-risk-ink hover:bg-risk-soft disabled:cursor-not-allowed disabled:opacity-50 xl:col-span-4 xl:justify-self-end" disabled={!canApproveIgnoringConflicts} onClick={() => { setPublishMessage(null); setConfirmingWithout(true); }} type="button">Publish without these items</button> : null}
             </div>
+            <div aria-live="polite">{publishMessage && !confirmingWithout ? <p className="mt-2 rounded-lg border border-risk-line bg-risk-soft px-3 py-2 text-sm text-risk-ink" role="alert">{publishMessage}</p> : null}</div>
         </div> : null}
+        <PublishWithoutDialog busy={saving} error={confirmingWithout ? publishMessage : null} items={withoutItems} onClose={() => { setConfirmingWithout(false); setPublishMessage(null); }} onConfirm={() => void publish(withoutItems.map((item) => item.id))} open={confirmingWithout && isDraft} />
     </section>;
 }

@@ -734,5 +734,28 @@ audit rows, logs or fixtures; synthetic data only.
 | D | Per-clinic roles, settings and invitations (same branch) |
 | E | Cross-clinic scheduling and conflict checks (branch `feature/clinic-scheduling-and-tags`) |
 | F | Clinic tags in notifications, email and audit (same branch) |
-| G | Shared clinical core (medications, allergies, conditions, critical alerts) with per-team ownership of everything else, and the patient's visibility control |
-| H | Care plans per care team (PLAN-002) |
+| G | Shared clinical core (medications, allergies, conditions, critical alerts) with per-team ownership of everything else, and the patient's visibility control. **Backend in review on PR #210** (migrations 084 and 086; portals pending); see the [read-path audit and API contract](plan-002-care-plans-per-care-team.md#read-path-audit-clinician-reads-of-owned-or-sensitive-data) |
+| H | Care plans per care team (PLAN-002). **Backend in review on PR #210** (migrations 083 and 085); portals pending |
+
+
+## Slices G and H: review checklist proofs (PR #210, backend)
+
+| | Invariant | Proof |
+| --- | --- | --- |
+| a | No patient data without an active link; another team's owned data hidden | unit: `test_care_team_access`, `test_clinician_record_ownership`, `test_clinician_reads_ownership*`; Docker: `test_care_team_records_postgres` (session reads of documents, facts, SOAP, conditions, ADR) |
+| b | Sensitive conditions never disclosed, with an explicit marker | Docker: `test_a_sensitive_condition_reaches_only_its_recording_team_with_an_explicit_marker`, `test_sensitive_with_an_unknown_recorder_is_visible_to_no_clinician`; unit: deep-dive, SOAP and reconciliation cases |
+| c | Two clinicians at two clinics draft and publish independently; the same clinician at two clinics has two plans | Docker: `test_two_clinicians_at_two_clinics_hold_independent_concurrent_drafts`, `test_same_clinician_at_two_clinics_publishes_two_plans_attributed_to_each_link` |
+| d | Duplicate, stop-versus-continue and dose conflicts block; acknowledgement is stale when either side changes | Docker: `test_publication` conflict cases, `test_an_acknowledgement_goes_stale_*` |
+| e | Concurrent publication, "Not sure" claim and adoption have one winner | Docker: `test_concurrent_publication_by_two_plans_is_serialized_and_rechecked`, `test_concurrent_claims_have_exactly_one_winner`, `test_concurrent_adoption_has_exactly_one_winner_and_a_replay_is_safe` |
+| f | Ambiguous legacy records are not guessed; version history, item and activity ids survive | Docker: `test_ambiguous_legacy_plan_is_left_unassigned_*`, `test_single_link_approver_owns_the_legacy_plan_and_nothing_is_rewritten`, `test_backfill_routes_only_what_is_unambiguous_*` |
+| g | Link revocation and no remaining team keep activities and change no medication | Docker: `test_ending_a_link_makes_the_plan_unowned_*`, `test_no_remaining_team_*` |
+| h | New tables and functions are backend-only; trails are append-only | Docker: `test_browser_roles_cannot_touch_*`, `test_ownership_trail_is_append_only_for_every_role`; each migration's verification block |
+
+## Slices G/H portal status (PR #210)
+
+The shared clinical summary, per-care-team plans, care-plan review items, claim queue and
+care-team selects are built in both portals and described in the
+[PLAN-002 portal section](plan-002-care-plans-per-care-team.md#portal-screens-pr-210-branch-featurecare-team-portals).
+Single-clinic and single-team users see no new chrome. The review-items view and claim queue honour
+the existing clinic filter and "All clinics" header. Local mocked-API checks only; live acceptance
+across two clinicians and two clinics is still open.

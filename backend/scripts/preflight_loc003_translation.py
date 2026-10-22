@@ -11,7 +11,7 @@ Two jobs:
     unreachable, which is exactly where they used to be uncheckable.
 
 ``--check-target`` (read-only reads of the configured project)
-    Reports whether migrations 080-083 are recorded in the target's ledger with the
+    Reports whether migrations 080-082 and 088 are recorded in the target's ledger with the
     checksums this working tree holds, and whether the columns and labels they add are
     actually present. Run this before the deployed acceptance journeys; the journeys
     themselves are recorded in docs/deployed-recheck-2026-10-11.md.
@@ -35,7 +35,7 @@ REQUIRED = (
     "080_message_translation_integrity.sql",
     "081_care_plan_wording_verification.sql",
     "082_loc003_display_provenance.sql",
-    "083_confirmed_message_translation.sql",
+    "088_confirmed_message_translation.sql",
 )
 
 #: Wording that exercises every guard at once: a dose with a unit, a thousands separator, a

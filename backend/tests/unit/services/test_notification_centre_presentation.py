@@ -563,3 +563,35 @@ def test_property_2_full_clinician_safety_links_are_none_or_a_canonical_assessme
             assert link == f"/medwatch?assessment={named}", context
         elif expected is None:
             assert link is None, context
+
+
+@pytest.mark.parametrize(
+    "review_kind",
+    [
+        "unowned_plan",
+        "unassigned_legacy_plan",
+        "cross_plan_conflict",
+        "conflict_acknowledged",
+        "conflict_published_without",
+        "conflict_reply",
+        "unowned_clinical_record",
+    ],
+)
+def test_care_team_work_items_name_the_kind_link_to_the_patient_and_carry_no_record_content(
+    review_kind,
+):
+    raw = item(
+        event_type="care_plan_review",
+        category="care_plans",
+        source_type="care_plan_review_items",
+        metadata={"review_kind": review_kind, "secret": "conflict wording"},
+    )
+
+    shown = present_item(raw, "clinician", "en-US")
+
+    assert shown.title and shown.body and "conflict wording" not in shown.model_dump_json()
+    assert (
+        shown.action_url == f"/patients/{raw['patient_id']}?tab=care-plan&review={raw['source_id']}"
+    )
+    assert shown.source_label == "Care-team work item"
+    assert present_item({**raw, "metadata": {"review_kind": "unknown"}}, "clinician", "en-US").title

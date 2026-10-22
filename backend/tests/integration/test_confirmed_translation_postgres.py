@@ -28,7 +28,7 @@ pytestmark = pytest.mark.skipif(
 def confirmed_db(source_sql):
     sql = source_sql
     sql((MIGRATION.parent / "068_message_translations.sql").read_text())
-    sql((MIGRATION.parent / "083_confirmed_message_translation.sql").read_text())
+    sql((MIGRATION.parent / "088_confirmed_message_translation.sql").read_text())
     sql(f"UPDATE patients SET preferred_language='es-MX' WHERE id='{PATIENT}';")
     thread = open_thread(sql)
     payload = {
@@ -126,7 +126,7 @@ def test_browser_roles_cannot_confirm(confirmed_db, database_role):
 def test_migration_rerun_retains_a_confirmation(confirmed_db):
     sql, payload = confirmed_db
     send(sql, payload)
-    sql((MIGRATION.parent / "083_confirmed_message_translation.sql").read_text())
+    sql((MIGRATION.parent / "088_confirmed_message_translation.sql").read_text())
     assert sql("SELECT count(*) FROM message_translations WHERE clinician_confirmed;") == "1"
 
 

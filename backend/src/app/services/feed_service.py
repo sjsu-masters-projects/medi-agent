@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from supabase import Client
 
 from app.core.exceptions import ValidationError
+from app.services.activity_grouping import group_identical_activities
 from app.services.patient_wording import patient_text
 from app.services.reminder_schedule_service import (
     ReminderScheduleService,
@@ -38,6 +39,20 @@ class FeedSnapshot:
     adherence: list[dict[str, Any]] = field(default_factory=list)
     # The patient's saved language picks approved wording; switching needs no re-review.
     locale: str = "en-US"
+    # care_plan_id -> plan_owner payload (PLAN-002). Empty for previews and legacy data.
+    plan_owners: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # False only when the patient has no active care team (drives "contact your clinic").
+    has_active_care_team: bool = True
+
+
+UNOWNED_FILTER = "unowned"
+
+
+def _first_text(*values: Any) -> str | None:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
 
 
 class FeedService:
@@ -51,8 +66,13 @@ class FeedService:
         patient_id: UUID,
         target_date: date | None = None,
         timezone: str | None = None,
+        care_team_filter: str | None = None,
     ) -> dict[str, Any]:
-        """Get today's feed for a patient."""
+        """Get today's feed for a patient, merged across every approved care plan.
+
+        ``care_team_filter`` is a care-team id or ``"unowned"``; an unknown value yields an
+        empty list rather than an error, so it never reveals whether an id exists.
+        """
         reminder_map: dict[tuple[str, str], dict[str, Any]] = {}
         patient_row = await self._get_patient(patient_id)
         locale = str(patient_row.get("preferred_language") or "en-US")
@@ -73,6 +93,9 @@ class FeedService:
             self._get_today_adherence(patient_id, target_date, effective_timezone),
             self._get_approved_plan_items(patient_id),
         )
+        # Owners are only needed when some approved plan item is in play.
+        plan_owners = await self._get_plan_owners(patient_id) if plan_items else {}
+        has_active_care_team = await self._has_active_care_team(patient_id) if plan_owners else True
         return self.render_snapshot(
             FeedSnapshot(
                 target_date,
@@ -83,10 +106,15 @@ class FeedService:
                 reminder_map,
                 adherence_logs,
                 locale,
-            )
+                plan_owners,
+                has_active_care_team,
+            ),
+            care_team_filter=care_team_filter,
         )
 
-    def render_snapshot(self, snapshot: FeedSnapshot) -> dict[str, Any]:
+    def render_snapshot(
+        self, snapshot: FeedSnapshot, *, care_team_filter: str | None = None
+    ) -> dict[str, Any]:
         """Render without database reads or writes; never invent reminder times."""
         target_date = snapshot.target_date
         effective_timezone = snapshot.timezone
@@ -99,9 +127,13 @@ class FeedService:
             snapshot.obligations, snapshot.plan_items, target_date
         )
 
-        adherence_occurrence_map, adherence_unscheduled_map = self._build_adherence_maps(
-            snapshot.adherence
+        # Identical activities of different plans show as one entry (the oldest). The
+        # records themselves stay separate; this only shapes what the patient sees.
+        group_of, medications, obligations, reminder_map, adherence = self._combine_identical(
+            medications, obligations, snapshot.plan_items, reminder_map, snapshot.adherence
         )
+
+        adherence_occurrence_map, adherence_unscheduled_map = self._build_adherence_maps(adherence)
 
         # Transform to tasks
         tasks: list[dict[str, Any]] = []
@@ -132,6 +164,18 @@ class FeedService:
             target = targets.get((str(task["type"]), str(task["target_id"])))
             if target is not None:
                 task.update(patient_text(str(task["type"]), target, snapshot.locale))
+            members = group_of.get((str(task["type"]), str(task["target_id"])))
+            owners = [
+                owner
+                for member in (members if members else [target] if target is not None else [])
+                if (owner := self._plan_owner_for(member, snapshot)) is not None
+            ]
+            unique_owners = list({o["care_plan_id"]: o for o in owners}.values())
+            task["plan_owner"] = unique_owners[0] if unique_owners else None
+            task["plan_owners"] = unique_owners
+            task["combined_item_ids"] = (
+                [str(m["id"]) for m in members] if members else [str(task["target_id"])]
+            )
 
         # Sort by scheduled time
         tasks.sort(
@@ -151,6 +195,15 @@ class FeedService:
             ):
                 task["status"] = "missed"
 
+        # Filters and the contact-clinic flag describe the whole merged list, so the
+        # patient can always switch owner; only the visible tasks are narrowed.
+        care_team_filters = self._care_team_filters(tasks)
+        contact_clinic = not snapshot.has_active_care_team and any(
+            owner.get("unowned_notice") for task in tasks for owner in task["plan_owners"]
+        )
+        if care_team_filter is not None:
+            tasks = [t for t in tasks if self._matches_owner(t["plan_owners"], care_team_filter)]
+
         # Calculate summary
         summary = self._calculate_summary(tasks)
 
@@ -159,7 +212,162 @@ class FeedService:
             "timezone": effective_timezone,
             "tasks": tasks,
             "summary": summary,
+            "care_team_filters": care_team_filters,
+            "contact_clinic": contact_clinic,
         }
+
+    @staticmethod
+    def _combine_identical(
+        medications: list[dict[str, Any]],
+        obligations: list[dict[str, Any]],
+        plan_items: dict[str, dict[str, Any]],
+        reminders: dict[tuple[str, str], dict[str, Any]],
+        adherence: list[dict[str, Any]],
+    ) -> tuple[
+        dict[tuple[str, str], list[dict[str, Any]]],
+        list[dict[str, Any]],
+        list[dict[str, Any]],
+        dict[tuple[str, str], dict[str, Any]],
+        list[dict[str, Any]],
+    ]:
+        """Collapse groups of identical activities onto their oldest member.
+
+        Returns the groups keyed by the entry's (type, id) with every member (entry first),
+        the lists without the other members, one reminder schedule per entry (the entry's
+        own, else the first member's), and logs of any member re-keyed to the entry.
+        """
+        activities = [("medication", m) for m in medications] + [
+            ("obligation", o) for o in obligations
+        ]
+        groups = group_identical_activities(activities, plan_items)  # type: ignore[arg-type]
+        if not groups:
+            return {}, medications, obligations, reminders, adherence
+        group_of: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        hidden: set[tuple[str, str]] = set()
+        entry_of: dict[tuple[str, str], tuple[str, str]] = {}
+        new_reminders = dict(reminders)
+        for group in groups:
+            entry_kind, entry = group[0]
+            entry_key = (entry_kind, str(entry["id"]))
+            group_of[entry_key] = [row for _kind, row in group]
+            for kind, row in group:
+                member_key = (kind, str(row["id"]))
+                entry_of[member_key] = entry_key
+                if member_key != entry_key:
+                    hidden.add(member_key)
+                    if entry_key not in new_reminders and member_key in reminders:
+                        new_reminders[entry_key] = reminders[member_key]
+        for key in hidden:
+            new_reminders.pop(key, None)
+        rekeyed = [
+            {**log, "target_id": entry_of[key][1]}
+            if (key := (str(log["target_type"]), str(log["target_id"]))) in entry_of
+            else log
+            for log in adherence
+        ]
+        return (
+            group_of,
+            [m for m in medications if ("medication", str(m["id"])) not in hidden],
+            [o for o in obligations if ("obligation", str(o["id"])) not in hidden],
+            new_reminders,
+            rekeyed,
+        )
+
+    async def combined_member_ids(
+        self, patient_id: UUID, target_type: str, target_id: str, target_date: date
+    ) -> list[str]:
+        """Ids of every activity that shares one entry with this one (itself first).
+
+        A single id when it is not part of a group; used to fan a check-off out to each
+        underlying activity so every owning team gets its own record.
+        """
+        medications, obligations, plan_items = await asyncio.gather(
+            self._get_medications(patient_id, strict=True),
+            self._get_obligations(patient_id, strict=True),
+            self._get_approved_plan_items(patient_id),
+        )
+        live_meds = self._current_plan_projections(medications, plan_items, target_date)
+        live_obls = self._current_plan_projections(obligations, plan_items, target_date)
+        activities = [("medication", m) for m in live_meds] + [("obligation", o) for o in live_obls]
+        for group in group_identical_activities(activities, plan_items):  # type: ignore[arg-type]
+            ids = [str(row["id"]) for kind, row in group if kind == target_type]
+            if target_id in ids:
+                return [target_id, *[i for i in ids if i != target_id]]
+        return [target_id]
+
+    async def combined_groups(
+        self, patient_id: UUID, target_date: date
+    ) -> list[list[tuple[str, str]]]:
+        """Groups of identical live activities as (kind, id) pairs, the entry's own id first.
+
+        The same grouping Today uses, so the reminder dispatcher and the feed always agree
+        on which activities are one entry. Deterministic: members are ordered by creation
+        time then id, and recomputed on every call (nothing is stored).
+        """
+        medications, obligations, plan_items = await asyncio.gather(
+            self._get_medications(patient_id, strict=True),
+            self._get_obligations(patient_id, strict=True),
+            self._get_approved_plan_items(patient_id),
+        )
+        live_meds = self._current_plan_projections(medications, plan_items, target_date)
+        live_obls = self._current_plan_projections(obligations, plan_items, target_date)
+        activities = [("medication", m) for m in live_meds] + [("obligation", o) for o in live_obls]
+        return [
+            [(kind, str(row["id"])) for kind, row in group]
+            for group in group_identical_activities(activities, plan_items)  # type: ignore[arg-type]
+        ]
+
+    @staticmethod
+    def _plan_owner_for(target: dict[str, Any], snapshot: FeedSnapshot) -> dict[str, Any] | None:
+        """The owner of the approved plan an activity came from; None for legacy records."""
+        item_id = target.get("care_plan_item_id")
+        if item_id is None:
+            return None
+        plan_item = snapshot.plan_items.get(str(item_id))
+        plan_id = plan_item.get("care_plan_id") if plan_item else None
+        return snapshot.plan_owners.get(str(plan_id)) if plan_id else None
+
+    @staticmethod
+    def _matches_owner(owners: list[dict[str, Any]], care_team_filter: str) -> bool:
+        """A combined entry stays when any of its owners matches."""
+        for owner in owners:
+            if care_team_filter == UNOWNED_FILTER:
+                if owner.get("care_team_id") is None:
+                    return True
+                continue
+            team_id = owner.get("care_team_id")
+            if team_id is not None and str(team_id).lower() == care_team_filter.strip().lower():
+                return True
+        return False
+
+    @staticmethod
+    def _care_team_filters(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """One entry per distinct owner present; all ownerless plans share one entry."""
+        buckets: dict[str | None, dict[str, Any]] = {}
+        activities: dict[str | None, set[tuple[str, str]]] = {}
+        for task in tasks:
+            for owner in task["plan_owners"]:
+                key = str(owner["care_team_id"]) if owner.get("care_team_id") else None
+                activities.setdefault(key, set()).add((str(task["type"]), str(task["target_id"])))
+                bucket = buckets.get(key)
+                if bucket is None:
+                    buckets[key] = {
+                        "care_team_id": key,
+                        "ownership_state": owner["ownership_state"],
+                        "specialty": owner.get("specialty"),
+                        "clinician_name": owner.get("clinician_name"),
+                        "clinic_name": owner.get("clinic_name"),
+                    }
+                elif key is None:
+                    # Several previous owners behind one "unowned" filter: show no single name.
+                    if owner["ownership_state"] == "unowned":
+                        bucket["ownership_state"] = "unowned"
+                    for field_name in ("specialty", "clinician_name", "clinic_name"):
+                        if bucket[field_name] != owner.get(field_name):
+                            bucket[field_name] = None
+        result = [{**bucket, "count": len(activities[key])} for key, bucket in buckets.items()]
+        result.sort(key=lambda row: (row["care_team_id"] is None, str(row["clinician_name"])))
+        return result
 
     async def _get_patient(self, patient_id: UUID, *, strict: bool = False) -> dict[str, Any]:
         result = (
@@ -201,6 +409,8 @@ class FeedService:
                     frequency,
                     instructions,
                     care_plan_item_id,
+                    route,
+                    created_at,
                     patient_wording,
                     prescribed_by_care_team_id,
                     care_teams!prescribed_by_care_team_id(
@@ -241,6 +451,7 @@ class FeedService:
                     frequency,
                     obligation_type,
                     care_plan_item_id,
+                    created_at,
                     patient_wording,
                     set_by_care_team_id,
                     care_teams!set_by_care_team_id(
@@ -272,7 +483,7 @@ class FeedService:
             versions = cast(
                 list[dict[str, Any]],
                 self.db.table("care_plan_versions")
-                .select("id, version_number")
+                .select("id, version_number, care_plan_id")
                 .eq("patient_id", str(patient_id))
                 .eq("status", "approved")
                 .execute()
@@ -280,12 +491,16 @@ class FeedService:
                 or [],
             )
             version_numbers = {str(row["id"]): int(row["version_number"]) for row in versions}
+            version_plans = {str(row["id"]): row.get("care_plan_id") for row in versions}
             if not version_numbers:
                 return {}
             items = cast(
                 list[dict[str, Any]],
                 self.db.table("care_plan_items")
-                .select("id, plan_version_id, category, schedule, is_removed")
+                .select(
+                    "id, plan_version_id, category, schedule, is_removed, "
+                    "instructions, frequency, medication"
+                )
                 .in_("plan_version_id", list(version_numbers))
                 .eq("is_removed", False)
                 .execute()
@@ -295,15 +510,163 @@ class FeedService:
         except Exception:
             logger.warning("Failed to load approved care-plan projections")
             return {}
+        retired = self._retired_item_ids([str(item["id"]) for item in items])
+        items = [item for item in items if str(item["id"]) not in retired]
         return {
             str(item["id"]): {
+                "care_plan_id": version_plans.get(str(item["plan_version_id"])),
                 "version_number": version_numbers[str(item["plan_version_id"])],
                 "category": str(item["category"]),
                 "schedule": item.get("schedule") or {},
+                "instructions": item.get("instructions"),
+                "frequency": item.get("frequency"),
+                "medication": item.get("medication"),
             }
             for item in items
             if str(item["plan_version_id"]) in version_numbers
         }
+
+    def _retired_item_ids(self, item_ids: list[str]) -> set[str]:
+        """Items a clinician retired. The projection is also deactivated; this is a backstop."""
+        if not item_ids:
+            return set()
+        try:
+            rows = cast(
+                list[dict[str, Any]],
+                self.db.table("care_plan_item_retirements")
+                .select("item_id")
+                .in_("item_id", item_ids)
+                .execute()
+                .data
+                or [],
+            )
+        except Exception:
+            logger.warning("Failed to load care-plan item retirements")
+            return set()
+        return {str(row["item_id"]) for row in rows}
+
+    async def _has_active_care_team(self, patient_id: UUID) -> bool:
+        try:
+            rows = (
+                self.db.table("care_teams")
+                .select("id")
+                .eq("patient_id", str(patient_id))
+                .eq("status", "active")
+                .limit(1)
+                .execute()
+                .data
+            )
+        except Exception:
+            logger.warning("Failed to read active care teams for feed")
+            return True  # unknown: do not tell the patient to contact a clinic by mistake
+        return bool(rows)
+
+    async def _get_plan_owners(self, patient_id: UUID) -> dict[str, dict[str, Any]]:
+        """care_plan_id -> owner display for every plan of the patient.
+
+        Owned plans show the live care-team, clinician and clinic rows; unowned plans show
+        the owner_snapshot kept when the team ended. Names only, no label text.
+        """
+        try:
+            plans = cast(
+                list[dict[str, Any]],
+                self.db.table("care_plans")
+                .select("id, care_team_id, ownership_state, owner_snapshot")
+                .eq("patient_id", str(patient_id))
+                .execute()
+                .data
+                or [],
+            )
+            team_ids = [str(p["care_team_id"]) for p in plans if p.get("care_team_id")]
+            teams: dict[str, dict[str, Any]] = {}
+            clinicians: dict[str, dict[str, Any]] = {}
+            clinics: dict[str, dict[str, Any]] = {}
+            if team_ids:
+                team_rows = cast(
+                    list[dict[str, Any]],
+                    self.db.table("care_teams")
+                    .select("id, clinician_id, clinic_id, role, specialty_context")
+                    .eq("patient_id", str(patient_id))
+                    .in_("id", team_ids)
+                    .execute()
+                    .data
+                    or [],
+                )
+                teams = {str(t["id"]): t for t in team_rows}
+                clinician_ids = sorted(
+                    {str(t["clinician_id"]) for t in team_rows if t.get("clinician_id")}
+                )
+                clinic_ids = sorted({str(t["clinic_id"]) for t in team_rows if t.get("clinic_id")})
+                if clinician_ids:
+                    clinicians = {
+                        str(c["id"]): c
+                        for c in cast(
+                            list[dict[str, Any]],
+                            self.db.table("clinicians")
+                            .select("id, first_name, last_name, specialty")
+                            .in_("id", clinician_ids)
+                            .execute()
+                            .data
+                            or [],
+                        )
+                    }
+                if clinic_ids:
+                    clinics = {
+                        str(c["id"]): c
+                        for c in cast(
+                            list[dict[str, Any]],
+                            self.db.table("clinics")
+                            .select("id, display_name")
+                            .in_("id", clinic_ids)
+                            .execute()
+                            .data
+                            or [],
+                        )
+                    }
+        except Exception:
+            logger.warning("Failed to load care-plan owners for feed")
+            return {}
+        owners: dict[str, dict[str, Any]] = {}
+        for plan in plans:
+            state = str(plan.get("ownership_state") or "unassigned_legacy")
+            snapshot = plan.get("owner_snapshot")
+            snapshot = snapshot if isinstance(snapshot, dict) else {}
+            team = teams.get(str(plan.get("care_team_id"))) if plan.get("care_team_id") else None
+            if state == "owned" and team is not None:
+                clinician = clinicians.get(str(team.get("clinician_id"))) or {}
+                clinic = clinics.get(str(team.get("clinic_id"))) or {}
+                name = " ".join(
+                    str(part).strip()
+                    for part in (clinician.get("first_name"), clinician.get("last_name"))
+                    if part and str(part).strip()
+                )
+                display = {
+                    "specialty": _first_text(
+                        team.get("specialty_context"), clinician.get("specialty"), team.get("role")
+                    ),
+                    "clinician_name": name or None,
+                    "clinic_id": team.get("clinic_id"),
+                    "clinic_name": clinic.get("display_name"),
+                }
+                care_team_id: Any = team["id"]
+            else:
+                display = {
+                    "specialty": _first_text(snapshot.get("specialty")),
+                    "clinician_name": _first_text(snapshot.get("clinician_name")),
+                    "clinic_id": snapshot.get("clinic_id"),
+                    "clinic_name": _first_text(snapshot.get("clinic_name")),
+                }
+                care_team_id = None
+                if state == "owned":
+                    state = "unassigned_legacy"  # owner row unreadable: never show as owned
+            owners[str(plan["id"])] = {
+                "care_plan_id": str(plan["id"]),
+                "care_team_id": str(care_team_id) if care_team_id else None,
+                "ownership_state": state,
+                **{k: (str(v) if k == "clinic_id" and v else v) for k, v in display.items()},
+                "unowned_notice": state in ("unowned", "unassigned_legacy"),
+            }
+        return owners
 
     async def _get_today_adherence(
         self, patient_id: UUID, target_date: date, timezone_name: str, *, strict: bool = False

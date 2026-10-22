@@ -53,7 +53,14 @@ MAX_DRAFT_FAILURES = 3
 NOTICE_TYPES = {"a2a_task_status", "appointment_proposal", "escalation_recommended"}
 RETRYABLE_REFUSALS = {"lease_active"}
 
-_inflight = 0  # touched only on the event loop thread (rule 17)
+
+class _InflightCounter:
+    """Turns running on this instance; touched only on the event loop thread (rule 17)."""
+
+    count = 0
+
+
+_inflight = _InflightCounter()
 
 
 class TransientTaskError(Exception):
@@ -220,8 +227,7 @@ async def run_chat_turn(
 ) -> dict[str, Any]:
     """Claim and run one turn. Returns a small outcome dict (HTTP 200) or raises
     :class:`TransientTaskError` (HTTP 503)."""
-    global _inflight
-    if _inflight >= settings.chat_worker_max_concurrency:
+    if _inflight.count >= settings.chat_worker_max_concurrency:
         log_event(
             logger,
             "chat_turn.worker_shed",
@@ -231,11 +237,11 @@ async def run_chat_turn(
             outcome="shed",
         )
         raise TransientTaskError("saturated")
-    _inflight += 1
+    _inflight.count += 1
     try:
         return await _run(db, turn_id, attempt, process_message)
     finally:
-        _inflight -= 1
+        _inflight.count -= 1
 
 
 async def _run(

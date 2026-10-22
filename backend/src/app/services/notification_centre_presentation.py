@@ -124,6 +124,12 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
         "Resultado crítico reportado",
         "Un documento informa un resultado que el laboratorio marcó como crítico. Ábrelo para revisarlo.",
     ),
+    "care_plan_review": (
+        "Care-team work item",
+        "A care-plan item needs your care team. Open the patient to see it.",
+        "Tarea del equipo de atención",
+        "Un elemento del plan de cuidado necesita a tu equipo. Abre al paciente para verlo.",
+    ),
     "safety_flag": (
         "Patient safety flag needs review",
         "An automated flag was saved. Review the original conversation; this is not a clinical decision.",
@@ -182,6 +188,7 @@ _SOURCE_LABELS = {
     "care_conversation_messages": "Private care-team conversation",
     "appointments": "Appointment record",
     "care_plan_versions": "Care-plan version",
+    "care_plan_review_items": "Care-team work item",
     "documents": "Document workflow",
     "adherence_logs": "Patient-recorded activity response",
     "adr_assessments": "ADR review candidate",
@@ -222,7 +229,53 @@ def _document_link(row: dict[str, Any], role: str) -> Destination:
     return (link, "Open document", "Abrir documento")
 
 
+# What a care-team work item asks (clinician-only; fixed wording, never record content).
+_REVIEW_COPY = {
+    "unowned_plan": (
+        "A care plan has no care team",
+        "A care team that ended left approved activities in this patient's Today. Adopt the plan "
+        "or retire items. Nothing was removed.",
+    ),
+    "unassigned_legacy_plan": (
+        "A care plan needs an owner",
+        "An older care plan could not be assigned to one care team. Adopt it or retire items. "
+        "Nothing was removed.",
+    ),
+    "cross_plan_conflict": (
+        "Another care team asks about a conflict",
+        "Another care team's plan has an instruction that conflicts with yours. Open the patient "
+        "to read the question and reply.",
+    ),
+    "conflict_acknowledged": (
+        "A conflict with your plan was acknowledged",
+        "Another care team kept both instructions for a medicine on your plan and recorded a "
+        "reason. Open the patient to read it.",
+    ),
+    "conflict_published_without": (
+        "A conflicting item was left out of another plan",
+        "Another care team published its plan without an item that conflicts with yours.",
+    ),
+    "conflict_reply": (
+        "Your question about a conflict was answered",
+        "The other care team replied. Open the patient to read the reply.",
+    ),
+    "unowned_clinical_record": (
+        "A reviewed record needs a care team",
+        "A reviewed record could not be assigned to one care team. Take it up from the patient's "
+        "page if it is yours.",
+    ),
+}
+
+
+def _review_link(row: dict[str, Any], role: str) -> Destination:
+    patient, item = _identifier(row.get("patient_id")), _identifier(row.get("source_id"))
+    link = f"/patients/{patient}?tab=care-plan&review={item}" if patient and item else None
+    return (link, "Open care-team item", "Abrir tarea del equipo")
+
+
 def _plan_link(row: dict[str, Any], role: str) -> Destination:
+    if row.get("event_type") == "care_plan_review":
+        return _review_link(row, role)
     patient = _identifier(row.get("patient_id"))
     link = (
         "/today?view=care-plan"
@@ -243,6 +296,9 @@ def _safety_link(row: dict[str, Any], role: str) -> Destination:
         link = f"/patients/{patient}?tab=symptoms#symptom-{source}" if patient and source else None
         return (link, "Review reported product", "Revisar producto reportado")
     if row["event_type"] == "critical_result":
+        if _metadata(row).get("source_accessible") is False:
+            # Shared safety information; the document itself belongs to another care team.
+            return (f"/patients/{patient}" if patient else None, "Open patient", "Abrir paciente")
         link = (
             f"/patients/{patient}?tab=documents#document-{source}" if patient and source else None
         )
@@ -312,6 +368,17 @@ def _display_copy(row: dict[str, Any], role: str, spanish: bool) -> tuple[str, s
             "A confirmed symptom report names a product not uniquely linked to the recorded "
             "medication list. Review identity before linking or adding. This is not a confirmed ADR.",
         )
+    if kind == "critical_result" and _metadata(row).get("source_accessible") is False:
+        # The result is safety information for every team; the document is another team's.
+        return (
+            "Critical test result reported",
+            "A result the laboratory marked critical was reported for this patient. The "
+            "document is held by another care team of this patient. Check on the patient.",
+        )
+    if kind == "care_plan_review":
+        review = _REVIEW_COPY.get(str(_metadata(row).get("review_kind")))
+        if review:
+            return review
     if kind == "appointment_changed" and _metadata(row).get("status") == "cancelled":
         kind = "appointment_cancelled"
     copy = _COPY.get(

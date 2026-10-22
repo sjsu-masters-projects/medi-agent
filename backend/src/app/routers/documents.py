@@ -20,15 +20,20 @@ from supabase import Client
 from app.core.security import get_current_user, require_role
 from app.db.connection import get_db
 from app.models.auth import CurrentUser
-from app.models.document import DocumentRead, DocumentResultRead
+from app.models.document import (
+    DocumentCareTeamOption,
+    DocumentClaimRead,
+    DocumentRead,
+    DocumentResultRead,
+)
 from app.models.enums import DocumentType, Language, coerce_locale
+from app.services.document_routing_service import DocumentRoutingService
 from app.services.document_service import DocumentService
 from app.services.explanation_service import (
     ExplanationService,
     normalize_patient_summary,
     summary_unavailable_message,
 )
-from app.services.smart_launch_service import SmartLaunchService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -37,6 +42,10 @@ _clinician_dep = require_role("clinician")
 
 def _get_service(db: Client = Depends(get_db)) -> DocumentService:
     return DocumentService(db)
+
+
+def _get_routing(db: Client = Depends(get_db)) -> DocumentRoutingService:
+    return DocumentRoutingService(db)
 
 
 # ── Request schema (specific to this endpoint) ─────────
@@ -57,6 +66,14 @@ class DocumentCreateRequest(BaseModel):
     notes: str | None = None
     content_hash: str | None = Field(default=None, pattern=r"^[A-Fa-f0-9]{64}$")
     start_ingestion: bool = True
+    # PLAN-002: the care team this document is for. Omit it when there is only one team;
+    # ``not_sure`` leaves the document unrouted until a clinician claims it.
+    care_team_id: UUID | None = None
+    not_sure: bool = False
+
+
+class ClaimRequest(BaseModel):
+    care_team_id: UUID
 
 
 class ExplainRequest(BaseModel):
@@ -79,7 +96,15 @@ async def create_document(
     body: DocumentCreateRequest,
     user: CurrentUser = Depends(get_current_user),
     service: DocumentService = Depends(_get_service),
+    routing: DocumentRoutingService = Depends(_get_routing),
 ) -> Any:
+    target = routing.upload_target(
+        uploader_role=user.role,
+        uploader_id=user.id,
+        patient_id=user.id,
+        care_team_id=body.care_team_id,
+        not_sure=body.not_sure,
+    )
     document = await service.create_document(
         patient_id=user.id,
         uploaded_by=user.id,
@@ -93,8 +118,22 @@ async def create_document(
         notes=body.notes,
         content_hash=body.content_hash,
         queue_ingestion=body.start_ingestion,
+        care_team_id=target["care_team_id"],
+        routing_state=target["routing_state"],
     )
     return document
+
+
+@router.get(
+    "/care-team-options",
+    response_model=list[DocumentCareTeamOption],
+    summary="My active care teams, for choosing where an upload goes",
+)
+async def list_care_team_options(
+    user: CurrentUser = Depends(require_role("patient")),
+    routing: DocumentRoutingService = Depends(_get_routing),
+) -> Any:
+    return routing.patient_options(user.id)
 
 
 @router.post(
@@ -108,10 +147,19 @@ async def create_clinician_document(
     body: DocumentCreateRequest,
     user: CurrentUser = Depends(_clinician_dep),
     service: DocumentService = Depends(_get_service),
-    db: Client = Depends(get_db),
+    routing: DocumentRoutingService = Depends(_get_routing),
 ) -> Any:
-    """Require an active care-team assignment before attaching a document to a chart."""
-    SmartLaunchService(db).ensure_assignment(clinician_id=user.id, patient_id=patient_id)
+    """Attach a document to the clinician's own care team for this patient.
+
+    No active link is refused; two links (for example two clinics) need ``care_team_id``.
+    """
+    target = routing.upload_target(
+        uploader_role=user.role,
+        uploader_id=user.id,
+        patient_id=patient_id,
+        care_team_id=body.care_team_id,
+        not_sure=body.not_sure,
+    )
     document = await service.create_document(
         patient_id=patient_id,
         uploaded_by=user.id,
@@ -125,8 +173,39 @@ async def create_clinician_document(
         notes=body.notes,
         content_hash=body.content_hash,
         queue_ingestion=body.start_ingestion,
+        care_team_id=target["care_team_id"],
+        routing_state=target["routing_state"],
     )
     return document
+
+
+@router.get(
+    "/claimable",
+    response_model=list[dict[str, Any]],
+    summary="Documents my care teams can see, including unrouted ones to claim",
+)
+async def list_clinician_document_queue(
+    patient_id: UUID | None = None,
+    user: CurrentUser = Depends(_clinician_dep),
+    routing: DocumentRoutingService = Depends(_get_routing),
+) -> Any:
+    return routing.queue(clinician_id=user.id, patient_id=patient_id)
+
+
+@router.post(
+    "/{document_id}/claim",
+    response_model=DocumentClaimRead,
+    summary="Claim an unrouted document for one of my care teams",
+)
+async def claim_document(
+    document_id: UUID,
+    body: ClaimRequest,
+    user: CurrentUser = Depends(_clinician_dep),
+    routing: DocumentRoutingService = Depends(_get_routing),
+) -> Any:
+    return routing.claim(
+        clinician_id=user.id, document_id=document_id, care_team_id=body.care_team_id
+    )
 
 
 @router.post(
@@ -143,7 +222,7 @@ async def retry_clinician_document_ingestion(
     db: Client = Depends(get_db),
 ) -> Any:
     """Atomically requeue a failed document for the durable worker."""
-    SmartLaunchService(db).ensure_assignment(clinician_id=user.id, patient_id=patient_id)
+    service.authorize_clinician_document(user.id, patient_id, document_id)
     db.rpc(
         "enqueue_document_ingestion_retry",
         {
@@ -152,7 +231,7 @@ async def retry_clinician_document_ingestion(
             "p_actor_id": str(user.id),
         },
     ).execute()
-    return await service.get_document(document_id, patient_id)
+    return await service.get_clinician_document(user.id, patient_id, document_id)
 
 
 @router.post(
@@ -173,7 +252,7 @@ async def retry_clinician_document_summary(
     This re-reads candidates that already exist: it never re-runs OCR, never proposes a
     clinical fact again, and cannot change the document's parse state or stored source.
     """
-    SmartLaunchService(db).ensure_assignment(clinician_id=user.id, patient_id=patient_id)
+    service.authorize_clinician_document(user.id, patient_id, document_id)
     db.rpc(
         "enqueue_document_summary_retry",
         {
@@ -182,7 +261,7 @@ async def retry_clinician_document_summary(
             "p_actor_id": str(user.id),
         },
     ).execute()
-    return await service.get_document(document_id, patient_id)
+    return await service.get_clinician_document(user.id, patient_id, document_id)
 
 
 @router.get(
@@ -195,11 +274,9 @@ async def get_clinician_document_source(
     document_id: UUID,
     user: CurrentUser = Depends(_clinician_dep),
     service: DocumentService = Depends(_get_service),
-    db: Client = Depends(get_db),
 ) -> Any:
-    """Allow a clinician to open only an assigned patient's private source document."""
-    SmartLaunchService(db).ensure_assignment(clinician_id=user.id, patient_id=patient_id)
-    return await service.get_document(document_id, patient_id)
+    """Open a source document only through a care team that owns it (or while unrouted)."""
+    return await service.get_clinician_document(user.id, patient_id, document_id)
 
 
 @router.get(

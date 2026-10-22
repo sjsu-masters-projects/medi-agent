@@ -145,7 +145,7 @@ async def test_the_query_is_filtered_by_the_session_patient() -> None:
     with patch.object(patient_context_module, "_service", return_value=service):
         await get_patient_context(_context())
 
-    service.get_context.assert_awaited_once_with(PATIENT_ID)
+    service.get_context.assert_awaited_once_with(PATIENT_ID, include_schedule=True)
 
 
 @pytest.mark.asyncio

@@ -81,8 +81,11 @@ class ValidationError(MediAgentError):
 class ConflictError(MediAgentError):
     """The record changed since the caller read it (HTTP 409); refresh and retry."""
 
-    def __init__(self, message: str, *, code: str = "CONFLICT"):
+    def __init__(
+        self, message: str, *, code: str = "CONFLICT", details: dict[str, Any] | None = None
+    ):
         super().__init__(message=message, code=code)
+        self.details = details
 
 
 class ExternalServiceError(MediAgentError):

@@ -76,6 +76,10 @@ EVENT_FIELDS = (
     "retry_count",
     "close_code",
     "initiator",
+    "utterance_id",
+    "speech_id",
+    "chars",
+    "frames",
 )
 
 _TRACE_HEADER = re.compile(r"^([0-9a-fA-F]{32})(?:/\d+)?(?:;o=\d)?$")

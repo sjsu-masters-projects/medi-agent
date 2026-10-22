@@ -8,6 +8,7 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from postgrest.exceptions import APIError
 from supabase import Client
@@ -24,6 +25,17 @@ MAX_CARD_RESULTS = 60
 _HISTORY_COLUMNS = (
     "id, patient_id, session_id, content, role, intent, language, audio_url, created_at"
 )
+# What Nora may read about visits and the plan: capped so the context stays small.
+APPOINTMENT_CONTEXT_LIMIT = 6
+ALLERGY_CONTEXT_LIMIT = 10
+PLAN_ACTIVITY_CONTEXT_LIMIT = 10
+# Visit statuses the patient portal shows as upcoming, and how Nora is told to say each.
+_UPCOMING_VISIT_STATUS = {
+    "confirmed": "confirmed",
+    "scheduled": "confirmed",
+    "proposed": "offer_awaiting_your_answer",
+    "alternative_requested": "change_requested_awaiting_care_team",
+}
 _MISSING_COLUMN_CODES = {"PGRST204", "42703"}
 
 
@@ -37,6 +49,23 @@ def _missing_attachments_column(error: APIError) -> bool:
 _SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 TITLE_CHARS = 80
 _TURN_SCAN_LIMIT = 500
+
+
+def plan_provenance(owner: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The plan fields Nora may cite; ownership_state 'unowned' means the prescriber left."""
+    if not owner:
+        return None
+    return _plan_fields(owner)
+
+
+def _plan_fields(owner: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "care_plan_id": owner.get("care_plan_id"),
+        "specialty": owner.get("specialty"),
+        "clinician_name": owner.get("clinician_name"),
+        "clinic_name": owner.get("clinic_name"),
+        "ownership_state": owner.get("ownership_state"),
+    }
 
 
 def _is_past(value: Any, now: datetime) -> bool:
@@ -316,7 +345,12 @@ class ChatService:
         self,
         patient_id: str,
         document_id: str | None = None,
+        *,
+        include_schedule: bool = False,
     ) -> dict[str, Any]:
+        """The patient's record for a turn. ``include_schedule`` adds visits, allergies and
+        today's plan activities: Nora's tool reads them fresh on each call, while the
+        connection handshake (which does not use them) stays light."""
         medications = await self._fetch_active_medications(patient_id)
         conditions = await self._fetch_active_conditions(patient_id)
         recent_symptoms_available = True
@@ -338,7 +372,7 @@ class ChatService:
         if document_id:
             document_context = await self._fetch_document_context(patient_id, document_id)
 
-        return {
+        context: dict[str, Any] = {
             "medications": medications,
             "conditions": conditions,
             "recent_symptoms": recent_symptoms,
@@ -346,6 +380,23 @@ class ChatService:
             "care_teams": care_teams,
             "document": document_context,
         }
+        plan_by_item, care_plans = (
+            await self._fetch_plan_provenance(patient_id) if include_schedule else ({}, None)
+        )
+        for medication in medications:
+            # Which approved plan a medication came from; None for older records.
+            item_id = medication.pop("care_plan_item_id", None)
+            if include_schedule:
+                medication["plan"] = plan_by_item.get(str(item_id)) if item_id else None
+        if include_schedule:
+            context["care_plans"] = care_plans
+            timezone = await self._fetch_patient_timezone(patient_id)
+            context["timezone"] = timezone
+            context["appointments"] = await self._fetch_upcoming_appointments(patient_id, timezone)
+            context["allergies"] = await self._fetch_allergies(patient_id)
+            # None means "could not be read", which is different from "nothing today".
+            context["todays_plan_activities"] = await self._fetch_todays_plan_activities(patient_id)
+        return context
 
     async def get_document_catalog(self, patient_id: str, limit: int = 8) -> list[dict[str, Any]]:
         """Return safe portal document metadata for an already-authorized chat patient."""
@@ -529,7 +580,7 @@ class ChatService:
     async def _fetch_active_medications(self, patient_id: str) -> list[dict[str, Any]]:
         result = await self._execute(
             self.db.table("medications")
-            .select("id, name, generic_name, rxcui, dosage, frequency, route")
+            .select("id, name, generic_name, rxcui, dosage, frequency, route, care_plan_item_id")
             .eq("patient_id", patient_id)
             .eq("is_active", True)
             .order("created_at", desc=True)
@@ -575,6 +626,151 @@ class ChatService:
             clinic = team.pop("clinics", None)
             team["clinic_name"] = clinic.get("display_name") if isinstance(clinic, dict) else None
         return teams
+
+    async def _fetch_patient_timezone(self, patient_id: str) -> str:
+        result = await self._execute(
+            self.db.table("patients").select("timezone").eq("id", patient_id).limit(1)
+        )
+        rows = [row for row in (result.data or []) if isinstance(row, dict)]
+        name = str(rows[0].get("timezone") or "UTC") if rows else "UTC"
+        try:
+            ZoneInfo(name)
+        except Exception:  # an unknown zone name falls back rather than failing the turn
+            return "UTC"
+        return name
+
+    async def _fetch_upcoming_appointments(
+        self, patient_id: str, timezone: str
+    ) -> list[dict[str, Any]]:
+        """This patient's upcoming visits and open offers, in their own time zone.
+
+        Scoped by ``patient_id`` (the query boundary: this client bypasses RLS) and capped.
+        A proposal whose answer window has passed is not shown, as in the portal.
+        """
+        now = datetime.now(UTC)
+        result = await self._execute(
+            self.db.table("appointments")
+            .select(
+                "scheduled_at, duration_minutes, appointment_type, location, reason, status, "
+                "clinician_name, proposal_expires_at, clinics(display_name)"
+            )
+            .eq("patient_id", patient_id)
+            .in_("status", list(_UPCOMING_VISIT_STATUS))
+            .gte("scheduled_at", now.isoformat())
+            .order("scheduled_at")
+            .limit(APPOINTMENT_CONTEXT_LIMIT * 2)
+        )
+        zone = ZoneInfo(timezone)
+        visits: list[dict[str, Any]] = []
+        for row in result.data or []:
+            if not isinstance(row, dict):
+                continue
+            status = str(row.get("status") or "")
+            expires = row.get("proposal_expires_at")
+            if status == "proposed" and expires and _is_past(expires, now):
+                continue
+            try:
+                start = datetime.fromisoformat(str(row["scheduled_at"]).replace("Z", "+00:00"))
+            except (KeyError, ValueError):
+                continue
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=UTC)
+            local = start.astimezone(zone)
+            clinic = row.get("clinics")
+            visits.append(
+                {
+                    "status": _UPCOMING_VISIT_STATUS[status],
+                    "starts_at_local": local.isoformat(timespec="minutes"),
+                    "weekday": local.strftime("%A"),
+                    "date_local": local.strftime("%B %d, %Y").replace(" 0", " "),
+                    "time_local": local.strftime("%I:%M %p").lstrip("0"),
+                    "time_zone": timezone,
+                    "duration_minutes": row.get("duration_minutes"),
+                    "visit_type": row.get("appointment_type"),
+                    "clinician": row.get("clinician_name"),
+                    "clinic": clinic.get("display_name") if isinstance(clinic, dict) else None,
+                    "location": row.get("location"),
+                    "reason": row.get("reason"),
+                    **({"answer_by": expires} if status == "proposed" and expires else {}),
+                }
+            )
+        return visits[:APPOINTMENT_CONTEXT_LIMIT]
+
+    async def _fetch_allergies(self, patient_id: str) -> list[dict[str, Any]]:
+        result = await self._execute(
+            self.db.table("allergies")
+            .select("allergen, reaction, severity")
+            .eq("patient_id", patient_id)
+            .order("created_at", desc=True)
+            .limit(ALLERGY_CONTEXT_LIMIT)
+        )
+        return [row for row in (result.data or []) if isinstance(row, dict)]
+
+    async def _fetch_plan_provenance(
+        self, patient_id: str
+    ) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]] | None]:
+        """Plan owner of each approved plan item, and the patient's approved plans.
+
+        Patient-facing, so every plan is shown, including those of sensitive conditions.
+        ``None`` for the plan list when it cannot be read.
+        """
+        from app.services.feed_service import FeedService
+
+        db = self.db
+
+        def read() -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+            async def load() -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+                feed = FeedService(db)
+                items = await feed._get_approved_plan_items(UUID(patient_id))
+                owners = await feed._get_plan_owners(UUID(patient_id))
+                by_item = {
+                    item_id: _plan_fields(owners[str(item["care_plan_id"])])
+                    for item_id, item in items.items()
+                    if item.get("care_plan_id") and str(item["care_plan_id"]) in owners
+                }
+                approved = {str(item["care_plan_id"]) for item in items.values()}
+                plans = [_plan_fields(o) for pid, o in owners.items() if pid in approved]
+                return by_item, plans
+
+            return asyncio.run(load())
+
+        try:
+            return await asyncio.to_thread(read)
+        except Exception as exc:
+            logger.warning("Care-plan provenance was not readable: %s", type(exc).__name__)
+            return {}, None
+
+    async def _fetch_todays_plan_activities(self, patient_id: str) -> list[dict[str, Any]] | None:
+        """Today's tasks exactly as the portal's Today builds them (approved plan items only).
+
+        ``None`` when they cannot be read, so Nora says so rather than "nothing today".
+        """
+        from app.services.feed_service import FeedService
+
+        db = self.db
+
+        def read() -> dict[str, Any]:
+            # The feed's reads are synchronous; run them off the event loop (rule 15).
+            return asyncio.run(FeedService(db).get_today(UUID(patient_id)))
+
+        try:
+            feed = await asyncio.to_thread(read)
+        except Exception as exc:
+            logger.warning("Today's plan activities were not readable: %s", type(exc).__name__)
+            return None
+        tasks = [task for task in feed.get("tasks") or [] if isinstance(task, dict)]
+        return [
+            {
+                "name": task.get("name"),
+                "type": task.get("type"),
+                "frequency": task.get("frequency"),
+                "scheduled_time": task.get("scheduled_time"),
+                "status": task.get("status"),
+                "from_care_plan": bool(task.get("care_plan_item_id")),
+                "plan": plan_provenance(task.get("plan_owner")),
+            }
+            for task in tasks[:PLAN_ACTIVITY_CONTEXT_LIMIT]
+        ]
 
     async def _fetch_document_context(
         self,

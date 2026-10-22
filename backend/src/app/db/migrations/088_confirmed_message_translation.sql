@@ -1,4 +1,5 @@
 -- Exact clinician-confirmed wording and its human message commit together.
+-- Renumbered while unapplied after main merged care-team ownership at 083.
 -- 067 owns the already-applied English fact fields; no duplicate migration of them.
 ALTER TABLE public.message_translations
   ADD COLUMN IF NOT EXISTS clinician_confirmed boolean NOT NULL DEFAULT false;

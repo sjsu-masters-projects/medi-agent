@@ -154,7 +154,7 @@ Both uses are labelled as such.
 
 ## Remaining (owner: Jeevan)
 
-- **Apply migrations 080–083 with separate authorization before deploying #203**, then run the deployed acceptance journeys below. The apply
+- **Apply migrations 080–082 and 088 with separate authorization before deploying #203**, then run the deployed acceptance journeys below. The apply
   needs `MEDIAGENT_DB_URL` (the Session pooler URI from Dashboard → Connect), which is not
   stored in this repository or in `.env`; see `docs/supabase_setup_guide.md`.
 - **LOC-001 review of the es-MX caveat drafts** for the patient-side translation note (listed
@@ -247,7 +247,7 @@ Both uses are labelled as such.
     negation, a separator swap and a changed drug name being rejected; proper names never
     reaching the model; the fingerprint tracking edits; the reply round trip; the gloss
     address being its own text. 19/19 pass with no network, database or model.
-    `--check-target` reads the configured project's ledger and the columns 080–083 add, with
+    `--check-target` reads the configured project's ledger and the columns 080–082 and 088 add, with
     no mutations. Both are read-only.
 
 ### Backend and data — done (October 19)
@@ -286,7 +286,7 @@ endpoint below; a background job was never an outstanding implementation require
     original message stays the record.
 17. **Applied migration identity is retained.** Keep `067_english_display_facts.sql`
     byte-for-byte unchanged. Its proposed 079/083 copies were redundant and removed.
-    Only the exact historical 067 filename pair is grandfathered. New 083 is instead
+    Only the exact historical 067 filename pair is grandfathered. New 088 is instead
     the atomic confirmed-message transaction, not a repeated English-display migration.
 18. **Translation runs without a live model when explicitly enabled.** `TRANSLATION_STUB_ENABLED`
     answers all four translation paths — second-language drafting, back-translation, fact

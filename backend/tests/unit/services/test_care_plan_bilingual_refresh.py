@@ -35,15 +35,45 @@ def _chain(data: list[dict[str, Any]]) -> MagicMock:
 
 def _service() -> BilingualRefreshService:
     versions = [
-        {"id": DRAFT, "patient_id": DRAFT_PATIENT, "version_number": 4, "status": "draft"},
-        {"id": DRAFT_BASE, "patient_id": DRAFT_PATIENT, "version_number": 3, "status": "approved"},
-        {"id": APPROVED, "patient_id": APPROVED_PATIENT, "version_number": 2, "status": "approved"},
-        {"id": QUEUED, "patient_id": QUEUED_PATIENT, "version_number": 1, "status": "approved"},
-        {"id": DONE, "patient_id": DONE_PATIENT, "version_number": 5, "status": "approved"},
+        {
+            "id": DRAFT,
+            "patient_id": DRAFT_PATIENT,
+            "care_plan_id": DRAFT_PATIENT,
+            "version_number": 4,
+            "status": "draft",
+        },
+        {
+            "id": DRAFT_BASE,
+            "patient_id": DRAFT_PATIENT,
+            "care_plan_id": DRAFT_PATIENT,
+            "version_number": 3,
+            "status": "approved",
+        },
+        {
+            "id": APPROVED,
+            "patient_id": APPROVED_PATIENT,
+            "care_plan_id": APPROVED_PATIENT,
+            "version_number": 2,
+            "status": "approved",
+        },
+        {
+            "id": QUEUED,
+            "patient_id": QUEUED_PATIENT,
+            "care_plan_id": QUEUED_PATIENT,
+            "version_number": 1,
+            "status": "approved",
+        },
+        {
+            "id": DONE,
+            "patient_id": DONE_PATIENT,
+            "care_plan_id": DONE_PATIENT,
+            "version_number": 5,
+            "status": "approved",
+        },
     ]
     db = MagicMock()
     db.table.side_effect = lambda name: _chain(
-        versions if name == "care_plan_versions" else [{"patient_id": QUEUED_PATIENT}]
+        versions if name == "care_plan_versions" else [{"care_plan_id": QUEUED_PATIENT}]
     )
     service = BilingualRefreshService(db)
     service.plans._items = MagicMock(  # type: ignore[method-assign]
@@ -57,6 +87,7 @@ def test_report_targets_open_drafts_and_unqueued_single_language_plans() -> None
     assert proposals == [
         {
             "patient_id": DRAFT_PATIENT,
+            "care_plan_id": DRAFT_PATIENT,
             "plan_version_id": DRAFT,
             "version_number": 4,
             "plan_status": "draft",
@@ -65,6 +96,7 @@ def test_report_targets_open_drafts_and_unqueued_single_language_plans() -> None
         },
         {
             "patient_id": APPROVED_PATIENT,
+            "care_plan_id": APPROVED_PATIENT,
             "plan_version_id": APPROVED,
             "version_number": 2,
             "plan_status": "approved",
@@ -81,7 +113,7 @@ async def test_apply_drafts_or_requests_review_and_never_approves() -> None:
         return_value={"translation_drafted_count": 1}
     )
     service.plans._audit = MagicMock()  # type: ignore[method-assign]
-    service.plans.request_generation = MagicMock()  # type: ignore[method-assign]
+    service.plans.request_generation_for_plan = MagicMock()  # type: ignore[method-assign]
     service.plans.approve = MagicMock()  # type: ignore[method-assign]
     draft, approved = service.proposals()
 
@@ -91,5 +123,5 @@ async def test_apply_drafts_or_requests_review_and_never_approves() -> None:
     assert drafted["translation_drafted_count"] == 1
     assert service.plans._audit.call_args.args[2] == "bilingual_refresh_drafted"
     assert requested["generation_requested"] is True
-    assert service.plans.request_generation.call_args.args[0] == UUID(APPROVED_PATIENT)
+    assert service.plans.request_generation_for_plan.call_args.args[0] == UUID(APPROVED_PATIENT)
     service.plans.approve.assert_not_called()

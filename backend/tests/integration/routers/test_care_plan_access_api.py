@@ -10,6 +10,7 @@ from app.main import app
 from app.models.auth import CurrentUser
 from app.routers.care_plans import _service
 from app.services.care_plan_service import CarePlanService
+from tests.unit.services.care_plan_ownership_stub import stub_ownership
 
 PATIENT = UUID("00000000-0000-0000-0000-000000000301")
 OUTSIDER = UUID("00000000-0000-0000-0000-000000000302")
@@ -66,7 +67,11 @@ def test_outsider_cannot_read_edit_approve_or_retry(
     guarded_service.table.return_value.insert.assert_not_called()
     guarded_service.table.return_value.update.assert_not_called()
     if role == "clinician":
-        assert {call.args[0] for call in guarded_service.table.call_args_list} == {"care_teams"}
+        # Only the membership and link lookups that decide access; no plan or patient data.
+        assert {call.args[0] for call in guarded_service.table.call_args_list} <= {
+            "care_teams",
+            "clinic_memberships",
+        }
         guarded_service.table.return_value.eq.assert_any_call("patient_id", str(PATIENT))
         assert denial_audit[0]["reason_code"] == "NO_CARE_TEAM_ASSIGNMENT"
     else:
@@ -88,7 +93,7 @@ def test_back_translate_of_a_removed_item_is_not_found(client):
     clinician = CurrentUser(id=OUTSIDER, email="c@example.test", role="clinician", aal="aal2")
     app.dependency_overrides[get_current_user] = lambda: clinician
     service = CarePlanService(MagicMock())
-    service._require_assignment = MagicMock()  # type: ignore[method-assign]
+    stub_ownership(service)
     service._plan = MagicMock(return_value={"id": str(PLAN)})  # type: ignore[method-assign]
     service._items = MagicMock(  # type: ignore[method-assign]
         return_value=[{"id": str(PLAN), "is_removed": True, "wording": {"es-MX": {"title": "x"}}}]

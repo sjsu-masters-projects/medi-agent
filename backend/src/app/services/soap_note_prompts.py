@@ -72,6 +72,7 @@ def build_soap_prompt(patient_context: dict[str, Any]) -> str:
     allergies = patient_context.get("allergies", [])
     adr_assessments = patient_context.get("adr_assessments", [])
     lookback_days = patient_context.get("lookback_days", 30)
+    some_private = bool(patient_context.get("some_conditions_private"))
 
     # Format medications list
     med_lines = []
@@ -87,6 +88,11 @@ def build_soap_prompt(patient_context: dict[str, Any]) -> str:
         ", ".join(c.get("name", c.get("icd10_code", "Unknown")) for c in conditions)
         or "None documented"
     )
+    if some_private:
+        # Only the fact that something is withheld; never its name or count.
+        conditions_text += (
+            " (some conditions are kept private by the patient and are not shown here)"
+        )
 
     # Format allergies
     allergies_text = (

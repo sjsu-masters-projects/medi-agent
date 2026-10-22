@@ -43,7 +43,12 @@ import { socketAuthProtocols } from "@/services/ws-auth";
 import { watchSpeechPause } from "@/services/voice-pause-monitor";
 import {
     addMessage,
+    addPendingMessage,
     clearChatState,
+    failPendingMessages,
+    markMessagePending,
+    reconcileSavedMessage,
+    removeMessage,
     setChatError,
     setConnectionStatus,
     setLoading,
@@ -169,12 +174,24 @@ interface PatientChatSessionState {
 
 type AssistantAudioInput = Pick<ChatMessage, "content" | "language"> & Partial<Pick<ChatMessage, "id" | "audioUrl">>;
 
+export interface AssistantReplyEvent {
+    seq: number;
+    text: string;
+    language: ChatLocale;
+    urgent: boolean;
+}
+
 interface PatientChatSessionActions {
     reconnectChat: () => void;
     retryTurn: (id: string) => void;
     dismissTurn: (id: string) => void;
     dismissDocumentContext: () => void;
     dismissSafetyNotice: () => void;
+    lastAssistantReply: AssistantReplyEvent | null;
+    /** One finalized live-voice utterance, sent as an ordinary chat message. */
+    sendVoiceUtterance: (text: string, language: ChatLocale) => "sent" | "handled" | "unavailable";
+    retryUnsentMessage: (clientMessageId: string) => void;
+    removeUnsentMessage: (clientMessageId: string) => void;
     handleHandsFreeToggle: () => void;
     handleMicClick: () => void;
     handlePlayAssistantMessage: (message: AssistantAudioInput) => void;
@@ -225,6 +242,8 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     const [assistantDraftStartedAt, setAssistantDraftStartedAt] = useState<string | null>(null);
     const [handsFreeMode, setHandsFreeMode] = useState<boolean>(resolveInitialHandsFree);
     const [voiceError, setVoiceError] = useState<string | null>(null);
+    // The latest completed Nora reply, numbered so live voice mode can speak each one once.
+    const [lastAssistantReply, setLastAssistantReply] = useState<AssistantReplyEvent | null>(null);
     const [voiceInterimTranscript, setVoiceInterimTranscript] = useState("");
     const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>(() => {
         const capabilities = getVoiceCapabilities();
@@ -303,6 +322,15 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     const recovery = useChatTurnRecovery(`${user?.id ?? ""}:${sessionId}`, socketRef);
     const receiveTurns = useEffectEvent((rows: ChatTurnApi[], snapshot = false) => {
         recovery.accept(rows, snapshot);
+        // The saved copy of a message this tab drew optimistically replaces it in place.
+        for (const row of rows) {
+            if (row.user_message && row.client_message_id) {
+                dispatch(reconcileSavedMessage({
+                    clientMessageId: row.client_message_id,
+                    message: mapChatMessageFromApi(row.user_message),
+                }));
+            }
+        }
         const inFlight = rows.some((row) => isTurnInProgress(normalizeTurnStatus(row.status)));
         if (error === "CHAT_TURN_BUSY" && !inFlight) dispatch(setChatError(null));
         // A snapshot or a new status never wipes a draft that is still being received: the
@@ -318,6 +346,9 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     });
     const rejectTurn = useEffectEvent((id: string) => {
         const content = recovery.reject(id);
+        // The server refused the claim and saved nothing: the bubble goes away and the text
+        // returns to the composer, where the reason is shown.
+        dispatch(removeMessage(id));
         if (content) setInput((current) => !current || current === content ? content : `${content}\n\n${current}`);
     });
     const reconcilePersistedSafetyTurns = useEffectEvent((messageIds: string[]) => {
@@ -375,15 +406,16 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         voiceRefs.current.mediaStream = null;
     }
 
-    function sendChatMessage(content: string, audioUrl?: string, mode: "typed" | "voice" = "typed", privateOnly = false): void {
+    function sendChatMessage(content: string, audioUrl?: string, mode: "typed" | "voice" = "typed", privateOnly = false,
+        language: ChatLocale = voiceRefs.current.selectedLanguage): "sent" | "handled" | "unavailable" {
         const trimmedContent = content.trim();
         if (!trimmedContent) {
-            return;
+            return "unavailable";
         }
         voiceRefs.current.dictatedInput = false;
 
         if (privateOnly && voiceRefs.current.privateRecordingScope !== privateScopeRef.current) {
-            setVoiceStatus("idle"); setInput(""); return;
+            setVoiceStatus("idle"); setInput(""); return "unavailable";
         }
 
         const handled = privateReplyRef.current?.(trimmedContent, mode, mode === "voice" ? voiceRefs.current.recordedLanguage ?? voiceRefs.current.selectedLanguage : undefined) ?? "unhandled";
@@ -391,21 +423,37 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             voiceRefs.current.autoPlayNextAssistantMessage = false;
             setVoiceStatus("idle");
             if (handled === "handled") { resetVoiceFeedback(); setInput(""); }
-            return;
+            return handled === "handled" ? "handled" : "unavailable";
         }
 
-        if (privateOnly) { setVoiceStatus("idle"); setInput(""); return; }
+        if (privateOnly) { setVoiceStatus("idle"); setInput(""); return "unavailable"; }
 
         if (!durableReadyRef.current || !socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
             dispatch(setChatError("CHAT_STARTUP_UNAVAILABLE"));
             voiceRefs.current.autoPlayNextAssistantMessage = false;
             setInput((current) => current || trimmedContent);
             setVoiceStatus("idle");
-            return;
+            return "unavailable";
         }
 
+        const clientMessageId = crypto.randomUUID();
         if (documentUnavailable || !recovery.send(trimmedContent,
-            voiceRefs.current.selectedLanguage, activeDocumentId, audioUrl)) return;
+            language, activeDocumentId, audioUrl, clientMessageId)) {
+            // Spoken words are never dropped: they wait in the composer.
+            if (mode === "voice") setInput((current) => current || trimmedContent);
+            return "unavailable";
+        }
+
+        // Instant feedback: the message is on screen now, not after the server round trip.
+        dispatch(addPendingMessage({
+            clientMessageId,
+            content: trimmedContent,
+            createdAt: new Date().toISOString(),
+            id: `pending-${clientMessageId}`,
+            language,
+            patientId: user?.id ?? "",
+            role: ChatRole.USER,
+        }));
 
         setReceivingStream(true);
         // Feedback must begin when the user sends, not after the model has classified the turn.
@@ -415,6 +463,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         setSafetyNotice(null);
         resetVoiceFeedback();
         setInput("");
+        return "sent";
     }
 
     function playbackEnded(): () => void {
@@ -1046,7 +1095,10 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                     );
                     return;
                 case "user_message_saved":
-                    dispatch(addMessage(mapChatMessageFromApi(payload.message)));
+                    dispatch(reconcileSavedMessage({
+                        clientMessageId: payload.client_message_id ?? null,
+                        message: mapChatMessageFromApi(payload.message),
+                    }));
                     return;
                 case "assistant_start":
                     socketDraftAtRef.current = Date.now();
@@ -1067,6 +1119,12 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                     resetAssistantDraft();
                     dispatch(setTyping(false));
                     dispatch(addMessage(assistantMessage));
+                    setLastAssistantReply((previous) => ({
+                        seq: (previous?.seq ?? 0) + 1,
+                        text: assistantMessage.content,
+                        language: assistantMessage.language ?? voiceRefs.current.selectedLanguage,
+                        urgent: Boolean(payload.escalation_required) && payload.urgency === "emergency",
+                    }));
 
                     // Auto-play only when this turn was voice-initiated.
                     // Typed turns never trigger TTS automatically.
@@ -1141,6 +1199,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             } else {
                 dispatch(setConnectionStatus("disconnected"));
             }
+            dispatch(failPendingMessages());
             voiceRefs.current.autoPlayNextAssistantMessage = false;
             setVoiceStatus((prev) => (prev === "processing" || prev === "playing" ? "idle" : prev));
         };
@@ -1152,6 +1211,9 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
 
             durableReadyRef.current = false;
             clearChatStabilityTimer();
+            // Unconfirmed messages keep their text with a retry; a reconnect snapshot that
+            // holds them turns them into the saved message.
+            dispatch(failPendingMessages());
             if (networkLost) {
                 dispatch(setConnectionStatus("disconnected"));
                 return;
@@ -1246,6 +1308,24 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     function startNewConversation(): void {
         openConversation(newConversationId());
         setInput("");
+    }
+
+    function retryUnsentMessage(clientMessageId: string): void {
+        const unsent = messages.find((message) => message.clientMessageId === clientMessageId);
+        if (!unsent || !durableReadyRef.current) return;
+        // The same request, same idempotency key: if the server did save it, nothing repeats.
+        if (recovery.retry(clientMessageId)) {
+            dispatch(markMessagePending(clientMessageId));
+            setReceivingStream(true);
+            dispatch(setTyping(true));
+            return;
+        }
+        dispatch(removeMessage(clientMessageId));
+        sendChatMessage(unsent.content);
+    }
+
+    function removeUnsentMessage(clientMessageId: string): void {
+        dispatch(removeMessage(clientMessageId));
     }
 
     function dismissSafetyNotice(): void {
@@ -1479,6 +1559,10 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         connectionStatus,
         dismissDocumentContext,
         dismissSafetyNotice,
+        retryUnsentMessage,
+        removeUnsentMessage,
+        lastAssistantReply,
+        sendVoiceUtterance: (text: string, language: ChatLocale) => sendChatMessage(text, undefined, "voice", false, language),
         documentContext,
         documentUnavailable,
         error,

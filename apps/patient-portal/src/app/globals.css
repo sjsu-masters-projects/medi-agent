@@ -225,3 +225,7 @@ details.ma-disclosure > summary::after {
   transition: transform var(--dur-panel) var(--ease-out);
 }
 details.ma-disclosure[open] > summary::after { transform: rotate(180deg); }
+
+/* Voice mode ring: size follows the live microphone level (set as --voice-level, 0 to 1). */
+.ma-voice-ring { transform: scale(calc(1 + var(--voice-level, 0) * .3)); transition: transform 90ms linear; }
+@media (prefers-reduced-motion: reduce) { .ma-voice-ring { transform: none !important; } }

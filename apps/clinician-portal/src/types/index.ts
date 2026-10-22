@@ -34,6 +34,33 @@ export type {
     PaginatedResponse,
 } from "../../../../packages/shared/src/types";
 
+export type {
+    AdoptPlanRequest,
+    CareTeamPlanErrorCode,
+    CarePlanScope,
+    ClinicReviewItem,
+    ConflictMedication,
+    ClinicianCareTeamOption,
+    ClinicianPlanList,
+    ClinicianPlanListEntry,
+    CrossPlanConflict,
+    CrossPlanConflictDetails,
+    CrossPlanConflictKind,
+    CrossPlanResolutionRequest,
+    CrossPlanReview,
+    DocumentClaimResult,
+    PlanOwnershipState,
+    PlanReviewItem,
+    PublishCarePlanRequest,
+    PublishCarePlanResult,
+    RecordedBy,
+    RetireItemsRequest,
+    ReviewItemKind,
+    ReviewItemList,
+    SharedClinicalSummary,
+    UnownedPlanActivities,
+} from "../../../../packages/shared/src/types/care-team-plans";
+
 export {
     Locale,
     DEFAULT_LOCALE,

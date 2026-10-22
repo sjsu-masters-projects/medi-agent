@@ -315,6 +315,23 @@ def _serialize_user_message(row: dict[str, Any]) -> dict[str, Any]:
         return {key: row[key] for key in _SAFE_MESSAGE_KEYS if key in row}
 
 
+def floor_guidance(text: str, language: object) -> str | None:
+    """The deterministic safety floor's guidance for patient TEXT, or None when no rule applies.
+
+    Typed and spoken messages share this: voice reaches it only through the transcript, so
+    the floor never depends on audio, a model or the queue.
+    """
+    verdict = deterministic_safety_floor(text)
+    if verdict is None:
+        return None
+    key = {
+        "emergency_mental_health_keyword": "mental_health_emergency_response",
+        "emergency_symptom_keyword": "emergency_response",
+        "urgent_medication_error": "medication_error_response",
+    }.get(verdict.safety_rule, "emergency_response")
+    return str(resolve_locale_resource(language, TRIAGE_COPY)[key])
+
+
 def public_turn(record: dict[str, Any]) -> dict[str, Any]:
     """No lease, fingerprint, clinical context snapshot or private URL enters socket events."""
     fields = (
@@ -326,15 +343,11 @@ def public_turn(record: dict[str, Any]) -> dict[str, Any]:
         "failure_code",
     )
     user_message = record.get("user_message") or {}
-    verdict = deterministic_safety_floor(str(user_message.get("content") or ""))
-    guidance = None
-    if verdict is not None and record.get("status") != "completed":
-        key = {
-            "emergency_mental_health_keyword": "mental_health_emergency_response",
-            "emergency_symptom_keyword": "emergency_response",
-            "urgent_medication_error": "medication_error_response",
-        }.get(verdict.safety_rule, "emergency_response")
-        guidance = resolve_locale_resource(user_message.get("language"), TRIAGE_COPY)[key]
+    guidance = (
+        floor_guidance(str(user_message.get("content") or ""), user_message.get("language"))
+        if record.get("status") != "completed"
+        else None
+    )
     return {
         **{key: record[key] for key in fields if key in record},
         **(

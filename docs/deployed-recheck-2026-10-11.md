@@ -370,6 +370,18 @@ DV-010, DV-012 and DV-013 remain deployed-recheck items rather than Done.
 
 #### October 22 — integration review of #203
 
+**Main advanced after the first reviewed push:** #210 merged as `1e7dec24` and
+introduced five conflicts in the tracker, CI matrix, ADR card, migration validator and
+fact translation. Resolution retains both CI lanes, care-team choices/ownership and
+original-preserving translation UI; numeric/status fields remain outside translation.
+#210's committed 083–087 files remain unchanged. #203's previously unapplied confirmed
+message migration moves to **088**; 080–082 are unchanged. The prior #203 push's CI
+completed successfully, but that does not substitute for merged-head checks.
+
+After integration: **4,442 backend unit/router tests**, **771 clinician tests**, source
+mypy (299 files), Ruff and parsing **104 migrations** pass. Remaining combined-head
+test receipts are recorded in the PR; no hosted migration/application is inferred.
+
 #193 is merged as `37224b2f` (all 41 PR checks passed); its main CI, frontend CI and
 automatic backend deployment succeeded. #209 is merged as `36972470`. Neither adds a
 migration or requires a new manual activation. These are delivery receipts, not new
@@ -378,7 +390,7 @@ live acceptance of the remaining private-intake or presentation journeys.
 #203 is reviewed against that main. Two bounded independent review lanes inspected
 backend/privacy/safety and UI/approval behaviour. Material fixes:
 
-- Validate clinician-only confirmed wording before sending. Migration 083 delegates the
+- Validate clinician-only confirmed wording before sending. Migration 088 delegates the
   existing clinic-authorized send and atomically commits exact translation or original-only
   delivery. Failure rolls back the message/audit; retries cannot change wording or mode.
 - Rejected/unavailable-preview fallback remains original-only permanently. A later patient
@@ -397,8 +409,8 @@ backend/privacy/safety and UI/approval behaviour. Material fixes:
   record for new/changed verified wording. No retrospective attestation is fabricated.
 
 Applied 067 and main's applied 079 remain byte-for-byte unchanged. Proposed 079/083 English
-copies were identical to 067 and removed. Pending **080–083** are genuine changes, not
-applied here; care-team #210 is coordinated separately for 084–087. Apply with separate
+copies were identical to 067 and removed. Pending **080–082 and 088** are genuine changes, not
+applied here; merged care-team #210 owns 083–087. Apply with separate
 authorization **before merging/deploying #203**, because backend rollout is automatic.
 Use the setup guide and checksum-aware read-only preflight, not ad hoc hosted SQL.
 
@@ -427,7 +439,7 @@ This checkpoint validates implementation, not deployment. It applies no migratio
 changes no remote configuration, care plan, reminder or clinical record. Migrations
 Pending #203 migrations are now `080`–`083`; no hosted application is performed by this review.
 Applied `067_english_display_facts.sql` remains unchanged. Its proposed 079/083 copies
-were byte-identical and removed; actual 083 is the atomic confirmed-message transaction.
+were byte-identical and removed; actual 088 is the atomic confirmed-message transaction.
 
 | Surface | Command | Result |
 | --- | --- | --- |
@@ -449,7 +461,7 @@ the back-translation comparison — is recorded as an open LOC-001 guard questio
 [LOC-003 specification](../.agent/specs/loc-003-english-first-clinician-review.md). The
 preflight prints it every run so it is not rediscovered.
 
-#### Deployed acceptance, once 080–083 are authorized/applied
+#### Deployed acceptance, once 080–082 and 088 are authorized/applied
 
 Run in this order and record the outcome per step. Do not apply migrations as part of a
 verification pass; applying stays a separate authorized step.

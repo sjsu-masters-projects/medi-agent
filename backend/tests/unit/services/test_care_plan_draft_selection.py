@@ -18,6 +18,7 @@ from app.models.generation import (
 )
 from app.services import care_plan_classification, care_plan_service
 from app.services.care_plan_service import CarePlanService
+from tests.unit.services.care_plan_ownership_stub import stub_ownership
 
 MEDICATION_FACT_ID = UUID("00000000-0000-0000-0000-000000000101")
 MONITORING_FACT_ID = UUID("00000000-0000-0000-0000-000000000102")
@@ -64,6 +65,7 @@ async def test_oversized_title_does_not_fail_the_generation_batch() -> None:
     await service._generate(
         {
             "patient_id": str(UUID(int=302)),
+            "care_plan_id": str(UUID(int=304)),
             "request_id": str(UUID(int=301)),
             "source_watermark": "2026-10-01T23:00:00Z",
         }
@@ -94,6 +96,7 @@ async def test_missing_frequency_commits_a_cited_blocker_without_inventing_wordi
     await service._generate(
         {
             "patient_id": str(UUID(int=302)),
+            "care_plan_id": str(UUID(int=304)),
             "request_id": str(UUID(int=301)),
             "source_watermark": "2026-10-01T23:00:00Z",
         }
@@ -456,7 +459,7 @@ def test_legacy_obligation_payload_stages_a_provenance_backed_draft(
     db = MagicMock()
     service = CarePlanService(db)
     monkeypatch.setattr(care_plan_service, "ClinicalFactService", FakeFactService)
-    monkeypatch.setattr(service, "_require_assignment", lambda *_args: None)
+    stub_ownership(service)
     monkeypatch.setattr(service, "_open_draft", lambda *_args: {"id": str(UUID(int=204))})
     monkeypatch.setattr(
         service, "_hydrate_plan", lambda plan: {"id": plan["id"], "status": "draft"}

@@ -33,6 +33,11 @@ async def get_today_feed(
         None,
         description="Optional IANA timezone override. Defaults to the patient's saved timezone.",
     ),
+    care_team_id: str | None = Query(
+        None,
+        max_length=64,
+        description='Show one owner\'s activities: a care-team id or "unowned".',
+    ),
     user: CurrentUser = Depends(get_current_user),
     service: FeedService = Depends(_get_service),
 ) -> Any:
@@ -55,4 +60,4 @@ async def get_today_feed(
                 detail="Invalid date format. Use YYYY-MM-DD",
             ) from e
 
-    return await service.get_today(user.id, target_date, timezone)
+    return await service.get_today(user.id, target_date, timezone, care_team_id)

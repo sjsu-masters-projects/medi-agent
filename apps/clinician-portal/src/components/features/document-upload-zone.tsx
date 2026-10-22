@@ -6,6 +6,7 @@ import { Icon } from "@/components/ui/icons";
 import { LiveDot, ProcessingDots } from "@/components/ui/motion";
 import { DocumentType } from "@/types";
 import { readStoredSession } from "@/services/auth-session";
+import { CareTeamSelect, useCareTeamChoice } from "@/components/features/care-team-select";
 
 const UploadStatus = {
   PENDING: "pending",
@@ -135,6 +136,9 @@ export function DocumentUploadZone({
   const [documentType, setDocumentType] = useState<DocumentType>(
     DocumentType.OTHER,
   );
+  // PLAN-002: with several links to this patient an upload belongs to one care team.
+  const careTeam = useCareTeamChoice(patientId);
+  const [careTeamPrompted, setCareTeamPrompted] = useState(false);
 
   // ── File validation ──────────────────────────────────────────────────────
 
@@ -196,6 +200,10 @@ export function DocumentUploadZone({
       (item) => item.status === UploadStatus.PENDING,
     );
     if (pendingItems.length === 0) return;
+    if (careTeam.missing) {
+      setCareTeamPrompted(true);
+      return;
+    }
 
     setUploading(true);
     const completedIds: string[] = [];
@@ -239,11 +247,17 @@ export function DocumentUploadZone({
               source_clinic: "Clinician uploaded document",
               content_hash: contentHash,
               start_ingestion: true,
+              ...(careTeam.careTeamId ? { care_team_id: careTeam.careTeamId } : {}),
             }),
           },
         );
 
         if (!response.ok) {
+          const body = (await response.json().catch(() => null)) as { error?: { code?: string } } | null;
+          if (response.status === 422 && body?.error?.code === "CARE_TEAM_REQUIRED") {
+            careTeam.requireChoice();
+            throw new Error("Choose which care team this document belongs to, then upload again.");
+          }
           throw new Error(`Upload failed: ${response.status}`);
         }
 
@@ -280,6 +294,7 @@ export function DocumentUploadZone({
 
   return (
     <div className="space-y-4">
+      <CareTeamSelect onChange={careTeam.setValue} options={careTeam.options} required={careTeam.required} showRequired={careTeamPrompted} value={careTeam.value} />
       <label className="block" htmlFor="upload-document-type">
         <span className="mb-1.5 block text-[13px] font-medium text-ink-2">
           Document type

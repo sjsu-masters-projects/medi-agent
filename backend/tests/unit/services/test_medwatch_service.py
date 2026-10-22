@@ -170,6 +170,7 @@ def _draft_row(**overrides: Any) -> dict[str, Any]:
         "discard_reason": None,
         "revision": 1,
         "export_version": "fda-3500-2025-09",
+        "care_team_id": "team-1",
         "created_at": "2026-10-13T16:00:00+00:00",
         "updated_at": "2026-10-13T16:00:00+00:00",
     }

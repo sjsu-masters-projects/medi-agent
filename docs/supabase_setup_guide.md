@@ -206,7 +206,7 @@ so run `backend/scripts/appointment-clinician-overlap-preflight.sql` (read-only)
 appointments in the hosted project. A read-only audit on October 17 found no public table with RLS
 off and no browser-role SELECT or INSERT on a public table.
 
-### Message-translation integrity, wording verification and display provenance (080–083) — not yet applied
+### Message-translation integrity, wording verification and display provenance (080–082 and 088) — not yet applied
 
 Pending the requester's authorization; nothing here has been applied to a hosted project.
 Apply in order, after main's `079_unlisted_product_review_alerts.sql`, before deploying #203's backend:
@@ -232,7 +232,7 @@ Apply in order, after main's `079_unlisted_product_review_alerts.sql`, before de
    under the two message labels). The migration finds 068's inline constraint by definition
    rather than assuming its generated name, and fails closed if either change is missing.
 
-4. `083_confirmed_message_translation.sql` — backend-only atomic confirmed send: the
+4. `088_confirmed_message_translation.sql` — backend-only atomic confirmed send: the
    existing clinic-authorized send and exact clinician-confirmed translation commit together.
    Duplicate retries cannot replace the approved text; translation failure or a changed patient
    locale rolls the send back. Original-only clinician sends atomically store a permanent
@@ -282,8 +282,8 @@ Keep the applied `067_english_display_facts.sql` unchanged. PR #203's proposed 0
 English-display copies were byte-identical and redundant, so they were removed rather than
 creating another ledger identity. The validator permits only the exact historical 067 pair
 with `067_clinic_lists_and_roles.sql`; any new 067 filename collision fails validation.
-Main's 079 remains the applied unlisted-product migration. #203 reserves 080–083;
-care-team PR #210 is coordinated for 084–087, not applied by this work.
+Main's 079 remains the applied unlisted-product migration. #203 reserves 080–082 and 088;
+merged care-team PR #210 owns 083–087, not applied by this work.
 Never edit an applied migration; renumber only a file that has not merged, and test it twice.
 
 ### Appointment booking guards (042/043)

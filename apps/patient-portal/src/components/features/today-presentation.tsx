@@ -7,6 +7,7 @@ import { IconTile, type TileTone } from "@/components/ui/list";
 import type { IconName } from "@/components/ui/icons";
 import type { TaskCardStatus } from "./task-card.types";
 import { FeedTaskType, type FeedTask } from "@/types";
+import { TaskOwnerLine } from "./care-team-owner";
 
 /** Long patient instructions step down from headline size so the card stays scannable on a phone. */
 /** Category labels are written for mid-sentence use; capitalize one that starts a line. */
@@ -68,10 +69,10 @@ export function TaskStatusPill({ status, task, copy, timeLabel }: { status: Task
     </span>;
 }
 
-export function TodayTaskContent({ task, copy, status, timeLabel, disabled, onComplete, onBarrier, hero = false, phase, eyebrow }: {
+export function TodayTaskContent({ task, copy, status, timeLabel, disabled, onComplete, onBarrier, hero = false, phase, eyebrow, showOwner = false }: {
     task: FeedTask; copy: TodayCopy; status: TaskCardStatus; timeLabel: string;
     disabled: boolean; onComplete: () => void; onBarrier: () => void;
-    hero?: boolean; phase?: "saving" | "checked" | "leaving"; eyebrow?: string;
+    hero?: boolean; phase?: "saving" | "checked" | "leaving"; eyebrow?: string; showOwner?: boolean;
 }) {
     const medication = task.type === FeedTaskType.MEDICATION;
     const actionable = status === "active" || status === "missed";
@@ -87,6 +88,7 @@ export function TodayTaskContent({ task, copy, status, timeLabel, disabled, onCo
             <div className="min-w-0 flex-1 space-y-1 break-words [overflow-wrap:anywhere]">
                 <h3 lang={task.contentLocale} className={`${hero ? heroTitleSize(task.name) : "text-xl"} font-semibold leading-tight tracking-[-0.01em] text-ink`}>{task.name}</h3>
                 <WrittenIn task={task} copy={copy} />
+                <TaskOwnerLine task={task} locale={copy.locale} showOwner={showOwner} />
                 {instruction.trim() !== task.name.trim() ? <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-ink-2">{instruction}</p> : null}
                 {!medication && task.frequency ? <p className="text-[13px] text-muted">{task.frequency}</p> : null}
             </div>
@@ -118,9 +120,9 @@ export function TodayTaskContent({ task, copy, status, timeLabel, disabled, onCo
     </div>;
 }
 
-export function TodayTaskRow({ task, copy, status, timeLabel, disabled, onDetails, onComplete }: {
+export function TodayTaskRow({ task, copy, status, timeLabel, disabled, onDetails, onComplete, showOwner = false }: {
     task: FeedTask; copy: TodayCopy; status: TaskCardStatus; timeLabel: string;
-    disabled: boolean; onDetails: () => void; onComplete: () => void;
+    disabled: boolean; onDetails: () => void; onComplete: () => void; showOwner?: boolean;
 }) {
     const canMarkDone = !task.requiresScheduleConfiguration && task.type !== FeedTaskType.MEDICATION && (status === "active" || status === "missed");
     const rawStatus = getTaskStatusLabel(status, task.scheduledTime ?? "", copy);
@@ -131,6 +133,7 @@ export function TodayTaskRow({ task, copy, status, timeLabel, disabled, onDetail
             <TodayTaskIcon task={task} />
             <span className="min-w-0 flex-1">
                 <span lang={task.contentLocale} className={`line-clamp-2 break-words text-[15px] font-semibold leading-snug [overflow-wrap:anywhere] ${status === "completed" ? "text-muted" : "text-ink"}`}>{task.name}</span>
+                <TaskOwnerLine task={task} locale={copy.locale} showOwner={showOwner} />
                 {sub ? <span className="mt-0.5 line-clamp-1 break-words text-[13px] text-muted [overflow-wrap:anywhere]">{sub}</span> : null}
             </span>
         </button>

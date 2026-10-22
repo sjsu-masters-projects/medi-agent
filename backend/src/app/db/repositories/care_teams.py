@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from app.db.supabase_execute import HasSupabaseClient, execute_async
+from app.db.supabase_execute import HasSupabaseClient, execute_async, execute_sync
 
 
 class CareTeamRepository:
@@ -128,5 +128,23 @@ class CareTeamRepository:
             .not_.is_("patient_id", "null"),
             operation="active link lookup",
             retry_transient=False,
+        )
+        return self._as_rows(result.data)
+
+    def list_patient_links_sync(self, clinician_id: str, patient_id: str) -> list[dict[str, Any]]:
+        """Exact actor/patient links; never infer a plan owner from a clinic label."""
+        result = execute_sync(
+            self.owner,
+            lambda db: db.table("care_teams")
+            .select(
+                "id, patient_id, clinician_id, clinic_id, status, role, specialty_context, "
+                "clinics(display_name), clinicians(specialty)"
+            )
+            .eq("clinician_id", clinician_id)
+            .eq("patient_id", patient_id)
+            .eq("status", "active")
+            .order("created_at"),
+            operation="patient care-team scope lookup",
+            retry_transient=True,
         )
         return self._as_rows(result.data)

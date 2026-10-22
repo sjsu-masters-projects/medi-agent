@@ -9,6 +9,7 @@ from uuid import UUID
 from supabase import Client
 
 from app.models.clinical_fact import ClinicalFactReviewState
+from app.services.clinician_record_gate import ClinicianRecordGate
 
 
 class FhirImportReviewService:
@@ -18,10 +19,12 @@ class FhirImportReviewService:
 
     def __init__(self, db: Client) -> None:
         self.db = db
+        self.gate = ClinicianRecordGate(db)
 
     def list_facts(
         self,
         *,
+        clinician_id: UUID,
         patient_id: UUID,
         review_state: ClinicalFactReviewState,
         fact_type: str | None,
@@ -32,19 +35,35 @@ class FhirImportReviewService:
         offset: int,
         limit: int,
     ) -> dict[str, Any]:
-        """Return one page of SMART and document candidates with source labels."""
+        """Return one page of SMART and document candidates with source labels.
+
+        Only facts whose every source this clinician may see are listed: a fact extracted
+        from a document routed to another care team, or imported by another team, is absent
+        from the page, the counts and the totals alike.
+        """
+        access = self.gate.access(clinician_id, patient_id)
         metadata_result = (
             self.db.table("clinical_facts")
             .select("id, fact_type, review_state, reconciliation_state, created_at")
             .eq("patient_id", str(patient_id))
             .execute()
         )
-        metadata = cast(list[dict[str, Any]], metadata_result.data or [])
+        metadata = self.gate.visible_facts(
+            access, cast(list[dict[str, Any]], metadata_result.data or [])
+        )
         sources = self._sources_for_facts(metadata)
+        # An import row carries its own owner: a fact from an import this clinician may not see
+        # stays hidden even if its provenance row predates the owner column.
+        hidden_imports = self.gate.hidden_import_ids(
+            access,
+            [str(source["import_id"]) for source in sources.values() if source.get("import_id")],
+        )
         visible_metadata = []
         for row in metadata:
             source = sources.get(str(row.get("id")))
             if row.get("review_state") == ClinicalFactReviewState.DELETED.value or not source:
+                continue
+            if source.get("import_id") and str(source["import_id"]) in hidden_imports:
                 continue
             if source_kind and source.get("source_kind") != source_kind:
                 continue
@@ -187,8 +206,11 @@ class FhirImportReviewService:
                 }
         return result
 
-    def get_source(self, *, fact_id: UUID, patient_id: UUID) -> dict[str, Any] | None:
+    def get_source(
+        self, *, clinician_id: UUID, fact_id: UUID, patient_id: UUID
+    ) -> dict[str, Any] | None:
         """Return the authorized original FHIR envelope or document evidence descriptor."""
+        self.gate.fact(clinician_id, patient_id, fact_id)
         fact_result = (
             self.db.table("clinical_facts")
             .select("id")
@@ -253,6 +275,8 @@ class FhirImportReviewService:
         envelope = cast(dict[str, Any] | None, envelope_result.data)
         if not envelope:
             return None
+        if envelope.get("import_id"):
+            self.gate.fhir_import(clinician_id, patient_id, envelope["import_id"])
         return {
             "issuer": envelope.get("issuer") or provenance.get("source_system"),
             "resource_type": envelope.get("resource_type") or "FHIR resource",

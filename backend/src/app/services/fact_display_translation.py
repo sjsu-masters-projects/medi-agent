@@ -31,7 +31,8 @@ BATCH_SIZE = 15
 START = "<<<FACTS_JSON"
 END = "FACTS_JSON>>>"
 
-# Fields that may be translated (text descriptions, names, instructions).
+# Fields that may be translated (text descriptions, names, instructions). This is an allowlist:
+# numeric values, units, dates, flags and statuses are absent, so they are never translated.
 _TRANSLATABLE_KEYS: dict[str, set[str]] = {
     "medication": {"name", "instructions", "frequency"},
     "obligation": {"description", "frequency"},
@@ -51,29 +52,6 @@ _PROPER_NAME_KEYS: dict[str, set[str]] = {
     "medication": {"name"},
     "allergy": {"allergen"},
     "immunization": {"vaccine"},
-}
-
-# Fields that must NEVER be translated (numeric values, units, dates, flags).
-_NEVER_TRANSLATE: set[str] = {
-    "value",
-    "unit",
-    "reference_range",
-    "flag",
-    "flag_meaning",
-    "range_status",
-    "dosage",
-    "route",
-    "status",
-    "severity",
-    "collected_at",
-    "measured_at",
-    "administered_at",
-    "dose_number",
-    "scheduled_for",
-    "specimen",
-    "panel",
-    "consistency",
-    "medication_action",
 }
 
 FACT_TRANSLATION_SYSTEM = """You translate extracted clinical fact fields from Mexican

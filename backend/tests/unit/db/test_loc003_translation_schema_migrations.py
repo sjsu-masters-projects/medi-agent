@@ -1,4 +1,4 @@
-"""Text-level guarantees of LOC-003 migrations 080-083 and applied-file identity."""
+"""Text-level guarantees of LOC-003 migrations 080-082 and 088 and applied-file identity."""
 
 from pathlib import Path
 
@@ -23,7 +23,7 @@ class TestDuplicatePrefixIsResolved:
         assert (MIGRATIONS / "079_unlisted_product_review_alerts.sql").exists()
         assert not (MIGRATIONS / "079_english_display_facts.sql").exists()
         assert not (MIGRATIONS / "083_english_display_facts.sql").exists()
-        assert (MIGRATIONS / "083_confirmed_message_translation.sql").exists()
+        assert (MIGRATIONS / "088_confirmed_message_translation.sql").exists()
 
     def test_the_renumbered_file_is_re_runnable_because_the_ledger_keys_on_the_name(self) -> None:
         renumbered = (MIGRATIONS / "067_english_display_facts.sql").read_text()

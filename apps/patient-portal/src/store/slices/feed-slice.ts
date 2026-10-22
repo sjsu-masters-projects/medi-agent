@@ -1,6 +1,6 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from "@reduxjs/toolkit";
 import { api } from "@/services/api";
-import { FeedTaskStatus, type FeedSummary, type FeedTask, type TodayFeedResponse } from "@/types";
+import { FeedTaskStatus, type CareTeamFilterOption, type FeedSummary, type PlanOwner, type FeedTask, type TodayFeedResponse } from "@/types";
 import type { Locale } from "@/types";
 import { ApiTransportError } from "../../../../../packages/shared/src/utils/api-transport";
 
@@ -39,6 +39,9 @@ interface ApiFeedTask {
         effective_start_date?: string | null;
         effective_end_date?: string | null;
     } | null;
+    plan_owner?: PlanOwner | null;
+    plan_owners?: PlanOwner[] | null;
+    combined_item_ids?: string[] | null;
 }
 
 interface ApiTodayFeedResponse {
@@ -46,11 +49,15 @@ interface ApiTodayFeedResponse {
     timezone: string;
     tasks: ApiFeedTask[];
     summary: FeedSummary;
+    care_team_filters?: CareTeamFilterOption[] | null;
+    contact_clinic?: boolean | null;
 }
 
 interface FeedState {
     tasks: FeedTask[];
     summary: FeedSummary;
+    careTeamFilters: CareTeamFilterOption[];
+    contactClinic: boolean;
     loading: boolean;
     error: string | null;
     locale: Locale | null;
@@ -68,6 +75,8 @@ export const defaultFeedSummary: FeedSummary = {
 const initialState: FeedState = {
     tasks: [],
     summary: defaultFeedSummary,
+    careTeamFilters: [],
+    contactClinic: false,
     loading: false,
     error: null,
     locale: null,
@@ -103,6 +112,9 @@ function mapApiTask(task: ApiFeedTask): FeedTask {
         description: task.description ?? undefined,
         frequency: task.frequency,
         id: task.id,
+        ...(task.plan_owner !== undefined ? { planOwner: task.plan_owner } : {}),
+        ...(task.plan_owners?.length ? { planOwners: task.plan_owners } : {}),
+        ...(task.combined_item_ids?.length ? { combinedItemIds: task.combined_item_ids } : {}),
         name: task.name,
         provider: mapApiProvider(task.provider),
         requiresScheduleConfiguration: Boolean(
@@ -125,6 +137,8 @@ function mapTodayFeedResponse(response: ApiTodayFeedResponse): TodayFeedResponse
         },
         tasks: response.tasks.map(mapApiTask),
         timezone: response.timezone,
+        careTeamFilters: response.care_team_filters ?? [],
+        contactClinic: Boolean(response.contact_clinic),
     };
 }
 
@@ -197,6 +211,8 @@ export const feedSlice = createSlice({
                 if (state.currentRequestId !== action.meta.requestId) return;
                 state.tasks = action.payload.tasks;
                 state.summary = action.payload.summary;
+                state.careTeamFilters = action.payload.careTeamFilters ?? [];
+                state.contactClinic = Boolean(action.payload.contactClinic);
                 state.locale = action.meta.arg?.locale ?? "en-US";
                 state.currentRequestId = null;
                 state.loading = false;
@@ -208,6 +224,8 @@ export const feedSlice = createSlice({
                 if (state.locale !== locale) {
                     state.tasks = [];
                     state.summary = { ...defaultFeedSummary };
+                    state.careTeamFilters = [];
+                    state.contactClinic = false;
                 }
                 state.locale = locale;
                 state.currentRequestId = null;

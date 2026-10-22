@@ -48,6 +48,8 @@ from app.models.medwatch_form_3500 import (
     MedWatchListState,
 )
 from app.pharmacovigilance import NaranjoQuestion
+from app.services.acting_care_team import acting_care_team
+from app.services.care_team_access import CareTeamAccessService, PatientAccess
 from app.services.clinic_membership_service import ClinicMembershipService
 from app.services.medwatch_3500.dates import (
     clinic_date_of,
@@ -683,6 +685,7 @@ class MedWatchService:
     def __init__(self, db: Client) -> None:
         self.db = db
         self.care_team_repo = CareTeamRepository(self)
+        self.care_access = CareTeamAccessService(db)
 
     # ── Create, list, read ───────────────────────────────────────────────
 
@@ -696,6 +699,11 @@ class MedWatchService:
         assessment = await self._get_assessment(assessment_id)
         patient_id = UUID(str(assessment["patient_id"]))
         await self._assert_assignment(clinician_id, patient_id)
+        access = await self._access(clinician_id, patient_id)
+        if not access.can_see_adr(assessment):
+            raise NotFoundError("ADR assessment", str(assessment_id))
+        # The draft, and the review it completes, belong to the clinician's exact link.
+        team_id = acting_care_team(access, request.care_team_id)
         if assessment.get("status") != ADRStatus.DRAFT.value:
             raise ValidationError(
                 "ADR assessment review has already been completed", code=ADR_REVIEW_COMPLETED
@@ -720,6 +728,7 @@ class MedWatchService:
             patient_id=patient_id,
             assessment=assessment,
             rationale=request.reportability_rationale,
+            access=access,
         )
         form, source_evidence = build_form_3500(sources)
         row = await self._rpc(
@@ -731,10 +740,13 @@ class MedWatchService:
                 "p_source_evidence": source_evidence,
                 "p_reportability_rationale": request.reportability_rationale,
                 "p_draft_id": str(draft_id),
+                # Written with the draft, in the same transaction.
+                "p_care_team_id": team_id,
             },
             failure="MedWatch draft could not be created",
             resource=("ADR assessment", assessment_id),
         )
+        row = {**row, "care_team_id": team_id}
         return (await self._read_models([row]))[0]
 
     async def list_drafts(
@@ -764,7 +776,10 @@ class MedWatchService:
                 "status", [MedWatchStatus.DRAFT.value, MedWatchStatus.REVIEWED.value]
             ).is_("discarded_at", "null")
         result = await self._execute(query.order("created_at", desc=True))
-        items = await self._read_models(cast(list[dict[str, Any]], result.data or []))
+        links = await asyncio.to_thread(self.care_access.for_clinician, clinician_id)
+        # Drafts follow their reviewing team; one with no team is every assigned team's.
+        visible = links.keep(cast(list[dict[str, Any]], result.data or []), "medwatch_draft")
+        items = await self._read_models(visible)
         items = [scope.annotate(item) for item in items]
         return {"items": items, "total": len(items)}
 
@@ -1248,7 +1263,12 @@ class MedWatchService:
         if not rows:
             raise NotFoundError("MedWatch draft", str(draft_id))
         draft = dict(rows[0])
-        await self._assert_assignment(clinician_id, UUID(str(draft["patient_id"])))
+        patient_id = UUID(str(draft["patient_id"]))
+        await self._assert_assignment(clinician_id, patient_id)
+        access = await self._access(clinician_id, patient_id)
+        if not access.can_see_medwatch_draft(draft):
+            # Another team's draft: the same answer as an unknown id.
+            raise NotFoundError("MedWatch draft", str(draft_id))
         return draft
 
     async def _get_readable_draft(self, clinician_id: UUID, draft_id: UUID) -> dict[str, Any]:
@@ -1265,6 +1285,7 @@ class MedWatchService:
         patient_id: UUID,
         assessment: Mapping[str, Any],
         rationale: str,
+        access: PatientAccess,
     ) -> Form3500Sources:
         """Only stored records: patient, symptom, medications, conditions, allergies, reporter."""
 
@@ -1286,9 +1307,13 @@ class MedWatchService:
             .eq("patient_id", str(patient_id))
             .eq("is_active", True)
         )
-        conditions = await self._rows(
-            self.db.table("conditions").select("*").eq("patient_id", str(patient_id))
-        )
+        # The form is filed under this clinician's name: a condition the patient kept private
+        # from their team never goes into it.
+        conditions = access.split_conditions(
+            await self._rows(
+                self.db.table("conditions").select("*").eq("patient_id", str(patient_id))
+            )
+        )[0]
         allergies = await self._rows(
             self.db.table("allergies").select("*").eq("patient_id", str(patient_id))
         )
@@ -1354,6 +1379,11 @@ class MedWatchService:
             elif old_value != new_value:
                 paths.append(path)
         return paths
+
+    async def _access(self, clinician_id: UUID, patient_id: UUID) -> PatientAccess:
+        return await asyncio.to_thread(
+            self.care_access.for_patient, clinician_id, patient_id, require=False
+        )
 
     async def _assert_assignment(self, clinician_id: UUID, patient_id: UUID) -> None:
         assignments = await self.care_team_repo.find_active_assignment(

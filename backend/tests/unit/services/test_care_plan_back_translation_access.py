@@ -10,6 +10,7 @@ import pytest
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models.generation import GenerationErrorCode, GenerationProviderError
 from app.services.care_plan_service import CarePlanService
+from tests.unit.services.care_plan_ownership_stub import stub_ownership
 
 PATIENT_ID = UUID("00000000-0000-0000-0000-000000000201")
 CLINICIAN_ID = UUID("00000000-0000-0000-0000-000000000202")
@@ -24,7 +25,7 @@ ITEM = {
 
 def _service(plan_found: bool = True) -> CarePlanService:
     service = CarePlanService(MagicMock())
-    service._require_assignment = MagicMock()
+    stub_ownership(service)
     if plan_found:
         service._plan = MagicMock(return_value={"id": str(PLAN_ID)})
     else:

@@ -42,6 +42,26 @@ logger = logging.getLogger(__name__)
 MAX_PARSE_ATTEMPTS = 3
 
 
+class DocumentDraftingRequest:
+    """Ask the database to queue care-plan drafting for the plan of a document's own team."""
+
+    def __init__(self, db: Client) -> None:
+        self.db = db
+
+    def request(self, document_id: UUID, source_watermark: datetime) -> dict[str, Any]:
+        result = self.db.rpc(
+            "request_care_plan_generation_for_document",
+            {
+                "p_document_id": str(document_id),
+                "p_source_watermark": source_watermark.isoformat(),
+            },
+        ).execute()
+        data = result.data
+        if isinstance(data, list):
+            data = data[0] if data else None
+        return data if isinstance(data, dict) else {}
+
+
 class IngestionService:
     """Process one claimed document outside the API request lifecycle."""
 
@@ -252,9 +272,9 @@ class IngestionService:
             # contains no source text; drafting later reads only the registered, grounded facts.
             # Results, vital signs, conditions and allergies alone never change a plan, so a
             # lab report does not open a draft a clinician would have to approve unchanged.
-            from app.services.care_plan_service import CarePlanService
-
-            CarePlanService(self.db).request_generation(patient_id, datetime.now(UTC))
+            # Drafting follows the document: its own team's plan. An unrouted document
+            # (the patient chose "Not sure") requests nothing until a clinician claims it.
+            DocumentDraftingRequest(self.db).request(document_id, datetime.now(UTC))
         return self._outcome(
             "completed",
             candidate_count=registered.created,

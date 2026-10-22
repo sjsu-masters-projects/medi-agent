@@ -849,6 +849,7 @@ async def generate_soap_note(
         patient_id=patient_id,
         clinician_id=user.id,
         lookback_days=request.lookback_days,
+        care_team_id=request.care_team_id,
     )
 
     if result.status != "success":

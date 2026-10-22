@@ -178,17 +178,25 @@ class CarePlanPreviewService:
         patient = await self.feed._get_patient(patient_id, strict=True)
         timezone = str(patient["timezone"])
         target_date = datetime.now(ZoneInfo(timezone)).date()
+        # Only THIS plan's previous approved version is replaced in the preview; the
+        # patient's other plans' activities stay exactly as they are.
+        _, care_plan = self.plans.lineage.require_owned_version(clinician_id, patient_id, plan_id)
         previous = next(
-            (row for row in self.plans._plans(patient_id) if row["status"] == "approved"), None
+            (
+                row
+                for row in self.plans._versions(UUID(str(care_plan["id"])))
+                if row["status"] == "approved"
+            ),
+            None,
         )
         previous_items = self.plans._items(UUID(str(previous["id"]))) if previous else []
         provider_result = (
             self.db.table("care_teams")
             .select("id, clinics(display_name), clinicians(id, first_name, last_name, specialty)")
+            .eq("id", str(care_plan["care_team_id"]))
             .eq("patient_id", str(patient_id))
             .eq("clinician_id", str(clinician_id))
             .eq("status", "active")
-            .order("created_at")
             .limit(1)
             .execute()
         )
@@ -199,9 +207,12 @@ class CarePlanPreviewService:
             previous_items,
             providers[0] if providers else None,
         )
+        own_items = self.plans._own_plan_item_ids(UUID(str(care_plan["id"])))
         for item in active:
             if item["category"] == "medication":
-                self.plans._validate_medication_decision(item["medication"], current.medications)
+                self.plans._validate_medication_decision(
+                    item["medication"], current.medications, own_items=own_items
+                )
         records = proposed_records(active, current)
         reminders = await ReminderScheduleService(self.db).get_schedule_map_for_patient(
             str(patient_id)

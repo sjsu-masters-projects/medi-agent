@@ -17,6 +17,7 @@ import httpx
 import pytest
 from postgrest import SyncPostgrestClient
 
+from app.services.care_team_access import PatientAccess
 from app.services.external_record_review_service import ExternalRecordReviewService
 from tests.integration.test_reconciliation_postgres import (
     FOREIGN,
@@ -63,6 +64,13 @@ def test_actual_nested_source_query_counts_facts_and_excludes_ineligible_evidenc
     source(sql, foreign, document=True)
     # A candidate without any cited imported source also must be excluded.
     fact(sql)
+    # Ownership columns (migration 084 defines them); this reduced schema needs only their shape.
+    # Every document here is "Not sure": in the queue of each of the clinician's teams.
+    sql("""
+      ALTER TABLE documents ADD COLUMN care_team_id uuid,
+        ADD COLUMN routing_state text NOT NULL DEFAULT 'unrouted';
+      ALTER TABLE source_provenances ADD COLUMN care_team_id uuid;
+    """)
     command = sql.command
     docker, container, database = command[0], command[3], command[-1]
     server = "mediagent-external-review-rest-" + uuid4().hex
@@ -99,7 +107,12 @@ def test_actual_nested_source_query_counts_facts_and_excludes_ineligible_evidenc
         ):
             import asyncio
 
-            result = asyncio.run(ExternalRecordReviewService(db)._patient(PATIENT))
+            service = ExternalRecordReviewService(db)
+            mine = PatientAccess("clinician", PATIENT, frozenset({"team-one"}))
+            result = asyncio.run(service._patient(PATIENT, mine))
+            # A clinician with no link to the patient counts nothing of this workload.
+            nobody = asyncio.run(service._patient(PATIENT, PatientAccess("stranger", PATIENT)))
+        assert nobody["pending_count"] == 0
         assert result["pending_count"] == 39
         assert result["inspected_candidates"] == 39
         assert result["source_times_complete"] is True

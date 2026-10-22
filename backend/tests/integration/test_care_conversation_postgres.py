@@ -1003,8 +1003,11 @@ def test_activity_attach_and_review_work_on_the_full_migration_chain(full_chain_
     sql = full_chain_sql
     plan, item, obligation = str(uuid4()), str(uuid4()), str(uuid4())
     sql(f"""
-      INSERT INTO care_plan_versions(id,patient_id,version_number,status)
-        VALUES('{plan}','{PATIENT}',1,'draft');
+      -- A version belongs to a care plan, and a plan to one care-team link (083).
+      INSERT INTO care_plans(id,patient_id,care_team_id,origin_care_team_id)
+        VALUES('{plan}','{PATIENT}','{TEAM}','{TEAM}');
+      INSERT INTO care_plan_versions(id,patient_id,care_plan_id,version_number,status)
+        VALUES('{plan}','{PATIENT}','{plan}',1,'draft');
       INSERT INTO care_plan_items(id,plan_version_id,category,title,instructions,frequency)
         VALUES('{item}','{plan}','hydration','Synthetic activity','Approved source instruction','daily');
       -- Seeding only: source-document eligibility is owned by the care-plan suite.

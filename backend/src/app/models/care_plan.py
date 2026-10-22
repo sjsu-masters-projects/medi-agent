@@ -89,6 +89,44 @@ class CarePlanDraftUpdate(BaseModel):
 
 class CarePlanApprovalRequest(BaseModel):
     note: str = Field(min_length=1, max_length=5000)
+    # One key per publish attempt: a retry with the same key, draft and exclusions returns
+    # the same result and publishes once. Omitted, the call is safe but not retry-idempotent.
+    idempotency_key: UUID | None = None
+    # "Publish without this item": these items stay pending in the next draft.
+    excluded_item_ids: list[UUID] = Field(default_factory=list, max_length=100)
+
+
+class CrossPlanResolutionRequest(BaseModel):
+    """Keep both (a current written reason) or ask the other care team (the question)."""
+
+    resolution: Literal["keep_both", "ask_other_team"]
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+class ReviewItemReplyRequest(BaseModel):
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class AdoptPlanRequest(BaseModel):
+    care_team_id: UUID
+    note: str = Field(min_length=1, max_length=2000)
+
+
+class RetireItemsRequest(BaseModel):
+    care_team_id: UUID
+    item_ids: list[UUID] = Field(min_length=1, max_length=100)
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+class CareTeamPlanScopeRead(BaseModel):
+    """Only the acting clinician's active exact links, not another team's plan detail."""
+
+    care_team_id: UUID
+    patient_id: UUID
+    clinician_id: UUID
+    clinic_id: UUID
+    clinic_name: str | None = None
+    specialty: str | None = None
 
 
 class CarePlanTodayPreviewRead(BaseModel):
@@ -211,3 +249,7 @@ class BackTranslationResponse(BaseModel):
 
     back_translation: BackTranslationWording
     guards: BackTranslationGuards
+
+
+class TakeRecordRequest(BaseModel):
+    care_team_id: UUID

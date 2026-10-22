@@ -6,6 +6,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from supabase import Client
@@ -14,6 +15,7 @@ from app.core.exceptions import ValidationError
 from app.core.job_logging import JobRunLog
 from app.db.supabase_execute import execute_async
 from app.services.email_service import EmailDeliveryService
+from app.services.feed_service import FeedService
 from app.services.health_knowledge_service import HealthKnowledgeService
 from app.services.reminder_schedule_service import (
     occurrence_datetimes_for_day,
@@ -376,6 +378,7 @@ class CronService:
         schedules = await self._fetch_enabled_reminder_schedules()
         if not schedules:
             return summary
+        schedules = await self._collapse_combined_schedules(schedules, window_end, summary)
 
         medication_map = await self._fetch_medication_display_map(
             [str(row["target_id"]) for row in schedules if row.get("target_type") == "medication"]
@@ -425,6 +428,60 @@ class CronService:
             else:
                 summary[f"{target_type}_created"] += 1
         return summary
+
+    async def _collapse_combined_schedules(
+        self, schedules: list[dict[str, Any]], window_end: datetime, summary: dict[str, int]
+    ) -> list[dict[str, Any]]:
+        """One reminder per occurrence for a combined Today entry (PLAN-002 decision 5).
+
+        Identical activities of several plans are one entry in Today, with one reminder. The
+        entry's own schedule wins; if it has none, the first member that does is used. The
+        notification is keyed on the entry's id, so the key is the same on every run and for
+        every retry, and the existing unique key makes concurrent dispatcher runs safe. If
+        grouping cannot be read, reminders still go out (ungrouped) and the failure is logged.
+        """
+        by_patient: dict[str, list[dict[str, Any]]] = {}
+        for schedule in schedules:
+            by_patient.setdefault(str(schedule["patient_id"]), []).append(schedule)
+        dropped: set[str] = set()
+        primary_of: dict[str, str] = {}
+        for patient_id, owned in by_patient.items():
+            if len(owned) < 2 or self.db is None:
+                continue
+            local_date = window_end.astimezone(
+                ZoneInfo(str(owned[0].get("timezone") or "UTC"))
+            ).date()
+            try:
+                groups = await FeedService(self.db).combined_groups(UUID(patient_id), local_date)
+            except Exception:
+                logger.warning(
+                    "Reminder grouping unavailable; sending ungrouped for patient %s", patient_id
+                )
+                summary["grouping_unavailable"] = summary.get("grouping_unavailable", 0) + 1
+                continue
+            for group in groups:
+                primary = group[0][1]
+                scheduled = [
+                    schedule
+                    for kind, member_id in group
+                    for schedule in owned
+                    if str(schedule["target_id"]) == member_id
+                    and schedule.get("target_type") == kind
+                ]
+                if not scheduled:
+                    continue
+                keep = next(
+                    (row for row in scheduled if str(row["target_id"]) == primary), scheduled[0]
+                )
+                dropped.update(str(row["id"]) for row in scheduled if row is not keep)
+                primary_of[str(keep["id"])] = primary
+        if dropped:
+            summary["skipped_combined_duplicate"] = len(dropped)
+        kept = [row for row in schedules if str(row["id"]) not in dropped]
+        for row in kept:
+            if str(row["id"]) in primary_of:
+                row["group_primary_id"] = primary_of[str(row["id"])]
+        return kept
 
     async def _ensure_job_not_running(self, job_name: str) -> None:
         cutoff = self._iso(self._utc_now() - timedelta(hours=self.RUNNING_STALE_AFTER_HOURS))
@@ -699,10 +756,12 @@ class CronService:
             "title": title,
             "body": body,
             "action_url": action_url,
-            "dedupe_key": f"{target_type}:{target_id}:{scheduled_at}",
+            # A combined entry is keyed on the entry's own id, so every member's schedule and
+            # every retry produce the same key.
+            "dedupe_key": f"{target_type}:{schedule.get('group_primary_id') or target_id}:{scheduled_at}",
             "metadata": {
                 "target_type": target_type,
-                "target_id": target_id,
+                "target_id": str(schedule.get("group_primary_id") or target_id),
                 "scheduled_at": scheduled_at,
                 "display_name": display_name,
             },

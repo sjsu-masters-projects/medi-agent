@@ -1,6 +1,6 @@
 """Retrying a patient explanation is care-team gated and clinically inert."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -38,7 +38,7 @@ def mock_db():
 @pytest.fixture
 def mock_service(document_id, patient_id):
     service = MagicMock()
-    service.get_document = AsyncMock(
+    service.get_clinician_document = AsyncMock(
         return_value={
             "id": str(document_id),
             "patient_id": str(patient_id),
@@ -79,15 +79,14 @@ def _url(patient_id, document_id) -> str:
 
 
 def test_assigned_clinician_requeues_only_the_explanation(
-    client, mock_db, clinician_id, patient_id, document_id
+    client, mock_db, mock_service, clinician_id, patient_id, document_id
 ):
-    with patch("app.routers.documents.SmartLaunchService") as smart:
-        response = client.post(_url(patient_id, document_id))
+    response = client.post(_url(patient_id, document_id))
 
     assert response.status_code == status.HTTP_202_ACCEPTED
     assert response.json()["summary_status"] == "pending"
-    smart.return_value.ensure_assignment.assert_called_once_with(
-        clinician_id=clinician_id, patient_id=patient_id
+    mock_service.authorize_clinician_document.assert_called_once_with(
+        clinician_id, patient_id, document_id
     )
     mock_db.rpc.assert_called_once_with(
         "enqueue_document_summary_retry",
@@ -102,11 +101,10 @@ def test_assigned_clinician_requeues_only_the_explanation(
 
 
 def test_unassigned_clinician_cannot_requeue_an_explanation(
-    client, mock_db, patient_id, document_id
+    client, mock_db, mock_service, patient_id, document_id
 ):
-    with patch("app.routers.documents.SmartLaunchService") as smart:
-        smart.return_value.ensure_assignment.side_effect = AuthorizationError("not assigned")
-        response = client.post(_url(patient_id, document_id))
+    mock_service.authorize_clinician_document.side_effect = AuthorizationError("not assigned")
+    response = client.post(_url(patient_id, document_id))
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
     mock_db.rpc.assert_not_called()

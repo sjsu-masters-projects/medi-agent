@@ -417,9 +417,14 @@ jobs:
             minimums: test_chat_turn_events_postgres=35
           - name: loc003-translation-schema
             # Message-translation integrity and retention, the wording-verification
-            # record, display provenance and atomic confirmed sends (080-083).
+            # record, display provenance and atomic confirmed sends (080-082, 088).
             files: tests/integration/test_loc003_translation_postgres.py tests/integration/test_confirmed_translation_postgres.py
             minimums: test_loc003_translation_postgres=31 test_confirmed_translation_postgres=15
+          - name: care-team-plans
+            # Plan ownership, routed documents, shared core, cross-plan publication and
+            # notification scoping and record owners (083-087). Disposable containers, no remote database.
+            files: tests/integration/test_care_team_plans_postgres.py tests/integration/test_care_team_records_postgres.py tests/integration/test_care_team_publication_postgres.py tests/integration/test_care_team_notifications_postgres.py tests/integration/test_care_team_record_owner_postgres.py
+            minimums: test_care_team_plans_postgres=25 test_care_team_records_postgres=35 test_care_team_publication_postgres=38 test_care_team_notifications_postgres=24 test_care_team_record_owner_postgres=14
           - name: confirmed-symptoms
             image: postgres:16-alpine
             files: tests/integration/test_symptom_intake_postgres.py tests/integration/test_symptom_handoff_postgres.py
@@ -455,6 +460,7 @@ jobs:
           CHAT_TURN_TEST_POSTGRES_DOCKER: "1"
           LOC003_TEST_POSTGRES: "1"
           LOC003_TEST_POSTGRES_DOCKER: "1"
+          CARE_TEAM_PLANS_TEST_POSTGRES_DOCKER: "1"
           SYMPTOM_INTAKE_TEST_POSTGRES: "1"
           CHAT_SAFETY_TEST_POSTGRES_DOCKER: "1"
           EXTERNAL_REVIEW_TEST_POSTGREST_DOCKER: "1"

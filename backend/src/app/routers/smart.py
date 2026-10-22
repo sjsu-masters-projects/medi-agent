@@ -36,8 +36,8 @@ from app.models.reconciliation import (
     ReconciliationDecisionRequest,
     ReconciliationPreviewRead,
 )
-from app.services.clinical_fact_service import ClinicalFactService
 from app.services.clinical_reconciliation_service import ClinicalReconciliationService
+from app.services.clinician_record_gate import ClinicianFactService, ClinicianRecordGate
 from app.services.external_patient_binding_service import ExternalPatientBindingService
 from app.services.fhir_audit_export_service import FhirAuditExportService
 from app.services.fhir_import_review_service import FhirImportReviewService
@@ -53,6 +53,10 @@ _clinician_dep = require_role("clinician")
 
 def _service(db: Client = Depends(get_db)) -> SmartLaunchService:
     return SmartLaunchService(db)
+
+
+def _record_gate(db: Client = Depends(get_db)) -> ClinicianRecordGate:
+    return ClinicianRecordGate(db)
 
 
 def _fhir_audit_export_service(db: Client = Depends(get_db)) -> FhirAuditExportService:
@@ -167,8 +171,10 @@ async def import_identity_binding_preview(
     user: CurrentUser = Depends(_clinician_dep),
     service: SmartLaunchService = Depends(_service),
     bindings: ExternalPatientBindingService = Depends(_external_patient_binding_service),
+    gate: ClinicianRecordGate = Depends(_record_gate),
 ) -> FhirIdentityBindingRead:
     service.ensure_assignment(clinician_id=user.id, patient_id=patient_id)
+    gate.fhir_import(user.id, patient_id, import_id)
     return FhirIdentityBindingRead.model_validate(
         bindings.preview(import_id=import_id, patient_id=patient_id)
     )
@@ -185,8 +191,10 @@ async def confirm_import_identity_binding(
     user: CurrentUser = Depends(_clinician_dep),
     service: SmartLaunchService = Depends(_service),
     bindings: ExternalPatientBindingService = Depends(_external_patient_binding_service),
+    gate: ClinicianRecordGate = Depends(_record_gate),
 ) -> FhirIdentityBindingRead:
     service.ensure_assignment(clinician_id=user.id, patient_id=patient_id)
+    gate.fhir_import(user.id, patient_id, import_id)
     return FhirIdentityBindingRead.model_validate(
         bindings.confirm(
             import_id=import_id,
@@ -215,6 +223,7 @@ async def list_pending_facts(
     service.ensure_assignment(clinician_id=user.id, patient_id=patient_id)
     return FhirPatientReviewRead.model_validate(
         review_service.list_facts(
+            clinician_id=user.id,
             patient_id=patient_id,
             review_state=review_state,
             fact_type=fact_type,
@@ -238,7 +247,9 @@ async def fact_lineage(
     reconciliation: ClinicalReconciliationService = Depends(_clinical_reconciliation_service),
 ) -> Any:
     service.ensure_assignment(clinician_id=user.id, patient_id=patient_id)
-    return ClinicalFactService(db).get_lineage(fact_id, patient_id)
+    return ClinicianFactService(db).lineage(
+        clinician_id=user.id, patient_id=patient_id, fact_id=fact_id
+    )
 
 
 @router.get(
@@ -252,7 +263,7 @@ async def fact_source(
     review_service: FhirImportReviewService = Depends(_fhir_import_review_service),
 ) -> FhirReviewSourceDetailRead:
     service.ensure_assignment(clinician_id=user.id, patient_id=patient_id)
-    source = review_service.get_source(fact_id=fact_id, patient_id=patient_id)
+    source = review_service.get_source(clinician_id=user.id, fact_id=fact_id, patient_id=patient_id)
     if source is None:
         raise ValidationError("FHIR source is unavailable for this clinical fact")
     return FhirReviewSourceDetailRead.model_validate(source)
@@ -268,7 +279,9 @@ async def fact_fhir_audit(
 ) -> Any:
     """Generate validated FHIR provenance/audit resources without external writes."""
     service.ensure_assignment(clinician_id=user.id, patient_id=patient_id)
-    return export_service.export_for_fact(fact_id=fact_id, patient_id=patient_id)
+    return export_service.export_for_fact(
+        clinician_id=user.id, fact_id=fact_id, patient_id=patient_id
+    )
 
 
 @router.post("/patients/{patient_id}/facts/{fact_id}/approve")
@@ -282,7 +295,9 @@ async def approve_fact(
     reconciliation: ClinicalReconciliationService = Depends(_clinical_reconciliation_service),
 ) -> Any:
     service.ensure_assignment(clinician_id=user.id, patient_id=patient_id)
-    fact = ClinicalFactService(db).get_fact(fact_id, patient_id)
+    fact = ClinicianFactService(db).get_fact(
+        clinician_id=user.id, patient_id=patient_id, fact_id=fact_id
+    )
     if str(fact.get("fact_type")) in ClinicalReconciliationService.PROJECTABLE_FACT_TYPES:
         raise ValidationError(
             "Use the reconciliation decision endpoint to add, update, or keep a local record"
@@ -312,7 +327,7 @@ async def reconciliation_preview(
 ) -> ReconciliationPreviewRead:
     service.ensure_assignment(clinician_id=user.id, patient_id=patient_id)
     return ReconciliationPreviewRead.model_validate(
-        reconciliation.preview(fact_id=fact_id, patient_id=patient_id)
+        reconciliation.preview(clinician_id=user.id, fact_id=fact_id, patient_id=patient_id)
     )
 
 
@@ -325,7 +340,9 @@ async def medication_reference(
     fact_id: UUID,
     user: CurrentUser = Depends(_clinician_dep),
     service: MedicationReferenceService = Depends(_medication_reference_service),
+    gate: ClinicianRecordGate = Depends(_record_gate),
 ) -> MedicationReferenceRead:
+    gate.fact(user.id, patient_id, fact_id)
     return await service.get_reference(user.id, patient_id=patient_id, fact_id=fact_id)
 
 
@@ -363,7 +380,9 @@ async def reject_fact(
     reconciliation: ClinicalReconciliationService = Depends(_clinical_reconciliation_service),
 ) -> Any:
     service.ensure_assignment(clinician_id=user.id, patient_id=patient_id)
-    fact = ClinicalFactService(db).get_fact(fact_id, patient_id)
+    fact = ClinicianFactService(db).get_fact(
+        clinician_id=user.id, patient_id=patient_id, fact_id=fact_id
+    )
     if str(fact.get("fact_type")) in ClinicalReconciliationService.PROJECTABLE_FACT_TYPES:
         return reconciliation.decide(
             fact_id=fact_id,
@@ -375,8 +394,8 @@ async def reject_fact(
                 idempotency_key=uuid4(),
             ),
         )
-    return ClinicalFactService(db).reject(
-        fact_id, patient_id, reviewer_id=user.id, note=request.note or ""
+    return ClinicianFactService(db).reject(
+        clinician_id=user.id, patient_id=patient_id, fact_id=fact_id, note=request.note or ""
     )
 
 
@@ -392,6 +411,10 @@ async def correct_fact(
     if not request.value:
         raise ValidationError("Corrected fact value is required")
     service.ensure_assignment(clinician_id=user.id, patient_id=patient_id)
-    return ClinicalFactService(db).correct(
-        fact_id, patient_id, actor_id=user.id, value=request.value, note=request.note
+    return ClinicianFactService(db).correct(
+        clinician_id=user.id,
+        patient_id=patient_id,
+        fact_id=fact_id,
+        value=request.value,
+        note=request.note,
     )
