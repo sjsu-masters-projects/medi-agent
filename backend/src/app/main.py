@@ -19,6 +19,37 @@ from app.core.log_redaction import install_credential_redaction
 from app.core.request_context import RequestContextMiddleware
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.core.structured_logging import configure_logging
+from app.routers import (
+    adherence,
+    appointments,
+    auth,
+    care_conversations,
+    care_plans,
+    care_team_records,
+    chat,
+    chat_turns,
+    clinicians,
+    clinics,
+    cron,
+    documents,
+    email_preferences,
+    feed,
+    handoff_shares,
+    handoff_summaries,
+    internal_tasks,
+    medications,
+    mfa,
+    notification_centre,
+    notifications,
+    obligations,
+    ops,
+    patients,
+    reminders,
+    smart,
+    staff,
+    symptom_intakes,
+    voice,
+)
 from app.services.a2a_retry_worker import A2ARetryWorker
 from app.services.chat_turn_events import TurnWatchSet
 from app.services.chat_turn_queue import TurnDispatcher, warm_dispatcher
@@ -257,6 +288,9 @@ def create_app() -> FastAPI:
     )
     application.include_router(
         handoff_summaries.router, prefix=f"{api}/care-team", tags=["Handoff summaries"]
+    )
+    application.include_router(
+        handoff_shares.router, prefix=f"{api}/care-team", tags=["Handoff summaries"]
     )
     application.include_router(feed.router, prefix=f"{api}/feed", tags=["Feed"])
     application.include_router(cron.router, prefix=f"{api}/cron", tags=["Cron"])

@@ -238,7 +238,9 @@ def test_only_the_approved_current_version_exports_and_every_export_is_audited(s
 )
 def test_versions_and_events_are_append_only_for_every_role(sql, statement) -> None:
     made(sql)
-    assert "append-only" in sql(statement, succeeds=False)
+    # Once shares reference versions (096), the foreign key refuses a truncate first.
+    refused = sql(statement, succeeds=False)
+    assert "append-only" in refused or "cannot truncate a table referenced" in refused
 
 
 def test_a_patients_erasure_removes_their_summaries_but_keeps_the_event_trail(sql) -> None:

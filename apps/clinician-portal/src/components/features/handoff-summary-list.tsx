@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { SharedWithMeList } from "@/components/features/shared-handoff-list";
 import { CareTeamSelect, useCareTeamChoice } from "@/components/features/care-team-select";
 import { Badge, Button, EmptyState, ErrorState, Skeleton } from "@/components/ui";
 import {
@@ -116,6 +117,8 @@ export function HandoffSummaryList({ patientId }: { patientId: string }) {
                     </ul>
                 ) : null}
             </section>
+
+            <SharedWithMeList patientId={patientId} />
         </div>
     );
 }

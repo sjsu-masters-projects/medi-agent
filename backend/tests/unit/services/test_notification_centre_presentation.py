@@ -669,3 +669,21 @@ def test_review_notice_copy_drops_unsafe_or_missing_metadata():
     )
     long_title = reviewed_item(metadata={"report_title": "x" * 500})
     assert len(present_item(long_title, "patient", "en-US").body) < 200
+def test_a_shared_handoff_item_names_the_author_links_the_share_and_carries_no_content():
+    raw = item(
+        event_type="handoff_shared",
+        category="follow_up",
+        source_type="care_handoff_shares",
+        actionable=False,
+        metadata={"actor_name": "Elena Park", "version": 2, "secret": "Lisinopril"},
+    )
+
+    shown = present_item(raw, "clinician", "en-US")
+
+    assert shown.title == "Elena Park shared a handoff summary"
+    assert shown.action_url == f"/handoff-shared/{raw['source_id']}"
+    assert shown.actionable is False and shown.action_label == "View"
+    assert shown.source_label == "Shared handoff summary"
+    assert "Lisinopril" not in shown.model_dump_json()
+    nameless = present_item({**raw, "metadata": {}}, "clinician", "en-US")
+    assert nameless.title == "A colleague shared a handoff summary"

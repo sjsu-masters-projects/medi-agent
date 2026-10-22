@@ -1,6 +1,6 @@
 # CON-001 — Reviewed care-handoff summary and export
 
-Status: implemented, in review. Migration 089 (unapplied).
+Status: implemented. Migration 089 applied; sharing (migration 096) is built and unapplied.
 
 ## Goal
 
@@ -95,3 +95,52 @@ version is ever added it needs es-MX drafts pending LOC-001.
 
 Backend unit and router tests, a Postgres contract (`test_care_handoff_summaries_postgres.py`,
 CI shard `care-handoff`), and clinician-portal vitest (`handoff-summary.test.tsx`).
+
+## Sharing an approved version with a named colleague (migration 096)
+
+Requester decision, October 22: yes.
+
+* **Who may share.** Only the author of the summary, while they still hold its care-team link,
+  and only the approved current version. Editing returns the summary to draft, so a draft or an
+  edited summary cannot be shared (`HANDOFF_NOT_APPROVED`, 422).
+* **Who may receive** (the picker shows only these: name, specialty, clinic, and why):
+  a clinician with an active link to the same patient at any active clinic where they are an
+  active member, or an active member of the AUTHOR'S clinic (so a colleague taking over can
+  receive it before they are linked). Never the author. Anyone else is
+  `HANDOFF_RECIPIENT_NOT_ALLOWED` (422). The server re-checks this on every share and every read.
+* **Per version, audited, revocable.** A share is one row per (summary, version, recipient). The
+  title, purpose and approval are fixed at share time. Editing creates a new version; the share
+  stays on its version. Events: `shared`, `share_revoked`, `shared_viewed` (once per ten minutes
+  per reader), `shared_exported` (with format); the author's audit list names the recipient.
+  Revoking is immediate: every recipient read, list and notification re-checks that the share is
+  not revoked and the recipient is still an allowed recipient (leaving the clinic or ending the
+  link also ends access; it returns only if eligibility does). Sharing again after a revoke is a
+  new generation with its own notification.
+* **What the recipient sees.** Only the shared version's content (sections, narrative, notes),
+  read-only, "Shared by Dr. X on date", print and FHIR export (both audited). Source chips are
+  labels only: the server strips record ids and links, since the recipient may not hold the
+  patient's record. No team, version list, audit trail or other versions. "A newer version
+  exists" appears only if that newer version is also shared with the same recipient.
+  Sharing grants no access to the patient or to the summary's own endpoints.
+* **Notification.** A `handoff_shared` item (clinician en-US copy, category follow-up, news not
+  work, no email) is captured in the same transaction as the share, once per generation (event
+  key `handoff_share:<share>:<generation>`), and links to `/handoff-shared/<share>`. The ledger
+  helpers (`notification_source`, `_authorized`, `_actionable`, `_scope`, `_owner_sees`) are
+  wrapped, not rewritten: the existing bodies are renamed to `*_core` and delegate for every other
+  source. Risk: a later migration that does `CREATE OR REPLACE` on one of those names would drop
+  the wrapper; the `care-handoff` shard covers the share notification end to end and fails if so.
+* **API** (`/api/v1/care-team/clinician`): `GET /handoff-summaries/{id}/share-candidates?q=`,
+  `GET|POST /handoff-summaries/{id}/shares`, `DELETE /handoff-shares/{share}`,
+  `GET /shared-handoffs`, `GET /shared-handoffs/{share}`, `POST /shared-handoffs/{share}/export`.
+  Clinician role; `no-store`; any refusal is the same 404. Author routes are keyed by summary.
+* **OPS-006.** Authorization is a lock-free read before the single summary-row lock (rules 7, 9);
+  share is idempotent (replay returns 200, no second event or notification; rules 4, 5);
+  notification written in the share transaction (rule 6); 50 active shares per summary; database
+  clock; ids and reason codes only in logs (rule 24); share rows change only by revoke or
+  re-share (guard trigger); no PHI in logs.
+* **UI.** "Share" on the approved review page opens a side panel (search, clinic chips, current
+  shares with Revoke); "Shared with me" is a section of the handoff list page and its own page
+  `/handoff-shared`, reached from the notification. Spanish for the notification is an unapproved
+  draft (LOC-001) and is never shown: clinician-only.
+* **Verification.** `test_care_handoff_shares_postgres.py` (CI shard `care-handoff`), router and
+  presentation unit tests, `handoff-share.test.tsx`.
