@@ -16,6 +16,7 @@ const english = {
     `${symptom}, ${severity}, ${date}`,
   status: {
     reported: "Reported",
+    not_sent: "Not sent: no care team yet",
     shared: "Sent to your care team",
     reviewed: "Reviewed",
   },
@@ -33,6 +34,8 @@ const english = {
   events: {
     reported: "You confirmed this report",
     shared_with_care_team: "Sent to your care team",
+    not_sent_no_care_team:
+      "Not sent: you have no care team yet. Contact your clinic.",
     flagged_urgent: "Marked for urgent review by your care team",
     reviewed: (name: string | null) =>
       name ? `Reviewed by ${name}` : "Reviewed by your care team",
@@ -58,6 +61,7 @@ const spanish: Copy = {
   rowLabel: (symptom, severity, date) => `${symptom}, ${severity}, ${date}`,
   status: {
     reported: "Reportado",
+    not_sent: "No enviado: aún no tienes equipo de atención",
     shared: "Enviado a tu equipo de atención",
     reviewed: "Revisado",
   },
@@ -75,6 +79,8 @@ const spanish: Copy = {
   events: {
     reported: "Confirmaste este reporte",
     shared_with_care_team: "Enviado a tu equipo de atención",
+    not_sent_no_care_team:
+      "No enviado: aún no tienes un equipo de atención. Comunícate con tu clínica.",
     flagged_urgent: "Tu equipo de atención lo marcó para revisión urgente",
     reviewed: (name) =>
       name ? `Revisado por ${name}` : "Revisado por tu equipo de atención",

@@ -86,3 +86,29 @@ def test_unassigned_clinician_is_denied_review(client, as_role, monkeypatch):
     url = f"/api/v1/clinicians/me/patients/{uuid4()}/symptom-reports/{uuid4()}/review"
     assert client.post(url).status_code == 403
     denied.assert_awaited_once()
+
+
+def test_review_forwards_the_chosen_care_team_and_rejects_extra_fields(
+    client, as_role, monkeypatch
+):
+    user = as_role("clinician")
+    from app.services.symptom_report_presenter import present_clinician
+
+    card = {
+        "id": str(uuid4()),
+        "patient_id": str(uuid4()),
+        "symptom": "Dizziness",
+        "confirmed_at": "2026-10-20T17:00:00+00:00",
+        "locale": "en-US",
+        "handoff_state": "sent",
+        "handed_off_at": "2026-10-20T17:00:01+00:00",
+        "reviews": [],
+        "provenance": {"report_id": str(uuid4()), "consent_recorded": True},
+    }
+    reviewed = AsyncMock(return_value=present_clinician(card))
+    monkeypatch.setattr(ClinicianService, "review_symptom_report", reviewed)
+    patient, report, team = uuid4(), uuid4(), uuid4()
+    url = f"/api/v1/clinicians/me/patients/{patient}/symptom-reports/{report}/review"
+    assert client.post(url, json={"care_team_id": str(team)}).status_code == 200
+    reviewed.assert_awaited_once_with(user.id, patient, report, team)
+    assert client.post(url, json={"reviewed_by": str(uuid4())}).status_code == 422

@@ -8,7 +8,12 @@ import {
     markSymptomReportReviewed,
     type ClinicianSymptomReport,
 } from "@/services/clinicians";
+import { fetchCareTeamOptions } from "@/services/care-team-plans";
 
+vi.mock("@/services/care-team-plans", async (importActual) => ({
+    ...(await importActual<typeof import("@/services/care-team-plans")>()),
+    fetchCareTeamOptions: vi.fn(),
+}));
 vi.mock("@/services/clinicians", () => ({
     fetchPatientTimeline: vi.fn(),
     fetchSymptomReport: vi.fn(),
@@ -18,10 +23,10 @@ vi.mock("@/services/clinicians", () => ({
 const base: ClinicianSymptomReport = {
     id: "report-1", patient_id: "patient-1", symptom: "Mareo", severity: 6, onset: "Ayer", duration: null,
     body_area: null, confirmed_at: "2026-10-20T17:00:00+00:00", locale: "es-MX", timezone: "America/Los_Angeles",
-    status: "shared",
+    status: "shared", handoff: "sent",
     events: [
-        { kind: "reported", at: "2026-10-20T17:00:00+00:00", actor_name: null },
-        { kind: "shared_with_care_team", at: "2026-10-20T17:00:01+00:00", actor_name: null },
+        { kind: "reported", at: "2026-10-20T17:00:00+00:00", actor_name: null, team_label: null },
+        { kind: "shared_with_care_team", at: "2026-10-20T17:00:01+00:00", actor_name: null, team_label: null },
     ],
     answers: [
         { question_id: "severity", label: "Intensidad (0 a 10)", state: "answered", display: "6", wording: null, captured_at: null },
@@ -34,15 +39,23 @@ const base: ClinicianSymptomReport = {
         confirmed_at: "2026-10-20T17:00:00+00:00", language: "es-MX", timezone: "America/Los_Angeles", consent_recorded: true,
     },
     triage: { safety_rule_version: "triage-floor/1", safety_result: "no_existing_rule_matched", escalation_urgency: null, escalation_delivery: null, escalation_at: null },
-    review: { state: "pending", reviewed_at: null, reviewed_by_name: null, care_team_id: null },
+    your_care_team_ids: ["team-1"], reviews: [], reviewed_by_your_team: false, acting_care_team_id: null,
     already_reviewed: null,
 };
 const reviewed: ClinicianSymptomReport = {
     ...base, status: "reviewed", already_reviewed: false,
-    review: { state: "reviewed", reviewed_at: "2026-10-21T01:00:00+00:00", reviewed_by_name: "Synthetic Reviewer", care_team_id: "team-1" },
+    reviews: [{ care_team_id: "team-1", team_label: "Primary care", reviewed_by_name: "Synthetic Reviewer", reviewed_at: "2026-10-21T01:00:00+00:00", mine: true }],
+    reviewed_by_your_team: true, acting_care_team_id: "team-1",
+};
+const otherTeamOnly: ClinicianSymptomReport = {
+    ...base,
+    reviews: [{ care_team_id: "team-9", team_label: "Cardiology · Cedar Grove", reviewed_by_name: "Dr. Park", reviewed_at: "2026-10-21T01:00:00+00:00", mine: false }],
 };
 
-beforeEach(() => vi.resetAllMocks());
+beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(fetchCareTeamOptions).mockResolvedValue([]);
+});
 
 describe("SymptomReportPanel", () => {
     it("shows confirmed answers, safety outcome, provenance and consent", async () => {
@@ -54,11 +67,11 @@ describe("SymptomReportPanel", () => {
         expect(screen.getByText(/No existing emergency rule matched/)).toBeInTheDocument();
         expect(screen.getByText("message-1")).toBeInTheDocument();
         expect(screen.getByText("Explicit consent recorded at confirmation")).toBeInTheDocument();
-        expect(screen.getByText("Awaiting review")).toBeInTheDocument();
+        expect(screen.getByText("Not reviewed by your team")).toBeInTheDocument();
         expect(fetchSymptomReport).toHaveBeenCalledWith("patient-1", "report-1");
     });
 
-    it("marks reviewed once even on a double click, then shows who reviewed", async () => {
+    it("marks reviewed once even on a double click, then shows it is reviewed by you", async () => {
         vi.mocked(fetchSymptomReport).mockResolvedValue(base);
         let resolve!: (value: ClinicianSymptomReport) => void;
         vi.mocked(markSymptomReportReviewed).mockReturnValue(new Promise((r) => { resolve = r; }));
@@ -69,17 +82,17 @@ describe("SymptomReportPanel", () => {
         fireEvent.click(button);
         expect(markSymptomReportReviewed).toHaveBeenCalledTimes(1);
         resolve(reviewed);
-        await screen.findByText(/Reviewed by Synthetic Reviewer/);
+        await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/Reviewed by you/));
         expect(screen.queryByRole("button", { name: "Mark reviewed" })).not.toBeInTheDocument();
         expect(onReviewed).toHaveBeenCalledTimes(1);
     });
 
-    it("reports a colleague's earlier review instead of creating another", async () => {
+    it("says already reviewed when this team had reviewed", async () => {
         vi.mocked(fetchSymptomReport).mockResolvedValue(base);
         vi.mocked(markSymptomReportReviewed).mockResolvedValue({ ...reviewed, already_reviewed: true });
         render(<SymptomReportPanel patientId="patient-1" reportId="report-1" onClose={vi.fn()} />);
         fireEvent.click(await screen.findByRole("button", { name: "Mark reviewed" }));
-        await screen.findByText(/Already reviewed by Synthetic Reviewer/);
+        await screen.findByText(/Already reviewed by you/);
     });
 
     it("keeps the report open and offers a retry when review fails", async () => {
@@ -89,7 +102,7 @@ describe("SymptomReportPanel", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Mark reviewed" }));
         expect(await screen.findByRole("alert")).toHaveTextContent("Nothing was changed");
         fireEvent.click(screen.getByRole("button", { name: "Mark reviewed" }));
-        await screen.findByText(/Reviewed by/);
+        await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/Reviewed by you/));
     });
 
     it("never concludes anything from a failed load, and a denial shows no report", async () => {
@@ -99,6 +112,43 @@ describe("SymptomReportPanel", () => {
         expect(screen.queryByRole("button", { name: "Mark reviewed" })).not.toBeInTheDocument();
         fireEvent.click(screen.getByRole("button", { name: /try again|retry/i }));
         await waitFor(() => expect(screen.getByText("Intensidad (0 a 10)")).toBeInTheDocument());
+    });
+});
+
+describe("per care team review", () => {
+    it("shows another team's review without treating this team as reviewed", async () => {
+        vi.mocked(fetchSymptomReport).mockResolvedValue(otherTeamOnly);
+        render(<SymptomReportPanel patientId="patient-1" reportId="report-1" onClose={vi.fn()} />);
+        await screen.findByText(/Also reviewed by Cardiology · Cedar Grove · Dr. Park/);
+        expect(screen.getByText("Not reviewed by your team")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Mark reviewed" })).toBeEnabled();
+    });
+
+    it("sends the chosen care team when the clinician holds several links", async () => {
+        const two = { ...base, your_care_team_ids: ["team-1", "team-2"] };
+        vi.mocked(fetchCareTeamOptions).mockResolvedValue([
+            { care_team_id: "team-1", patient_id: "patient-1", clinician_id: "c", clinic_id: "a", clinic_name: "Cedar Grove", specialty: "Cardiology" },
+            { care_team_id: "team-2", patient_id: "patient-1", clinician_id: "c", clinic_id: "b", clinic_name: "Bay Clinic", specialty: "Primary care" },
+        ]);
+        vi.mocked(fetchSymptomReport).mockResolvedValue(two);
+        vi.mocked(markSymptomReportReviewed).mockResolvedValue(reviewed);
+        render(<SymptomReportPanel patientId="patient-1" reportId="report-1" onClose={vi.fn()} />);
+        const select = await screen.findByLabelText(/Care team/);
+        const button = screen.getByRole("button", { name: "Mark reviewed" });
+        expect(button).toBeDisabled();
+        fireEvent.change(select, { target: { value: "team-2" } });
+        fireEvent.click(button);
+        await waitFor(() => expect(markSymptomReportReviewed).toHaveBeenCalledWith("patient-1", "report-1", "team-2"));
+    });
+
+    it("shows the not-sent hand-off outcome truthfully", async () => {
+        vi.mocked(fetchSymptomReport).mockResolvedValue({
+            ...base, handoff: "not_sent", status: "not_sent",
+            events: [base.events[0]!, { kind: "not_sent_no_care_team", at: base.confirmed_at, actor_name: null, team_label: null }],
+        });
+        render(<SymptomReportPanel patientId="patient-1" reportId="report-1" onClose={vi.fn()} />);
+        await screen.findByText(/Not sent: the patient had no active care team/);
+        expect(screen.queryByText(/Review task and notices sent/)).not.toBeInTheDocument();
     });
 });
 

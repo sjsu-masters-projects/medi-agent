@@ -4,10 +4,13 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-ReportStatus = Literal["reported", "shared", "reviewed"]
-EventKind = Literal["reported", "shared_with_care_team", "flagged_urgent", "reviewed"]
+ReportStatus = Literal["reported", "not_sent", "shared", "reviewed"]
+EventKind = Literal[
+    "reported", "shared_with_care_team", "not_sent_no_care_team", "flagged_urgent", "reviewed"
+]
+Handoff = Literal["sent", "not_sent", "unrecorded"]
 
 
 class ReportEvent(BaseModel):
@@ -16,6 +19,7 @@ class ReportEvent(BaseModel):
     kind: EventKind
     at: datetime
     actor_name: str | None = None
+    team_label: str | None = None
 
 
 class ReportAnswer(BaseModel):
@@ -38,6 +42,7 @@ class SymptomReportListItem(BaseModel):
     confirmed_at: datetime
     locale: Literal["en-US", "es-MX"]
     status: ReportStatus
+    handoff: Handoff
     events: list[ReportEvent]
 
 
@@ -69,11 +74,14 @@ class ReportProvenance(BaseModel):
     consent_recorded: bool
 
 
-class ReportReviewState(BaseModel):
-    state: Literal["pending", "reviewed"]
-    reviewed_at: datetime | None = None
+class TeamReview(BaseModel):
+    """One care team's review. Each team owns its own follow-up."""
+
+    care_team_id: UUID
+    team_label: str | None = None
     reviewed_by_name: str | None = None
-    care_team_id: UUID | None = None
+    reviewed_at: datetime
+    mine: bool = False
 
 
 class ReportTriage(BaseModel):
@@ -92,5 +100,15 @@ class ClinicianSymptomReport(SymptomReportDetail):
     related_medication_name: str | None = None
     provenance: ReportProvenance
     triage: ReportTriage
-    review: ReportReviewState
+    your_care_team_ids: list[UUID] = Field(default_factory=list)
+    reviews: list[TeamReview] = Field(default_factory=list)
+    reviewed_by_your_team: bool = False
+    acting_care_team_id: UUID | None = None
     already_reviewed: bool | None = None
+
+
+class SymptomReportReview(BaseModel):
+    """Which of the caller's own care teams is reviewing; optional with a single link."""
+
+    model_config = ConfigDict(extra="forbid")
+    care_team_id: UUID | None = None

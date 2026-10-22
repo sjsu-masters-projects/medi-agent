@@ -17,7 +17,7 @@ import httpx
 from postgrest.exceptions import APIError
 from supabase import Client
 
-from app.core.exceptions import NotFoundError, ServiceUnavailableError
+from app.core.exceptions import NotFoundError, ServiceUnavailableError, ValidationError
 from app.models.symptom_report_history import (
     ClinicianSymptomReport,
     SymptomReportDetail,
@@ -61,6 +61,10 @@ class SymptomReportHistoryService:
             if exc.code == "42501":
                 # Not yours and not there are the same answer.
                 raise NotFoundError("Symptom report", str(payload.get("report_id", ""))) from None
+            if exc.message == "CARE_TEAM_REQUIRED":
+                raise ValidationError(
+                    "Choose which of your care teams this is for.", code="CARE_TEAM_REQUIRED"
+                ) from None
             raise self._unavailable() from None
         except (TimeoutError, OSError, httpx.TransportError):
             raise self._unavailable() from None
@@ -106,12 +110,21 @@ class SymptomReportHistoryService:
         return await self._staff(clinician_id, patient_id, report_id, "detail")
 
     async def mark_reviewed(
-        self, clinician_id: UUID, patient_id: UUID, report_id: UUID
+        self,
+        clinician_id: UUID,
+        patient_id: UUID,
+        report_id: UUID,
+        care_team_id: UUID | None = None,
     ) -> ClinicianSymptomReport:
-        return await self._staff(clinician_id, patient_id, report_id, "review")
+        return await self._staff(clinician_id, patient_id, report_id, "review", care_team_id)
 
     async def _staff(
-        self, clinician_id: UUID, patient_id: UUID, report_id: UUID, action: str
+        self,
+        clinician_id: UUID,
+        patient_id: UUID,
+        report_id: UUID,
+        action: str,
+        care_team_id: UUID | None = None,
     ) -> ClinicianSymptomReport:
         if self.authorize is None:
             raise self._unavailable()
@@ -120,6 +133,10 @@ class SymptomReportHistoryService:
             clinician_id,
             "clinician",
             action,
-            {"report_id": str(report_id), "patient_id": str(patient_id)},
+            {
+                "report_id": str(report_id),
+                "patient_id": str(patient_id),
+                **({"care_team_id": str(care_team_id)} if care_team_id else {}),
+            },
         )
         return present_clinician(card)

@@ -265,10 +265,13 @@ export function SymptomReportView({
               ) : null}
               <span
                 aria-hidden="true"
-                className={`relative mt-1.5 h-[11px] w-[11px] shrink-0 rounded-full ${event.kind === "reviewed" ? "bg-brand" : event.kind === "flagged_urgent" ? "bg-danger-ink" : "bg-line-strong"}`}
+                className={`relative mt-1.5 h-[11px] w-[11px] shrink-0 rounded-full ${event.kind === "reviewed" ? "bg-brand" : event.kind === "flagged_urgent" || event.kind === "not_sent_no_care_team" ? "bg-danger-ink" : "bg-line-strong"}`}
               />
               <div className="min-w-0">
                 <p className="break-words text-[14px] font-medium text-ink">{eventLabel(event, locale)}</p>
+                {event.kind === "reviewed" && event.team_label ? (
+                  <p className="break-words text-xs text-muted">{event.team_label}</p>
+                ) : null}
                 <p className="text-xs text-muted">
                   <time dateTime={event.at}>{formatSymptomTime(event.at, locale, timezone)}</time>
                 </p>

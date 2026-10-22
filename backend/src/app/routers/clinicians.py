@@ -88,7 +88,7 @@ from app.models.medwatch_form_3500 import (
     MedWatchListState,
 )
 from app.models.patient import PatientDetailRead
-from app.models.symptom_report_history import ClinicianSymptomReport
+from app.models.symptom_report_history import ClinicianSymptomReport, SymptomReportReview
 from app.services.clinician_service import ClinicianService
 from app.services.external_record_review_service import ExternalRecordReviewService
 from app.services.medwatch_service import MedWatchService
@@ -785,10 +785,13 @@ async def get_symptom_report(
 async def review_symptom_report(
     patient_id: UUID,
     report_id: UUID,
+    data: SymptomReportReview | None = None,
     user: CurrentUser = Depends(_clinician_dep),
     service: ClinicianService = Depends(_get_service),
 ) -> Any:
-    return await service.review_symptom_report(user.id, patient_id, report_id)
+    return await service.review_symptom_report(
+        user.id, patient_id, report_id, data.care_team_id if data else None
+    )
 
 
 @router.get(

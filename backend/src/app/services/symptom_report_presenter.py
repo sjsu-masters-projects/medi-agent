@@ -10,10 +10,10 @@ from app.models.symptom_report_history import (
     ReportAnswer,
     ReportEvent,
     ReportProvenance,
-    ReportReviewState,
     ReportTriage,
     SymptomReportDetail,
     SymptomReportListItem,
+    TeamReview,
 )
 
 # Row labels in the language the patient used. The Spanish is a draft pending LOC-001 review.
@@ -139,21 +139,30 @@ def _parse(value: Any) -> datetime | None:
 
 
 def build_events(card: dict[str, Any]) -> list[ReportEvent]:
-    """Only recorded events: confirmation, hand-off row, a delivered urgent alert, a review."""
-    events = [ReportEvent(kind="reported", at=_required(card["confirmed_at"]))]
+    """Only recorded events: confirmation, the hand-off outcome, a delivered urgent alert, reviews."""
+    confirmed = _required(card["confirmed_at"])
+    events = [ReportEvent(kind="reported", at=confirmed)]
+    handoff = card.get("handoff_state")
     handed = _parse(card.get("handed_off_at"))
-    if handed:
+    if handoff == "sent" and handed:
         events.append(ReportEvent(kind="shared_with_care_team", at=handed))
+    elif handoff == "not_sent":
+        events.append(ReportEvent(kind="not_sent_no_care_team", at=confirmed))
     escalation = card.get("escalation")
     if isinstance(escalation, dict) and escalation.get("delivery_state") == "delivered":
         at = _parse(escalation.get("at"))
         if at:
             events.append(ReportEvent(kind="flagged_urgent", at=at))
-    review = card.get("review")
-    if isinstance(review, dict) and (at := _parse(review.get("reviewed_at"))):
-        events.append(
-            ReportEvent(kind="reviewed", at=at, actor_name=review.get("reviewed_by_name"))
-        )
+    for review in card.get("reviews") or []:
+        if at := _parse(review.get("reviewed_at")):
+            events.append(
+                ReportEvent(
+                    kind="reviewed",
+                    at=at,
+                    actor_name=review.get("reviewed_by_name"),
+                    team_label=review.get("team_label"),
+                )
+            )
     return sorted(events, key=lambda event: event.at)
 
 
@@ -168,7 +177,9 @@ def _status(events: list[ReportEvent]) -> str:
     kinds = {event.kind for event in events}
     if "reviewed" in kinds:
         return "reviewed"
-    return "shared" if "shared_with_care_team" in kinds else "reported"
+    if "shared_with_care_team" in kinds:
+        return "shared"
+    return "not_sent" if "not_sent_no_care_team" in kinds else "reported"
 
 
 def _base(card: dict[str, Any]) -> dict[str, Any]:
@@ -182,6 +193,9 @@ def _base(card: dict[str, Any]) -> dict[str, Any]:
         "confirmed_at": _required(card["confirmed_at"]),
         "locale": report_locale(card),
         "status": _status(events),
+        "handoff": card.get("handoff_state")
+        if card.get("handoff_state") in {"sent", "not_sent"}
+        else "unrecorded",
         "events": events,
     }
 
@@ -205,8 +219,16 @@ def present_clinician(card: dict[str, Any]) -> ClinicianSymptomReport:
     provenance = card.get("provenance") or {}
     safety = card.get("safety") or {}
     escalation = card.get("escalation") or {}
-    review = card.get("review")
-    detail = card.get("review_detail") or {}
+    reviews = [
+        TeamReview(
+            care_team_id=item["care_team_id"],
+            team_label=item.get("team_label"),
+            reviewed_by_name=item.get("reviewed_by_name"),
+            reviewed_at=_required(item["reviewed_at"]),
+            mine=bool(item.get("mine")),
+        )
+        for item in card.get("reviews") or []
+    ]
     return ClinicianSymptomReport(
         **base,
         patient_id=card["patient_id"],
@@ -233,11 +255,9 @@ def present_clinician(card: dict[str, Any]) -> ClinicianSymptomReport:
             escalation_delivery=escalation.get("delivery_state"),
             escalation_at=_parse(escalation.get("at")),
         ),
-        review=ReportReviewState(
-            state="reviewed" if review else "pending",
-            reviewed_at=_parse(review.get("reviewed_at")) if review else None,
-            reviewed_by_name=review.get("reviewed_by_name") if review else None,
-            care_team_id=detail.get("care_team_id"),
-        ),
+        your_care_team_ids=card.get("viewer_care_team_ids") or [],
+        reviews=reviews,
+        reviewed_by_your_team=any(item.mine for item in reviews),
+        acting_care_team_id=card.get("acting_care_team_id"),
         already_reviewed=card.get("already_reviewed"),
     )

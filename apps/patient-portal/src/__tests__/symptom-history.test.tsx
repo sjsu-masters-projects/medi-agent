@@ -23,10 +23,12 @@ const summary: SymptomReportSummary = {
   confirmed_at: "2026-10-20T03:30:00+00:00",
   locale: "es-MX",
   status: "reviewed",
+  handoff: "sent",
   events: [
-    { kind: "reported", at: "2026-10-20T03:30:00+00:00", actor_name: null },
-    { kind: "shared_with_care_team", at: "2026-10-20T03:30:01+00:00", actor_name: null },
-    { kind: "reviewed", at: "2026-10-20T15:00:00+00:00", actor_name: "Pat Reviewer" },
+    { kind: "reported", at: "2026-10-20T03:30:00+00:00", actor_name: null, team_label: null },
+    { kind: "shared_with_care_team", at: "2026-10-20T03:30:01+00:00", actor_name: null, team_label: null },
+    { kind: "reviewed", at: "2026-10-20T15:00:00+00:00", actor_name: "Pat Reviewer", team_label: "Primary care" },
+    { kind: "reviewed", at: "2026-10-20T16:00:00+00:00", actor_name: "Dr. Park", team_label: "Cardiology" },
   ],
 };
 const detail: SymptomReportDetail = {
@@ -93,6 +95,34 @@ describe("SymptomHistoryList", () => {
   });
 });
 
+describe("report with no care team", () => {
+  const unsent = {
+    ...detail,
+    status: "not_sent" as const,
+    handoff: "not_sent" as const,
+    events: [
+      summary.events[0]!,
+      { kind: "not_sent_no_care_team" as const, at: summary.confirmed_at, actor_name: null, team_label: null },
+    ],
+  };
+
+  it.each<[Locale, string]>([
+    ["en-US", "Not sent: you have no care team yet. Contact your clinic."],
+    ["es-MX", "No enviado: aún no tienes un equipo de atención. Comunícate con tu clínica."],
+  ])("never claims it was sent (%s)", async (locale, text) => {
+    fetchOne.mockResolvedValue(unsent);
+    wrap(<SymptomReportView id={summary.id} locale={locale} timezone="UTC" />);
+    expect(await screen.findByText(text)).toBeInTheDocument();
+    expect(screen.queryByText(/Sent to your care team|Enviado a tu equipo/)).not.toBeInTheDocument();
+  });
+
+  it("labels the list row as not sent", async () => {
+    fetchList.mockResolvedValue({ items: [{ ...summary, ...unsent }], has_more: false });
+    wrap(<SymptomHistoryList locale="en-US" timezone="UTC" />);
+    expect(await screen.findByText("Not sent: no care team yet")).toBeInTheDocument();
+  });
+});
+
 describe("SymptomReportView", () => {
   it("shows confirmed answers in the report language and a status timeline", async () => {
     fetchOne.mockResolvedValue(detail);
@@ -104,12 +134,14 @@ describe("SymptomReportView", () => {
     expect(steps[0]).toContain("You confirmed this report");
     expect(steps[1]).toContain("Sent to your care team");
     expect(steps[2]).toContain("Reviewed by Pat Reviewer");
+    expect(steps[3]).toContain("Reviewed by Dr. Park");
+    expect(steps[3]).toContain("Cardiology");
     expect(screen.getByRole("note")).toHaveTextContent("911");
     expect(fetchOne).toHaveBeenCalledWith("access-token", summary.id, expect.anything());
   });
 
   it("does not claim steps that were not recorded", async () => {
-    fetchOne.mockResolvedValue({ ...detail, status: "reported", events: [summary.events[0]] });
+    fetchOne.mockResolvedValue({ ...detail, status: "reported", handoff: "unrecorded", events: [summary.events[0]] });
     wrap(<SymptomReportView id={summary.id} locale="es-MX" timezone="UTC" />);
     await screen.findByText("Confirmaste este reporte");
     expect(screen.queryByText(/Enviado a tu equipo/)).not.toBeInTheDocument();

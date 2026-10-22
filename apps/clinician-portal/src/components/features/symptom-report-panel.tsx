@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, ErrorState, Modal } from "@/components/ui";
+import { CareTeamSelect, useCareTeamChoice } from "@/components/features/care-team-select";
 import {
     fetchSymptomReport,
     markSymptomReportReviewed,
@@ -23,7 +24,8 @@ function when(value: string | null, timezone?: string | null) {
 
 const EVENT_LABEL: Record<string, string> = {
     reported: "Patient confirmed the report",
-    shared_with_care_team: "Review task and notices sent to the care team",
+    shared_with_care_team: "Review task and notices sent to the patient's active care teams",
+    not_sent_no_care_team: "Not sent: the patient had no active care team at confirmation",
     flagged_urgent: "Urgent-answer alert delivered",
     reviewed: "Marked reviewed",
 };
@@ -48,6 +50,7 @@ export function SymptomReportPanel({ patientId, reportId, onClose, onReviewed }:
     const [failed, setFailed] = useState<"load" | "review" | null>(null);
     const [saving, setSaving] = useState(false);
     const [attempt, setAttempt] = useState(0);
+    const team = useCareTeamChoice(patientId);
 
     useEffect(() => {
         let active = true;
@@ -63,16 +66,18 @@ export function SymptomReportPanel({ patientId, reportId, onClose, onReviewed }:
         setSaving(true);
         setFailed(null);
         try {
-            setReport(await markSymptomReportReviewed(patientId, reportId));
+            setReport(await markSymptomReportReviewed(patientId, reportId, team.careTeamId));
             onReviewed?.();
-        } catch {
-            setFailed("review");
+        } catch (error) {
+            // A clinician with several links must choose one; the select then appears.
+            if (!team.handleError(error)) setFailed("review");
         } finally {
             setSaving(false);
         }
-    }, [patientId, reportId, saving, onReviewed]);
+    }, [patientId, reportId, saving, onReviewed, team]);
 
-    const reviewed = report?.review.state === "reviewed";
+    const reviewed = Boolean(report?.reviewed_by_your_team);
+    const others = report?.reviews.filter((item) => !item.mine) ?? [];
     return (
         <Modal open onClose={onClose} placement="side" title="Patient-confirmed symptom report">
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
@@ -88,7 +93,7 @@ export function SymptomReportPanel({ patientId, reportId, onClose, onReviewed }:
                                 <Badge variant={report.severity === null ? "neutral" : report.severity >= 8 ? "danger" : report.severity >= 5 ? "warning" : "success"}>
                                     {report.severity === null ? "Severity unknown / not provided" : `Severity ${report.severity}/10`}
                                 </Badge>
-                                <Badge variant={reviewed ? "success" : "warning"}>{reviewed ? "Reviewed" : "Awaiting review"}</Badge>
+                                <Badge variant={reviewed ? "success" : "warning"}>{reviewed ? "Reviewed by you" : "Not reviewed by your team"}</Badge>
                                 {report.flagged_for_adr && <Badge variant="danger">ADR flagged</Badge>}
                             </div>
                             <p className="text-xs text-muted">Confirmed by the patient {when(report.confirmed_at, report.timezone)}. Patient testimony, not a diagnosis; a cause has not been established.</p>
@@ -140,7 +145,7 @@ export function SymptomReportPanel({ patientId, reportId, onClose, onReviewed }:
                             <ol className="mt-2 space-y-2">
                                 {report.events.map((event) => (
                                     <li key={`${event.kind}-${event.at}`} className="text-sm text-ink-2">
-                                        {EVENT_LABEL[event.kind] ?? event.kind}{event.actor_name ? ` by ${event.actor_name}` : ""}
+                                        {EVENT_LABEL[event.kind] ?? event.kind}{event.actor_name ? ` by ${event.actor_name}` : ""}{event.team_label ? ` (${event.team_label})` : ""}
                                         <span className="block text-xs text-muted"><time dateTime={event.at}>{when(event.at, report.timezone)}</time></span>
                                     </li>
                                 ))}
@@ -151,13 +156,19 @@ export function SymptomReportPanel({ patientId, reportId, onClose, onReviewed }:
             </div>
             {report && (
                 <footer className="shrink-0 space-y-2 border-t border-line px-5 py-3">
+                    {others.map((item) => (
+                        <p key={item.care_team_id} className="text-sm text-ink-2">
+                            Also reviewed by {[item.team_label, item.reviewed_by_name].filter(Boolean).join(" · ") || "another care team"} <span className="text-xs text-muted">{when(item.reviewed_at, report.timezone)}</span>
+                        </p>
+                    ))}
                     {failed === "review" && <p role="alert" className="text-sm text-risk-ink">Could not mark this report reviewed. Nothing was changed; try again.</p>}
-                    {reviewed ? (
+                    {report.your_care_team_ids.length > 1 && <CareTeamSelect onChange={team.setValue} options={team.options} required={team.required} value={team.value} />}
+                    {reviewed && report.your_care_team_ids.length <= 1 ? (
                         <p role="status" className="text-sm text-ok-ink">
-                            {report.already_reviewed ? "Already reviewed" : "Reviewed"}{report.review.reviewed_by_name ? ` by ${report.review.reviewed_by_name}` : ""} {when(report.review.reviewed_at, report.timezone)}. Review records follow-up only; it does not approve a diagnosis or medication change.
+                            {report.already_reviewed ? "Already reviewed by you" : "Reviewed by you"} {when(report.reviews.find((item) => item.mine)?.reviewed_at ?? null, report.timezone)}. Review records your team's follow-up only; it does not approve a diagnosis or medication change.
                         </p>
                     ) : (
-                        <Button fullWidth disabled={saving} onClick={() => void review()}>{saving ? "Saving…" : "Mark reviewed"}</Button>
+                        <Button fullWidth disabled={saving || team.missing} onClick={() => void review()}>{saving ? "Saving…" : "Mark reviewed"}</Button>
                     )}
                 </footer>
             )}

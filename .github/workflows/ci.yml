@@ -423,7 +423,7 @@ jobs:
           - name: confirmed-symptoms
             image: postgres:16-alpine
             files: tests/integration/test_symptom_intake_postgres.py tests/integration/test_symptom_handoff_postgres.py tests/integration/test_symptom_report_history_postgres.py
-            minimums: test_symptom_intake_postgres=17 test_symptom_handoff_postgres=8 test_symptom_report_history_postgres=7
+            minimums: test_symptom_intake_postgres=17 test_symptom_handoff_postgres=8 test_symptom_report_history_postgres=11
     defaults:
       run:
         working-directory: backend

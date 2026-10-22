@@ -834,10 +834,16 @@ class ClinicianService:
         )
 
     async def review_symptom_report(
-        self, clinician_id: UUID, patient_id: UUID, report_id: UUID
+        self,
+        clinician_id: UUID,
+        patient_id: UUID,
+        report_id: UUID,
+        care_team_id: UUID | None = None,
     ) -> Any:
-        """Idempotent, audited review mark; the database re-checks the active link."""
-        return await self._symptom_reports().mark_reviewed(clinician_id, patient_id, report_id)
+        """Idempotent per care team, audited; the database re-checks the caller's own link."""
+        return await self._symptom_reports().mark_reviewed(
+            clinician_id, patient_id, report_id, care_team_id
+        )
 
     async def get_patient_deep_dive(self, clinician_id: UUID, patient_id: UUID) -> Any:
         """Aggregate all patient data for the Patient Deep Dive view.

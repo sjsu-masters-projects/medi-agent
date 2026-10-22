@@ -1,10 +1,11 @@
 import { api } from "@/services/api";
 import type { Locale } from "@/types";
 
-export type SymptomReportStatus = "reported" | "shared" | "reviewed";
+export type SymptomReportStatus = "reported" | "not_sent" | "shared" | "reviewed";
 export type SymptomEventKind =
   | "reported"
   | "shared_with_care_team"
+  | "not_sent_no_care_team"
   | "flagged_urgent"
   | "reviewed";
 
@@ -12,6 +13,7 @@ export interface SymptomReportEvent {
   kind: SymptomEventKind;
   at: string;
   actor_name: string | null;
+  team_label: string | null;
 }
 
 export interface SymptomReportAnswer {
@@ -31,6 +33,7 @@ export interface SymptomReportSummary {
   confirmed_at: string;
   locale: Locale;
   status: SymptomReportStatus;
+  handoff: "sent" | "not_sent" | "unrecorded";
   events: SymptomReportEvent[];
 }
 

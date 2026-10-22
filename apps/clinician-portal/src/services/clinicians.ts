@@ -1914,6 +1914,14 @@ export interface SymptomReportAnswer {
     captured_at: string | null;
 }
 
+export interface TeamReview {
+    care_team_id: string;
+    team_label: string | null;
+    reviewed_by_name: string | null;
+    reviewed_at: string;
+    mine: boolean;
+}
+
 export interface ClinicianSymptomReport {
     id: string;
     patient_id: string;
@@ -1925,8 +1933,9 @@ export interface ClinicianSymptomReport {
     confirmed_at: string;
     locale: "en-US" | "es-MX";
     timezone: string | null;
-    status: "reported" | "shared" | "reviewed";
-    events: Array<{ kind: string; at: string; actor_name: string | null }>;
+    status: "reported" | "not_sent" | "shared" | "reviewed";
+    handoff: "sent" | "not_sent" | "unrecorded";
+    events: Array<{ kind: string; at: string; actor_name: string | null; team_label: string | null }>;
     answers: SymptomReportAnswer[];
     summary: string | null;
     flagged_for_adr: boolean;
@@ -1951,12 +1960,10 @@ export interface ClinicianSymptomReport {
         escalation_delivery: string | null;
         escalation_at: string | null;
     };
-    review: {
-        state: "pending" | "reviewed";
-        reviewed_at: string | null;
-        reviewed_by_name: string | null;
-        care_team_id: string | null;
-    };
+    your_care_team_ids: string[];
+    reviews: TeamReview[];
+    reviewed_by_your_team: boolean;
+    acting_care_team_id: string | null;
     already_reviewed: boolean | null;
 }
 
@@ -1967,7 +1974,10 @@ export function fetchSymptomReport(patientId: string, reportId: string): Promise
     return apiFetch(symptomReportPath(patientId, reportId));
 }
 
-/** Idempotent: a repeat, or a colleague's earlier review, returns the existing review. */
-export function markSymptomReportReviewed(patientId: string, reportId: string): Promise<ClinicianSymptomReport> {
-    return apiFetch(`${symptomReportPath(patientId, reportId)}/review`, { method: "POST" });
+/** Idempotent per care team: a repeat by the same team returns its existing review. */
+export function markSymptomReportReviewed(patientId: string, reportId: string, careTeamId?: string): Promise<ClinicianSymptomReport> {
+    return apiFetch(`${symptomReportPath(patientId, reportId)}/review`, {
+        method: "POST",
+        body: JSON.stringify(careTeamId ? { care_team_id: careTeamId } : {}),
+    });
 }
