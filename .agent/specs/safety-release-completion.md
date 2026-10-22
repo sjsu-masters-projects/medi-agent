@@ -2,6 +2,9 @@
 
 ## Scope
 
+Delivery: [PR #222](https://github.com/sjsu-masters-projects/medi-agent/pull/222),
+open for review. CI and merge remain separate from the local results below.
+
 Requester-approved grouped follow-up to merged #220 (`9c16adc4`), on
 `codex/safety-release-completion`. INT-002's implementation is already merged;
 do not rebuild its importer or confuse it with a deployed acceptance pass.
