@@ -1007,6 +1007,11 @@ async def _process_chat_message(
                     continue
                 await websocket.send_json({"type": "assistant_chunk", "content": chunk_text})
                 streamed_response = True
+            elif ev_type == "chunk_reset":
+                # Text already shown is withdrawn (the model failed after it began); the
+                # reviewed reply that follows replaces it.
+                await websocket.send_json({"type": "assistant_reset"})
+                streamed_response = False
             elif ev_type == "complete":
                 assistant_content = str(event.get("response_text", "")).strip()
                 cited_documents = [str(item) for item in event.get("cited_documents") or [] if item]

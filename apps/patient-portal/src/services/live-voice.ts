@@ -59,6 +59,24 @@ export interface ReplyToSpeak {
     urgent: boolean;
 }
 
+/** The reply as written so far, for speaking before it is complete. */
+export interface DraftToSpeak {
+    text: string;
+    intent: string;
+    urgency: string;
+    /** Changes when the draft restarts (a withdrawn draft is not a longer one). */
+    generation: number;
+}
+
+/**
+ * Whether a draft may be spoken before the reply is final. Only a routine, directly answered
+ * reply is: an urgent or emergency reply, or one the server will replace with a fixed message
+ * (the guided symptom flow), is spoken once, from the saved message, without interruption.
+ */
+export function mayBeSpokenEarly(draft: Pick<DraftToSpeak, "intent" | "urgency">): boolean {
+    return draft.urgency === "routine" && draft.intent !== "symptom";
+}
+
 export interface LiveVoiceOptions {
     language: ChatLocale;
     createSocket: () => SocketLike;
@@ -77,6 +95,8 @@ const BARGE_IN_FRAMES = 6;
 const SESSION_START_TIMEOUT_MS = 10_000;
 const SPEECH_START_TIMEOUT_MS = 12_000;
 const THINKING_TIMEOUT_MS = 120_000;
+/** After speech began from a draft, the saved reply must arrive within this time. */
+const FINAL_REPLY_TIMEOUT_MS = 120_000;
 const END_LINGER_MS = 1_500;
 const DEFAULT_SAMPLE_RATE = 16_000;
 const DEFAULT_TTS_RATE = 24_000;
@@ -101,7 +121,14 @@ export class LiveVoiceController {
     private ttsSupported = true;
     private captureStarted = false;
     private awaitingReply = false;
-    private speech: { id: string; interruptible: boolean; started: boolean; sampleRate: number } | null = null;
+    private speech: {
+        id: string; interruptible: boolean; started: boolean; sampleRate: number;
+        /** Set when speech began from a draft: the text handed to speech so far. */
+        early?: { fed: string };
+    } | null = null;
+    /** What happened to the current reply before it was final. */
+    private turn: { generation: number | null; dead: boolean; interrupted: boolean; language: ChatLocale };
+    private finalTimer: ReturnType<typeof setTimeout> | null = null;
     private loudFrames = 0;
     private timers = new Set<ReturnType<typeof setTimeout>>();
     private startTimer: ReturnType<typeof setTimeout> | null = null;
@@ -111,6 +138,11 @@ export class LiveVoiceController {
 
     constructor(private readonly options: LiveVoiceOptions) {
         this.now = options.now ?? Date.now;
+        this.turn = this.freshTurn();
+    }
+
+    private freshTurn(language: ChatLocale = this.options.language) {
+        return { generation: null as number | null, dead: false, interrupted: false, language };
     }
 
     getSnapshot(): VoiceModeSnapshot {
@@ -187,13 +219,22 @@ export class LiveVoiceController {
                 this.onTtsEnd(event);
                 return;
             case "tts_cancelled":
-                if (this.isCurrent(event)) this.finishSpeaking();
+                if (this.isCurrent(event)) {
+                    // Cancelled while the reply is still being written: the patient spoke over it.
+                    if (this.speech?.early && this.awaitingReply) this.turn.interrupted = true;
+                    this.finishSpeaking();
+                }
                 return;
             case "tts_error":
                 if (this.isCurrent(event)) {
                     this.options.audio.stopPlayback();
-                    this.speech = null;
                     this.clearSpeechTimer();
+                    if (this.speech?.early && this.awaitingReply) {
+                        // Early speech failed: say nothing more from the draft; the saved reply is spoken whole.
+                        this.dropEarly();
+                        return;
+                    }
+                    this.speech = null;
                     this.update({ notice: "speech_unavailable" });
                     this.settle();
                 }
@@ -254,6 +295,7 @@ export class LiveVoiceController {
         if (this.closing) return;
         if (result === "sent") {
             this.awaitingReply = true;
+            this.turn = this.freshTurn(language);
             this.update({ partial: "", guidance: guidance ?? this.snapshot.guidance, notice: null, state: "thinking" });
             this.reportState();
             this.thinkingTimer = this.later(() => this.noReply(), THINKING_TIMEOUT_MS);
@@ -303,6 +345,12 @@ export class LiveVoiceController {
 
     private onTtsEnd(event: Record<string, unknown>): void {
         if (!this.isCurrent(event) || !this.speech) return;
+        if (this.speech.early && this.awaitingReply) {
+            // The provider ended speech we have not finished writing: the saved reply is spoken whole.
+            this.options.audio.stopPlayback();
+            this.dropEarly();
+            return;
+        }
         const id = this.speech.id;
         this.options.audio.finishSpeech(id, () => {
             if (this.speech?.id === id) this.finishSpeaking();
@@ -316,11 +364,95 @@ export class LiveVoiceController {
         this.settle();
     }
 
+    /**
+     * Start speaking the reply while it is still being written. Called with the whole draft each
+     * time it grows; only the new text is sent on. Ignored unless a reply is awaited, the draft
+     * is eligible (see `mayBeSpokenEarly`) and it has only ever grown. If it is withdrawn or
+     * changes in any other way, what is playing stops and the saved reply is spoken instead.
+     */
+    speakDraft(draft: DraftToSpeak): void {
+        const turn = this.turn;
+        if (!this.awaitingReply || this.closing || this.disposed || turn.dead || turn.interrupted) return;
+        if (turn.generation !== null && turn.generation !== draft.generation) {
+            // The draft restarted. Nothing said from the old one may be trusted.
+            if (this.speech?.early) this.killEarly();
+            turn.dead = true;
+            return;
+        }
+        turn.generation = draft.generation;
+        if (!mayBeSpokenEarly(draft) || !draft.text) return;
+        let early = this.speech?.early;
+        if (!this.speech) {
+            if (!this.ttsSupported || !this.socketOpen() || this.snapshot.state !== "thinking") return;
+            const id = speechId();
+            early = { fed: "" };
+            this.speech = { id, interruptible: true, started: false, sampleRate: DEFAULT_TTS_RATE, early };
+            this.send({ type: "tts_stream_start", speech_id: id, language: turn.language, interruptible: true });
+            this.clearThinkingTimer();
+            this.finalTimer = this.later(() => this.noReply(), FINAL_REPLY_TIMEOUT_MS);
+            this.speechTimer = this.later(() => {
+                if (this.speech?.id === id && !this.speech.started) this.dropEarly();
+            }, SPEECH_START_TIMEOUT_MS);
+        }
+        if (!early || !this.speech) return;
+        if (!draft.text.startsWith(early.fed)) {
+            this.killEarly();
+            turn.dead = true;
+            return;
+        }
+        const added = draft.text.slice(early.fed.length);
+        if (added) {
+            this.send({ type: "tts_text", speech_id: this.speech.id, text: added });
+            early.fed = draft.text;
+        }
+    }
+
+    /** Stop what was started from a draft and wait for the saved reply. */
+    private killEarly(): void {
+        const speech = this.speech;
+        if (!speech) return;
+        this.options.audio.stopPlayback();
+        this.send({ type: "tts_cancel", speech_id: speech.id });
+        this.dropEarly();
+    }
+
+    private dropEarly(): void {
+        this.speech = null;
+        this.turn.dead = true;
+        this.clearSpeechTimer();
+        this.loudFrames = 0;
+        if (this.snapshot.state === "speaking") {
+            this.update({ state: "thinking" });
+            this.reportState();
+        }
+    }
+
     /** Ask for Nora's reply to be spoken. False when it cannot be, so the reply stays text. */
     speakReply(reply: ReplyToSpeak): boolean {
         if (!this.awaitingReply || this.closing || this.disposed) return false;
         this.awaitingReply = false;
         this.clearThinkingTimer();
+        this.clearFinalTimer();
+        const early = this.speech?.early;
+        if (this.turn.interrupted) {
+            // The patient spoke over the reply while it was being written: do not talk over them now.
+            this.settle();
+            return false;
+        }
+        if (early && this.speech) {
+            const spoken = early.fed.trimEnd();
+            if (!reply.urgent && reply.language === this.turn.language && reply.text.startsWith(spoken)) {
+                // What was said is the start of the saved reply: finish it.
+                const rest = reply.text.slice(spoken.length);
+                if (rest) this.send({ type: "tts_text", speech_id: this.speech.id, text: rest });
+                this.send({ type: "tts_end", speech_id: this.speech.id });
+                early.fed = reply.text;
+                return true;
+            }
+            // The saved reply differs from what was spoken (replaced, shortened, or urgent): stop
+            // at once and speak the saved reply from the start.
+            this.killEarly();
+        }
         if (this.snapshot.state !== "thinking" || !this.ttsSupported || !this.socketOpen()) {
             this.update({ notice: this.snapshot.state === "thinking" ? "speech_unavailable" : this.snapshot.notice });
             this.settle();
@@ -346,6 +478,8 @@ export class LiveVoiceController {
         if (!this.awaitingReply) return;
         this.awaitingReply = false;
         this.clearThinkingTimer();
+        this.clearFinalTimer();
+        if (this.speech?.early) this.killEarly();
         this.update({ notice: "reply_failed" });
         this.settle();
     }
@@ -357,6 +491,7 @@ export class LiveVoiceController {
     private bargeIn(): void {
         const speech = this.speech;
         if (!speech || !speech.interruptible) return;
+        if (speech.early && this.awaitingReply) this.turn.interrupted = true;
         this.options.audio.stopPlayback();
         this.speech = null;
         this.clearSpeechTimer();
@@ -531,6 +666,7 @@ export class LiveVoiceController {
     private clearStartTimer(): void { this.clearTimer(this.startTimer); this.startTimer = null; }
     private clearSpeechTimer(): void { this.clearTimer(this.speechTimer); this.speechTimer = null; }
     private clearThinkingTimer(): void { this.clearTimer(this.thinkingTimer); this.thinkingTimer = null; }
+    private clearFinalTimer(): void { this.clearTimer(this.finalTimer); this.finalTimer = null; }
 
     private clearTimers(): void {
         for (const timer of this.timers) clearTimeout(timer);

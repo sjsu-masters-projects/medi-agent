@@ -18,12 +18,14 @@ function fakes() {
 }
 const receive = (socket: SocketLike, event: Record<string, unknown>) => act(async () => { socket.onmessage?.({ data: JSON.stringify(event) }); await Promise.resolve(); });
 
+type Draft = { text: string; intent: string; urgency: string; generation: number } | null;
+
 function mount(reply: VoiceReply | null = null, sendUtterance = vi.fn(() => "sent" as const)) {
     const { socket, audio } = fakes();
-    const hook = renderHook((props: { reply: VoiceReply | null; token: string | null }) => useVoiceMode({
+    const hook = renderHook((props: { reply: VoiceReply | null; token: string | null; draft?: Draft }) => useVoiceMode({
         patientId: "p1", accessToken: props.token, scope: "s1", locale: "en-US", sendUtterance, reply: props.reply, chatError: null,
-        createAudio: () => audio, createSocket: () => socket,
-    }), { initialProps: { reply, token: "t" as string | null } });
+        draft: props.draft ?? null, createAudio: () => audio, createSocket: () => socket,
+    }), { initialProps: { reply, token: "t" as string | null, draft: null as Draft } as { reply: VoiceReply | null; token: string | null; draft?: Draft } });
     return { hook, socket, audio, sendUtterance };
 }
 
@@ -79,5 +81,31 @@ describe("useVoiceMode", () => {
         act(() => { vi.advanceTimersByTime(61_000); });
         expect(audio.close).toHaveBeenCalled();
         expect(hook.result.current.active).toBe(false);
+    });
+
+    it("speaks a routine draft as it grows and finishes the same stream with the saved reply", async () => {
+        const { hook, socket } = mount();
+        await act(async () => { hook.result.current.start(); await Promise.resolve(); });
+        await receive(socket, { type: "voice_ready", live_stt_supported: true, tts_stream_supported: true, sample_rate: 16000, max_session_seconds: 900 });
+        await receive(socket, { type: "voice_session_started" });
+        await receive(socket, { type: "utterance_final", transcript: "hello", language: "en-US" });
+        const draft = (text: string): Draft => ({ text, intent: "general", urgency: "routine", generation: 1 });
+        hook.rerender({ reply: null, token: "t", draft: draft("Hi there. ") });
+        hook.rerender({ reply: null, token: "t", draft: draft("Hi there. How are you?") });
+        hook.rerender({ reply: { seq: 1, text: "Hi there. How are you?", language: "en-US", urgent: false }, token: "t", draft: null });
+        const sent = socket.sent.filter((item): item is string => typeof item === "string").map((item) => JSON.parse(item) as { type: string; text?: string });
+        expect(sent.filter((item) => item.type === "tts_stream_start")).toHaveLength(1);
+        expect(sent.filter((item) => item.type === "tts_text").map((item) => item.text)).toEqual(["Hi there. ", "How are you?"]);
+        expect(sent.filter((item) => item.type === "tts_end")).toHaveLength(1);
+    });
+
+    it("does not speak an emergency draft early", async () => {
+        const { hook, socket } = mount();
+        await act(async () => { hook.result.current.start(); await Promise.resolve(); });
+        await receive(socket, { type: "voice_ready", live_stt_supported: true, tts_stream_supported: true, sample_rate: 16000, max_session_seconds: 900 });
+        await receive(socket, { type: "voice_session_started" });
+        await receive(socket, { type: "utterance_final", transcript: "chest pain", language: "en-US" });
+        hook.rerender({ reply: null, token: "t", draft: { text: "Call 911. ", intent: "symptom", urgency: "emergency", generation: 1 } });
+        expect(socket.sent.filter((item) => typeof item === "string" && item.includes("tts_stream_start"))).toHaveLength(0);
     });
 });

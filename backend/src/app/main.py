@@ -34,12 +34,14 @@ from app.routers import (
     documents,
     email_preferences,
     feed,
+    handoff_summaries,
     internal_tasks,
     medications,
     mfa,
     notification_centre,
     notifications,
     obligations,
+    ops,
     patients,
     reminders,
     smart,
@@ -241,6 +243,9 @@ def create_app() -> FastAPI:
     application.include_router(
         care_team_records.router, prefix=f"{api}/care-team", tags=["Care team records"]
     )
+    application.include_router(
+        handoff_summaries.router, prefix=f"{api}/care-team", tags=["Handoff summaries"]
+    )
     application.include_router(feed.router, prefix=f"{api}/feed", tags=["Feed"])
     application.include_router(cron.router, prefix=f"{api}/cron", tags=["Cron"])
     application.include_router(
@@ -256,6 +261,7 @@ def create_app() -> FastAPI:
     )
     application.include_router(reminders.router, prefix=f"{api}/reminders", tags=["Reminders"])
     application.include_router(staff.router, prefix=f"{api}/staff", tags=["Staff"])
+    application.include_router(ops.router, prefix=f"{api}/ops", tags=["Operations"])
     application.include_router(smart.router, prefix=f"{api}/smart", tags=["SMART on FHIR"])
     application.add_api_websocket_route("/ws/chat/{patient_id}", chat.chat_websocket_endpoint)
     application.add_api_websocket_route("/ws/voice/{patient_id}", voice.voice_websocket_endpoint)

@@ -417,9 +417,9 @@ jobs:
             files: tests/integration/test_chat_turn_postgres.py
             minimums: test_chat_turn_postgres=47
           - name: chat-turn-events
-            # The worker queue, events and claim (078).
-            files: tests/integration/test_chat_turn_events_postgres.py
-            minimums: test_chat_turn_events_postgres=35
+            # The worker queue, events and claim (078) and the AI availability counters (090).
+            files: tests/integration/test_chat_turn_events_postgres.py tests/integration/test_ai_availability_postgres.py
+            minimums: test_chat_turn_events_postgres=35 test_ai_availability_postgres=12
           - name: loc003-translation-schema
             # Message-translation integrity and retention, the wording-verification
             # record, display provenance and atomic confirmed sends (080-082, 088).
@@ -434,6 +434,11 @@ jobs:
             image: postgres:16-alpine
             files: tests/integration/test_symptom_intake_postgres.py tests/integration/test_symptom_handoff_postgres.py
             minimums: test_symptom_intake_postgres=17 test_symptom_handoff_postgres=8
+          - name: care-handoff
+            # Reviewed care-handoff summaries (089): ownership, append-only versions, approval
+            # and export gating, concurrency. Opt-in env is set by the job.
+            files: tests/integration/test_care_handoff_summaries_postgres.py
+            minimums: test_care_handoff_summaries_postgres=21
     defaults:
       run:
         working-directory: backend
