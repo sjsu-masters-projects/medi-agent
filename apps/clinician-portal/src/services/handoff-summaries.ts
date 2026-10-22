@@ -47,10 +47,12 @@ export interface HandoffHeader {
 }
 
 export interface HandoffEvent {
-    event_type: "created" | "edited" | "refreshed" | "approved" | "exported";
+    event_type: "created" | "edited" | "refreshed" | "approved" | "exported" | "shared" | "share_revoked" | "shared_viewed" | "shared_exported";
     version: number;
     export_format: "print" | "fhir" | null;
     actor_id: string;
+    recipient_id?: string | null;
+    recipient_name?: string | null;
     created_at: string;
 }
 
@@ -119,4 +121,104 @@ export function exportHandoffSummary(
     format: "print" | "fhir",
 ): Promise<HandoffExport> {
     return api.post<HandoffExport>(`${one(patientId, summaryId)}/export`, { version, format }, { token: token() });
+}
+
+// ── Sharing an approved version with a colleague ────────────────────────────────────────────
+
+export interface HandoffRecipient {
+    clinician_id: string;
+    first_name: string;
+    last_name: string;
+    specialty: string;
+    clinics: Array<{ id: string; name: string }>;
+    bases: Array<"care_team" | "clinic_member">;
+}
+
+export interface HandoffShare {
+    id: string;
+    summary_id: string;
+    version: number;
+    recipient_id: string;
+    recipient_name: string | null;
+    recipient_specialty: string | null;
+    shared_at: string;
+    revoked_at: string | null;
+    replayed: boolean | null;
+}
+
+export interface HandoffNewer { share_id: string; version: number }
+
+export interface SharedHandoffItem {
+    share_id: string;
+    summary_id: string;
+    version: number;
+    title: string;
+    purpose: HandoffPurpose;
+    patient_id: string;
+    patient_name: string;
+    author_name: string;
+    author_specialty: string;
+    shared_at: string;
+    approved_at: string;
+    newer: HandoffNewer | null;
+}
+
+/** The shared version only: no care team, audit trail or record links. */
+export interface SharedHandoffDetail {
+    share_id: string;
+    summary_id: string;
+    version: number;
+    title: string;
+    purpose: HandoffPurpose;
+    patient_id: string;
+    patient_name: string;
+    author_name: string;
+    author_specialty: string;
+    author_clinic: string | null;
+    shared_at: string;
+    approved_by_name: string | null;
+    approved_at: string;
+    built_at: string;
+    sections: HandoffSection[];
+    narrative: string | null;
+    notes: string | null;
+    newer: HandoffNewer | null;
+}
+
+export interface SharedHandoffExport {
+    format: "print" | "fhir";
+    summary: SharedHandoffDetail;
+    bundle: Record<string, unknown> | null;
+}
+
+const authorRoot = (summaryId: string) => `/api/v1/care-team/clinician/handoff-summaries/${encodeURIComponent(summaryId)}`;
+const sharedRoot = "/api/v1/care-team/clinician/shared-handoffs";
+
+export function listShareCandidates(summaryId: string, query?: string): Promise<HandoffRecipient[]> {
+    const suffix = query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : "";
+    return api.get<HandoffRecipient[]>(`${authorRoot(summaryId)}/share-candidates${suffix}`, { token: token() });
+}
+
+export function listHandoffShares(summaryId: string): Promise<HandoffShare[]> {
+    return api.get<HandoffShare[]>(`${authorRoot(summaryId)}/shares`, { token: token() });
+}
+
+export function shareHandoffSummary(summaryId: string, version: number, recipientId: string): Promise<HandoffShare> {
+    return api.post<HandoffShare>(`${authorRoot(summaryId)}/shares`, { version, recipient_id: recipientId }, { token: token() });
+}
+
+export function revokeHandoffShare(shareId: string): Promise<HandoffShare> {
+    return api.delete<HandoffShare>(`/api/v1/care-team/clinician/handoff-shares/${encodeURIComponent(shareId)}`, { token: token() });
+}
+
+export function listSharedWithMe(): Promise<SharedHandoffItem[]> {
+    return api.get<SharedHandoffItem[]>(sharedRoot, { token: token() });
+}
+
+export function fetchSharedHandoff(shareId: string): Promise<SharedHandoffDetail> {
+    return api.get<SharedHandoffDetail>(`${sharedRoot}/${encodeURIComponent(shareId)}`, { token: token() });
+}
+
+export function exportSharedHandoff(shareId: string, format: "print" | "fhir"): Promise<SharedHandoffExport> {
+    return api.post<SharedHandoffExport>(`${sharedRoot}/${encodeURIComponent(shareId)}/export`, { format }, { token: token() });
 }

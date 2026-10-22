@@ -130,6 +130,14 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
         "Tarea del equipo de atención",
         "Un elemento del plan de cuidado necesita a tu equipo. Abre al paciente para verlo.",
     ),
+    # Clinician-only news; the name comes from the event, never stored clinical text. The
+    # Spanish pair is an unapproved draft (LOC-001): no patient ever receives it.
+    "handoff_shared": (
+        "A colleague shared a handoff summary",
+        "Open the approved summary. It is read-only; sharing does not give access to the record.",
+        "Un colega compartió un resumen de traspaso",
+        "Abre el resumen aprobado. Es de solo lectura; compartirlo no da acceso al expediente.",
+    ),
     "safety_flag": (
         "Patient safety flag needs review",
         "An automated flag was saved. Review the original conversation; this is not a clinical decision.",
@@ -196,6 +204,7 @@ _SOURCE_LABELS = {
     "symptom_reports": "Confirmed patient symptom report",
     "clinician_messages": "Earlier operational notice",
     "notifications": "Reminder or earlier notification",
+    "care_handoff_shares": "Shared handoff summary",
 }
 
 
@@ -358,6 +367,10 @@ _LINKS: dict[str, Callable[[dict[str, Any], str], Destination]] = {
 
 
 def destination(row: dict[str, Any], role: str) -> Destination:
+    if row["event_type"] == "handoff_shared":
+        share = _identifier(row.get("source_id"))
+        link = f"/handoff-shared/{share}" if share else "/handoff-shared"
+        return (link, "Open shared summary", "Abrir resumen compartido")
     if row["event_type"] == "adr_information_requested" and role == "patient":
         # Since 063 the source is the request itself; earlier items name the assessment.
         # The follow-up view resolves either.
@@ -403,6 +416,9 @@ def _display_copy(row: dict[str, Any], role: str, spanish: bool) -> tuple[str, s
             "A result the laboratory marked critical was reported for this patient. The "
             "document is held by another care team of this patient. Check on the patient.",
         )
+    if kind == "handoff_shared" and _name(_metadata(row).get("actor_name")):
+        author = _name(_metadata(row).get("actor_name"))
+        return (f"{author} shared a handoff summary", _COPY["handoff_shared"][1])
     if kind == "care_plan_review" and _is_clinic_scope(row):
         return _CLINIC_REVIEW_COPY.get(
             str(_metadata(row).get("review_kind")), _CLINIC_REVIEW_DEFAULT

@@ -617,3 +617,23 @@ def test_a_clinic_level_work_item_names_no_patient_and_links_the_clinic_page(rev
     assert shown.action_url == f"/care-plan-reviews?clinic={clinic}&item={raw['source_id']}"
     assert "patient" not in shown.title.lower()
     assert str(shown.clinic_id) == clinic
+
+
+def test_a_shared_handoff_item_names_the_author_links_the_share_and_carries_no_content():
+    raw = item(
+        event_type="handoff_shared",
+        category="follow_up",
+        source_type="care_handoff_shares",
+        actionable=False,
+        metadata={"actor_name": "Elena Park", "version": 2, "secret": "Lisinopril"},
+    )
+
+    shown = present_item(raw, "clinician", "en-US")
+
+    assert shown.title == "Elena Park shared a handoff summary"
+    assert shown.action_url == f"/handoff-shared/{raw['source_id']}"
+    assert shown.actionable is False and shown.action_label == "View"
+    assert shown.source_label == "Shared handoff summary"
+    assert "Lisinopril" not in shown.model_dump_json()
+    nameless = present_item({**raw, "metadata": {}}, "clinician", "en-US")
+    assert nameless.title == "A colleague shared a handoff summary"

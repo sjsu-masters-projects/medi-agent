@@ -436,9 +436,11 @@ jobs:
             minimums: test_symptom_intake_postgres=17 test_symptom_handoff_postgres=8 test_symptom_report_history_postgres=11
           - name: care-handoff
             # Reviewed care-handoff summaries (089): ownership, append-only versions, approval
-            # and export gating, concurrency. Opt-in env is set by the job.
-            files: tests/integration/test_care_handoff_summaries_postgres.py
-            minimums: test_care_handoff_summaries_postgres=21
+            # and export gating, concurrency, and sharing an approved version with a colleague
+            # (096: recipients, revoke, version pinning, unlinked recipient, notification).
+            # Opt-in env is set by the job.
+            files: tests/integration/test_care_handoff_summaries_postgres.py tests/integration/test_care_handoff_shares_postgres.py
+            minimums: test_care_handoff_summaries_postgres=21 test_care_handoff_shares_postgres=28
     defaults:
       run:
         working-directory: backend
