@@ -427,6 +427,31 @@ class TestClinicianPatientMessages:
         assert data[0]["patient_first_name"] == "Elena"
         assert data[0]["body"] == "Your labs are ready."
 
+    def test_handoff_message_carries_its_report_id_and_others_do_not(
+        self, client, override_auth, override_service
+    ):
+        report_id = str(uuid4())
+        base = {
+            "clinician_id": str(uuid4()),
+            "patient_id": str(uuid4()),
+            "channel": "in_app",
+            "body": "Patient confirmed: Headache.",
+            "is_read": False,
+            "created_at": "2026-05-11T08:00:00Z",
+        }
+        rows = [
+            {**base, "id": str(uuid4()), "symptom_report_id": report_id},
+            {**base, "id": str(uuid4()), "symptom_report_id": None},
+        ]
+        override_service.list_all_sent_messages = AsyncMock(return_value=rows)
+        override_service.list_patient_messages = AsyncMock(return_value=rows)
+
+        inbox = client.get("/api/v1/clinicians/me/messages").json()
+        thread = client.get(f"/api/v1/clinicians/me/patients/{base['patient_id']}/messages").json()
+
+        for body in (inbox, thread):
+            assert [m["symptom_report_id"] for m in body] == [report_id, None]
+
 
 class TestGetPatientRiskSnapshot:
     """GET /api/v1/clinicians/me/patients/{patient_id}/risk - Risk card snapshot."""

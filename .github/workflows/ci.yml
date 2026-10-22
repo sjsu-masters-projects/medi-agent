@@ -434,6 +434,11 @@ jobs:
             image: postgres:16-alpine
             files: tests/integration/test_symptom_intake_postgres.py tests/integration/test_symptom_handoff_postgres.py tests/integration/test_symptom_report_history_postgres.py
             minimums: test_symptom_intake_postgres=17 test_symptom_handoff_postgres=8 test_symptom_report_history_postgres=11
+          - name: symptom-review-notifications
+            # The patient notice when a care team reviews a confirmed report and the report id
+            # on the hand-off message (095), on the whole ledger. Disposable containers.
+            files: tests/integration/test_symptom_review_notifications_postgres.py
+            minimums: test_symptom_review_notifications_postgres=8
           - name: care-handoff
             # Reviewed care-handoff summaries (089): ownership, append-only versions, approval
             # and export gating, concurrency. Opt-in env is set by the job.

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
@@ -107,6 +108,14 @@ export function EarlierMessages({ clinicId = null, showClinic = false }: { clini
                                             <>
                                                 {msg.subject && <p className="text-[13px] font-medium text-ink-2">{msg.subject}</p>}
                                                 <p className="line-clamp-2 whitespace-pre-wrap text-[13px] text-ink-2">{msg.body}</p>
+                                                {msg.symptomReportId && (
+                                                    <Link
+                                                        href={`/patients/${encodeURIComponent(msg.patientId)}?tab=symptoms#symptom-${encodeURIComponent(msg.symptomReportId)}`}
+                                                        className="mt-1 inline-flex min-h-9 items-center text-[13px] font-semibold text-primary underline"
+                                                    >
+                                                        Open symptom report
+                                                    </Link>
+                                                )}
                                                 {msg.channel === "email" && <p className="text-xs text-muted">Sent by email</p>}
                                             </>
                                         )}
