@@ -206,6 +206,60 @@ so run `backend/scripts/appointment-clinician-overlap-preflight.sql` (read-only)
 appointments in the hosted project. A read-only audit on October 17 found no public table with RLS
 off and no browser-role SELECT or INSERT on a public table.
 
+### Message-translation integrity, wording verification and display provenance (080–082 and 088) — not yet applied
+
+Pending the requester's authorization; nothing here has been applied to a hosted project.
+Apply in order, after main's `079_unlisted_product_review_alerts.sql`, before deploying #203's backend:
+
+1. `080_message_translation_integrity.sql` — `AFTER DELETE` triggers on
+   `care_conversation_messages` and `chat_messages` that remove a deleted message's stored
+   translations (the cascade a polymorphic `source_table` cannot express as one foreign key),
+   plus `public.purge_message_translations(interval)`, which removes orphans and expired
+   failure markers. The function is `service_role`-only; the migration's verification block
+   fails closed if either trigger is missing or a browser role can execute it.
+2. `081_care_plan_wording_verification.sql` — `care_plan_items.back_translation` (the cached
+   back-translation a clinician verifies against) and `care_plan_items.wording_verification`
+   (the deterministic guard outcome recorded with `wording_verified`), plus a trigger
+   requiring new or changed verified wording to carry its record. Legacy approved wording
+   is not rewritten; cache-only updates remain possible without inventing verification. It also
+   adds `care_plan_items.translation_model_id`, the model that drafted the second language.
+3. `082_loc003_display_provenance.sql` — `clinical_facts.display_model_id` (the model that
+   produced a fact's English display fields), and widens the `message_translations`
+   `source_table` check to accept `evidence_excerpt`, so an English gloss of Spanish source
+   evidence is stored in the table that already holds translations with their guard outcome
+   and model, rather than in a second table with the same columns. Excerpt glosses are keyed
+   by a UUIDv5 of the excerpt text, so 080's orphan sweep leaves them alone (it only looks
+   under the two message labels). The migration finds 068's inline constraint by definition
+   rather than assuming its generated name, and fails closed if either change is missing.
+
+4. `088_confirmed_message_translation.sql` — backend-only atomic confirmed send: the
+   existing clinic-authorized send and exact clinician-confirmed translation commit together.
+   Duplicate retries cannot replace the approved text; translation failure or a changed patient
+   locale rolls the send back. Original-only clinician sends atomically store a permanent
+   non-display marker, so a later patient read cannot regenerate a rejected translation.
+   The marker is kept until source deletion, not expired as a transient model failure.
+   Browser roles cannot execute this function.
+
+All four are re-runnable and add no table. New functions have explicit least-privilege grants
+and final permission checks. 080 deletes only orphaned/expired translation display state,
+never original messages. Applying hosted SQL requires separate explicit authorization.
+
+The retention rule is a recorded cron job, `POST /api/v1/cron/message-translations/purge`
+(internal, `CRON_AUTH_TOKEN`), intended for Cloud Scheduler about once a day. It is safe to
+repeat and reports `orphans_removed` and `expired_failure_markers_removed`.
+
+Verify with the contract suite before applying anywhere:
+
+```bash
+cd backend
+LOC003_TEST_POSTGRES=1 PYTHONPATH=src pytest tests/integration/test_loc003_translation_postgres.py
+```
+
+It builds a disposable cluster and runs the real migration bytes (30 cases). On macOS with
+PostgreSQL 18 the fixture pins `LC_ALL=C` and creates the `postgres` superuser itself, so no
+local cluster configuration is needed. CI runs the same file in the PostgreSQL contract
+matrix as `loc003-translation-schema`.
+
 ### Hosted default grants
 
 New public tables and functions created through SQL receive platform default grants to `anon`,
@@ -224,6 +278,12 @@ and is applied again, so every migration must be idempotent (`IF NOT EXISTS`, `C
 guarded constraint and policy creation). Example: LOC-003's migrations were first applied as
 `065_english_display_facts` and `066_message_translations`, then renumbered to `067_english_display_facts`
 and `068_message_translations`; the renumbered files reapplied cleanly because they are re-runnable.
+Keep the applied `067_english_display_facts.sql` unchanged. PR #203's proposed 079/083
+English-display copies were byte-identical and redundant, so they were removed rather than
+creating another ledger identity. The validator permits only the exact historical 067 pair
+with `067_clinic_lists_and_roles.sql`; any new 067 filename collision fails validation.
+Main's 079 remains the applied unlisted-product migration. #203 reserves 080–082 and 088;
+merged care-team PR #210 owns 083–087, not applied by this work.
 Never edit an applied migration; renumber only a file that has not merged, and test it twice.
 
 ### Appointment booking guards (042/043)

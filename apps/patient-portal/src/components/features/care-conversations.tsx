@@ -12,6 +12,7 @@ import { PullToRefresh } from "@/components/ui/pull-to-refresh";
 import { ChatTextarea, chatButton, chatDisplayTime } from "./chat-presentation";
 import { normalizeLocale, type Locale } from "@/types";
 import { ConversationActivityAttachment, ConversationActivityContext } from "./conversation-activity";
+import { TranslationNote } from "./translation-note";
 import type { CareConversation, CareConversationMessage, ConversationDraft, ConversationRecipient } from "@/types/care-conversations";
 import { applyTranslationResult, conversationAccessDenied, conversationRoleLabel, conversationSendFailure, getConversationCopy, mergeConversationMessages, requestPendingTranslations } from "../../../../../packages/shared/src/utils/care-conversations";
 
@@ -430,10 +431,15 @@ function ConversationThread({ token, thread, locale, visible, draft, onDraft, on
           {message.activity_context ? <ConversationActivityContext activity={message.activity_context} locale={locale} /> : null}
           <p className={`whitespace-pre-wrap break-words text-[15px] leading-[1.45] [overflow-wrap:anywhere] ${own ? "max-w-[82%] rounded-[20px_20px_6px_20px] bg-brand px-3.5 py-[11px] text-white" : "max-w-[88%] rounded-[20px_20px_20px_6px] bg-surface px-[15px] py-[13px] text-ink shadow-[0_1px_0_rgba(16,32,43,.04)]"}`}>{displayBody}</p>
           {message.translation_pending && !own ? <p role="status" className="max-w-[88%] px-1 text-[11px] text-muted">{copy.translating}</p> : null}
-          {guardFailed ? <p className="max-w-[88%] px-1 text-[11px] text-muted">{copy.translationUnavailable}</p> : null}
-          {hasTranslation ? <p className={`max-w-[88%] px-1 text-[11px] text-muted`}>
-            {originalShown ? null : <span>{translatedLabel} · </span>}
+          {guardFailed ? <p className="flex max-w-[88%] flex-wrap items-center gap-x-1 px-1 text-[11px] text-muted">
+            <span>{copy.translationUnavailable}</span>
+            <TranslationNote copy={copy} modelId={message.translation_model_id} />
+          </p> : null}
+          {hasTranslation ? <p className={`flex max-w-[88%] flex-wrap items-center gap-x-1 px-1 text-[11px] text-muted`}>
+            {originalShown ? null : <span>{translatedLabel} ·</span>}
             <button type="button" className="underline underline-offset-2 hover:text-ink" onClick={() => setShowOriginal((current) => { const next = new Set(current); if (next.has(message.id)) next.delete(message.id); else next.add(message.id); return next; })}>{originalShown ? copy.showTranslation : copy.showOriginal}</button>
+            {/* LOC-003 item 5: a computer made this, it may be wrong, and the original counts. */}
+            <TranslationNote copy={copy} modelId={message.translation_model_id} />
           </p> : null}
           <p className={`max-w-[88%] break-words px-1 text-[11px] text-muted ${own ? "text-right" : ""}`}>{message.sender_name} · {conversationRoleLabel(message.sender_role, locale)} · {thread.clinic_name} · <time className="font-mono" dateTime={message.created_at}>{chatDisplayTime(message.created_at, locale)}</time></p>
         </li>;

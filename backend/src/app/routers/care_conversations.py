@@ -15,6 +15,8 @@ from app.models.care_conversation import (
     ConversationCreate,
     ConversationMessage,
     ConversationMessagePage,
+    ConversationPreviewRequest,
+    ConversationPreviewResult,
     ConversationReadMarker,
     ConversationReadReceipt,
     ConversationRecipient,
@@ -91,6 +93,27 @@ async def send_message(
     service: CareConversationService = Depends(conversation_service),
 ) -> Any:
     return await service.send(conversation_id, data)
+
+
+@router.post(
+    "/{conversation_id}/messages/preview",
+    response_model=ConversationPreviewResult,
+    summary="LOC-003: what the patient will receive for an unsent reply",
+    description=(
+        "Clinician-only. Translates a draft reply into the patient's language and returns it "
+        "with an English back-translation and the guard results, so the clinician can confirm "
+        "the wording the patient will read without reading that language. Nothing is stored: "
+        "the reply has not been sent. `needed` is false when the patient already reads the "
+        "language the clinician wrote in, and a translation that failed a guard is reported "
+        "but never offered for confirmation."
+    ),
+)
+async def preview_reply(
+    conversation_id: UUID,
+    data: ConversationPreviewRequest,
+    service: CareConversationService = Depends(conversation_service),
+) -> Any:
+    return await service.preview_reply(conversation_id, data.body)
 
 
 @router.post(

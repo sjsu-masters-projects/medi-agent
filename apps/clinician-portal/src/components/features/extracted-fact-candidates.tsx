@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 import { Icon } from "@/components/ui/icons";
+import { OriginalText, TranslationBadge, UntranslatedBadge } from "@/components/ui/translation-note";
+import { EvidenceGlossLine, glossFor, useEvidenceGlosses, type GlossMap } from "@/components/features/evidence-gloss";
 import type { ExtractedDocumentFact } from "@/services/clinicians";
 
 /**
@@ -103,24 +105,36 @@ function textValue(value: unknown): string {
     return isPresent(value) ? formatFactField(value).trim() : "";
 }
 
+/** One printed field as the clinician reads it, plus the original when English replaced it. */
+export interface FactField {
+    key: string;
+    label: string;
+    value: string;
+    /** The source text this English replaced, when the two differ. */
+    original?: string;
+}
+
 /** Printed fields in source order, excluding derived and (optionally) other keys. */
 export function factFields(
     fact: ExtractedDocumentFact,
     exclude: ReadonlySet<string> = new Set(),
-): Array<{ key: string; label: string; value: string }> {
+): FactField[] {
     /* LOC-003: prefer English display_value fields when available (Spanish source). */
     const displayValue = fact.display_value ?? {};
     return Object.entries(fact.value)
         .filter(([key, value]) => !DERIVED_KEYS.has(key) && !exclude.has(key) && isPresent(value))
         .map(([key, value]) => {
             const englishOverride = displayValue[key];
-            const displayText = typeof englishOverride === "string" && englishOverride.trim()
-                ? englishOverride
-                : formatFactField(value);
+            const printed = formatFactField(value);
+            const translated = typeof englishOverride === "string" && englishOverride.trim()
+                ? englishOverride.trim()
+                : "";
+            /* LOC-003 item 4: the original stays one tap away, never replaced in storage. */
             return {
                 key,
                 label: factFieldLabel(fact.fact_type, key),
-                value: displayText,
+                value: translated || printed,
+                original: translated && translated !== printed.trim() ? printed : undefined,
             };
         });
 }
@@ -128,6 +142,23 @@ export function factFields(
 /** LOC-003: True when this fact was extracted from a Spanish document and has English display fields. */
 export function isFactTranslatedFromSpanish(fact: ExtractedDocumentFact): boolean {
     return fact.display_locale === "es-MX" && fact.display_value != null && Object.keys(fact.display_value).length > 0;
+}
+
+/**
+ * LOC-003 item 6: a Spanish fact the translation guard rejected, or the model never
+ * translated. Ingestion records `es-MX` either way, so the absence of English display
+ * fields is exactly the untranslated state — and it must be said, not left to look like
+ * English that happens to be in Spanish.
+ */
+export function isFactUntranslated(fact: ExtractedDocumentFact): boolean {
+    return fact.display_locale === "es-MX" && !isFactTranslatedFromSpanish(fact);
+}
+
+/** The Spanish text of an untranslated fact, for the card's "show original" disclosure. */
+export function untranslatedFactText(fact: ExtractedDocumentFact): string {
+    return factFields(fact)
+        .map((field) => `${field.label}: ${field.value}`)
+        .join(" · ");
 }
 
 export type FactReviewEntry =
@@ -269,16 +300,20 @@ function LabResultRow({ fact }: { fact: ExtractedDocumentFact }) {
     );
 }
 
-function FactFieldList({ fields }: { fields: Array<{ key: string; label: string; value: string }> }) {
+function FactFieldList({ fields }: { fields: FactField[] }) {
     if (fields.length === 0) {
         return null;
     }
     return (
         <dl className="mt-3 space-y-1 text-sm text-ink-2">
-            {fields.map(({ key, label, value }) => (
+            {fields.map(({ key, label, value, original }) => (
                 <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] gap-2" key={key}>
                     <dt className="text-[13px] font-medium text-muted">{label}</dt>
-                    <dd className="whitespace-pre-line break-words">{value}</dd>
+                    <dd className="min-w-0 whitespace-pre-line break-words">
+                        {value}
+                        {/* LOC-003: the printed Spanish this English replaced, one tap away. */}
+                        {original ? <OriginalText className="mt-0.5">{original}</OriginalText> : null}
+                    </dd>
                 </div>
             ))}
         </dl>
@@ -289,27 +324,31 @@ interface FactCandidateProps {
     fact: ExtractedDocumentFact;
     selected: boolean;
     onSelect: (factId: string) => void;
+    /** LOC-003 item 2: English glosses for the Spanish excerpts on this screen. */
+    glosses?: GlossMap;
 }
 
-function FactCandidate({ fact, selected, onSelect }: FactCandidateProps) {
+function FactCandidate({ fact, selected, onSelect, glosses }: FactCandidateProps) {
     const isLab = fact.fact_type === "lab_result";
     const action = fact.fact_type === "medication" ? textValue(fact.value.medication_action).toLowerCase() : "";
     const consistency = textValue(fact.value.consistency);
     const citation = fact.citations?.[0];
     const translated = isFactTranslatedFromSpanish(fact);
+    const untranslated = isFactUntranslated(fact);
     return (
-        <button
-            aria-pressed={selected}
+        <article
             className={`ma-press w-full rounded-xl border p-3.5 text-left ${selected ? "border-primary bg-primary-tint" : "border-line bg-surface hover:bg-surface-2"}`}
-            onClick={() => onSelect(fact.id)}
-            type="button"
         >
+            <button aria-pressed={selected} className="ma-press mb-2 min-h-10 w-full rounded-lg px-2 text-left text-sm font-semibold text-primary hover:bg-primary-tint" onClick={() => onSelect(fact.id)} type="button">Select {factTypeHeading(fact.fact_type)} evidence</button>
             <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
                 <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5">
                         <p className="text-sm font-semibold text-ink">{factTypeHeading(fact.fact_type)}</p>
                         {action ? <MedicationActionBadge action={action} /> : null}
-                        {translated ? <span className="inline-flex items-center gap-1 rounded-md bg-ai-tint px-1.5 py-0.5 text-[10px] font-medium text-ai-ink">Translated from Spanish</span> : null}
+                        {/* LOC-003 items 5 and 6: translated text carries the model and its
+                            caveat; a guard-rejected fact says so instead of looking English. */}
+                        {translated ? <TranslationBadge modelId={fact.display_model_id} /> : null}
+                        {untranslated ? <UntranslatedBadge /> : null}
                     </div>
                     <p className="mt-1 text-xs font-medium text-warn-ink">{candidateState(fact)}</p>
                 </div>
@@ -325,8 +364,12 @@ function FactCandidate({ fact, selected, onSelect }: FactCandidateProps) {
                     <span>{consistency}</span>
                 </p>
             ) : null}
-            {citation?.excerpt ? <p className="mt-3 border-l-2 border-line-strong pl-3 text-xs text-ink-2">“{citation.excerpt}”{citation.location?.page ? ` · page ${citation.location.page}` : ""}</p> : null}
-        </button>
+            {/* LOC-003 item 2: the excerpt stays the exact printed text; English sits under it. */}
+            {citation?.excerpt ? <span className="mt-3 block border-l-2 border-line-strong pl-3 text-xs text-ink-2">
+                <span className="block" lang={fact.display_locale === "es-MX" ? "es-MX" : undefined}>“{citation.excerpt}”{citation.location?.page ? ` · page ${citation.location.page}` : ""}</span>
+                {glosses ? <EvidenceGlossLine gloss={glossFor(glosses, citation.excerpt)} /> : null}
+            </span> : null}
+        </article>
     );
 }
 
@@ -334,15 +377,19 @@ interface ExtractedFactCandidatesProps {
     facts: ExtractedDocumentFact[];
     selectedFactId: string | null;
     onSelect: (factId: string) => void;
+    /** Needed to ask for glosses; without it the Spanish excerpts simply stand alone. */
+    patientId?: string;
 }
 
-export function ExtractedFactCandidates({ facts, selectedFactId, onSelect }: ExtractedFactCandidatesProps) {
+export function ExtractedFactCandidates({ facts, selectedFactId, onSelect, patientId }: ExtractedFactCandidatesProps) {
+    /* LOC-003 item 2: one request covers every Spanish excerpt on screen. */
+    const glosses = useEvidenceGlosses(patientId, facts.map((fact) => fact.citations?.[0]?.excerpt));
     return (
         <div className="space-y-2.5" role="list" aria-label="Extracted fact candidates">
             {groupFactsForReview(facts).map((entry, index) =>
                 entry.kind === "fact" ? (
                     <div key={entry.fact.id} role="listitem">
-                        <FactCandidate fact={entry.fact} onSelect={onSelect} selected={selectedFactId === entry.fact.id} />
+                        <FactCandidate fact={entry.fact} glosses={glosses} onSelect={onSelect} selected={selectedFactId === entry.fact.id} />
                     </div>
                 ) : (
                     <div key={`panel-${index}-${entry.panel}`} role="listitem">
@@ -354,7 +401,7 @@ export function ExtractedFactCandidates({ facts, selectedFactId, onSelect }: Ext
                             <div className="space-y-2" role="list" aria-label={`${entry.panel} results`}>
                                 {entry.facts.map((fact) => (
                                     <div key={fact.id} role="listitem">
-                                        <FactCandidate fact={fact} onSelect={onSelect} selected={selectedFactId === fact.id} />
+                                        <FactCandidate fact={fact} glosses={glosses} onSelect={onSelect} selected={selectedFactId === fact.id} />
                                     </div>
                                 ))}
                             </div>
