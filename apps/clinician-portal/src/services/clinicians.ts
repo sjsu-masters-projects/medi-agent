@@ -1970,3 +1970,82 @@ export async function sendPatientMessage(
     );
     return normalizeClinicianMessage(msg);
 }
+
+// ── Patient-confirmed symptom report (PAT-002-C) ─────────────────────────────
+
+export interface SymptomReportAnswer {
+    question_id: string;
+    label: string;
+    state: "answered" | "unknown" | "declined";
+    display: string;
+    wording: string | null;
+    captured_at: string | null;
+}
+
+export interface TeamReview {
+    care_team_id: string;
+    team_label: string | null;
+    reviewed_by_name: string | null;
+    reviewed_at: string;
+    mine: boolean;
+}
+
+export interface ClinicianSymptomReport {
+    id: string;
+    patient_id: string;
+    symptom: string;
+    severity: number | null;
+    onset: string | null;
+    duration: string | null;
+    body_area: string | null;
+    confirmed_at: string;
+    locale: "en-US" | "es-MX";
+    timezone: string | null;
+    status: "reported" | "not_sent" | "shared" | "reviewed";
+    handoff: "sent" | "not_sent" | "unrecorded";
+    events: Array<{ kind: string; at: string; actor_name: string | null; team_label: string | null }>;
+    answers: SymptomReportAnswer[];
+    summary: string | null;
+    flagged_for_adr: boolean;
+    related_medication_name: string | null;
+    provenance: {
+        report_id: string;
+        intake_id: string | null;
+        source_message_id: string | null;
+        session_id: string | null;
+        schema_version: string | null;
+        library_version: string | null;
+        submitted_status: string | null;
+        confirmed_at: string;
+        language: "en-US" | "es-MX";
+        timezone: string | null;
+        consent_recorded: boolean;
+    };
+    triage: {
+        safety_rule_version: string | null;
+        safety_result: string | null;
+        escalation_urgency: "urgent" | "emergency" | null;
+        escalation_delivery: string | null;
+        escalation_at: string | null;
+    };
+    your_care_team_ids: string[];
+    reviews: TeamReview[];
+    reviewed_by_your_team: boolean;
+    acting_care_team_id: string | null;
+    already_reviewed: boolean | null;
+}
+
+const symptomReportPath = (patientId: string, reportId: string) =>
+    `/api/v1/clinicians/me/patients/${encodeURIComponent(patientId)}/symptom-reports/${encodeURIComponent(reportId)}`;
+
+export function fetchSymptomReport(patientId: string, reportId: string): Promise<ClinicianSymptomReport> {
+    return apiFetch(symptomReportPath(patientId, reportId));
+}
+
+/** Idempotent per care team: a repeat by the same team returns its existing review. */
+export function markSymptomReportReviewed(patientId: string, reportId: string, careTeamId?: string): Promise<ClinicianSymptomReport> {
+    return apiFetch(`${symptomReportPath(patientId, reportId)}/review`, {
+        method: "POST",
+        body: JSON.stringify(careTeamId ? { care_team_id: careTeamId } : {}),
+    });
+}

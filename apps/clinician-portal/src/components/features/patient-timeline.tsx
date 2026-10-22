@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button, ErrorState } from "@/components/ui";
+import { SymptomReportPanel } from "@/components/features/symptom-report-panel";
 import { fetchPatientTimeline, type PatientTimelineResponse } from "@/services/clinicians";
 
 function Timestamp({ value }: { value: string }) {
@@ -15,6 +16,7 @@ export function PatientTimeline({ patientId }: { patientId: string }) {
     const [failedPatient, setFailedPatient] = useState<string | null>(null);
     const [attempt, setAttempt] = useState(0);
     const [expanded, setExpanded] = useState<string | null>(null);
+    const [openReport, setOpenReport] = useState<string | null>(null);
     const data = snapshot?.patient_id === patientId ? snapshot : null;
     const failed = failedPatient === patientId;
 
@@ -78,6 +80,7 @@ export function PatientTimeline({ patientId }: { patientId: string }) {
                     <p className="break-words text-sm text-ink-2">{event.details["file_name"] ?? event.details["name"] ?? event.details["symptom"] ?? event.details["event_type"] ?? event.details["action"] ?? event.details["status"] ?? event.domain}</p>
                     <div className="flex flex-wrap gap-4 text-sm">
                         <Link aria-label={`Source record for ${event.title} ${event.source_id}`} className="text-primary underline" href={event.source_href} onClick={() => setExpanded(event.id)}>Source record</Link>
+                        {event.domain === "symptom" && event.source_table === "symptom_reports" && <button type="button" className="min-h-9 text-primary underline" aria-label={`Open structured report for ${event.details["symptom"] ?? "symptom"} ${event.source_id}`} onClick={() => setOpenReport(event.source_id)}>Open structured report</button>}
                         {event.destination_href && <Link aria-label={`Open ${event.domain === "message" ? "your conversation" : "source workspace"} for ${event.source_id}`} className="text-primary underline" href={event.destination_href}>Open {event.domain === "message" ? "your conversation" : "source workspace"}</Link>}
                     </div>
                     <details id={`source-${event.id}`} tabIndex={-1} open={expanded === event.id} className="scroll-mt-24 rounded-lg bg-surface-2 p-3 text-xs text-muted">
@@ -90,5 +93,6 @@ export function PatientTimeline({ patientId }: { patientId: string }) {
                 </li>)}
             </ol>}
         </>}
+        {openReport && <SymptomReportPanel patientId={patientId} reportId={openReport} onClose={() => setOpenReport(null)} />}
     </section>;
 }

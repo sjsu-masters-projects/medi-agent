@@ -25,6 +25,7 @@ import { usePatientReviewCount } from "@/hooks/use-patient-review-count";
 import type { RootState } from "@/store/store";
 import { PatientADRPanel } from "@/components/features/patient-adr-panel";
 import { PatientTimeline } from "@/components/features/patient-timeline";
+import { SymptomReportPanel } from "@/components/features/symptom-report-panel";
 import { formatClinicianDateTime } from "@/utils/dates";
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
@@ -181,6 +182,18 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
         element?.focus({ preventScroll: true });
         element?.scrollIntoView?.({ block: "nearest" });
     }, [hasMounted, activeTab, patient]);
+
+    // A notification or timeline link (#symptom-<id>) opens the structured report directly.
+    const [pickedReport, setPickedReport] = useState<string | null>(null);
+    const [closedReport, setClosedReport] = useState<string | null>(null);
+    const linkedReport = hasMounted && activeTab === "symptoms" && patient
+        ? patient.symptom_reports.find((entry) => entry.confirmationState === "patient_confirmed" && window.location.hash === `#symptom-${entry.id}`)?.id ?? null
+        : null;
+    const openSymptomReport = pickedReport ?? (linkedReport && linkedReport !== closedReport ? linkedReport : null);
+    const setOpenSymptomReport = (id: string | null) => {
+        setPickedReport(id);
+        if (id === null) setClosedReport(linkedReport);
+    };
 
     const soapTeam = useCareTeamChoice(patientId, enabled && activeTab === "soap");
     function handleGenerateSoap() {
@@ -544,11 +557,11 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                                     }`}
                                                 />
                                                 <div className="min-w-0">
-                                                    <p className="text-sm font-medium capitalize text-ink">
+                                                    <p className="text-sm font-medium text-ink">
                                                         {s.symptom}
                                                     </p>
                                                     <p className="mt-0.5 text-xs text-muted">{s.confirmationState === "patient_confirmed"
-                                                        ? `Patient-confirmed${s.confirmedAt ? ` · ${s.confirmedAt}` : ""}`
+                                                        ? `Patient-confirmed${s.confirmedAt ? ` · ${formatConfirmedAt(s.confirmedAt, patient.timezone)}` : ""}`
                                                         : "Historical report — patient confirmation not recorded"}</p>
                                                     {s.confirmedSummary && <details className="mt-2 text-sm"><summary className="min-h-11 cursor-pointer py-2">Confirmed patient summary</summary><p className="whitespace-pre-wrap">{s.confirmedSummary}</p></details>}
                                                     {s.reportedProduct && <div className="mt-2 max-w-prose break-words rounded-lg bg-surface-2 p-2 text-xs text-ink-2">
@@ -557,6 +570,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                                         {!s.relatedMedicationId && <Link className="mt-2 inline-flex min-h-9 items-center font-medium text-primary underline" href={`/patients/${patientId}?tab=profile`}>Compare recorded medication list</Link>}
                                                         {s.reportedProduct.concern === true && <p>A reported concern is not a confirmed adverse reaction.</p>}
                                                     </div>}
+                                                    {s.confirmationState === "patient_confirmed" && <button type="button" className="mt-2 inline-flex min-h-9 items-center font-medium text-primary underline" onClick={() => setOpenSymptomReport(s.id)}>Open structured report</button>}
                                                     {s.onset && (
                                                         <p className="mt-0.5 text-xs text-muted">
                                                             Onset: {s.onset}
@@ -719,8 +733,19 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                 {activeTab === "timeline" && <PatientTimeline key={patientId} patientId={patientId} />}
                 {activeTab === "care-plan" && <CarePlanArea patientId={patientId} onPublished={() => void reload()} reviewId={searchParams.get("review")} />}
             </div>
+            {openSymptomReport && <SymptomReportPanel patientId={patientId} reportId={openSymptomReport} onClose={() => setOpenSymptomReport(null)} />}
         </div>
     );
+}
+
+/** Patient-entered text is never re-cased; the time is shown in the patient's own zone. */
+function formatConfirmedAt(value: string, timezone?: string): string {
+    const options: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "short" };
+    try {
+        return formatClinicianDateTime(value, { ...options, timeZone: timezone || "UTC" });
+    } catch {
+        return formatClinicianDateTime(value, { ...options, timeZone: "UTC" });
+    }
 }
 
 export default function PatientDeepDivePage() {

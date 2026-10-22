@@ -1254,3 +1254,55 @@ portal builds; record exact final results in the dated acceptance document and
 on #193. Resolve existing code-quality comments without broad refactoring. No
 migration bytes, library selection, hosted configuration, deployment or merge
 is authorized by this review. Physical audio/device acceptance remains VOI-001-M.
+
+## 30. PAT-002-C — patient symptom history and clinician report detail (October 22, 2026)
+
+**State:** Implemented locally; in review. Migration 091 is not applied to any remote database.
+
+No second event store. Every event shown is a row the product already writes:
+
+| Event | Source | Shown to |
+| --- | --- | --- |
+| Reported | `symptom_reports.confirmed_at` (patient-confirmed rows only) | patient, clinician |
+| Sent to the care team | `symptom_intake_audit` action `review_handoff` with `recipients` > 0 (091) | patient, clinician |
+| Marked for urgent review | `symptom_intake_safety_alerts`, only when `delivery_state='delivered'` for the patient | patient, clinician (any state) |
+| Reviewed by name, per team | new `symptom_report_reviews` (091) and audit action `clinician_reviewed` | patient, clinician |
+
+"Clinician viewed" and "clinician replied" are not recorded anywhere and are not shown. A private
+message thread has no link to a report.
+
+```text
+patient  -> GET /patients/me/symptom-history[/id] -> symptom_report_history(patient) -> own confirmed rows
+clinician-> GET /clinicians/me/patients/{p}/symptom-reports/{r}
+         -> existing assignment check -> symptom_report_history(clinician): active link, report belongs to p
+clinician-> POST .../review -> same checks -> INSERT ... ON CONFLICT DO NOTHING + one audit row
+```
+
+Decisions:
+
+- **Review is per care team.** Each care-team link owns its follow-up (PLAN-002), so reviews are
+  recorded per (report, care team). A repeat by the same team returns its review; concurrent
+  attempts converge on one row and one audit event through the primary key. Another team's
+  review does not mark this team reviewed; clinicians see it as "Also reviewed by ...", and the
+  patient sees every team's review. A clinician with several links names the team
+  (`CARE_TEAM_REQUIRED` otherwise). Review records follow-up only; it approves no diagnosis,
+  medication link or ADR conclusion.
+- **One function, checked in SQL.** `public.symptom_report_history(actor, role, action, payload)`
+  is callable only by the backend role. A patient reaches only their own reports; denial and
+  "no such report" are the same error (HTTP 404 for the patient, 403 for an unassigned clinician).
+  Retrieval context (`confirmed_content.context`) is never returned.
+- **Answers in the language used.** Row labels come from a fixed per-field map in the report's
+  locale (`es-MX` labels are a draft pending LOC-001); values are the patient's confirmed values.
+  Unknown and declined answers stay as such.
+- **Bounded.** The list returns at most 100 reports (default 50) with `has_more`.
+- **Hand-off notification.** The existing unlisted-product safety flag already links to
+  `?tab=symptoms#symptom-<id>`; that link now opens the report panel. The generic hand-off
+  message (`clinician_messages`) carries no report id and so cannot link; changing the
+  notification ledger for that is a follow-up.
+- **Hand-off truth.** Migration 091 replaces the 071 hand-off trigger function so its audit row
+  records how many active clinicians it reached. "Sent to your care team" appears only when that
+  count is above zero; zero shows "Not sent: you have no care team yet. Contact your clinic.";
+  a report confirmed before 091 has no count and shows neither claim (unrecorded).
+
+Verification receipts are in the pull request.
+

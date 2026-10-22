@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/ui/icons";
 import { PageHeader } from "@/components/layouts";
+import { SymptomHistoryList } from "@/components/features/symptom-history";
 import { usePatientProfile } from "@/hooks/use-patient-profile";
 import { usePatientShell } from "@/contexts/patient-shell-context";
 
@@ -75,18 +76,10 @@ export default function SymptomsPage() {
             ? "Este chat no se monitorea continuamente. En una emergencia, llama al 911."
             : "This chat is not continuously monitored. In an emergency, call 911."}
         </p>
-        <details className="ma-disclosure rounded-[22px] bg-surface px-[14px]">
-          <summary className="min-h-12 cursor-pointer py-3 text-sm font-semibold text-ink-2">
-            {spanish
-              ? "Historial de síntomas no disponible aquí"
-              : "Symptom history is not available here"}
-          </summary>
-          <p className="pb-4 text-sm leading-6 text-muted">
-            {spanish
-              ? "Esta pantalla aún no está conectada a tus reportes guardados. Puedes usar el chat para reportar un síntoma o consultar a tu equipo de atención."
-              : "This screen is not yet connected to your saved reports. You can use chat to report a symptom or ask your care team."}
-          </p>
-        </details>
+        <SymptomHistoryList
+          locale={profile?.preferredLanguage ?? "en-US"}
+          timezone={profile?.timezone ?? "UTC"}
+        />
       </div>
     </div>
   );
