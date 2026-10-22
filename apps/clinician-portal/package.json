@@ -35,11 +35,11 @@
     "prettier": "^3.8.1",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.12"
   },
   "overrides": {
     "flatted": ">=3.4.2",
     "picomatch": ">=4.0.4",
-    "vite": ">=7.3.2"
+    "vite": ">=8.2.4"
   }
 }
