@@ -6,6 +6,12 @@
 > environment**; anything needing a running service is marked *unverified*.
 > Feature freeze: December 4, 2026.
 
+> **Scope update, October 22:** The requester excluded the live staging
+> `verify_authorization_denials.py` run from completion requirements. The
+> historical finding below records the original audit, not an outstanding task
+> or a claimed pass. Authorization safeguards and automated denial coverage
+> remain required; the script remains an optional diagnostic.
+
 Sizes: **S** under a day, **M** one to three days, **L** more than three days
 including tests and both-portal UI. "Expo" means needed for the university-expo
 demo with fictional data, not for any production claim.
@@ -117,8 +123,9 @@ and [`../docs/decisions/ai-runtime-2026-09.md`](../../docs/decisions/ai-runtime-
 
 1. SAFE-002: persist `urgent_medication_error` correctly plus a test that every floor rule is
    accepted by the RPC (S, needs a migration the requester must authorize).
-2. SAFE-001: run `verify_authorization_denials.py` on staging and record the result; relabel
-   the four skipped cases honestly in the catalog (S).
+2. SAFE-001: retain automated authorization-denial coverage. The proposed live
+   staging script run was excluded by the requester; do not treat it as a blocker
+   or infer a successful run. Unsupported fixture cases remain unsupported.
 3. COM-001: only if the demo story includes it, a no-show actionable item for the assigned
    clinician (M). A delivery-health card (M) is lower priority.
 4. Everything else is post-expo or documentation-only.

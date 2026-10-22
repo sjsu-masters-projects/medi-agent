@@ -31,6 +31,7 @@ class Table:
         self.filters: list[tuple[str, str]] = []
         self.payload: dict[str, Any] | None = None
         self.single_result = False
+        self.ignore_duplicate = False
 
     def select(self, *_: str) -> Table:
         return self
@@ -51,10 +52,25 @@ class Table:
         self.payload = payload
         return self
 
+    def upsert(
+        self, payload: dict[str, Any], *, on_conflict: str, ignore_duplicates: bool
+    ) -> Table:
+        assert on_conflict == "recommendation_id,idempotency_key"
+        assert ignore_duplicates is True
+        self.payload = payload
+        self.ignore_duplicate = True
+        return self
+
     def execute(self) -> Result:
         rows = self.store.setdefault(self.name, [])
         matched = [row for row in rows if all(str(row.get(k)) == v for k, v in self.filters)]
         if self.payload is not None:
+            if self.ignore_duplicate and any(
+                row["recommendation_id"] == self.payload["recommendation_id"]
+                and row["idempotency_key"] == self.payload["idempotency_key"]
+                for row in rows
+            ):
+                return Result([])
             if self.name == "care_teams":
                 raise AssertionError("unexpected care team write")
             if self.name in {"clinical_recommendations", "action_envelopes"} and matched:
@@ -79,6 +95,7 @@ class Table:
 class Database:
     def __init__(self) -> None:
         self.store: dict[str, list[dict[str, Any]]] = {
+            "clinicians": [{"id": str(PROPOSER)}, {"id": str(REVIEWER)}],
             "care_teams": [
                 {
                     "id": "care-proposer",
@@ -92,7 +109,7 @@ class Database:
                     "patient_id": str(PATIENT),
                     "status": "active",
                 },
-            ]
+            ],
         }
 
     def table(self, name: str) -> Table:
@@ -141,10 +158,12 @@ def test_unassigned_clinician_and_unapproved_execution_are_rejected() -> None:
     db = Database()
     service = ClinicalActionService(db)  # type: ignore[arg-type]
     proposed = service.propose(recommendation(), actor_id=PROPOSER)
+    unassigned = uuid4()
+    db.store["clinicians"].append({"id": str(unassigned)})
     with pytest.raises(AuthorizationError, match="not assigned"):
         service.decide(
             UUID(proposed["id"]),
-            reviewer_id=uuid4(),
+            reviewer_id=unassigned,
             decision=ApprovalDecisionCreate(decision="approve", note="No access"),
         )
     with pytest.raises(ValidationError, match="approved"):
@@ -210,3 +229,56 @@ def test_a_refused_proposal_is_not_persisted() -> None:
         service.propose(unclassified_recommendation(), actor_id=None)
 
     assert db.store.get("clinical_recommendations", []) == []
+
+
+def test_assignment_row_does_not_replace_a_clinician_profile():
+    db = Database()
+    db.store["clinicians"] = []
+    with pytest.raises(AuthorizationError, match="clinician profile"):
+        ClinicalActionService(db).propose(unclassified_recommendation(), actor_id=PROPOSER)
+    assert not db.store.get("clinical_recommendations")
+
+
+def test_duplicate_envelope_keeps_outcome_and_writes_only_one_request_audit():
+    db = Database()
+    service = ClinicalActionService(db)
+    record = service.propose(recommendation(), actor_id=PROPOSER)
+    rid = UUID(record["id"])
+    service.decide(
+        rid,
+        reviewer_id=REVIEWER,
+        decision=ApprovalDecisionCreate(decision="approve", note="Reviewed"),
+    )
+    envelope = ActionEnvelopeCreate(idempotency_key="synthetic-envelope-key")
+    first = service.get_or_create_envelope(rid, clinician_id=REVIEWER, envelope=envelope)
+    first["state"] = "executed"
+    first["outcome"] = {"synthetic": "saved"}
+    replay = service.get_or_create_envelope(rid, clinician_id=REVIEWER, envelope=envelope)
+    assert replay == first
+    assert replay["state"] == "executed"
+    assert replay["outcome"] == {"synthetic": "saved"}
+    assert len(db.store["action_envelopes"]) == 1
+    assert (
+        sum(
+            row["event_type"] == "execution_requested"
+            for row in db.store["clinical_action_audit_records"]
+        )
+        == 1
+    )
+
+
+def test_replay_rechecks_assignment_before_returning_an_envelope():
+    db = Database()
+    service = ClinicalActionService(db)
+    record = service.propose(recommendation(), actor_id=PROPOSER)
+    rid = UUID(record["id"])
+    service.decide(
+        rid,
+        reviewer_id=REVIEWER,
+        decision=ApprovalDecisionCreate(decision="approve", note="Reviewed"),
+    )
+    envelope = ActionEnvelopeCreate(idempotency_key="synthetic-envelope-key")
+    service.get_or_create_envelope(rid, clinician_id=REVIEWER, envelope=envelope)
+    db.store["care_teams"] = []
+    with pytest.raises(AuthorizationError):
+        service.get_or_create_envelope(rid, clinician_id=REVIEWER, envelope=envelope)
