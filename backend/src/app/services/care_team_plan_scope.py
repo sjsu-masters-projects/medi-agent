@@ -20,6 +20,7 @@ class CareTeamPlanScope:
     clinician_id: UUID
     clinic_id: UUID
     clinic_name: str | None
+    specialty: str | None = None
 
 
 class CareTeamPlanScopeService:
@@ -65,6 +66,12 @@ class CareTeamPlanScopeService:
             clinician_id=UUID(str(row["clinician_id"])),
             clinic_id=UUID(str(row["clinic_id"])),
             clinic_name=(row.get("clinics") or {}).get("display_name"),
+            specialty=(
+                str(row.get("specialty_context") or "").strip()
+                or str((row.get("clinicians") or {}).get("specialty") or "").strip()
+                or str(row.get("role") or "").strip()
+                or None
+            ),
         )
 
     def resolve(

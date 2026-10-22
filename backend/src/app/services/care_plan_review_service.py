@@ -38,7 +38,7 @@ class CarePlanReviewService:
         links = cast(
             list[dict[str, Any]],
             self.db.table("care_teams")
-            .select("id, patient_id")
+            .select("id, patient_id, clinic_id, clinics(display_name)")
             .eq("clinician_id", str(clinician_id))
             .eq("status", "active")
             .execute()
@@ -60,6 +60,7 @@ class CarePlanReviewService:
                 .data
                 or [],
             )
+        items = self._with_names(items, links)
         admin_clinics = [
             str(row["clinic_id"])
             for row in cast(
@@ -89,6 +90,48 @@ class CarePlanReviewService:
                 or [],
             )
         return {"items": items, "clinic_items": clinic_items}
+
+    def _with_names(
+        self, items: list[dict[str, Any]], links: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Add the patient's name and the clinic of the addressed link to each item.
+
+        Both are things this clinician already sees for the patient through that link; the
+        clinic items (addressed to admins) never get them.
+        """
+        if not items:
+            return items
+        patient_ids = sorted({str(item["patient_id"]) for item in items})
+        patients = {
+            str(row["id"]): row
+            for row in cast(
+                list[dict[str, Any]],
+                self.db.table("patients")
+                .select("id, first_name, last_name")
+                .in_("id", patient_ids)
+                .execute()
+                .data
+                or [],
+            )
+        }
+        teams = {str(link["id"]): link for link in links}
+        named: list[dict[str, Any]] = []
+        for item in items:
+            patient = patients.get(str(item["patient_id"]), {})
+            team = teams.get(str(item.get("target_care_team_id")), {})
+            clinic = cast(dict[str, Any], team.get("clinics") or {})
+            name = " ".join(
+                part for part in (patient.get("first_name"), patient.get("last_name")) if part
+            )
+            named.append(
+                {
+                    **item,
+                    "patient_name": name or None,
+                    "clinic_id": team.get("clinic_id"),
+                    "clinic_name": clinic.get("display_name"),
+                }
+            )
+        return named
 
     def reply(self, clinician_id: UUID, item_id: UUID, note: str | None) -> dict[str, Any]:
         try:

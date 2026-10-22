@@ -136,7 +136,10 @@ class CareTeamRepository:
         result = execute_sync(
             self.owner,
             lambda db: db.table("care_teams")
-            .select("id, patient_id, clinician_id, clinic_id, status, clinics(display_name)")
+            .select(
+                "id, patient_id, clinician_id, clinic_id, status, role, specialty_context, "
+                "clinics(display_name), clinicians(specialty)"
+            )
             .eq("clinician_id", clinician_id)
             .eq("patient_id", patient_id)
             .eq("status", "active")

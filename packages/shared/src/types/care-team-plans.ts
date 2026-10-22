@@ -152,6 +152,11 @@ export type ReviewItemKind =
 export interface PlanReviewItem {
     id: string;
     patient_id: string;
+    /** The patient's display name (already visible to the addressed team). */
+    patient_name: string | null;
+    /** The clinic of the addressed care-team link. */
+    clinic_id: string | null;
+    clinic_name: string | null;
     care_plan_id: string | null;
     kind: ReviewItemKind;
     target_care_team_id: string;
@@ -293,4 +298,15 @@ export interface TakeRecordRequest {
 export interface CarePlanReviewNotificationMetadata {
     review_kind: ReviewItemKind;
     care_plan_id: string | null;
+}
+
+/** GET /care-plans/clinician/patients/{id}/care-team-options: my own active links. */
+export interface ClinicianCareTeamOption {
+    care_team_id: string;
+    patient_id: string;
+    clinician_id: string;
+    clinic_id: string;
+    clinic_name: string | null;
+    /** Care-team specialty, else the clinician's, else the link's role. Null if none. */
+    specialty: string | null;
 }

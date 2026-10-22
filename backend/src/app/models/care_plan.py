@@ -126,6 +126,7 @@ class CareTeamPlanScopeRead(BaseModel):
     clinician_id: UUID
     clinic_id: UUID
     clinic_name: str | None = None
+    specialty: str | None = None
 
 
 class CarePlanTodayPreviewRead(BaseModel):

@@ -247,7 +247,8 @@ version routes is the VERSION id (unchanged for compatibility).
   `POST .../retry-generation` take optional `care_team_id` and `care_plan_id`. With two links
   that both have plans and neither named: 422 `CARE_TEAM_REQUIRED`,
   `details.options[{care_team_id, care_plan_id}]`.
-- `GET /care-plans/clinician/patients/{patient_id}/care-team-options` -> my exact active links.
+- `GET /care-plans/clinician/patients/{patient_id}/care-team-options` -> my exact active links
+  (`ClinicianCareTeamOption`: `care_team_id`, `clinic_id`, `clinic_name`, `specialty` nullable).
 - `PUT .../{version_id}`, `.../items/{id}/translate`, `.../back-translate`,
   `GET .../today-preview`: unchanged; another team's version is `404 NOT_FOUND`.
 
@@ -273,7 +274,9 @@ version routes is the VERSION id (unchanged for compatibility).
   `/patients/{id}?tab=care-plan&review={item_id}`), only for the addressed team's clinician; it
   stops being actionable when resolved. `POST /care-plans/clinician/records/{adr_assessment|medwatch_draft}/{id}/take`
   `{care_team_id}` (409 `RECORD_ALREADY_TAKEN`) takes up a record that has no care team.
-- `GET /care-plans/clinician/review-items?status=open` -> `{items, clinic_items}`;
+- `GET /care-plans/clinician/review-items?status=open` -> `{items, clinic_items}`; each `items`
+  entry also carries `patient_name`, `clinic_id` and `clinic_name` (what this clinician already
+  sees for that patient through the addressed link); `clinic_items` stay non-PHI;
   `POST .../review-items/{id}/reply` `{note?}` (a reply informs the asker; it never clears the
   blocker).
 
@@ -299,7 +302,7 @@ version routes is the VERSION id (unchanged for compatibility).
 
 **Patient**
 
-- `GET /documents/care-team-options` -> `UploadCareTeamOption[]`; `POST /documents/` takes
+- `GET /documents/care-team-options` -> `UploadCareTeamOption[]` (`specialty` nullable); `POST /documents/` takes
   `care_team_id` or `not_sure: true` (two or more teams and neither: 422 `CARE_TEAM_REQUIRED`).
 - `GET /feed/today?care_team_id=<uuid|"unowned">` -> existing fields plus per task
   `plan_owner`, `plan_owners`, `combined_item_ids`, and `care_team_filters`, `contact_clinic`

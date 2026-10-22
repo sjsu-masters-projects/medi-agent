@@ -468,11 +468,17 @@ def test_review_items_list_only_my_teams_and_admin_items_carry_no_patient() -> N
         },
     ]
     db.tables["clinic_memberships"][0]["role"] = "admin"
+    db.tables["patients"] = [{"id": PATIENT, "first_name": "Sam", "last_name": "Rivera"}]
 
     listing = CarePlanReviewService(db).list_for_clinician(uid(CLINICIAN))  # type: ignore[arg-type]
 
     assert [i["id"] for i in listing["items"]] == ["r1"]
+    # Items for my team carry what I already see for that patient and link; admin items never do.
+    assert listing["items"][0]["patient_name"] == "Sam Rivera"
+    assert listing["items"][0]["clinic_id"] == CLINIC
+    assert listing["items"][0]["clinic_name"] == "Cedar Grove"
     assert [i["id"] for i in listing["clinic_items"]] == ["r3"]
+    assert not {"patient_name", "clinic_name"} & set(listing["clinic_items"][0])
 
 
 def test_adoption_and_retirement_require_the_callers_own_link_to_that_patient() -> None:
@@ -539,3 +545,17 @@ def test_taking_an_unowned_record_sends_the_actor_and_team_and_maps_a_lost_race(
     with pytest.raises(ConflictError) as caught:
         svc.take_record(uid(CLINICIAN), "medwatch_draft", UUID(int=7), care_team_id=uid(TEAM))
     assert caught.value.code == "RECORD_ALREADY_TAKEN"
+
+
+def test_clinician_care_team_options_carry_the_specialty_with_the_usual_fallbacks() -> None:
+    db = world()
+    db.tables["care_teams"][1]["specialty_context"] = None
+    db.tables["care_teams"][1]["clinicians"] = {"specialty": None}
+    db.tables["care_teams"][1]["role"] = "specialist"
+    from app.services.care_team_plan_scope import CareTeamPlanScopeService
+
+    mine = CareTeamPlanScopeService(db).list_for_clinician(uid(CLINICIAN), uid(PATIENT))  # type: ignore[arg-type]
+    theirs = CareTeamPlanScopeService(db).list_for_clinician(uid(OTHER), uid(PATIENT))  # type: ignore[arg-type]
+
+    assert [scope.specialty for scope in mine] == ["Cardiology"]
+    assert [scope.specialty for scope in theirs] == ["specialist"]
