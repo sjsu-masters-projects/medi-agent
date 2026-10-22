@@ -382,6 +382,15 @@ After integration: **4,442 backend unit/router tests**, **771 clinician tests**,
 mypy (299 files), Ruff and parsing **104 migrations** pass. Remaining combined-head
 test receipts are recorded in the PR; no hosted migration/application is inferred.
 
+The combined patient suite also passes **931 tests / 87 files**, with both app lint and
+typechecks passing; the combined clinician production webpack build passes. The 46 local
+translation PostgreSQL contracts pass after the 088 rename. The initial care-team run
+exposed verified-wording fixtures without the now-required record (26 failures), followed
+by 15 disposable-database setup errors; this is not a live failure. The synthetic publication
+fixture now supplies an explicit test verification record. The harness releases each
+UUID-named database it creates after the case, rather than retaining all cloned ledgers.
+No production guard or timeout was weakened. Targeted rerun results are recorded in the PR.
+
 #193 is merged as `37224b2f` (all 41 PR checks passed); its main CI, frontend CI and
 automatic backend deployment succeeded. #209 is merged as `36972470`. Neither adds a
 migration or requires a new manual activation. These are delivery receipts, not new
