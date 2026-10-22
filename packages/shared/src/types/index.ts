@@ -5,6 +5,8 @@
  * sides aligned when changing models or API contracts.
  */
 
+import type { CareTeamFilterOption, PlanOwner } from "./care-team-plans";
+
 // ── Enums (match backend StrEnum values) ──────────
 
 export const Locale = { EN_US: "en-US", ES_MX: "es-MX" } as const;
@@ -541,6 +543,12 @@ export interface FeedTask {
     /** Language of the name and description, when known. Approved plans match the
      * patient's language; an older single-language record may not. */
     contentLocale?: Locale;
+    /** PLAN-002: the care team that owns the activity. Absent on a single-owner feed from an older server. */
+    planOwner?: PlanOwner | null;
+    /** Every owner when identical activities of several plans are one combined entry. */
+    planOwners?: PlanOwner[];
+    /** The underlying activity ids of a combined entry (its own id first). */
+    combinedItemIds?: string[];
 }
 
 export interface FeedSummary {
@@ -556,6 +564,10 @@ export interface TodayFeedResponse {
     timezone: string;
     tasks: FeedTask[];
     summary: FeedSummary;
+    /** PLAN-002: one option per owning care team (and the shared "unowned" bucket). */
+    careTeamFilters?: CareTeamFilterOption[];
+    /** True when no care team is active and an activity has lost its owner. */
+    contactClinic?: boolean;
 }
 
 export interface SymptomReport {

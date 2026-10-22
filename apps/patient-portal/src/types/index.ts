@@ -42,6 +42,14 @@ export type {
     PaginatedResponse,
 } from "../../../../packages/shared/src/types";
 
+export type {
+    CareTeamFilterOption,
+    PatientApprovedPlanSummary,
+    PatientCondition,
+    PlanOwner,
+    UploadCareTeamOption,
+} from "../../../../packages/shared/src/types/care-team-plans";
+
 export type { ChatAttachment, ChatDocumentResultsAttachment } from "./chat-attachments";
 
 /** A chat message as the patient portal shows it, with any server-built cards under it. */

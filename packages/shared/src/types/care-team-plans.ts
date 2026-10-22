@@ -282,3 +282,12 @@ export interface TodayOwnershipSummary {
     /** True when the patient has no active care team and an activity has lost its owner. */
     contact_clinic: boolean;
 }
+
+// ── Patient: merged approved plans ───────────────────────────────────────────────────────
+
+/** One entry of `plans[]` in `GET /care-plans/patients/{patient_id}`. */
+export interface PatientApprovedPlanSummary extends PlanOwner {
+    plan_version_id: string;
+    version_number: number;
+    approved_at: string | null;
+}
