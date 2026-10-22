@@ -1201,6 +1201,11 @@ Evidence screenshots: `/private/tmp/post208-migration079-verified.png`,
 
 ### Follow-up verification and continuation
 
+Delivery: [PR #209](https://github.com/sjsu-masters-projects/medi-agent/pull/209),
+initial implementation/evidence commit `b11ca2d6`; ready for review, not merged.
+Initial PR policy check passes; remaining CI/preview checks were still running
+when this checkpoint was written. No all-green CI claim.
+
 Commands run against this follow-up branch:
 
 - Clinician `npm test -- --run`: **680 passed, 76 files** (includes async focus,
