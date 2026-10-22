@@ -1164,7 +1164,7 @@ No backfill, clinical approval, account deletion or configuration change is incl
 | --- | --- | --- |
 | Release / all six rows | Merge → serving code → reviewed migration identity | Main/deployment success; Timeline visible; only 079 applied with explicit approval, matching receipt and independent security checks above. |
 | Records / REC-001/002, MED-001 | Original/source titles → candidate/local comparison → explicit approved decision → reload/provenance | Authorized Keep existing saved on Rajeev's imported Lisinopril 10 mg tablet with the exact approved synthetic note. Reload retains Approved / Kept Existing. Pending 39→38, approved 0→1; shared inbox 386→385 and Rajeev 39→38. Profile retains all three medicines, Lisinopril 20 mg daily, morning glucose activity and unconfigured reminders; Today remains 0/4. Other lifecycle decisions not exercised live. |
-| Product concern / MED-001, CLN-001 | New explicitly confirmed unlisted concern → assigned alert → exact report → audited acknowledge | Await 079 and separate approval of exact synthetic report/confirmation. No medication/ADR/plan changes allowed by acknowledgement. |
+| Product concern / MED-001, CLN-001 | New explicitly confirmed unlisted concern → assigned alert → exact report → audited acknowledge | Pass October 21: approved Rajeev report confirmed, one forward event; Elena opens/focuses exact report and records one audited acknowledgement. Patient reload and clinician History retain state. No canonical medication, plan, activity or ADR mutation; see exact counts/fingerprints below. |
 | Notifications / NOT-003 | Count/list → single/read-through action → reload; unrelated items unchanged | Patient single read 12→11, then displayed-read 11→0; clinician loaded-read 42→0, all retained after reload. Elena's 40 action items remain unchanged. No source review/approval. Expired-cursor recovery remains unforced live; signing isolation is covered separately by the passing automated tests, not inferred from counts. |
 | Shared inbox / CLN-001 | Exact candidate counts → correct patient/source → scoped refresh; second reviewer/access boundary | Exact source counts update after the saved decision. Willow Terrace filter clears old rows and returns a genuine zero for one assigned patient; All clinics restores scoped work. Maya's 200-candidate capture-time limit is explicit. Existing PostgreSQL/PostgREST access contracts retained; second actor live acceptance and acknowledgement remain. |
 | Timeline / CLN-002 | Actual source dates/coverage → exact disclosure/destination → reload/keyboard/narrow layout | All 12 buckets available, truthful zero rows, no source failure. New reconciled audit event visible after navigation; exact source link focuses its DETAILS ID and exposes only recorded event type. Coverage expands using Enter; refresh succeeds. At measured 423 CSS px, document content width is also 423, no horizontal overflow. Elena's own private-thread links observed; different-actor isolation remains automated, not asserted as a live second-actor test. |
@@ -1221,12 +1221,65 @@ Commands run against this follow-up branch:
   and `.venv/bin/mypy src/ --ignore-missing-imports`: pass (283 source files).
 - `git diff --check`: pass.
 
-No new report was submitted: exact synthetic unlisted-product report plus alert
-acknowledgement authorization was requested separately and has not yet arrived.
-Remaining: that approved journey, REC-001 correction/source lifecycle UI checks,
-live stale-cursor recovery and second-reviewer/access acceptance. DV-022–024 need
-follow-up PR review/merge/deployment and live correction checks. No other remote
-migration/configuration, clinical changes, deployment or merge performed.
+Remaining: REC-001 correction/source lifecycle UI checks, live stale-cursor
+recovery and second-reviewer/access acceptance. DV-022–024 need follow-up PR
+review/merge/deployment and live correction checks. No further remote migration,
+configuration, deployment or merge performed.
+
+### Unlisted-product live acceptance — October 21
+
+Requester explicitly approved one fictional Rajeev report: mild nausea 2/10,
+onset one hour ago, concern about “Synthetic QA herbal tea,” followed by Elena's
+acknowledgement. The initial Nora message was saved; guided fields retained only
+these facts. Location, duration, course, associated/warning symptoms, concomitant
+use, history and outcome were unknown—not invented negatives or chart-derived
+patient testimony. Strength/dose/route/indication/product dates were left blank.
+
+The reviewed preview labelled the product unverified/not on the medication list
+and used no record context. Consent was explicitly selected before confirmation.
+Report **`3f64ed79-630c-4ef3-a78c-98896d4be6fa`**, confirmed
+**2026-10-22 04:53:19.867952 UTC** (October 21 Pacific), survives patient reload
+as “Report saved for care-team review.”
+
+Elena received “Patient-reported product needs review,” explicitly not a confirmed
+ADR. Its Review reported product link opens `?tab=symptoms#symptom-<report_id>`;
+the exact report element receives focus and displays severity 2/10, original
+onset and unverified product, with comparison offered separately. No link/add
+medication action was taken. The initial Nora message also generated a separate
+existing safety flag; it remains unacknowledged, not merged into this product item.
+
+Elena recorded the authorized acknowledgement, with no optional note. Needs
+attention changed **42→41**; product item disappeared from active work and remains
+in History after reload. The UI states that acknowledgement is not clinical
+approval or resolution. The distinct safety flag remains open.
+
+Exact read-only database verification:
+
+| Check | Result |
+| --- | --- |
+| Confirmed report, correct patient/product and null medication FK | 1 |
+| Source-keyed review event with only `review_kind: unlisted_product` metadata | 1 |
+| Acknowledged receipt | 1 |
+| Matching acknowledgement audit, actor equals receipt recipient | 1 |
+| All Rajeev ADR assessments | 0 |
+| Rajeev reminder schedules | 0 |
+
+Before/after ordered full-row JSON fingerprints match (MD5 used only for equality,
+not a security signature): medications `96a94e3e7273ab8b21c439e930bd3336`, care-plan
+versions `01ae12b68ae4b83547ad5c1d069cb670`, obligations
+`c97e30f547df9abd0c4fd5a2936fc858`, ADR assessments
+`d751713988987e9331980363e24189ce` (empty array). Reloaded Profile retains all
+three medicines, Lisinopril 20 mg daily, glucose activity and unconfigured reminders.
+This completes MED-001's agreed deployed source-based review slice; DV-024 remains
+a separately tracked presentation fix, not comprehensive interaction validation.
+
+Screenshots: `/private/tmp/post208-unlisted-preview.png`,
+`/private/tmp/post208-unlisted-alert-arrived.png`,
+`/private/tmp/post208-unlisted-exact-report.png`,
+`/private/tmp/post208-unlisted-history.png`,
+`/private/tmp/post208-unlisted-audit-verified.png`.
+Only browser workflow writes (approved report and acknowledgement) were made;
+SQL was read-only. No new clinical approval, medication, ADR diagnosis or plan change.
 
 ### Tracker reconciliation
 

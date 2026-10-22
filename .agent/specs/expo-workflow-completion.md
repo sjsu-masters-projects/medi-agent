@@ -39,7 +39,7 @@ Requester decisions, October 21, 2026:
 | REC-002 | Actual 029–032 RPC contracts for add/update selected fields/keep/defer/reject, binding, replay, stale/foreign sources and unchanged reminders/history. Lost-response retry and exact NKDA absence handling fixed. | Complete October 21: authorized Keep existing → reload → one matching immutable decision/audit; approved medicines/reminders unchanged. See grouped evidence. |
 | NOT-003 | Purpose-derived signing and independent-root option; actor/role/purpose/expiry/rotation/auth-token isolation tests. Independent root configured. | New-code activation, both portals' notification reads/read-through and stale-cursor refresh. |
 | OPS-006 | Amended worker slice accepted: real outage/long-session delivery, 35 PostgreSQL contracts and bounded runtime/IAM checks. | Already Done for this slice, not blanket inherited-IAM/hosted-checksum or OPS-005 closure. |
-| MED-001 | Source conflict flags, explicit-click public references with source/cache dates, unchecked coverage, conservative matching, preserved testimony and atomic forward-only review capture. No invented medication/ADR/Naranjo for unlinked products. | Separately authorized 079, new synthetic confirmation → exact report alert → audited acknowledgement; reference lookup and approved meds/reminders unchanged. |
+| MED-001 | Source conflict flags, explicit-click public references with source/cache dates, unchecked coverage, conservative matching, preserved testimony and atomic forward-only review capture. No invented medication/ADR/Naranjo for unlinked products. | Complete October 21: authorized 079 plus new synthetic confirmation → exact report alert → one audited acknowledgement; reload/History persist, medication/plan/activity/ADR fingerprints unchanged. See grouped evidence. |
 | CLN-001 | Scoped inbox/review links, current external-candidate pages and exact counts, source/age/snapshot context, visible-only refresh and stale-clinic isolation. Existing decision APIs unchanged. | Two-reviewer shared state, clinic/access scope, failure/retry and acknowledgement UI. |
 | CLN-002 | Versioned risk rationale, actual source dates and bounded cross-domain source-linked timeline with explicit unavailable coverage. | Deployed timeline/freshness/links, own-private-thread isolation and keyboard/narrow-layout acceptance. |
 
@@ -74,12 +74,14 @@ The RxNorm ingredient concept is informational, never an automatically applied
 candidate value or proof of formulation equivalence. Source clinical evidence,
 canonical medication decisions and public reference material remain separate.
 
-Read-only live baseline: Elena's assigned synthetic Rajeev chart had 39 pending
+Pre-208 read-only baseline: Elena's assigned synthetic Rajeev chart had 39 pending
 facts, four medication candidates and three active medicines. Lisinopril strength/
 form matching failed in the deployed preview; local regression fixes this. Preview
 was cancelled; glucose activity and unconfigured reminders stayed unchanged.
 Proof: `/private/tmp/rec-lisinopril-unmatched-before-fix.png` and
-`/private/tmp/rec-unchanged-approved-profile.png`. No live decision is claimed.
+`/private/tmp/rec-unchanged-approved-profile.png`. That earlier inspection made no
+decision. Post-208 authorized Keep existing and its exact audit are now accepted
+in the grouped live evidence; pending candidates are 38 and medicines unchanged.
 
 ## Unlisted-product review and migration 079
 
