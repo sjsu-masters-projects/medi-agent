@@ -746,6 +746,14 @@ export interface PatientDeepDive {
         content: string;
         created_at: string;
         audio_url?: string;
+        /** LOC-003: needed to ask for a pending translation of this turn. */
+        id?: string;
+        /** LOC-003: stored English translation of a Spanish turn. */
+        translation?: string | null;
+        translation_locale?: string | null;
+        translation_guard_passed?: boolean | null;
+        translation_pending?: boolean;
+        translation_model_id?: string | null;
     }>;
     conditions: Array<{ name?: string; icd10_code?: string; created_at?: string }>;
     allergies: Array<{ allergen: string; severity?: string }>;
@@ -791,6 +799,8 @@ export interface ExtractedDocumentFact {
     display_value?: Record<string, unknown> | null;
     /** LOC-003: Language the fact was originally extracted in. */
     display_locale?: string | null;
+    /** LOC-003: the model that produced `display_value`, shown with its caveat. */
+    display_model_id?: string | null;
     confidence_score?: number | null;
     confidence_band?: string;
     uncertainty?: string[];
@@ -823,6 +833,8 @@ export interface CarePlanItem {
     wording?: Partial<Record<CarePlanLocale, CarePlanWording>>;
     wording_origin?: Partial<Record<CarePlanLocale, CarePlanWordingOrigin>>;
     wording_verified?: boolean;
+    /** LOC-003: the model that drafted the second language, shown with its caveat. */
+    translation_model_id?: string | null;
     is_removed: boolean;
     imported_evidence?: boolean;
     overlapping_item_ids?: string[];
@@ -1746,6 +1758,62 @@ export async function approveClinicianCarePlan(
             ...(options?.excludedItemIds?.length ? { excluded_item_ids: options.excludedItemIds } : {}),
         }),
     });
+}
+
+// ── LOC-003: Nora transcript translation ──────────────────────────────────
+
+/** One transcript turn translated into the clinician's English. */
+export interface TranscriptTranslationResult {
+    message_id: string;
+    translation: string | null;
+    translation_locale: string | null;
+    translation_guard_passed: boolean | null;
+    translation_pending: boolean;
+    translation_model_id?: string | null;
+}
+
+/**
+ * LOC-003: translate ONE Spanish turn of the patient-Nora transcript into English.
+ *
+ * Stored once on the server, so asking again costs no model call. A turn already in English,
+ * or one whose translation changed a number or a medication name, comes back without a
+ * translation and its original stands alone.
+ */
+export async function translateTranscriptMessage(
+    patientId: string,
+    messageId: string,
+): Promise<TranscriptTranslationResult> {
+    return apiFetch<TranscriptTranslationResult>(
+        `/api/v1/clinicians/me/patients/${patientId}/chat-messages/${messageId}/translation`,
+        { method: "POST" },
+    );
+}
+
+// ── LOC-003: Evidence glosses ─────────────────────────────────────────────
+
+/** One Spanish excerpt's English gloss. The excerpt itself is never replaced. */
+export interface EvidenceGloss {
+    excerpt_id: string;
+    /** The excerpt this glosses, whitespace-collapsed, as the server read it. */
+    excerpt: string;
+    gloss: string;
+    model_id?: string | null;
+}
+
+/**
+ * LOC-003: ask for English glosses of Spanish source-evidence excerpts.
+ *
+ * An excerpt with no usable gloss (English already, or a gloss that failed the guards) is
+ * absent from the answer, so its original stays on screen alone.
+ */
+export async function fetchEvidenceGlosses(
+    patientId: string,
+    excerpts: string[],
+): Promise<{ glosses: EvidenceGloss[] }> {
+    return apiFetch<{ glosses: EvidenceGloss[] }>(
+        `/api/v1/clinicians/me/patients/${patientId}/evidence-glosses`,
+        { method: "POST", body: JSON.stringify({ excerpts }) },
+    );
 }
 
 // ── LOC-003: Back-translation ─────────────────────────────────────────────

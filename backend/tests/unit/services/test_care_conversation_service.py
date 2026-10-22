@@ -40,7 +40,9 @@ async def test_send_uses_only_authenticated_actor_and_one_rpc(service, role):
         conversation, ConversationSend(body="  Synthetic reply\n", client_message_id=key)
     ) == {"saved": True}
     db.rpc.assert_called_once_with(
-        "care_conversation_activity_operation",
+        "care_conversation_confirmed_operation"
+        if role == "clinician"
+        else "care_conversation_activity_operation",
         {
             "p_actor_id": str(svc.actor.id),
             "p_actor_role": role,
@@ -50,6 +52,7 @@ async def test_send_uses_only_authenticated_actor_and_one_rpc(service, role):
                 "body": "Synthetic reply",
                 "client_message_id": str(key),
                 "care_plan_item_id": None,
+                **({"original_source_locale": "en-US"} if role == "clinician" else {}),
             },
         },
     )
@@ -348,6 +351,40 @@ async def test_translation_endpoint_makes_no_call_when_languages_match():
         out = await svc.translate_message(uuid4(), uuid4())
     fake.translate_and_store.assert_not_awaited()
     assert out["translation"] is None
+
+
+@pytest.mark.asyncio
+async def test_original_only_fallback_cannot_be_translated_on_a_later_read():
+    marker = {
+        "translated_text": "-",
+        "guard_passed": False,
+        "guard_failure_code": "original_only",
+        "translated_at": "2000-01-01T00:00:00Z",
+    }
+    svc = _endpoint_service(
+        role="patient", body="Do not take 500 mg without food", sender="clinician"
+    )
+    fake = _fake_translator(stored={"m-1": marker})
+    fake.get_translation = AsyncMock(return_value=marker)
+    with _patched(svc, fake, "es-MX"):
+        result = await svc.translate_message(uuid4(), uuid4())
+        page = _page(("m-1", "clinician", "Do not take 500 mg without food"))
+        await svc._attach_translations(page)
+    assert result["translation"] is None
+    assert not page["items"][0].get("translation_pending")
+    assert not page["items"][0].get("translation")
+    fake.translate_and_store.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_failed_lookup_is_not_permission_to_regenerate_clinician_wording():
+    svc = _endpoint_service(role="patient", body=ENGLISH_REPLY, sender="clinician")
+    fake = _fake_translator()
+    fake.get_translation = AsyncMock(side_effect=RuntimeError("unavailable"))
+    with _patched(svc, fake, "es-MX"):
+        result = await svc.translate_message(uuid4(), uuid4())
+    assert result["translation"] is None
+    fake.translate_and_store.assert_not_awaited()
 
 
 @pytest.mark.asyncio

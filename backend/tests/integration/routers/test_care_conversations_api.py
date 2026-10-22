@@ -46,6 +46,7 @@ def conversation():
         "translation": None,
         "translation_locale": None,
         "translation_guard_passed": None,
+        "translation_model_id": None,
         "translation_pending": False,
         "activity_context": None,
     }

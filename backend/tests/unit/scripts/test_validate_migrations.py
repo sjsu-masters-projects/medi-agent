@@ -10,7 +10,7 @@ def migration(directory: Path, number: int, name: str) -> None:
     (directory / f"{number:03d}_{name}.sql").write_text("SELECT 1;\n")
 
 
-@pytest.mark.parametrize("sequence", [59, 60, 71, 72, 73, 74])
+@pytest.mark.parametrize("sequence", [59, 60, 67, 71, 72, 73, 74, 79, 83])
 def test_new_duplicate_prefixes_fail(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, sequence: int
 ):
@@ -37,6 +37,7 @@ def test_historical_shared_prefix_is_preserved(monkeypatch: pytest.MonkeyPatch, 
     [
         (59, "chat_safety_alerts", "critical_result_alerts"),
         (60, "confirmed_symptom_intake", "critical_result_open_work"),
+        (67, "clinic_lists_and_roles", "english_display_facts"),
         (71, "clinician_visit_management", "confirmed_symptom_handoff"),
     ],
 )

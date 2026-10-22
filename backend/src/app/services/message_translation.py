@@ -8,6 +8,7 @@ Safety checks and escalation use only the original, never the translation.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections import Counter
 from collections.abc import Iterable
@@ -21,6 +22,7 @@ from supabase import Client
 from app.adk.background_generation import generate_for_workload
 from app.adk.registry import Workload
 from app.services.translation_guards import guard_failure, number_tokens
+from app.services.translation_stub import generate_or_stub, translate_text
 from app.utils.localization import detect_locale
 
 logger = logging.getLogger(__name__)
@@ -90,11 +92,13 @@ def _fence(text: str) -> str:
 
 
 def is_failure_marker(row: dict[str, Any]) -> bool:
-    return row.get("guard_failure_code") == MODEL_ERROR
+    return row.get("guard_failure_code") in {MODEL_ERROR, "original_only"}
 
 
 def failure_marker_is_recent(row: dict[str, Any], now: datetime | None = None) -> bool:
     """True while a stored failure marker should stop the model being called again."""
+    if row.get("guard_failure_code") == "original_only":
+        return True  # A clinician chose original-only delivery; never auto-translate it later.
     raw = row.get("translated_at")
     try:
         stamp = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
@@ -117,17 +121,22 @@ async def translate_message(
     is still returned with guard_passed=False so the UI can decide whether to show it.
     """
     try:
-        response = await generate_for_workload(
-            Workload.CARE_PLAN_TRANSLATION,
-            prompt=MESSAGE_TRANSLATION_USER.format(
-                source_locale="English" if source_locale == "en-US" else "Spanish",
-                target_locale="Spanish" if target_locale == "es-MX" else "English",
-                message_text=_fence(text),
+        response = await generate_or_stub(
+            stub=lambda: json.dumps(
+                {"translated_text": translate_text(text, target_locale)}, ensure_ascii=False
             ),
-            system_instruction=MESSAGE_TRANSLATION_SYSTEM,
-            temperature=0,
-            response_schema=_message_schema(),
-            record_telemetry=True,
+            generate=lambda: generate_for_workload(
+                Workload.CARE_PLAN_TRANSLATION,
+                prompt=MESSAGE_TRANSLATION_USER.format(
+                    source_locale="English" if source_locale == "en-US" else "Spanish",
+                    target_locale="Spanish" if target_locale == "es-MX" else "English",
+                    message_text=_fence(text),
+                ),
+                system_instruction=MESSAGE_TRANSLATION_SYSTEM,
+                temperature=0,
+                response_schema=_message_schema(),
+                record_telemetry=True,
+            ),
         )
         parsed = _TranslatedMessage.model_validate_json(response.text)
     except (PydanticValidationError, Exception) as exc:
@@ -142,6 +151,26 @@ async def translate_message(
     # LOC-001 guards: numbers with units, negation and medication names must survive.
     failure = guard_failure(text, translated, protected_terms)
     return translated, failure is None, failure, model_id
+
+
+async def back_translate_message(
+    translated_text: str,
+    translated_locale: str,
+    original_locale: str,
+    protected_terms: Iterable[str] = (),
+) -> str:
+    """Translate a translation back, so a clinician can check it without reading it.
+
+    LOC-003 decision 3: the clinician confirms the Spanish a patient will receive by reading
+    its English back-translation. This is the same guarded translation path in reverse, so
+    there is one prompt, one schema and one set of guards rather than a second of each.
+    """
+    back, guard_passed, failure, _model = await translate_message(
+        translated_text, translated_locale, original_locale, protected_terms
+    )
+    if not guard_passed:
+        raise ValueError(f"Back-translation guard rejected: {failure}")
+    return back
 
 
 class MessageTranslationService:
@@ -181,13 +210,8 @@ class MessageTranslationService:
                 source_message_id,
                 exc_info=False,
             )
-            await self._store(
-                {
-                    **base,
-                    "translated_text": _FAILURE_PLACEHOLDER,
-                    "guard_passed": False,
-                    "guard_failure_code": MODEL_ERROR,
-                }
+            await self.store_failure_marker(
+                source_table, source_message_id, source_locale, target_locale
             )
             return None
 
@@ -198,7 +222,56 @@ class MessageTranslationService:
             "guard_failure_code": guard_failure_code,
             "model_id": model_id,
         }
-        return await self._store(row) or row
+        return await self._store(row)
+
+    async def store_gloss(
+        self,
+        *,
+        source_table: str,
+        source_message_id: str,
+        translated_text: str,
+        guard_passed: bool,
+        model_id: str | None,
+        source_locale: str = "es-MX",
+        target_locale: str = "en-US",
+    ) -> dict[str, Any] | None:
+        """Store an already-produced translation (LOC-003 item 2 glosses its own text).
+
+        A gloss that failed its guard is still stored, as the record that this text was
+        tried and must not be shown; the reader decides, not the writer.
+        """
+        return await self._store(
+            {
+                "source_table": source_table,
+                "source_message_id": source_message_id,
+                "source_locale": source_locale,
+                "target_locale": target_locale,
+                "translated_text": translated_text,
+                "guard_passed": guard_passed,
+                "guard_failure_code": None if guard_passed else "guard_rejected",
+                "model_id": model_id,
+            }
+        )
+
+    async def store_failure_marker(
+        self,
+        source_table: str,
+        source_message_id: str,
+        source_locale: str,
+        target_locale: str,
+    ) -> dict[str, Any] | None:
+        """Record that the model failed, so the next read does not retry straight away."""
+        return await self._store(
+            {
+                "source_table": source_table,
+                "source_message_id": source_message_id,
+                "source_locale": source_locale,
+                "target_locale": target_locale,
+                "translated_text": _FAILURE_PLACEHOLDER,
+                "guard_passed": False,
+                "guard_failure_code": MODEL_ERROR,
+            }
+        )
 
     async def _store(self, row: dict[str, Any]) -> dict[str, Any] | None:
         def write() -> Any:
@@ -243,7 +316,7 @@ class MessageTranslationService:
             rows = cast(list[dict[str, Any]], result.data or [])
             return rows[0] if rows else None
         except Exception:
-            return None
+            raise RuntimeError("Stored translation unavailable") from None
 
     async def get_translations_for_messages(
         self,

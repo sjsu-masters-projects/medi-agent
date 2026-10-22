@@ -1264,9 +1264,9 @@ No second event store. Every event shown is a row the product already writes:
 | Event | Source | Shown to |
 | --- | --- | --- |
 | Reported | `symptom_reports.confirmed_at` (patient-confirmed rows only) | patient, clinician |
-| Sent to the care team | `symptom_intake_audit` action `review_handoff` (071) | patient, clinician |
+| Sent to the care team | `symptom_intake_audit` action `review_handoff` with `recipients` > 0 (091) | patient, clinician |
 | Marked for urgent review | `symptom_intake_safety_alerts`, only when `delivery_state='delivered'` for the patient | patient, clinician (any state) |
-| Reviewed by name | new `symptom_report_reviews` (091) and audit action `clinician_reviewed` | patient, clinician |
+| Reviewed by name, per team | new `symptom_report_reviews` (091) and audit action `clinician_reviewed` | patient, clinician |
 
 "Clinician viewed" and "clinician replied" are not recorded anywhere and are not shown. A private
 message thread has no link to a report.
@@ -1280,12 +1280,13 @@ clinician-> POST .../review -> same checks -> INSERT ... ON CONFLICT DO NOTHING 
 
 Decisions:
 
-- **Review is shared per report.** A confirmed symptom is shared safety information (PLAN-002,
-  "Decided by existing rule"), so one review by any actively linked clinician (active clinic
-  membership and clinic) is the review for the whole care team. A repeat or a colleague's attempt
-  returns the existing review with `already_reviewed=true`; concurrent attempts converge on one
-  row and one audit event through the primary key. Review records follow-up only; it approves no
-  diagnosis, medication link or ADR conclusion.
+- **Review is per care team.** Each care-team link owns its follow-up (PLAN-002), so reviews are
+  recorded per (report, care team). A repeat by the same team returns its review; concurrent
+  attempts converge on one row and one audit event through the primary key. Another team's
+  review does not mark this team reviewed; clinicians see it as "Also reviewed by ...", and the
+  patient sees every team's review. A clinician with several links names the team
+  (`CARE_TEAM_REQUIRED` otherwise). Review records follow-up only; it approves no diagnosis,
+  medication link or ADR conclusion.
 - **One function, checked in SQL.** `public.symptom_report_history(actor, role, action, payload)`
   is callable only by the backend role. A patient reaches only their own reports; denial and
   "no such report" are the same error (HTTP 404 for the patient, 403 for an unassigned clinician).
@@ -1298,9 +1299,10 @@ Decisions:
   `?tab=symptoms#symptom-<id>`; that link now opens the report panel. The generic hand-off
   message (`clinician_messages`) carries no report id and so cannot link; changing the
   notification ledger for that is a follow-up.
-- **Hand-off wording.** The hand-off audit row is written in the confirmation transaction whether
-  or not the patient had an active care team, so "Sent to your care team" means the review task
-  was queued, not that a named clinician received it.
+- **Hand-off truth.** Migration 091 replaces the 071 hand-off trigger function so its audit row
+  records how many active clinicians it reached. "Sent to your care team" appears only when that
+  count is above zero; zero shows "Not sent: you have no care team yet. Contact your clinic.";
+  a report confirmed before 091 has no count and shows neither claim (unrecorded).
 
 Verification receipts are in the pull request.
 
