@@ -342,8 +342,8 @@ Gaps found by reading the code against this contract, and what was done:
 | A re-claimed turn (worker redelivery) or a withdrawn draft left viewers on the old, longer draft, which was then ignored as "not an extension" | Fixed. `started.run` and `draft.epoch` reset viewers; checkpoints are idempotent per seq |
 | Attempt outcomes (429, 5xx, timeout, fallback) existed only in logs; `model_invocation_events` records the ADK final per agent with an exception class as `error_code`, an empty `fallback_path`, and has no retention (no DELETE grant) | Added bounded counters (below). Retention: migration 090's write function also deletes `model_invocation_events` rows older than 30 days, 200 per call |
 | Model admission waits (`model_slot`) have no bound of their own (OPS-006 rule 14) | Fixed for interactive calls: shed after `MODEL_ADMISSION_WAIT_SECONDS` (5) with a retriable 503, so the backup model or the unavailable reply takes over; counted as outcome `shed`. Background calls still wait (their callers own longer deadlines) |
-| Conversation recap is three turns of 280 characters; the stored `summary` is not read by the model; `patient_context` omits care teams (appointment proposals only come from the legacy path) | Not changed: context quality needs a clinical evaluation, not a code edit |
-| Structured evidence (which sources backed a reply) is persisted only as the source line in the message text and document cards | Not changed: needs a schema decision |
+| Conversation recap is three turns of 280 characters; the stored `summary` is not read by the model; `patient_context` omits care teams (appointment proposals only come from the legacy path) | Recap and summary fixed in the continuity section below (migration 094). `patient_context` still omits care teams: that context needs a clinical evaluation, not a code edit |
+| Structured evidence (which sources backed a reply) is persisted only as the source line in the message text and document cards | Fixed: one append-only evidence row per reply (migration 094), readable through the chat access rule. See below |
 
 ### Availability counters
 
@@ -363,3 +363,55 @@ Read: `GET /api/v1/ops/ai-availability?hours=24` (1 to 336), clinic admins only:
 and model, attempts, outcome counts, fallback attempts, success rate, mean and p50/p95/p99 latency
 (the upper edge of the histogram bin). Background Gemini text calls are labelled with the workload that asked (`generate_for_workload`); direct callers outside it still count as `unknown`. `AI_AVAILABILITY_ENABLED=false` stops counting and
 flushing. This is availability evidence for the September routing, not a clinical measure.
+
+## AI-003 conversation continuity
+
+Migration `094_nora_conversation_continuity.sql` (not applied anywhere; apply after 093 (MED-002)).
+
+### Context the model reads
+
+`app/adk/recap.py` builds one text for the coordinator and the responder from stored chat
+messages only: the newest **whole turns** that fit 6,000 characters (a single message is clipped
+to 1,200; the newest turn is always kept), preceded, when one exists, by the **stored rolling
+summary** (at most 1,500 characters read), labelled as automatic and possibly incomplete.
+It replaces three turns of 280 characters. A private symptom draft lives in its own tables and is
+not an input to the recap, the summary or the evidence. Sessions stay per day
+(`day-YYYY-MM-DD`): the summary belongs to one `(patient, session)` and a new day starts clean.
+
+### Rolling summary
+
+Table `chat_conversation_summaries` (one row per conversation, at most 2,000 characters, in the
+conversation's language, backend-only). It is written after a completed turn by
+`app/services/conversation_summary.py`, scheduled once the reply is delivered, never inside the
+reply path; the worker waits (at most 20 s) for it before ending its request.
+
+* Due only when the conversation nearly fills the recent budget and the first message the
+  summary does not cover is about to leave the window; short conversations never pay a model call.
+  A run covers up to six messages past the window start, so one summary serves a few turns.
+* New workload `conversation_summary` (Flash, no fallback, 15 s attempt budget, switch
+  `CONVERSATION_SUMMARY_AI_ENABLED`). Failure, timeout or a disabled switch keeps the previous
+  summary and the recent messages; the next turn simply reads less.
+* Compare-and-set on the watermark (the newest message covered) in `record_conversation_summary`:
+  a redelivered turn or a second worker loses with `stale`, so it moves forward only and is never
+  applied twice. At most two runs per process, one per conversation; a third is skipped, not queued.
+* Logs carry the outcome and duration only, never message or summary text. The model is told the
+  transcript is data, to keep medication names and numbers exactly as written and to add nothing.
+* Known limit: if updates keep failing, messages that leave the window before a summary covers them
+  are not seen by the model (the same as before this change, no worse).
+
+### Per-reply evidence
+
+Table `chat_reply_evidence`, one row per assistant reply (`UNIQUE message_id`, cascade with the
+message and the patient), written by `record_reply_evidence` after the reply is saved
+(best effort, 5 s, a failure is logged by class and never changes the turn; a missing row
+means "not recorded"). The object (`app/adk/evidence.py`, version 1) is rebuilt field by field from
+what the grounding layer produced: tools called, cited sources (reference label, title, https URL,
+dates; documents by id, file name, titles and page numbers) and care plan ids returned with the
+patient record. The grounding layer does not expose care plan item ids to the model, so none are
+stored. No reply text, extracted values or names are stored; at most 12 KB. Rows are append-only
+(update trigger), written only by the service role, and deleted after 180 days (100 per write).
+
+Read: `GET /api/v1/chat/evidence/{patient_id}/{message_id}`, with the chat history rule: the
+patient for their own replies, an actively assigned clinician for their patient's; others get 403.
+Row level security allows the same two readers. The patient and clinician portals show the source
+line already in the reply text and document cards; no new UI was added for this.

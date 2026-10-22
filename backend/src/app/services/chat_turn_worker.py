@@ -42,6 +42,7 @@ from app.services.chat_turn_pipeline import (
 )
 from app.services.chat_turn_queue import TurnQueueOps
 from app.services.chat_turn_service import ChatTurnService, turn_budget
+from app.services.conversation_summary import drain as drain_summaries
 from app.services.explanation_service import normalize_patient_summary
 
 logger = logging.getLogger(__name__)
@@ -358,6 +359,9 @@ async def _run(
             status = "completed"
         elif outcome.get("mark_failed") is False:
             raise TransientTaskError("failure_not_recorded")
+    # A scheduled conversation-summary run finishes (bounded) before this request ends, so a
+    # scaled-down instance does not throttle it away. It never changes the turn's outcome.
+    await drain_summaries()
     try:
         await ops.call(turn_id, "prune_events")
     except (ExternalServiceError, ServiceUnavailableError):

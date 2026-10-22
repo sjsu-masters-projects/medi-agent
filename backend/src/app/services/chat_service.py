@@ -229,6 +229,79 @@ class ChatService:
         rows = [row for row in (result.data or []) if isinstance(row, dict)]
         return list(reversed(rows))
 
+    async def get_conversation_summary(
+        self, patient_id: str, session_id: str
+    ) -> dict[str, Any] | None:
+        """The stored rolling summary of one conversation, or None (also before migration 094)."""
+        try:
+            result = await self._execute(
+                self.db.table("chat_conversation_summaries")
+                .select("summary, language, covered_through_id, covered_through_at")
+                .eq("patient_id", patient_id)
+                .eq("session_id", normalize_session_id(session_id))
+                .limit(1)
+            )
+        except APIError as exc:
+            logger.warning("Conversation summary unavailable: %s", getattr(exc, "code", None))
+            return None
+        rows = [row for row in (result.data or []) if isinstance(row, dict)]
+        return rows[0] if rows and str(rows[0].get("summary") or "").strip() else None
+
+    async def record_conversation_summary(
+        self,
+        patient_id: str,
+        session_id: str,
+        *,
+        expected_through: str | None,
+        through_id: str,
+        summary: str,
+        language: str,
+    ) -> bool:
+        """Move the summary forward from the watermark the caller read; False when it lost."""
+        result = await self._execute(
+            self.db.rpc(
+                "record_conversation_summary",
+                {
+                    "p_patient_id": patient_id,
+                    "p_session_id": normalize_session_id(session_id),
+                    "p_expected_through": expected_through,
+                    "p_through_id": through_id,
+                    "p_summary": summary,
+                    "p_language": language,
+                },
+            )
+        )
+        return isinstance(result.data, dict) and bool(result.data.get("accepted"))
+
+    async def record_reply_evidence(
+        self, patient_id: str, session_id: str, message_id: str, evidence: dict[str, Any]
+    ) -> bool:
+        """Append the evidence one saved reply used; a repeat is a no-op. False when refused."""
+        result = await self._execute(
+            self.db.rpc(
+                "record_reply_evidence",
+                {
+                    "p_patient_id": patient_id,
+                    "p_session_id": normalize_session_id(session_id),
+                    "p_message_id": message_id,
+                    "p_evidence": evidence,
+                },
+            )
+        )
+        return isinstance(result.data, dict) and bool(result.data.get("accepted"))
+
+    async def get_reply_evidence(self, patient_id: str, message_id: str) -> dict[str, Any] | None:
+        """The stored evidence of one reply, only when it belongs to this patient."""
+        result = await self._execute(
+            self.db.table("chat_reply_evidence")
+            .select("message_id, session_id, evidence, created_at")
+            .eq("patient_id", patient_id)
+            .eq("message_id", message_id)
+            .limit(1)
+        )
+        rows = [row for row in (result.data or []) if isinstance(row, dict)]
+        return rows[0] if rows else None
+
     async def list_conversations(self, patient_id: str, limit: int = 30) -> list[dict[str, Any]]:
         """This patient's conversations, most recent first, for the conversation list.
 

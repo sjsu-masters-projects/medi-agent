@@ -43,6 +43,15 @@ class ChatConversation(BaseModel):
     reply_in_progress: bool = False
 
 
+class ReplyEvidence(BaseModel):
+    """The structured evidence one assistant reply used (tools, sources, care plan ids)."""
+
+    message_id: str
+    session_id: str
+    evidence: dict[str, Any]
+    created_at: str
+
+
 class TranscriptTranslationResult(BaseModel):
     """LOC-003: one Nora transcript turn translated into the clinician's English.
 
