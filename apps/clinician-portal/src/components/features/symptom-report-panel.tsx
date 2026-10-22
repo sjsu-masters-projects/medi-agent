@@ -165,7 +165,7 @@ export function SymptomReportPanel({ patientId, reportId, onClose, onReviewed }:
                     {report.your_care_team_ids.length > 1 && <CareTeamSelect onChange={team.setValue} options={team.options} required={team.required} value={team.value} />}
                     {reviewed && report.your_care_team_ids.length <= 1 ? (
                         <p role="status" className="text-sm text-ok-ink">
-                            {report.already_reviewed ? "Already reviewed by you" : "Reviewed by you"} {when(report.reviews.find((item) => item.mine)?.reviewed_at ?? null, report.timezone)}. Review records your team's follow-up only; it does not approve a diagnosis or medication change.
+                            {report.already_reviewed ? "Already reviewed by you" : "Reviewed by you"} {when(report.reviews.find((item) => item.mine)?.reviewed_at ?? null, report.timezone)}. Review records your team&apos;s follow-up only; it does not approve a diagnosis or medication change.
                         </p>
                     ) : (
                         <Button fullWidth disabled={saving || team.missing} onClick={() => void review()}>{saving ? "Saving…" : "Mark reviewed"}</Button>
