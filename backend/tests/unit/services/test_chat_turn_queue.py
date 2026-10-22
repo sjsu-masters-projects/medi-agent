@@ -24,6 +24,7 @@ def queue_settings(monkeypatch):
         settings, "chat_worker_invoker_sa", "invoker@synthetic.iam.gserviceaccount.com"
     )
     monkeypatch.setattr(settings, "chat_worker_oidc_audience", "")
+    monkeypatch.setattr(chat_turn_queue, "DISPATCH_RETRY_BASE_SECONDS", 0.0)
 
 
 def test_task_id_is_deterministic_per_turn_and_attempt():
@@ -266,3 +267,116 @@ async def test_a_failing_saved_notice_never_blocks_the_enqueue(monkeypatch):
     )
     dispatch.assert_awaited_once()
     assert result["dispatched"] is True
+
+
+# -- latency: one warm client per process, immediate bounded retry -------------------------------
+
+
+def test_the_client_is_created_once_per_process_and_reused(monkeypatch):
+    created = []
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            created.append(kwargs)
+
+    monkeypatch.setattr(chat_turn_queue, "_client_singleton", None)
+    monkeypatch.setattr(chat_turn_queue, "_fresh_credentials", lambda: "creds")
+    monkeypatch.setattr(tasks_v2, "CloudTasksClient", FakeClient)
+    first = chat_turn_queue._client()
+    assert chat_turn_queue._client() is first
+    assert created == [{"credentials": "creds"}]
+
+
+def test_credentials_that_cannot_be_prefetched_fall_back_to_the_client_lookup(monkeypatch):
+    import google.auth
+
+    def broken(**kwargs):
+        raise RuntimeError("no metadata server")
+
+    monkeypatch.setattr(google.auth, "default", broken)
+    assert chat_turn_queue._fresh_credentials() is None
+
+
+@pytest.mark.asyncio
+async def test_warm_up_runs_on_the_dispatch_pool_and_never_raises(monkeypatch):
+    warmed = MagicMock(return_value=5)
+    monkeypatch.setattr(chat_turn_queue, "warm_client", warmed)
+    await chat_turn_queue.warm_dispatcher()
+    warmed.assert_called_once()
+    monkeypatch.setattr(chat_turn_queue, "warm_client", MagicMock(side_effect=RuntimeError("x")))
+    await chat_turn_queue.warm_dispatcher()  # logged, not raised
+    monkeypatch.setattr(settings, "chat_worker_url", "")
+    warmed.reset_mock()
+    monkeypatch.setattr(chat_turn_queue, "warm_client", warmed)
+    await chat_turn_queue.warm_dispatcher()  # unconfigured: nothing to warm
+    warmed.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_a_failed_enqueue_is_retried_at_once_then_succeeds(monkeypatch):
+    _client(
+        monkeypatch,
+        MagicMock(side_effect=[gax.ServiceUnavailable("blip"), gax.DeadlineExceeded("slow"), None]),
+    )
+    dispatcher = TurnDispatcher(MagicMock())
+    dispatcher.ops.call = AsyncMock(return_value={"accepted": True})
+    assert await dispatcher.dispatch_with_retry(str(uuid4()), 1)
+
+
+@pytest.mark.asyncio
+async def test_retry_is_bounded_and_leaves_the_turn_to_the_sweep(monkeypatch):
+    fake = _client(monkeypatch, MagicMock(side_effect=gax.ServiceUnavailable("down")))
+    dispatcher = TurnDispatcher(MagicMock())
+    dispatcher.ops.call = AsyncMock()
+    assert not await dispatcher.dispatch_with_retry(str(uuid4()), 1)
+    assert fake.create_task.call_count == chat_turn_queue.DISPATCH_RETRY_ATTEMPTS
+    dispatcher.ops.call.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_retry_stops_when_the_time_budget_is_spent(monkeypatch):
+    monkeypatch.setattr(chat_turn_queue, "DISPATCH_RETRY_BASE_SECONDS", 1.0)
+    monkeypatch.setattr(chat_turn_queue, "DISPATCH_RETRY_BUDGET_SECONDS", 0.1)
+    fake = _client(monkeypatch, MagicMock(side_effect=gax.ServiceUnavailable("down")))
+    dispatcher = TurnDispatcher(MagicMock())
+    assert not await dispatcher.dispatch_with_retry(str(uuid4()), 1)
+    assert fake.create_task.call_count == 1  # no pause fits the budget
+
+
+@pytest.mark.asyncio
+async def test_a_hung_enqueue_is_cut_off_by_the_timeout(monkeypatch):
+    import time as _time
+
+    monkeypatch.setattr(chat_turn_queue, "ENQUEUE_TIMEOUT_SECONDS", -1.9)  # wait_for gets 0.1 s
+    _client(monkeypatch, MagicMock(side_effect=lambda **kw: _time.sleep(0.5)))
+    dispatcher = TurnDispatcher(MagicMock())
+    started = _time.monotonic()
+    assert not await dispatcher.dispatch(str(uuid4()), 1)
+    assert _time.monotonic() - started < 0.4
+
+
+@pytest.mark.asyncio
+async def test_the_title_label_is_saved_after_the_enqueue(monkeypatch):
+    order: list[str] = []
+
+    async def begin(self, request, timeout, *, queued=False):
+        return _begin_result(True)
+
+    async def dispatch(self, turn_id, attempt):
+        order.append("dispatch")
+        return True
+
+    async def title(*args, **kwargs):
+        order.append("title")
+
+    monkeypatch.setattr("app.services.chat_turn_service.ChatTurnService.begin", begin)
+    monkeypatch.setattr(TurnDispatcher, "dispatch", dispatch)
+    monkeypatch.setattr("app.services.chat_service.ChatService.set_conversation_title", title)
+    await submit_turn(
+        MagicMock(),
+        patient_id="p",
+        session_id="s",
+        request={"client_message_id": str(uuid4()), "content": "x", "document_id": None},
+        language="en-US",
+    )
+    assert order == ["dispatch", "title"]

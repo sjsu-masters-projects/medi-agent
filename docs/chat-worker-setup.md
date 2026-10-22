@@ -110,7 +110,7 @@ gh variable set DEPLOY_CHAT_WORKER --body true
 
 The next deploy of `main` (or a manual run of the workflow) creates `$WORKER_SERVICE` with
 `WORKER_MODE=true`, `--no-allow-unauthenticated`, request-based CPU, `--concurrency 4`,
-`--timeout 300`, `--min-instances 0`, then sets `CHAT_WORKER_URL` and `CHAT_WORKER_OIDC_AUDIENCE`
+`--timeout 300`, `--min-instances 1`, `--cpu-boost`, then sets `CHAT_WORKER_URL` and `CHAT_WORKER_OIDC_AUDIENCE`
 on the worker to its own URL and prints it. The worker uses the same four Supabase secrets as the
 ingestion job; if the API reports errors to Sentry and you want the worker to as well, add
 `BACKEND_SENTRY_DSN` to the `--update-secrets` list in the workflow step.
@@ -330,3 +330,42 @@ Repository variables that feed these settings are listed under "Repository varia
 A required status check for the new `Backend PostgreSQL contracts (chat-turns)` CI job must be
 added in the repository's branch protection by the requester if the previous
 `care-conversations` check was required to cover the Nora turn suite.
+
+
+## Latency and cost (October 22 measurements)
+
+One patient message on a cold path measured (Cloud Run logs, no message text):
+
+| Step | Measured | Cause |
+| --- | --- | --- |
+| `chat_turn.begin` to `chat_turn.dispatched` | 6.5 s (earlier turns: 2.1-3.0 s; warm: 0.14 s) | The first Cloud Tasks call on a new API process built the client, fetched credentials and opened the TLS channel inside the request. |
+| `chat_turn.dispatched` to `chat_turn.worker_task` | 30 s (warm worker: 0.1 s) | The worker had scaled to zero. The container took about 30 s from "Starting new instance" to "Started server process" (image load plus importing the application). |
+| Model | 11-24 s | Unchanged by this work. |
+
+Changes:
+
+- The API warms the Cloud Tasks client at startup (`warm_dispatcher`): client creation, credential
+  fetch and gRPC channel connect run on the bounded dispatch pool, off the request path. The log
+  event `chat_turn.dispatcher_warm` carries `duration_ms`. `chat_turn.dispatched` now carries
+  `client_ms` (time to obtain the client; large only on a cold process) and the new
+  `chat_turn.submit_timing` event carries `begin_ms`, `saved_notice_ms`, `dispatch_ms` and
+  `begin_to_dispatch_ms`. None of them contains message text.
+- The conversation title is saved after the enqueue, not before it.
+- A failed enqueue on the send path is retried at once, up to three times with jitter and inside a
+  20 s budget (`dispatch_with_retry`). Only if all fail does the turn wait for the sweep, which runs
+  every minute, so a transient Cloud Tasks error no longer costs up to a minute.
+- Both services deploy with `--min-instances 1` and `--cpu-boost` (startup CPU boost). The worker
+  uses request-based CPU, so its idle warm instance is billed at the low idle rate (memory and a
+  small CPU share), a few dollars a month. The API uses always-allocated CPU (a Nora reply keeps
+  running after its socket closes), so its warm instance is billed continuously (about one vCPU and
+  2 GiB, tens of dollars a month); that is the price of a warm API. Set `--min-instances 0` in the
+  workflow to go back, accepting the cold starts above.
+- The worker app imports only the task router instead of every user-API router, and the image
+  byte-compiles the application at build time (`PYTHONDONTWRITEBYTECODE` is set, so otherwise each
+  cold start recompiled it). Locally this removes about 300 of 2,160 imported modules; the large
+  remaining cost is the model library stack the first turn needs, so a warm instance is the real
+  fix.
+
+Check after a deploy: send a message after 10 minutes idle and read `chat_turn.submit_timing`
+(`begin_to_dispatch_ms` should be under about 1000) and the gap from `chat_turn.dispatched` to
+`chat_turn.worker_task` (should be under about 1 s with a warm worker).
