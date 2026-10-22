@@ -415,6 +415,11 @@ jobs:
             # The worker queue, events and claim (078).
             files: tests/integration/test_chat_turn_events_postgres.py
             minimums: test_chat_turn_events_postgres=35
+          - name: care-team-plans
+            # Plan ownership, routed documents, shared core, cross-plan publication and
+            # notification scoping (080-083). Disposable containers, no remote database.
+            files: tests/integration/test_care_team_plans_postgres.py tests/integration/test_care_team_records_postgres.py tests/integration/test_care_team_publication_postgres.py tests/integration/test_care_team_notifications_postgres.py
+            minimums: test_care_team_plans_postgres=25 test_care_team_records_postgres=35 test_care_team_publication_postgres=38 test_care_team_notifications_postgres=24
     defaults:
       run:
         working-directory: backend
@@ -444,6 +449,7 @@ jobs:
           NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER: "1"
           EMAIL_TEST_POSTGRES_DOCKER: "1"
           CHAT_TURN_TEST_POSTGRES_DOCKER: "1"
+          CARE_TEAM_PLANS_TEST_POSTGRES_DOCKER: "1"
           EXTERNAL_REVIEW_TEST_POSTGREST_DOCKER: "1"
         run: |
           mkdir -p test-results

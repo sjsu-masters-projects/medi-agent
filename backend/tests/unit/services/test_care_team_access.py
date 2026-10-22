@@ -43,9 +43,17 @@ def test_documents_are_owned_by_one_team_or_in_every_queue_until_claimed() -> No
     orphan = {"routing_state": "routed", "care_team_id": None}  # its team's link was deleted
 
     assert [MINE.can_see_document(d) for d in (routed_mine, routed_theirs, open_doc, orphan)] == [
-        True, False, True, False]
+        True,
+        False,
+        True,
+        False,
+    ]
     assert [THEIRS.can_see_document(d) for d in (routed_mine, routed_theirs, open_doc, orphan)] == [
-        False, True, True, False]
+        False,
+        True,
+        True,
+        False,
+    ]
 
 
 def test_a_document_row_without_its_owner_columns_is_hidden_not_shown() -> None:
@@ -105,7 +113,9 @@ def test_plan_detail_is_readable_only_by_the_owning_team_and_never_when_unowned(
 
 
 def test_clinician_access_applies_each_patients_own_links_to_a_mixed_list() -> None:
-    access = ClinicianAccess(CLINICIAN, {PATIENT: frozenset({TEAM}), SECOND_PATIENT: frozenset({THIRD_TEAM})})
+    access = ClinicianAccess(
+        CLINICIAN, {PATIENT: frozenset({TEAM}), SECOND_PATIENT: frozenset({THIRD_TEAM})}
+    )
     docs = [
         {"patient_id": PATIENT, "routing_state": "routed", "care_team_id": TEAM},
         {"patient_id": PATIENT, "routing_state": "routed", "care_team_id": OTHER_TEAM},
@@ -115,13 +125,17 @@ def test_clinician_access_applies_each_patients_own_links_to_a_mixed_list() -> N
 
     kept = access.keep(docs, "document")
 
-    assert [(d["patient_id"], d["care_team_id"]) for d in kept] == [(PATIENT, TEAM), (SECOND_PATIENT, None)]
+    assert [(d["patient_id"], d["care_team_id"]) for d in kept] == [
+        (PATIENT, TEAM),
+        (SECOND_PATIENT, None),
+    ]
 
 
 def test_the_service_loads_only_active_links_of_this_clinician_and_patient() -> None:
     db = FakeDB()
     db.tables["care_teams"].append(
-        {"id": THIRD_TEAM, "patient_id": PATIENT, "clinician_id": CLINICIAN, "status": "inactive"})
+        {"id": THIRD_TEAM, "patient_id": PATIENT, "clinician_id": CLINICIAN, "status": "inactive"}
+    )
     service = CareTeamAccessService(db)  # type: ignore[arg-type]
 
     access = service.for_patient(CLINICIAN, PATIENT)
@@ -134,43 +148,59 @@ def test_the_service_loads_only_active_links_of_this_clinician_and_patient() -> 
 
 
 def fact_db() -> FakeDB:
-    return FakeDB({
-        "documents": [
-            {"id": "d-mine", "routing_state": "routed", "care_team_id": TEAM},
-            {"id": "d-theirs", "routing_state": "routed", "care_team_id": OTHER_TEAM},
-            {"id": "d-open", "routing_state": "unrouted", "care_team_id": None},
-        ],
-        "source_provenances": [
-            {"id": "p-mine", "document_id": "d-mine", "care_team_id": None},
-            {"id": "p-theirs", "document_id": "d-theirs", "care_team_id": None},
-            {"id": "p-open", "document_id": "d-open", "care_team_id": None},
-            {"id": "p-entry-mine", "document_id": None, "care_team_id": TEAM},
-            {"id": "p-entry-theirs", "document_id": None, "care_team_id": OTHER_TEAM},
-            {"id": "p-entry-legacy", "document_id": None, "care_team_id": None},
-        ],
-        "evidence_citations": [
-            {"fact_id": "f-mine", "provenance_id": "p-mine"},
-            {"fact_id": "f-theirs", "provenance_id": "p-theirs"},
-            {"fact_id": "f-open", "provenance_id": "p-open"},
-            {"fact_id": "f-mixed", "provenance_id": "p-mine"},
-            {"fact_id": "f-mixed", "provenance_id": "p-theirs"},
-            {"fact_id": "f-entry-mine", "provenance_id": "p-entry-mine"},
-            {"fact_id": "f-entry-theirs", "provenance_id": "p-entry-theirs"},
-            {"fact_id": "f-entry-legacy", "provenance_id": "p-entry-legacy"},
-            {"fact_id": "f-dangling", "provenance_id": "p-missing"},
-        ],
-    })
+    return FakeDB(
+        {
+            "documents": [
+                {"id": "d-mine", "routing_state": "routed", "care_team_id": TEAM},
+                {"id": "d-theirs", "routing_state": "routed", "care_team_id": OTHER_TEAM},
+                {"id": "d-open", "routing_state": "unrouted", "care_team_id": None},
+            ],
+            "source_provenances": [
+                {"id": "p-mine", "document_id": "d-mine", "care_team_id": None},
+                {"id": "p-theirs", "document_id": "d-theirs", "care_team_id": None},
+                {"id": "p-open", "document_id": "d-open", "care_team_id": None},
+                {"id": "p-entry-mine", "document_id": None, "care_team_id": TEAM},
+                {"id": "p-entry-theirs", "document_id": None, "care_team_id": OTHER_TEAM},
+                {"id": "p-entry-legacy", "document_id": None, "care_team_id": None},
+            ],
+            "evidence_citations": [
+                {"fact_id": "f-mine", "provenance_id": "p-mine"},
+                {"fact_id": "f-theirs", "provenance_id": "p-theirs"},
+                {"fact_id": "f-open", "provenance_id": "p-open"},
+                {"fact_id": "f-mixed", "provenance_id": "p-mine"},
+                {"fact_id": "f-mixed", "provenance_id": "p-theirs"},
+                {"fact_id": "f-entry-mine", "provenance_id": "p-entry-mine"},
+                {"fact_id": "f-entry-theirs", "provenance_id": "p-entry-theirs"},
+                {"fact_id": "f-entry-legacy", "provenance_id": "p-entry-legacy"},
+                {"fact_id": "f-dangling", "provenance_id": "p-missing"},
+            ],
+        }
+    )
 
 
 def test_a_fact_is_visible_only_if_every_source_behind_it_is() -> None:
     service = CareTeamAccessService(fact_db())  # type: ignore[arg-type]
-    ids = ["f-mine", "f-theirs", "f-open", "f-mixed", "f-entry-mine", "f-entry-theirs",
-           "f-entry-legacy", "f-dangling", "f-no-citation"]
+    ids = [
+        "f-mine",
+        "f-theirs",
+        "f-open",
+        "f-mixed",
+        "f-entry-mine",
+        "f-entry-theirs",
+        "f-entry-legacy",
+        "f-dangling",
+        "f-no-citation",
+    ]
 
     visible = service.visible_fact_ids(MINE, ids)
 
     assert visible == {"f-mine", "f-open", "f-entry-mine", "f-entry-legacy", "f-no-citation"}
     assert service.visible_fact_ids(THEIRS, ids) == {
-        "f-theirs", "f-open", "f-entry-theirs", "f-entry-legacy", "f-no-citation"}
+        "f-theirs",
+        "f-open",
+        "f-entry-theirs",
+        "f-entry-legacy",
+        "f-no-citation",
+    }
     assert service.visible_fact_ids(NONE, ids) == set()
     assert service.visible_fact_ids(MINE, []) == set()

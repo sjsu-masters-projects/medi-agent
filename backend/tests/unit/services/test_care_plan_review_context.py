@@ -259,7 +259,9 @@ def test_medication_decision_requires_explicit_match_or_new_name() -> None:
         validate({"decision": "update", "target_id": "someone-else", "name": "Metformin"}, active)
     with pytest.raises(ValidationError, match="Choose an active matching"):
         validate({"decision": "update", "target_id": "med-1", "name": "Different"}, active)
-    validate({"decision": "update", "target_id": "med-1", "name": "metformin"}, active, own_items={"own"})
+    validate(
+        {"decision": "update", "target_id": "med-1", "name": "metformin"}, active, own_items={"own"}
+    )
     validate({"decision": "create", "name": "Loratadine"}, active)
 
 

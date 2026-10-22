@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
-from tests.unit.services.care_plan_ownership_stub import stub_ownership
 
 from app.core.exceptions import AuthorizationError, ValidationError
 from app.models.care_plan import CarePlanTodayPreviewRead
@@ -16,6 +15,7 @@ from app.services.care_plan_preview_service import (
     proposed_records,
 )
 from app.services.feed_service import FeedService, FeedSnapshot
+from tests.unit.services.care_plan_ownership_stub import stub_ownership
 
 PATIENT = UUID("00000000-0000-0000-0000-000000000201")
 CLINICIAN = UUID("00000000-0000-0000-0000-000000000202")

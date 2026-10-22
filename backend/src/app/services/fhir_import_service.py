@@ -81,8 +81,13 @@ class FhirImportService:
         actor_id: UUID,
         issuer: str,
         resources: list[dict[str, Any]],
+        care_team_id: UUID | None = None,
     ) -> dict[str, Any]:
-        """Validate and persist resources; unsupported types stay visible as warnings."""
+        """Validate and persist resources; unsupported types stay visible as warnings.
+
+        ``care_team_id`` is the importing clinician's link; the candidates' provenance carries
+        it so facts from this import stay with that team.
+        """
         warnings: list[str] = []
         persisted_count = 0
         candidate_count = 0
@@ -120,6 +125,7 @@ class FhirImportService:
                 issuer=issuer,
                 stored_resource=stored,
                 resource=resource,
+                care_team_id=care_team_id,
             ):
                 self.facts.create_candidate(candidate, actor_id=actor_id)
                 candidate_count += 1
@@ -220,6 +226,7 @@ class FhirImportService:
         issuer: str,
         stored_resource: dict[str, Any],
         resource: dict[str, Any],
+        care_team_id: UUID | None = None,
     ) -> list[ClinicalFactCreate]:
         mapped = self._map_resource(resource)
         if mapped is None:
@@ -251,6 +258,7 @@ class FhirImportService:
                         "resource_id": resource.get("id"),
                     },
                     extractor_version="fhir-r4-import/1",
+                    care_team_id=care_team_id,
                 ),
                 citations=[
                     EvidenceCitationCreate(

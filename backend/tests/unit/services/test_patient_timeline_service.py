@@ -70,6 +70,17 @@ class Database:
         return SimpleNamespace(execute=lambda: SimpleNamespace(data={"items": result}))
 
 
+MY_TEAM = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1"
+OTHER_TEAM = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2"
+
+
+def is_lookup(query):
+    """An owner look-up made after a source read, bounded by the ids already read."""
+    return query.table == "care_teams" or any(
+        call[0] == "in_" and call[1][0] == "id" for call in query.calls
+    )
+
+
 def row(**values):
     return {"id": str(uuid4()), "created_at": "2026-10-01T10:00:00+00:00", **values}
 
@@ -95,16 +106,22 @@ async def test_cross_domain_events_use_real_dates_and_exact_source_links():
         private_reasoning="secret",
     )
     doc = row(
-        file_name="synthetic.pdf", reviewed_at="2026-10-03T09:00:00Z", review_status="approved"
+        file_name="synthetic.pdf",
+        reviewed_at="2026-10-03T09:00:00Z",
+        review_status="approved",
+        routing_state="routed",
+        care_team_id=MY_TEAM,
     )
     medication = row(name="Synthetic medication", start_date="2026-09-01")
     log = row(logged_at="2026-10-05T08:00:00Z", target_id=str(uuid4()), status="taken")
-    appointment = row(scheduled_at="2026-11-01T08:00:00Z")
-    audit = row(
-        event_type="approved", plan_version_id=str(uuid4()), event_data={"reasoning": "secret"}
-    )
+    appointment = row(scheduled_at="2026-11-01T08:00:00Z", care_team_id=MY_TEAM)
+    version, plan = str(uuid4()), str(uuid4())
+    audit = row(event_type="approved", plan_version_id=version, event_data={"reasoning": "secret"})
     db = Database(
         {
+            "care_teams": [{"id": MY_TEAM}],
+            "care_plan_versions": [{"id": version, "care_plan_id": plan}],
+            "care_plans": [{"id": plan, "care_team_id": MY_TEAM, "ownership_state": "owned"}],
             "documents": [doc],
             "medications": [medication],
             "symptom_reports": [symptom],
@@ -152,11 +169,16 @@ async def test_cross_domain_events_use_real_dates_and_exact_source_links():
     assert "secret" not in result.model_dump_json()
     for query in db.queries:
         assert (
-            "limit",
-            (SOURCE_LIMIT + 1,),
-            {},
-        ) in query.calls or query.table == "care_conversations"
-        if query.table != "care_conversations":
+            (
+                "limit",
+                (SOURCE_LIMIT + 1,),
+                {},
+            )
+            in query.calls
+            or query.table in {"care_conversations", "care_teams"}
+            or is_lookup(query)
+        )
+        if query.table != "care_conversations" and not is_lookup(query):
             selected = next(call[1][0] for call in query.calls if call[0] == "select")
             assert "event_data" not in selected and "body" not in selected
 

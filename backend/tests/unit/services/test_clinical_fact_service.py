@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -201,15 +202,21 @@ def test_lineage_returns_the_source_artifact_and_evidence_excerpt() -> None:
     assert lineage["citations"][0]["excerpt"] == "Continue metformin 500 mg."
 
 
+def _export(db: Any, fact_id: UUID) -> dict[str, Any]:
+    service = FhirAuditExportService(db)
+    # Ownership of the fact is proven in test_clinician_record_ownership; this module
+    # tests the shape of what is exported.
+    service.gate = MagicMock()
+    return service.export_for_fact(clinician_id=REVIEWER_ID, fact_id=fact_id, patient_id=PATIENT_ID)
+
+
 def test_fhir_provenance_and_audit_export_are_valid_and_minimally_disclose_lineage() -> None:
     db = FakeDatabase()
     facts = ClinicalFactService(db)  # type: ignore[arg-type]
     fact = facts.create_candidate(candidate(), actor_id=ACTOR_ID)
     facts.approve(UUID(fact["id"]), PATIENT_ID, reviewer_id=REVIEWER_ID, note="Reviewed")
 
-    exported = FhirAuditExportService(db).export_for_fact(  # type: ignore[arg-type]
-        fact_id=UUID(fact["id"]), patient_id=PATIENT_ID
-    )
+    exported = _export(db, UUID(fact["id"]))
 
     provenance = exported["provenance"]
     assert provenance["resourceType"] == "Provenance"
@@ -248,9 +255,7 @@ def test_fhir_provenance_prefers_the_versioned_imported_resource_reference() -> 
     ]
     fact = facts.create_candidate(ClinicalFactCreate.model_validate(payload), actor_id=ACTOR_ID)
 
-    exported = FhirAuditExportService(db).export_for_fact(  # type: ignore[arg-type]
-        fact_id=UUID(fact["id"]), patient_id=PATIENT_ID
-    )
+    exported = _export(db, UUID(fact["id"]))
 
     assert exported["provenance"]["entity"][0]["what"]["reference"] == (
         "MedicationRequest/med-123/_history/7"
@@ -273,9 +278,7 @@ def test_fhir_audit_events_carry_the_clinic_of_the_actors_link() -> None:
         {**link, "clinician_id": str(ACTOR_ID), "clinic_id": str(uuid4())},
     ]
 
-    events = FhirAuditExportService(db).export_for_fact(  # type: ignore[arg-type]
-        fact_id=UUID(fact["id"]), patient_id=PATIENT_ID
-    )["audit_events"]
+    events = _export(db, UUID(fact["id"]))["audit_events"]
 
     by_type = {e["subtype"][0]["code"]: e for e in events}
     assert by_type["approved"]["extension"] == [

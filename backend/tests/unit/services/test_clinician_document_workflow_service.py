@@ -9,9 +9,13 @@ import pytest
 from app.core.exceptions import NotFoundError, ValidationError
 from app.db.repositories import CareTeamRepository
 from app.models.enums import DocumentReviewStatus
+from app.services.care_team_access import PatientAccess
 from app.services.clinician_document_workflow_service import (
     ClinicianDocumentWorkflowService,
 )
+
+TEAM = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1"
+OWNED = {"routing_state": "routed", "care_team_id": TEAM}
 
 
 def _response(*, data=None):
@@ -34,11 +38,20 @@ def execute():
 
 
 @pytest.fixture
-def service(mock_db, care_team_repo, execute):
+def gate():
+    """Ownership has its own tests (test_clinician_record_ownership); here the caller owns."""
+    mock = MagicMock()
+    mock.access.return_value = PatientAccess("clinician", "patient", frozenset({TEAM}))
+    return mock
+
+
+@pytest.fixture
+def service(mock_db, care_team_repo, execute, gate):
     return ClinicianDocumentWorkflowService(
         db=mock_db,
         care_team_repo=care_team_repo,
         execute=execute,
+        gate=gate,
     )
 
 
@@ -62,6 +75,7 @@ async def test_fetch_patient_documents_hydrates_reviewer_metadata(service, execu
                     "reviewed_by": str(reviewer_id),
                     "reviewed_at": "2026-04-21T11:00:00Z",
                     "review_note": "Looks valid",
+                    **OWNED,
                 }
             ]
         ),
@@ -77,7 +91,7 @@ async def test_fetch_patient_documents_hydrates_reviewer_metadata(service, execu
         ),
     ]
 
-    documents = await service.fetch_patient_documents(patient_id)
+    documents = await service.fetch_patient_documents(patient_id, clinician_id=uuid4())
 
     assert documents[0]["review_note"] == "Looks valid"
     assert documents[0]["reviewer"]["first_name"] == "Mina"
@@ -86,7 +100,7 @@ async def test_fetch_patient_documents_hydrates_reviewer_metadata(service, execu
 
 @pytest.mark.asyncio
 async def test_approve_document_review_updates_pending_patient_upload(
-    service, care_team_repo, execute, mock_db
+    service, gate, execute, mock_db
 ):
     clinician_id = uuid4()
     patient_id = uuid4()
@@ -95,19 +109,17 @@ async def test_approve_document_review_updates_pending_patient_upload(
     for method in ("select", "eq", "single", "update"):
         getattr(chain, method).return_value = chain
     mock_db.table.return_value = chain
-    care_team_repo.find_active_assignment = AsyncMock(return_value=[{"id": str(uuid4())}])
+    gate.document.return_value = {
+        "id": str(document_id),
+        "patient_id": str(patient_id),
+        "uploaded_by_role": "patient",
+        "review_status": "pending",
+        "reviewed_by": None,
+        "reviewed_at": None,
+        "review_note": None,
+        **OWNED,
+    }
     execute.side_effect = [
-        _response(
-            data={
-                "id": str(document_id),
-                "patient_id": str(patient_id),
-                "uploaded_by_role": "patient",
-                "review_status": "pending",
-                "reviewed_by": None,
-                "reviewed_at": None,
-                "review_note": None,
-            }
-        ),
         _response(
             data=[
                 {
@@ -131,42 +143,35 @@ async def test_approve_document_review_updates_pending_patient_upload(
 
 
 @pytest.mark.asyncio
-async def test_review_race_does_not_report_success(service, care_team_repo, execute):
-    care_team_repo.find_active_assignment = AsyncMock(return_value=[{"id": str(uuid4())}])
-    execute.side_effect = [
-        _response(
-            data={"id": str(uuid4()), "uploaded_by_role": "patient", "review_status": "pending"}
-        ),
-        _response(data=[]),
-    ]
+async def test_review_race_does_not_report_success(service, gate, execute):
+    gate.document.return_value = {
+        "id": str(uuid4()),
+        "uploaded_by_role": "patient",
+        "review_status": "pending",
+        **OWNED,
+    }
+    execute.side_effect = [_response(data=[])]
     with pytest.raises(ValidationError, match="review changed"):
         await service.approve_document_review(uuid4(), uuid4(), uuid4())
 
 
 @pytest.mark.asyncio
-async def test_reject_document_review_rejects_already_reviewed_document(
-    service, care_team_repo, execute
-):
-    care_team_repo.find_active_assignment = AsyncMock(return_value=[{"id": str(uuid4())}])
-    execute.return_value = _response(
-        data={
-            "id": str(uuid4()),
-            "patient_id": str(uuid4()),
-            "uploaded_by_role": "patient",
-            "review_status": "approved",
-        }
-    )
+async def test_reject_document_review_rejects_already_reviewed_document(service, gate):
+    gate.document.return_value = {
+        "id": str(uuid4()),
+        "patient_id": str(uuid4()),
+        "uploaded_by_role": "patient",
+        "review_status": "approved",
+        **OWNED,
+    }
 
     with pytest.raises(ValidationError, match="already been completed"):
         await service.reject_document_review(uuid4(), uuid4(), uuid4(), "Bad upload")
 
 
 @pytest.mark.asyncio
-async def test_save_document_annotation_rejects_document_outside_patient_scope(
-    service, care_team_repo, execute
-):
-    care_team_repo.find_active_assignment = AsyncMock(return_value=[{"id": str(uuid4())}])
-    execute.return_value = _response(data=[])
+async def test_save_document_annotation_rejects_document_outside_patient_scope(service, gate):
+    gate.document.side_effect = NotFoundError("Document", "x")
 
     with pytest.raises(NotFoundError, match="Document"):
         await service.save_document_annotation(uuid4(), uuid4(), uuid4(), "Needs follow-up")
@@ -182,13 +187,14 @@ async def test_patient_documents_carry_the_summary_lifecycle(service, execute):
                     "id": str(uuid4()),
                     "summary_status": "failed",
                     "summary_failure_code": "provider_unavailable",
+                    **OWNED,
                 }
             ]
         ),
         _response(data=[]),
     ]
 
-    documents = await service.fetch_patient_documents(uuid4())
+    documents = await service.fetch_patient_documents(uuid4(), clinician_id=uuid4())
 
     assert documents[0]["summary_failure_code"] == "provider_unavailable"
     selected = service.db.table.return_value.select.call_args.args[0]
@@ -215,11 +221,11 @@ async def test_documents_keep_the_existing_lifecycle_before_retry_schedule_migra
                 "message": "column documents.summary_next_attempt_at does not exist",
             }
         ),
-        _response(data=[{"id": str(uuid4()), "summary_status": "pending"}]),
+        _response(data=[{"id": str(uuid4()), "summary_status": "pending", **OWNED}]),
         _response(data=[]),
     ]
 
-    documents = await service.fetch_patient_documents(uuid4())
+    documents = await service.fetch_patient_documents(uuid4(), clinician_id=uuid4())
 
     assert documents[0]["summary_status"] == "pending"
     selected = service.db.table.return_value.select.call_args.args[0]
@@ -235,11 +241,11 @@ async def test_documents_still_load_before_migration_038_is_applied(service, exe
     execute.side_effect = [
         APIError({"code": "42703", "message": "column documents.summary_status does not exist"}),
         APIError({"code": "42703", "message": "column documents.summary_status does not exist"}),
-        _response(data=[{"id": str(uuid4()), "parse_status": "completed"}]),
+        _response(data=[{"id": str(uuid4()), "parse_status": "completed", **OWNED}]),
         _response(data=[]),
     ]
 
-    documents = await service.fetch_patient_documents(uuid4())
+    documents = await service.fetch_patient_documents(uuid4(), clinician_id=uuid4())
 
     assert len(documents) == 1
     # The retry drops the summary columns; the API schema supplies their defaults.
@@ -253,7 +259,7 @@ async def test_an_unrelated_read_failure_is_not_retried_away(service, execute):
     execute.side_effect = APIError({"code": "42501", "message": "permission denied"})
 
     with pytest.raises(APIError):
-        await service.fetch_patient_documents(uuid4())
+        await service.fetch_patient_documents(uuid4(), clinician_id=uuid4())
 
 
 @pytest.mark.asyncio
@@ -263,11 +269,11 @@ async def test_documents_include_titles_and_load_before_migration_050(service, e
 
     execute.side_effect = [
         APIError({"code": "42703", "message": "column documents.display_title does not exist"}),
-        _response(data=[{"id": str(uuid4()), "summary_status": "ready"}]),
+        _response(data=[{"id": str(uuid4()), "summary_status": "ready", **OWNED}]),
         _response(data=[]),
     ]
 
-    documents = await service.fetch_patient_documents(uuid4())
+    documents = await service.fetch_patient_documents(uuid4(), clinician_id=uuid4())
 
     assert documents[0]["summary_status"] == "ready"
     selects = [call.args[0] for call in service.db.table.return_value.select.call_args_list]

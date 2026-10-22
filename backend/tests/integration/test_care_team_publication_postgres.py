@@ -34,10 +34,14 @@ from tests.integration.test_care_team_records_postgres import document, fact
 
 pytest_plugins = ["tests.integration.care_team_plan_harness"]
 
-pytestmark = pytest.mark.skipif(
-    os.environ.get("CARE_TEAM_PLANS_TEST_POSTGRES_DOCKER") != "1",
-    reason="explicit opt-in disposable Docker PostgreSQL contract check",
-)
+pytestmark = [
+    # The first test builds the template databases for the module.
+    pytest.mark.timeout(600),
+    pytest.mark.skipif(
+        os.environ.get("CARE_TEAM_PLANS_TEST_POSTGRES_DOCKER") != "1",
+        reason="explicit opt-in disposable Docker PostgreSQL contract check",
+    ),
+]
 
 
 BLOCKED = "resolve each cross-plan conflict before publication"  # raised with SQLSTATE CP001

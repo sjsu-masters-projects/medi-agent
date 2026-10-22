@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
 
 import pytest
-from tests.unit.services.care_plan_ownership_stub import stub_ownership
 
 from app.models.clinical_fact import SourceArtifactType
 from app.models.generation import (
@@ -19,6 +18,7 @@ from app.models.generation import (
 )
 from app.services import care_plan_classification, care_plan_service
 from app.services.care_plan_service import CarePlanService
+from tests.unit.services.care_plan_ownership_stub import stub_ownership
 
 MEDICATION_FACT_ID = UUID("00000000-0000-0000-0000-000000000101")
 MONITORING_FACT_ID = UUID("00000000-0000-0000-0000-000000000102")

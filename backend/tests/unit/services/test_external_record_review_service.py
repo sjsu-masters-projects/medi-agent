@@ -1,7 +1,7 @@
 """External review workload: assignment scope, metadata-only reads and coverage."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import httpx
@@ -16,6 +16,7 @@ from app.core.security import get_current_user
 from app.db.connection import get_db
 from app.models.auth import CurrentUser
 from app.routers import clinicians
+from app.services.care_team_access import ClinicianAccess, PatientAccess
 from app.services.clinic_link_scope import ClinicLinkScope
 from app.services.external_record_review_service import (
     CANDIDATE_LIMIT,
@@ -75,10 +76,20 @@ def candidate(time="2026-10-01T12:00:00Z"):
     }
 
 
+def admit_everything(service, patients=()):
+    """Every source is visible to the caller; ownership has its own tests."""
+    service.access = MagicMock()
+    service.access.for_clinician.return_value = ClinicianAccess(
+        "clinician", {str(patient): frozenset({"team"}) for patient in patients}
+    )
+    service.access.visible_fact_ids.side_effect = lambda _access, ids: {str(i) for i in ids}
+    return service
+
+
 def service_with_scope(db, patients):
     service = ExternalRecordReviewService(db)
     service.memberships.link_scope = AsyncMock(return_value=ClinicLinkScope(patients))
-    return service
+    return admit_everything(service, patients)
 
 
 @pytest.mark.asyncio
@@ -139,7 +150,7 @@ async def test_groups_current_scope_with_exact_counts_real_capture_time_and_no_p
 async def test_real_membership_link_scope_excludes_foreign_clinic_before_any_source_query():
     db = Database()
     actor, patient, own, foreign = (uuid4() for _ in range(4))
-    service = ExternalRecordReviewService(db)
+    service = admit_everything(ExternalRecordReviewService(db))
     links = [
         {
             "patient_id": str(patient),
@@ -257,16 +268,19 @@ async def test_installed_postgrest_client_emits_nested_filters_and_parses_exact_
 
     def respond(request):
         requests.append(request)
-        return httpx.Response(206, json=[candidate()], headers={"Content-Range": "0-0/39"})
+        return httpx.Response(
+            206, json=[candidate() for _ in range(39)], headers={"Content-Range": "0-38/39"}
+        )
 
     with (
         httpx.Client(transport=httpx.MockTransport(respond)) as http,
         SyncPostgrestClient("https://synthetic.invalid/rest/v1", http_client=http) as db,
     ):
-        result = await ExternalRecordReviewService(db)._patient(str(uuid4()))
+        service = admit_everything(ExternalRecordReviewService(db))
+        result = await service._patient(str(uuid4()), PatientAccess("c", "p", frozenset({"t"})))
     assert result["pending_count"] == 39
-    assert result["inspected_candidates"] == 1
-    assert not result["source_times_complete"]
+    assert result["inspected_candidates"] == 39
+    assert result["source_times_complete"]
     request = requests[0]
     assert request.method == "GET"
     assert request.url.path == "/rest/v1/clinical_facts"

@@ -101,7 +101,7 @@ def test_ehr_launch_encrypts_opaque_context_and_uses_ehr_scope(monkeypatch) -> N
     monkeypatch.setattr(settings, "smart_redirect_uri", "https://api.example/smart/callback")
     monkeypatch.setattr(settings, "smart_allowed_issuers", "https://sandbox.example/fhir")
     monkeypatch.setattr(settings, "smart_scopes", "patient/Patient.read patient/Condition.read")
-    monkeypatch.setattr(service, "_require_assignment", lambda *_: None)
+    monkeypatch.setattr(service, "_import_care_team", lambda *_: uuid4())
     monkeypatch.setattr(
         service,
         "_discover",
@@ -203,7 +203,7 @@ def test_standalone_launch_uses_configured_sim_issuer_without_launch_handle(monk
         "token_endpoint": f"{sim_base}/auth/token",
     }
     service = SmartLaunchService(db, http_client=http)
-    monkeypatch.setattr(service, "_require_assignment", lambda *_: None)
+    monkeypatch.setattr(service, "_import_care_team", lambda *_: uuid4())
 
     result = service.start_launch(clinician_id=uuid4(), patient_id=uuid4(), issuer=None)
 
@@ -224,7 +224,7 @@ def test_standalone_launch_uses_configured_sim_issuer_without_launch_handle(monk
 def test_standalone_launch_without_issuer_requires_configuration(monkeypatch) -> None:
     _configure_launch(monkeypatch, standalone_issuer="  ")
     service = SmartLaunchService(MagicMock(), http_client=MagicMock())
-    monkeypatch.setattr(service, "_require_assignment", lambda *_: None)
+    monkeypatch.setattr(service, "_import_care_team", lambda *_: uuid4())
 
     with pytest.raises(ValidationError, match="standalone launch is not configured"):
         service.start_launch(clinician_id=uuid4(), patient_id=uuid4(), issuer=None)
@@ -233,7 +233,7 @@ def test_standalone_launch_without_issuer_requires_configuration(monkeypatch) ->
 def test_ehr_launch_without_issuer_is_rejected(monkeypatch) -> None:
     _configure_launch(monkeypatch)
     service = SmartLaunchService(MagicMock(), http_client=MagicMock())
-    monkeypatch.setattr(service, "_require_assignment", lambda *_: None)
+    monkeypatch.setattr(service, "_import_care_team", lambda *_: uuid4())
 
     with pytest.raises(ValidationError, match="requires the EHR issuer"):
         service.start_launch(

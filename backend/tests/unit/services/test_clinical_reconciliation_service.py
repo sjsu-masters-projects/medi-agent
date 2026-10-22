@@ -5,11 +5,20 @@ import pytest
 
 from app.core.exceptions import ValidationError
 from app.models.reconciliation import ReconciliationDecision, ReconciliationDecisionRequest
+from app.services.care_team_access import PatientAccess
 from app.services.clinical_reconciliation_service import ClinicalReconciliationService
 
 
+def _build(db):
+    """A service whose ownership gate admits the caller (ownership has its own tests)."""
+    service = ClinicalReconciliationService(db)
+    service.gate = MagicMock()
+    service.gate.fact.return_value = PatientAccess("clinician", "patient", frozenset({"team"}))
+    return service
+
+
 def _service() -> ClinicalReconciliationService:
-    return ClinicalReconciliationService(MagicMock())
+    return _build(MagicMock())
 
 
 def test_medication_matching_prefers_rxnorm_then_normalized_names() -> None:
@@ -122,7 +131,7 @@ def test_reconciliation_request_requires_explicit_safe_shape() -> None:
 
 def test_withdrawn_or_applied_candidate_cannot_be_reconciled_again() -> None:
     db = MagicMock()
-    service = ClinicalReconciliationService(db)
+    service = _build(db)
     service._fact = MagicMock(  # type: ignore[method-assign]
         return_value={
             "id": "00000000-0000-0000-0000-000000000001",
@@ -162,7 +171,7 @@ def test_add_reconciles_all_present_medication_fields_with_an_audit_key() -> Non
         "fact_id": "00000000-0000-0000-0000-000000000001",
         "decision": "add",
     }
-    service = ClinicalReconciliationService(db)
+    service = _build(db)
     service._fact = MagicMock(  # type: ignore[method-assign]
         return_value={
             "id": "00000000-0000-0000-0000-000000000001",
@@ -227,6 +236,7 @@ def test_preview_exposes_candidate_fields_and_match_context() -> None:
     )
 
     preview = service.preview(
+        clinician_id=UUID("00000000-0000-0000-0000-000000000004"),
         fact_id=UUID("00000000-0000-0000-0000-000000000001"),
         patient_id=UUID("00000000-0000-0000-0000-000000000003"),
     )

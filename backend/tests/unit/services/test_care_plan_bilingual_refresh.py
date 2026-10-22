@@ -35,11 +35,41 @@ def _chain(data: list[dict[str, Any]]) -> MagicMock:
 
 def _service() -> BilingualRefreshService:
     versions = [
-        {"id": DRAFT, "patient_id": DRAFT_PATIENT, "care_plan_id": DRAFT_PATIENT, "version_number": 4, "status": "draft"},
-        {"id": DRAFT_BASE, "patient_id": DRAFT_PATIENT, "care_plan_id": DRAFT_PATIENT, "version_number": 3, "status": "approved"},
-        {"id": APPROVED, "patient_id": APPROVED_PATIENT, "care_plan_id": APPROVED_PATIENT, "version_number": 2, "status": "approved"},
-        {"id": QUEUED, "patient_id": QUEUED_PATIENT, "care_plan_id": QUEUED_PATIENT, "version_number": 1, "status": "approved"},
-        {"id": DONE, "patient_id": DONE_PATIENT, "care_plan_id": DONE_PATIENT, "version_number": 5, "status": "approved"},
+        {
+            "id": DRAFT,
+            "patient_id": DRAFT_PATIENT,
+            "care_plan_id": DRAFT_PATIENT,
+            "version_number": 4,
+            "status": "draft",
+        },
+        {
+            "id": DRAFT_BASE,
+            "patient_id": DRAFT_PATIENT,
+            "care_plan_id": DRAFT_PATIENT,
+            "version_number": 3,
+            "status": "approved",
+        },
+        {
+            "id": APPROVED,
+            "patient_id": APPROVED_PATIENT,
+            "care_plan_id": APPROVED_PATIENT,
+            "version_number": 2,
+            "status": "approved",
+        },
+        {
+            "id": QUEUED,
+            "patient_id": QUEUED_PATIENT,
+            "care_plan_id": QUEUED_PATIENT,
+            "version_number": 1,
+            "status": "approved",
+        },
+        {
+            "id": DONE,
+            "patient_id": DONE_PATIENT,
+            "care_plan_id": DONE_PATIENT,
+            "version_number": 5,
+            "status": "approved",
+        },
     ]
     db = MagicMock()
     db.table.side_effect = lambda name: _chain(

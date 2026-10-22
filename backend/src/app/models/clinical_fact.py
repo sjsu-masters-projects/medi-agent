@@ -54,6 +54,9 @@ class SourceProvenanceCreate(BaseModel):
     extractor_version: str | None = Field(default=None, max_length=100)
     model_version: str | None = Field(default=None, max_length=200)
     captured_at: datetime | None = None
+    # PLAN-002: the care team that owns a non-document source (an import, a clinician entry).
+    # A document source is owned through its document, so this stays empty for those.
+    care_team_id: UUID | None = None
 
     @model_validator(mode="after")
     def document_sources_require_document_id(self) -> SourceProvenanceCreate:

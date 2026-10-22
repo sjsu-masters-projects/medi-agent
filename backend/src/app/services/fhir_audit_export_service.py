@@ -16,6 +16,7 @@ from fhir.resources.R4B.provenance import Provenance
 from supabase import Client
 
 from app.services.clinical_fact_service import ClinicalFactService
+from app.services.clinician_record_gate import ClinicianRecordGate
 
 _FACT_IDENTIFIER_SYSTEM = "urn:mediagent:clinical-fact"
 _AUDIT_SUBTYPE_SYSTEM = "urn:mediagent:clinical-fact-audit"
@@ -39,9 +40,17 @@ class FhirAuditExportService:
     def __init__(self, db: Client) -> None:
         self.db = db
         self.facts = ClinicalFactService(db)
+        self.gate = ClinicianRecordGate(db)
 
-    def export_for_fact(self, *, fact_id: UUID, patient_id: UUID) -> dict[str, Any]:
-        """Build one Provenance and ordered AuditEvents for a local candidate fact."""
+    def export_for_fact(
+        self, *, clinician_id: UUID, fact_id: UUID, patient_id: UUID
+    ) -> dict[str, Any]:
+        """Build one Provenance and ordered AuditEvents for a local candidate fact.
+
+        Only for a fact whose every source this clinician may see; any other fact is reported
+        as not found, with no events and no provenance.
+        """
+        self.gate.fact(clinician_id, patient_id, fact_id)
         lineage = self.facts.get_lineage(fact_id, patient_id)
         fact = cast(dict[str, Any], lineage["fact"])
         provenances = cast(list[dict[str, Any]], lineage["provenances"])

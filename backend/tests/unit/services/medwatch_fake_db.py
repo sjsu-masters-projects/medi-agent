@@ -37,6 +37,11 @@ class FakeQuery:
         self.negate = False
         self.sort: tuple[str, bool] | None = None
         self.count: int | None = None
+        self.patch: dict[str, Any] | None = None
+
+    def update(self, values: dict[str, Any]) -> FakeQuery:
+        self.patch = values
+        return self
 
     def select(self, *_args: Any, **_kwargs: Any) -> FakeQuery:
         return self
@@ -71,6 +76,13 @@ class FakeQuery:
 
     def execute(self) -> Any:
         self.db.queries.append(self.table)
+        if self.patch is not None:
+            changed = []
+            for row in self.db.tables.get(self.table, []):
+                if all(check(row) for check in self.filters):
+                    row.update(copy.deepcopy(self.patch))
+                    changed.append(copy.deepcopy(row))
+            return SimpleNamespace(data=changed)
         rows = [
             copy.deepcopy(row)
             for row in self.db.tables.get(self.table, [])
@@ -155,11 +167,13 @@ class FakeDB:
             "discard_reason": None,
             "revision": 1,
             "export_version": "fda-3500-2025-09",
+            "care_team_id": None,
             "created_at": now,
             "updated_at": now,
         }
         self.tables.setdefault("medwatch_drafts", []).append(row)
         assessment["status"] = "reviewed"
+        assessment["reviewed_by"] = p["p_actor_id"]
         self.audit(row["id"], "created", {"revision": 1})
         return row
 

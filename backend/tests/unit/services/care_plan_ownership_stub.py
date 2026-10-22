@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import Any
-from uuid import UUID
 from unittest.mock import MagicMock
+from uuid import UUID
 
 CARE_PLAN_ID = "00000000-0000-0000-0000-0000000000cc"
 CARE_TEAM_ID = "00000000-0000-0000-0000-0000000000dd"

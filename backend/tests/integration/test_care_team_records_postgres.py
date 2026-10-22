@@ -31,10 +31,14 @@ from tests.integration.care_team_plan_harness import (
 
 pytest_plugins = ["tests.integration.care_team_plan_harness"]
 
-pytestmark = pytest.mark.skipif(
-    os.environ.get("CARE_TEAM_PLANS_TEST_POSTGRES_DOCKER") != "1",
-    reason="explicit opt-in disposable Docker PostgreSQL contract check",
-)
+pytestmark = [
+    # The first test builds the template databases for the module.
+    pytest.mark.timeout(600),
+    pytest.mark.skipif(
+        os.environ.get("CARE_TEAM_PLANS_TEST_POSTGRES_DOCKER") != "1",
+        reason="explicit opt-in disposable Docker PostgreSQL contract check",
+    ),
+]
 
 
 def two_teams(sql):

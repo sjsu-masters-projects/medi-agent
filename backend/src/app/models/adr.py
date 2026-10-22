@@ -104,6 +104,8 @@ class ADRReviewDecisionRequest(BaseModel):
     action: ADRReviewAction
     note: str | None = Field(default=None, max_length=2000)
     requested_information: list[NaranjoQuestion] = Field(default_factory=list, max_length=20)
+    # Required only when the clinician holds several care-team links to the patient.
+    care_team_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_action_details(self) -> "ADRReviewDecisionRequest":
@@ -341,6 +343,8 @@ class MedWatchDraftCreateRequest(BaseModel):
 
     decision: MedWatchPreparationDecision
     reportability_rationale: str = Field(..., min_length=1, max_length=2000)
+    # Required only when the clinician holds several care-team links to the patient.
+    care_team_id: UUID | None = None
 
     @model_validator(mode="after")
     def strip_rationale(self) -> "MedWatchDraftCreateRequest":
