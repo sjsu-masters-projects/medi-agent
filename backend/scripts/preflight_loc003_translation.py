@@ -14,7 +14,7 @@ Two jobs:
     Reports whether migrations 080-082 and 088 are recorded in the target's ledger with the
     checksums this working tree holds, and whether the columns and labels they add are
     actually present. Run this before the deployed acceptance journeys; the journeys
-    themselves are recorded in docs/deployed-recheck-2026-10-11.md.
+    themselves are recorded in docs/evidence/deployed-recheck-2026-10-11.md.
 
 Nothing here mutates a remote environment. Applying migrations stays a separate, explicitly
 authorized step (scripts/apply-supabase-migrations.sh).

@@ -1,6 +1,6 @@
 # NORA-002 — Grounded, plain-language answers from Nora
 
-**Status:** Done — merged in #147 (`4c9de30`); deployed chat recheck October 11 (docs/deployed-recheck-2026-10-11.md); voice on a phone is VOI-001 · **Owner:** Rajeev · **Refresh:** Cloud Run Job
+**Status:** Done — merged in #147 (`4c9de30`); deployed chat recheck October 11 (docs/evidence/deployed-recheck-2026-10-11.md); voice on a phone is VOI-001 · **Owner:** Rajeev · **Refresh:** Cloud Run Job
 `mediagent-health-knowledge-refresh`, trigger `mediagent-health-knowledge-refresh-weekly`
 (Sundays 03:00 America/Los_Angeles)
 

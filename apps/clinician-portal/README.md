@@ -240,7 +240,7 @@ new/changed activities do not inherit reminder times or completion. Edits and sa
 preview. Refresh it if records or reminders change: it is not a transaction reservation or a
 guarantee of later publication. Errors discard the snapshot, not display an empty success.
 Save draft edits before approval. PAT-005 is accepted, including live version
-supersession; see [the final acceptance](../../docs/pat-005-final-acceptance-2026-10-10.md).
+supersession; see [the final acceptance](../../docs/evidence/pat-005-final-acceptance-2026-10-10.md).
 
 Care Plan review makes each proposed medication an explicit create-or-update
 decision against the assigned patient's active medication list. It shows one source action per
@@ -265,7 +265,7 @@ review shows both languages side by side and preserves source and reviewed wordi
 extraction confidence is not medical certainty. Review blockers and explicit
 publication decisions remain visible and enforced. Clinical text containing numbers
 is not formatted as a date unless its field is explicitly a date field.
-UI review evidence: `docs/portal-ui-ux-review-2026-10-10.md`.
+UI review evidence: `docs/evidence/portal-ui-ux-review-2026-10-10.md`.
 
 **Messages** opens an assignment-scoped conversation inbox. Choose one linked
 patient to start or resume a thread, or select an existing conversation to reply.
@@ -377,7 +377,7 @@ Private intake answers do not enter this view. Active care-team assignment remai
 required. Unknown severity is labelled and is a gap in the chart, never a zero or mild
 rating. Confirmation records testimony for clinician review, not causality or a clinical
 verdict. The full symptom timeline/detail expansion remains PAT-002-C; see the
-[PAT-002-B acceptance record](../../docs/pat-002-b-acceptance-2026-10-12.md).
+[PAT-002-B acceptance record](../../docs/evidence/pat-002-b-acceptance-2026-10-12.md).
 
 ### Timeline and review context
 

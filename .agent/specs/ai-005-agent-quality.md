@@ -14,7 +14,7 @@ understood almost nothing of the document:
 - Nora answers about documents from those facts and the explanation, so it could not
   say what the A1c was either.
 
-Evidence: [deployed recheck](../../docs/deployed-recheck-2026-10-11.md#clinician-flow-for-an-uploaded-lab-report-october-12).
+Evidence: [deployed recheck](../../docs/evidence/deployed-recheck-2026-10-11.md#clinician-flow-for-an-uploaded-lab-report-october-12).
 
 ## Current behaviour (origin/main, October 12)
 

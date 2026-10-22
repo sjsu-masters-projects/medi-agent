@@ -149,7 +149,7 @@ review/publication gates or describe local tests as deployed acceptance.
 
 ## Production status — October 12
 
-Evidence: [deployed recheck](../../docs/deployed-recheck-2026-10-11.md#email-001-on-production-october-12).
+Evidence: [deployed recheck](../../docs/evidence/deployed-recheck-2026-10-11.md#email-001-on-production-october-12).
 Verified: invitation, verification code, unread-message and Spanish appointment notices,
 opt-out, neutral reset request and the clinician and patient password resets (after both portals were
 rebuilt with the correct public Supabase key; the earlier builds had it missing its first

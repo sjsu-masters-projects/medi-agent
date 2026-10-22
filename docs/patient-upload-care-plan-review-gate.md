@@ -87,7 +87,7 @@ Eight read-only checks passed: checksum, six evidence fences, publication/queue
 guards, service-role-only public RPCs, invoker-security helpers, pending-evidence
 exclusion, unchanged approved V2 and unchanged draft V3. No plan approval or
 history rewrite occurred. Backend/UI deployment and live Spanish/non-scheduled-day
-acceptance are recorded in [the PAT-005 final acceptance](pat-005-final-acceptance-2026-10-10.md)
+acceptance are recorded in [the PAT-005 final acceptance](evidence/pat-005-final-acceptance-2026-10-10.md)
 (V3 Spanish, Saturday absence; #140 deployed); this is not a production-readiness claim.
 
 October 10 inline-review cleanup extracts the intentional Docker readiness

@@ -30,7 +30,7 @@
 > (critical-result alerts and chat attachments), so PR 2 is `063_adr_information_loop_lifecycle.sql` and PR 3 is
 > `064_medwatch_form_3500.sql`. The contract-test fixture finds the PR 2 file by name
 > (`*_adr_information_loop_lifecycle.sql`).
-> **Scope tracker:** `.agent/TASKS.md` → PV-001-C / PV-002. Historical implementation findings below describe their stated baseline, not current deployment status. October 19 Spanish answers and synthetic draft/export/discard evidence are in the [grouped acceptance checkpoint](../../../docs/deployed-recheck-2026-10-11.md#pr-202-grouped-acceptance-continuation--october-19).
+> **Scope tracker:** `.agent/TASKS.md` → PV-001-C / PV-002. Historical implementation findings below describe their stated baseline, not current deployment status. October 19 Spanish answers and synthetic draft/export/discard evidence are in the [grouped acceptance checkpoint](../../../docs/evidence/deployed-recheck-2026-10-11.md#pr-202-grouped-acceptance-continuation--october-19).
 
 ## Introduction
 

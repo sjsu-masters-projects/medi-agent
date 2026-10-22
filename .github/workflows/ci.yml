@@ -629,6 +629,17 @@ jobs:
       - name: Build
         run: npm run build
 
+  documentation:
+    name: Documentation Links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: node --test scripts/tests/check-docs.test.mjs
+      - run: node scripts/check-docs.mjs --all
+
   ci-summary:
     name: CI Summary
     if: always()
@@ -646,6 +657,7 @@ jobs:
       - secret-scan
       - patient-build
       - clinician-build
+      - documentation
     runs-on: ubuntu-latest
     steps:
       - name: Publish completed-job durations
@@ -688,6 +700,7 @@ jobs:
           SECRETS: ${{ needs.secret-scan.result }}
           PATIENT: ${{ needs.patient-build.result }}
           CLINICIAN: ${{ needs.clinician-build.result }}
+          DOCUMENTATION: ${{ needs.documentation.result }}
         run: |
           {
             echo "## MediAgent CI summary"
@@ -704,6 +717,7 @@ jobs:
             echo "| Secret scan | ${SECRETS} |"
             echo "| Patient portal | ${PATIENT} |"
             echo "| Clinician portal | ${CLINICIAN} |"
+            echo "| Documentation links | ${DOCUMENTATION} |"
           } >> "$GITHUB_STEP_SUMMARY"
           test "$RUFF_LINT" = success
           test "$RUFF_FORMAT" = success
@@ -725,3 +739,4 @@ jobs:
           test "$SECRETS" = success
           test "$PATIENT" = success
           test "$CLINICIAN" = success
+          test "$DOCUMENTATION" = success
