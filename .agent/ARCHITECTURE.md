@@ -157,6 +157,17 @@ same-scope snapshots but never reuse old-clinic rows. Patient Timeline is a boun
 read-only source projection; private messages still use exact-conversation RPC
 authorization. See `.agent/specs/expo-workflow-completion.md` for rollout and tests.
 
+## Reviewed care-handoff summaries (CON-001)
+
+A clinician can hand a patient to a colleague, another care team or a transition with a
+reviewed summary. The backend assembles its sections deterministically from records the
+author's own care-team link may see (shared core, that team's plan and work, the bounded
+#208 timeline); no model writes or influences them. The clinician edits the narrative,
+approves a pinned version, and only that approved version exports (printable view or a FHIR
+R4B document Bundle with Provenance). Versions and audit events are append-only in migration
+089, reached only through `service_role` functions that re-check the actor's link. Contract:
+[`specs/con-001-care-handoff-summary.md`](specs/con-001-care-handoff-summary.md).
+
 ## Evidence, FHIR, and safety
 
 The codebase validates a supported import subset with maintained FHIR R4B models and

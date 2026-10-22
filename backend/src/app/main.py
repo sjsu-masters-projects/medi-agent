@@ -34,6 +34,7 @@ from app.routers import (
     documents,
     email_preferences,
     feed,
+    handoff_summaries,
     internal_tasks,
     medications,
     mfa,
@@ -240,6 +241,9 @@ def create_app() -> FastAPI:
     application.include_router(care_plans.router, prefix=f"{api}/care-plans", tags=["Care plans"])
     application.include_router(
         care_team_records.router, prefix=f"{api}/care-team", tags=["Care team records"]
+    )
+    application.include_router(
+        handoff_summaries.router, prefix=f"{api}/care-team", tags=["Handoff summaries"]
     )
     application.include_router(feed.router, prefix=f"{api}/feed", tags=["Feed"])
     application.include_router(cron.router, prefix=f"{api}/cron", tags=["Cron"])

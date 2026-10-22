@@ -429,6 +429,11 @@ jobs:
             image: postgres:16-alpine
             files: tests/integration/test_symptom_intake_postgres.py tests/integration/test_symptom_handoff_postgres.py
             minimums: test_symptom_intake_postgres=17 test_symptom_handoff_postgres=8
+          - name: care-handoff
+            # Reviewed care-handoff summaries (089): ownership, append-only versions, approval
+            # and export gating, concurrency. Opt-in env is set by the job.
+            files: tests/integration/test_care_handoff_summaries_postgres.py
+            minimums: test_care_handoff_summaries_postgres=21
     defaults:
       run:
         working-directory: backend
