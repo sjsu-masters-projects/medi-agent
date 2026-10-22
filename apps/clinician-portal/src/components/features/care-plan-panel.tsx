@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { carePlanChanges, carePlanOverlaps } from "@/components/features/care-plan-changes";
 import { DocumentSourceViewer } from "@/components/features/document-source-viewer";
+import { EvidenceGlossLine, glossFor, useEvidenceGlosses } from "@/components/features/evidence-gloss";
 import { CarePlanTodayPreviewPanel } from "@/components/features/care-plan-today-preview";
 import { AiChip } from "@/components/ui/ai-chip";
 import { ApprovalSeal } from "@/components/ui/approval-seal";
@@ -226,6 +227,14 @@ export function CarePlanPanel({ patientId, onPublished, scope }: CarePlanPanelPr
             .finally(() => { if (!cancelled) setSourceLoading(false); });
         return () => { cancelled = true; };
     }, [patientId, selectedSourceDocumentId, sourceRetry]);
+
+    /* LOC-003 item 2: English glosses for the Spanish excerpts this plan quotes. One
+       request covers the whole plan, and the same printed sentence is glossed once. */
+    const excerpts = useMemo(
+        () => items.flatMap((item) => (item.sources ?? (item.source ? [item.source] : [])).map((citation) => citation.excerpt)),
+        [items],
+    );
+    const glosses = useEvidenceGlosses(patientId, excerpts);
 
     const unresolved = useMemo(
         () => items.filter((item) => !item.is_removed && (missingRequiredEvidence(item) ||
@@ -534,7 +543,9 @@ export function CarePlanPanel({ patientId, onPublished, scope }: CarePlanPanelPr
             <details className="ma-disclosure rounded-xl border border-line bg-surface"><summary className="min-h-10 px-3.5 py-2 text-[13px] font-medium text-ink-2">Source excerpts and confidence ({citations.length})</summary>
                 <div className="space-y-2 border-t border-line px-3.5 pb-3.5 pt-2.5">
                     <p className="text-xs text-muted">Extraction confidence is an automated estimate of the extracted information. It is not medical certainty or approval of the instruction.</p>
-                    {citations.filter((citation) => Boolean(citation.excerpt)).map((citation, index) => <p className="break-words border-l-2 border-primary-line pl-3 text-xs text-ink-2" key={`${citation.document_id}-${index}`}><span className="flex items-start gap-1.5 font-semibold text-ink">{citation.document_id ? <SourceFileIcon className="mt-px" name={citation.file_name} /> : null}<span className="min-w-0 break-all">{citation.document_id ? sourceDocumentLabel(citation) : citation.file_name || "Clinician-entered evidence"}{citation.location?.page ? ` · page ${citation.location.page}` : ""}</span></span><span className="mt-1 block">“{citation.excerpt}”</span></p>)}
+                    {/* LOC-003 item 2: the excerpt is the evidence and stays exactly as printed;
+                        its English gloss sits underneath, labelled and never in its place. */}
+                    {citations.filter((citation) => Boolean(citation.excerpt)).map((citation, index) => <p className="break-words border-l-2 border-primary-line pl-3 text-xs text-ink-2" key={`${citation.document_id}-${index}`}><span className="flex items-start gap-1.5 font-semibold text-ink">{citation.document_id ? <SourceFileIcon className="mt-px" name={citation.file_name} /> : null}<span className="min-w-0 break-all">{citation.document_id ? sourceDocumentLabel(citation) : citation.file_name || "Clinician-entered evidence"}{citation.location?.page ? ` · page ${citation.location.page}` : ""}</span></span><span className="mt-1 block">“{citation.excerpt}”</span><EvidenceGlossLine gloss={glossFor(glosses, citation.excerpt)} /></p>)}
                     {!item.source?.excerpt ? <p className="border-l-2 border-primary-line pl-3 text-xs text-ink-2">{displaySource(item)}</p> : null}
                 </div>
             </details>
@@ -670,7 +681,10 @@ export function CarePlanPanel({ patientId, onPublished, scope }: CarePlanPanelPr
                     {selectedSourceItem && !selectedSourceDocumentId ? <p className="text-sm text-muted">This is a clinician-authored entry. Its recorded instruction is shown in the source excerpt; no document preview is available.</p> : null}
                     {sourceLoading ? <div className="space-y-2" role="status"><p className="text-sm text-muted">Loading source preview…</p><div className="ma-skeleton h-72 rounded-[10px]" /></div> : null}
                     {source ? <p className="mb-2 flex items-start gap-1.5 break-all text-[13px] font-semibold text-ink"><SourceFileIcon className="mt-0.5" name={source.file_name} /><span>Selected source: {source.file_name}</span></p> : null}
-                    {selectedCitation?.excerpt && source ? <p key={`${selectedSourceItemId}:${selectedSourceDocumentId}`} className="ma-flash mb-3 rounded-md bg-[rgba(250,204,21,.32)] px-2 py-1.5 font-serif text-[13px] leading-relaxed text-ink ring-[1.5px] ring-[rgba(202,138,4,.55)]">“{selectedCitation.excerpt}”{selectedCitation.location?.page ? <span className="ml-1 font-sans text-[11px] text-muted">p.{selectedCitation.location.page}</span> : null}</p> : null}
+                    {selectedCitation?.excerpt && source ? <div key={`${selectedSourceItemId}:${selectedSourceDocumentId}`} className="mb-3 space-y-1">
+                        <p className="ma-flash rounded-md bg-[rgba(250,204,21,.32)] px-2 py-1.5 font-serif text-[13px] leading-relaxed text-ink ring-[1.5px] ring-[rgba(202,138,4,.55)]">“{selectedCitation.excerpt}”{selectedCitation.location?.page ? <span className="ml-1 font-sans text-[11px] text-muted">p.{selectedCitation.location.page}</span> : null}</p>
+                        <EvidenceGlossLine className="px-2" gloss={glossFor(glosses, selectedCitation.excerpt)} />
+                    </div> : null}
                     {sourceError ? <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-risk-line bg-risk-soft p-3 text-sm text-risk-ink"><p>{sourceError}</p><button className="ma-press h-8 rounded-lg border border-risk-line bg-surface px-3 text-xs font-semibold" onClick={() => setSourceRetry((current) => current + 1)} type="button">Retry source preview</button></div> : null}
                     {source ? <div className="ma-3d-tilt rounded-[10px] bg-surface p-3 shadow-[var(--shadow-page)]"><DocumentSourceViewer fileName={source.file_name} initialPage={selectedSourceItem ? distinctDocuments(selectedSourceItem).find((citation) => citation.document_id === selectedSourceDocumentId)?.location?.page ?? 1 : 1} previewMimeType={source.preview_mime_type} previewStatus={source.preview_status} previewUrl={source.preview_url} sourceMimeType={source.mime_type} sourceUrl={source.file_url} /></div> : null}
                 </aside>

@@ -41,3 +41,19 @@ class ChatConversation(BaseModel):
     # Set when the latest saved turn is unfinished and the patient can recover it.
     status: Literal["needs_attention"] | None = None
     reply_in_progress: bool = False
+
+
+class TranscriptTranslationResult(BaseModel):
+    """LOC-003: one Nora transcript turn translated into the clinician's English.
+
+    The original turn stays the record: it is what the patient actually wrote, and safety
+    checks and escalation read only it. A translation whose guard failed is not returned.
+    """
+
+    message_id: UUID
+    translation: str | None = None
+    translation_locale: str | None = None
+    translation_guard_passed: bool | None = None
+    translation_pending: bool = False
+    #: The model that produced the translation, shown with its "may contain errors" caveat.
+    translation_model_id: str | None = None

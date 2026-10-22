@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/icons";
+import { TranslationInfo } from "@/components/ui/translation-note";
+import { PatientPhonePreview } from "@/components/features/patient-preview";
 import type { CarePlanItem, CarePlanLocale, CarePlanWording, CarePlanWordingOrigin } from "@/services/clinicians";
 import { fetchBackTranslation, type BackTranslationResult } from "@/services/clinicians";
 
@@ -22,8 +24,12 @@ export function wordingComplete(item: CarePlanItem): boolean {
         FIELDS.every((field) => (wording[source]?.[field] ?? "").trim() === item[field].trim());
 }
 
-function OriginBadge({ origin }: { origin?: CarePlanWordingOrigin }) {
-    if (origin === "ai_draft") return <span className="inline-flex items-center gap-1 rounded-md bg-ai-tint px-1.5 py-0.5 text-[11px] font-medium text-ai-ink"><Icon name="spark" className="h-3 w-3" />AI translation · check it</span>;
+function OriginBadge({ origin, modelId }: { origin?: CarePlanWordingOrigin; modelId?: string | null }) {
+    if (origin === "ai_draft") return <span className="inline-flex items-center gap-1 align-middle">
+        <span className="inline-flex items-center gap-1 rounded-md bg-ai-tint px-1.5 py-0.5 text-[11px] font-medium text-ai-ink"><Icon name="spark" className="h-3 w-3" />AI translation · check it</span>
+        {/* LOC-003 item 5: the stored model and its caveat, one tap away. */}
+        <TranslationInfo modelId={modelId} />
+    </span>;
     if (origin === "clinician_edited") return <span className="rounded-md bg-primary-tint px-1.5 py-0.5 text-[11px] font-medium text-primary">Edited by clinician</span>;
     if (origin === "source") return <span className="inline-flex items-center gap-1 rounded-md bg-sunken px-1.5 py-0.5 text-[11px] font-medium text-ink-2"><Icon name="file" className="h-3 w-3" />From source</span>;
     return <span className="rounded-md bg-warn-tint px-1.5 py-0.5 text-[11px] font-medium text-warn-ink">Not written yet</span>;
@@ -65,6 +71,7 @@ function PatientVisibilityLabel({ locale, patientLocale }: { locale: CarePlanLoc
     return <span className="rounded-md bg-sunken px-1.5 py-0.5 text-[11px] font-medium text-muted">Stored in case patient changes language</span>;
 }
 
+
 /* ── LOC-003: Back-translation panel ──────────────────────────────────────── */
 
 type SpanishWording = { title: string; instructions: string; frequency: string };
@@ -88,6 +95,7 @@ export interface BackCheck {
  * must be of the SAVED Spanish wording, loaded, with both guards passed, and nothing unsaved.
  */
 export function verificationBlocker(item: CarePlanItem, check: BackCheck | undefined, unsaved: boolean): string | null {
+    if (item.translation_model_id === "offline-translation-stub") return "Offline demo wording cannot be verified. Regenerate with the configured translation service.";
     if (!wordingComplete(item)) return "Complete both languages first.";
     if (unsaved) return "Save your changes first";
     if (!check || check.key !== spanishKey(item.wording?.["es-MX"]) || check.state === "loading") return "Back-translation is loading";
@@ -234,7 +242,7 @@ export function BilingualWording({ item, patientLocale, fieldClass, busy, unsave
                             {LOCALE_LABEL[locale]}
                             <PatientVisibilityLabel locale={locale} patientLocale={patientLocale} />
                         </p>
-                        <OriginBadge origin={item.wording_origin?.[locale] ?? (isSource ? "source" : undefined)} />
+                        <OriginBadge origin={item.wording_origin?.[locale] ?? (isSource ? "source" : undefined)} modelId={item.translation_model_id} />
                     </div>
                     <label className="block text-xs font-semibold text-ink-2">Title<input className={fieldClass} lang={locale} value={text.title} onChange={(event) => onChange(locale, "title", event.target.value)} /></label>
                     <label className="block text-xs font-semibold text-ink-2">Instructions<textarea rows={3} className={`${fieldClass} text-[15px] leading-relaxed`} lang={locale} value={text.instructions} onChange={(event) => onChange(locale, "instructions", event.target.value)} /></label>
@@ -242,6 +250,11 @@ export function BilingualWording({ item, patientLocale, fieldClass, busy, unsave
                     {!isSource ? <div className="flex flex-wrap items-center gap-2">
                         <button className="ma-press inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary-line bg-surface px-2.5 text-[13px] font-semibold text-ai-ink hover:bg-ai-tint disabled:cursor-not-allowed disabled:opacity-50" disabled={busy || unsaved} onClick={() => onTranslate(source)} type="button"><Icon name="refresh" className="h-3.5 w-3.5" />Re-translate from {LOCALE_LABEL[source]}</button>
                         {unsaved ? <span className="text-xs text-muted">Save first to re-translate.</span> : null}
+                    </div> : null}
+                    {/* LOC-003 item 1: the wording the patient will actually read, on a phone.
+                        Only on their own language: the other one is storage, not a screen. */}
+                    {locale === patientLocale ? <div className="border-t border-line pt-3">
+                        <PatientPhonePreview locale={locale} wording={text} translated={!isSource} modelId={item.translation_model_id} />
                     </div> : null}
                     {/* LOC-003: Back-translation panel on the Spanish card */}
                     {isSpanish && text.title.trim() ? <BackTranslationPanel patientId={patientId} planId={planId} itemId={item.id} spanishWording={text} unsaved={unsaved} onCheck={onBackCheck} /> : null}
@@ -258,12 +271,18 @@ export function ApprovedWording({ item, patientLocale }: { item: CarePlanItem; p
     return <div className="space-y-3">
         {/* LOC-003: Show the language flow strip on approved items too (DV-004: evidence language) */}
         {patientLocale ? <LanguageFlowStrip evidenceLocale={item.source_evidence_locale} patientLocale={patientLocale} /> : null}
-        <div className="@container"><div className="grid gap-3 @xl:grid-cols-2">{locales.map((locale) => <div key={locale} className="rounded-xl border border-line bg-surface-2 p-3.5" lang={locale}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[11px] font-mono uppercase tracking-[.06em] text-muted">{LOCALE_LABEL[locale]}</p>
-                {patientLocale ? <PatientVisibilityLabel locale={locale} patientLocale={patientLocale} /> : null}
+        <div className="@container"><div className="grid gap-3 @xl:grid-cols-2">{locales.map((locale) => <div key={locale} className="space-y-3 rounded-xl border border-line bg-surface-2 p-3.5">
+            <div lang={locale}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[11px] font-mono uppercase tracking-[.06em] text-muted">{LOCALE_LABEL[locale]}</p>
+                    {patientLocale ? <PatientVisibilityLabel locale={locale} patientLocale={patientLocale} /> : null}
+                </div>
+                <p className="mt-1 text-[15px] leading-relaxed text-ink">{item.wording?.[locale]?.instructions} · {item.wording?.[locale]?.frequency}</p>
             </div>
-            <p className="mt-1 text-[15px] leading-relaxed text-ink">{item.wording?.[locale]?.instructions} · {item.wording?.[locale]?.frequency}</p>
+            {/* LOC-003 item 1: an approved plan shows the same phone preview, read-only. */}
+            {patientLocale && locale === patientLocale ? <div className="border-t border-line pt-3">
+                <PatientPhonePreview locale={locale} wording={item.wording?.[locale]} translated={Boolean(item.source_locale && item.source_locale !== locale)} modelId={item.translation_model_id} />
+            </div> : null}
         </div>)}</div></div>
     </div>;
 }

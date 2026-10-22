@@ -9,3 +9,4 @@ export { ErrorState } from "./error-state";
 export { Input } from "./input";
 export { Modal } from "./modal";
 export { Skeleton } from "./skeleton";
+export { OriginalText, TranslationBadge, TranslationInfo, UntranslatedBadge } from "./translation-note";

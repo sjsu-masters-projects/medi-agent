@@ -7,7 +7,12 @@ from supabase import Client
 
 from app.core.security import require_cron_auth_token
 from app.db.connection import get_db
-from app.models.cron import CronJobRunResponse, EmailDispatchRequest, ReminderDispatchRequest
+from app.models.cron import (
+    CronJobRunResponse,
+    EmailDispatchRequest,
+    MessageTranslationPurgeRequest,
+    ReminderDispatchRequest,
+)
 from app.services.chat_turn_queue import TurnDispatcher
 from app.services.cron_service import CronService
 
@@ -70,3 +75,26 @@ async def dispatch_reminders(
 )
 async def dispatch_chat_turns(db: Client = Depends(get_db)) -> dict[str, int]:
     return await TurnDispatcher(db).sweep()
+
+
+@router.post(
+    "/message-translations/purge",
+    response_model=CronJobRunResponse,
+    summary="Apply the message-translation retention rule",
+    description=(
+        "Internal-only. Deletes stored message translations whose source message no longer "
+        "exists and failure markers past their useful age, and records a "
+        "`message_translation_purge` run. A translation is display state, never the record "
+        "of truth, so nothing clinical is removed. Intended for Cloud Scheduler daily."
+    ),
+)
+async def purge_message_translations(
+    body: MessageTranslationPurgeRequest | None = None,
+    service: CronService = Depends(_get_service),
+) -> CronJobRunResponse:
+    request = body or MessageTranslationPurgeRequest()
+    return CronJobRunResponse(
+        **await service.purge_message_translations(
+            failure_marker_max_age_days=request.failure_marker_max_age_days
+        )
+    )

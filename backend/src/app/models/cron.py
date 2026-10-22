@@ -22,6 +22,12 @@ class EmailDispatchRequest(BaseModel):
     dry_run: bool = False
 
 
+class MessageTranslationPurgeRequest(BaseModel):
+    """How old a stored translation failure marker may be before it is removed."""
+
+    failure_marker_max_age_days: int = Field(default=7, ge=1, le=90)
+
+
 class CronJobRunResponse(BaseModel):
     """Standard response for internal cron job runs."""
 
