@@ -10,6 +10,8 @@ test('headings preserve Unicode, repeated separators and duplicate suffixes', ()
     ['overview', 'overview-1', 'español-setup', 'one--two']);
   assert.deepEqual([...headings('# <strong>Overview</strong>\n## <<em>Nested</em>')],
     ['overview', 'nested']);
+  assert.deepEqual([...headings('# Before <scr<script>ipt> After\n## Visible <unfinished')],
+    ['before-ipt-after', 'visible-']);
 });
 
 test('code examples do not create anchors', () => {

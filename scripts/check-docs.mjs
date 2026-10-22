@@ -6,13 +6,24 @@ import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+function headingText(source) {
+  let insideTag = false;
+  let text = '';
+  for (const character of source) {
+    if (character === '<') insideTag = true;
+    else if (character === '>') insideTag = false;
+    else if (!insideTag) text += character;
+  }
+  return text;
+}
+
 export function headings(source) {
   const counts = new Map();
   const ids = new Set();
   for (const line of withoutFences(source).split('\n')) {
     const match = line.match(/^ {0,3}#{1,6}\s+(.+?)\s*#*$/);
     if (!match) continue;
-    const slug = match[1].replace(/<[^>]*>/g, '').replace(/[<>]/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    const slug = headingText(match[1]).replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
       .toLowerCase().replace(/[^\p{L}\p{N}\p{M}\s_-]/gu, '').replace(/ /g, '-');
     const count = counts.get(slug) ?? 0;
     ids.add(count ? `${slug}-${count}` : slug);
