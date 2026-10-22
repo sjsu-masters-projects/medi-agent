@@ -328,13 +328,13 @@ version routes is the VERSION id (unchanged for compatibility).
 
 ## Known limitations
 
-- **SMART launch with two links to one patient** (migration 091, follow-up PR). The launch
+- **SMART launch with two links to one patient** (migration 092, follow-up PR). The launch
   request takes an optional `care_team_id`; with several links and none named it is
   `422 CARE_TEAM_REQUIRED` before any OAuth step (the clinician portal shows the required
   care-team select), and a team that is not the caller's is refused. The team is stored on
   `smart_launch_sessions.care_team_id`, re-checked at the callback (a link ended meanwhile
   fails closed) and stamps the import and its candidate provenance. The old
-  `smart_launch_single_link_only` limitation is gone. A session created before 091 has no
+  `smart_launch_single_link_only` limitation is gone. A session created before 092 has no
   team and falls back to the only link.
 - **Combined Today entries and reminders.** The dispatcher sends one reminder per entry
   (keyed on the entry's id; deterministic, idempotent, safe under concurrent runs because the

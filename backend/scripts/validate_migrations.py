@@ -17,9 +17,9 @@ MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "src" / "app" / "db" / "m
 # Applied 067 filenames stay immutable. Only that exact historical pair is allowed;
 # an additional file at 067 must still fail rather than silently changing history.
 LEGACY_SHARED_SEQUENCES = frozenset({11, 38, 39, 40, 41, 42, 43, 47, 48, 51})
-# Numbers reserved for other open lanes whose migrations land before 091; remove each
-# entry once its file exists.
-RESERVED_SEQUENCES = frozenset({89, 90})
+# 89, 90 and 91 belong to open PRs #212, #215 and #214 whose migrations land before 092;
+# remove each entry once its file exists.
+RESERVED_SEQUENCES = frozenset({89, 90, 91})
 LEGACY_SHARED_FILENAME_GROUPS = frozenset(
     {
         frozenset(
