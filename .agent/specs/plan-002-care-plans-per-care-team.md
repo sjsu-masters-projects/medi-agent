@@ -1,6 +1,6 @@
 # PLAN-002 — Care plans per care team
 
-**Status:** In progress on PR #210 (October 21); backend in review, portals pending.
+**Status:** In progress on PR #210 (October 22); backend and portals in review.
 Direction and conflict handling decided October 13. Part of CLN-003
 (slice H). It changes the PAT-005 contract, so read the
 [PAT-005 specification](pat-005-clinician-approved-today-feed-plan.md) first.
@@ -357,3 +357,64 @@ version routes is the VERSION id (unchanged for compatibility).
    "Not sure" (visible to each team that could see them before) until claimed.
 5. **Portals** (picker, owner chips, conflict screens, adopt/retire, sensitive toggle, claim
     queue) are the follow-up pass; this API is their contract.
+
+
+## Portal screens (PR #210, branch `feature/care-team-portals`)
+
+Built against the API contract above; verified with mocked-API unit tests and local screenshots
+only. A live two-clinician, two-clinic run against a real backend is still required.
+
+**Patient portal**
+
+- Today: owner line under each title ("Cardiology · Dr. Park · Cedar Grove"; a combined entry names
+  every owner and has one check-off), a horizontal chip filter (only with two or more owners; scrolls
+  inside itself), the muted "no longer on your care team" caption (shown even for a single unowned
+  plan) and the "Contact your clinic" card. A single-team patient sees today's screen unchanged.
+- Care plan details grouped by care team; falls back to the single list when any item lacks an owner.
+- Records upload: "Which care team is this for?" radio cards plus "Not sure" before anything is
+  uploaded (one team is preselected, read-only). `CARE_TEAM_REQUIRED` reopens the question. No care
+  teams or an unreadable list keeps the previous direct upload.
+- Records: a "Health conditions" list with a "Keep private" switch, a confirm step in both directions,
+  an optimistic change and rollback with an alert when the save fails.
+
+**Clinician portal**
+
+- Patient record, Care Plan tab: "Care plans" area only when there are two or more plans, another
+  team's plan, or review items. My plans are full cards (draft/approved/unowned, clinic chip for
+  multi-clinic users) and select which plan the draft review shows (`care_team_id`/`care_plan_id`
+  sent only when I hold several plans); other teams are compact read-only rows with a shared
+  medication list; plans nobody owns offer Adopt and Retire items. Badge count on the tab.
+- Draft review: red "Conflicts with another care team's plan" card per item, comparison (stacked in
+  narrow panes), four choices (change, remove, keep both with a reason of at least 10 characters,
+  ask the other care team, then "Waiting for Dr. X"), amber collapsible warnings, the persistent
+  "Interaction severity is not checked" line, disabled Approve with "N conflicts to resolve", and
+  "Publish without these items" with a confirmation listing exclusions. One idempotency key per
+  attempt, reused after an unknown outcome and replaced after a definite refusal. Handles
+  `CROSS_PLAN_CONFLICT`, `IDEMPOTENCY_KEY_REUSED`, `CONFLICT_CHANGED` and a stale acknowledgement.
+- Review items: `/care-plan-reviews` (clinic filter, roster join for names/clinics, non-PHI clinic
+  work rows for admins), reply/mark seen, adopt (`PLAN_ALREADY_ADOPTED` handled), retire, take an
+  unowned ADR/MedWatch record (`RECORD_ALREADY_TAKEN` handled). Deep links:
+  `/patients/{id}?tab=care-plan&review={item_id}` (a missing or resolved item is explained),
+  `/care-plan-reviews?item={id}` and `?patient={id}`. Linked from Alerts.
+- Documents: unrouted uploads show "Patient uploaded · not routed to a care team" with Claim and a
+  confirmation (`DOCUMENT_ALREADY_CLAIMED` removes the row); approve/reject answered by
+  `DOCUMENT_CLAIM_REQUIRED` switches to the claim state.
+- Shared clinical summary (Profile tab, only for several care teams or private conditions): "Recorded
+  by" captions, a neutral "Some conditions are kept private by the patient" row, "Also cared for by".
+- A required care-team select (only with two or more links) for document upload, SOAP, ADR review and
+  MedWatch draft creation. SMART launch with two links shows the plain "nothing was started" message.
+
+**Contract gaps and notes for the backend**
+
+- Review items carry ids only: the view joins the clinician's roster for patient names and clinics.
+  Adding `patient_name` and `clinic_id/name` would remove that join.
+- "Ask the other care team" requires a reason (1-2000); the portal prefills an editable question.
+- `care-team-options` has no specialty, so the select labels links by clinic name.
+- Review items have no endpoint to resolve `conflict_reply`; the portal shows them read-only.
+
+**Pending es-MX wording drafts, not approved (LOC-001 review required):** every string in
+`apps/patient-portal/src/content/care-team-copy.ts` (Today filter, unowned/contact-clinic, upload
+picker, conditions privacy, plan group labels), including `¿Para qué equipo de atención es esto?`,
+`No estoy seguro`, `Tus equipos de atención decidirán quién lo revisa.`, `Mantener privada`,
+`Ya no está en tu equipo de atención` and `Comunícate con tu clínica`. The clinician portal is
+English only.

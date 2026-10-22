@@ -129,7 +129,8 @@ export function ConflictComparison({ conflict }: { conflict: CrossPlanConflict }
             <div className="flex items-center gap-1.5"><dt className="text-muted">Kind</dt><dd className="rounded-md bg-risk-tint px-1.5 py-0.5 font-semibold text-risk-ink">{conflictKindLabel(conflict.kind)}</dd></div>
             {sharedList ? <div className="flex items-center gap-1.5"><dt className="text-muted">Overlaps on</dt><dd className="font-medium">the shared medication list{conflict.theirs.name ? `: ${conflict.theirs.name}` : ""}</dd></div> : null}
         </dl>
-        <div className="grid gap-3 md:grid-cols-2">
+        {/* Two columns when the pane is wide enough to read them, stacked in the narrow review pane and on phones. */}
+        <div className="@container"><div className="grid gap-3 @xl:grid-cols-2">
             <section aria-label="This draft" className="rounded-xl border border-line-strong bg-surface p-3.5">
                 <h4 className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">This draft</h4>
                 <InstructionLines medication={conflict.ours} />
@@ -138,7 +139,7 @@ export function ConflictComparison({ conflict }: { conflict: CrossPlanConflict }
                 <h4 className="mb-1.5 break-words text-[12px] font-semibold text-ink-2">{otherPlanLabel(conflict.other_plan)}{date ? <span className="font-normal text-muted"> · {date}</span> : null}</h4>
                 <InstructionLines medication={conflict.theirs} />
             </section>
-        </div>
+        </div></div>
     </div>;
 }
 

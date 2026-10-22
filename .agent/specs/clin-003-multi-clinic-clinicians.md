@@ -750,3 +750,12 @@ audit rows, logs or fixtures; synthetic data only.
 | f | Ambiguous legacy records are not guessed; version history, item and activity ids survive | Docker: `test_ambiguous_legacy_plan_is_left_unassigned_*`, `test_single_link_approver_owns_the_legacy_plan_and_nothing_is_rewritten`, `test_backfill_routes_only_what_is_unambiguous_*` |
 | g | Link revocation and no remaining team keep activities and change no medication | Docker: `test_ending_a_link_makes_the_plan_unowned_*`, `test_no_remaining_team_*` |
 | h | New tables and functions are backend-only; trails are append-only | Docker: `test_browser_roles_cannot_touch_*`, `test_ownership_trail_is_append_only_for_every_role`; each migration's verification block |
+
+## Slices G/H portal status (PR #210)
+
+The shared clinical summary, per-care-team plans, care-plan review items, claim queue and
+care-team selects are built in both portals and described in the
+[PLAN-002 portal section](plan-002-care-plans-per-care-team.md#portal-screens-pr-210-branch-featurecare-team-portals).
+Single-clinic and single-team users see no new chrome. The review-items view and claim queue honour
+the existing clinic filter and "All clinics" header. Local mocked-API checks only; live acceptance
+across two clinicians and two clinics is still open.
