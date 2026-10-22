@@ -1,8 +1,8 @@
 # INT-002 and INT-003 interoperability plan
 
 > **Status:** INT-003 Done (live public-sandbox EHR launch recorded; standalone launch
-> diagnosis is INT-003-V). INT-002 in progress: identifier quality and export/round-trip
-> fixtures remain. Current status is in `.agent/TASKS.md`.
+> diagnosis is INT-003-V). INT-002 completion is on `codex/int-002-completion`,
+> based on current main `de2a7782`. Current delivery status is in `.agent/TASKS.md`.
 
 ## Goal
 
@@ -11,7 +11,73 @@ import a bounded synthetic patient record, preserve the original FHIR resources 
 provenance, and show the imported context in the clinician portal. This is a sandbox
 demonstration only; it does not claim production EHR connectivity or real-PHI support.
 
+## October 22 completion scope
+
+The saved October 21 work was committed before integration, then carried onto
+current main. The original checkpoint below is historical, not an unpushed-work
+instruction. The current branch retains #210/#216 import/provenance ownership;
+it does not rebuild #212's reviewed handoff summary.
+
+- All 12 supported import types, including Bundle containers, retain their raw
+  JSON and original identifiers. Mapper v2 also stores identifiers as provenance
+  metadata. Cardinality is normalized to a list; system/value case, leading zeroes,
+  whitespace, type, period and assigner content are not rewritten. Malformed
+  identifiers remain invalid source evidence, never clinical candidates.
+- Authorized source detail reads derive `identifiers` and `master_identifier`
+  from the immutable envelope. This works for old imports without a backfill.
+  The source dialog labels them as evidence, not patient identity confirmation.
+- The existing fetch/expansion limits below are enforced before persistence.
+  A valid Bundle is retained as a container, not described as an unsupported type.
+- `GET /api/v1/smart/patients/{patient_id}/record-export` returns a non-cacheable
+  `application/fhir+json` collection of the current canonical shared core:
+  a minimal Patient reference, active medicines as MedicationStatement,
+  active visible Conditions and recorded AllergyIntolerances. MedicationRequest
+  is deliberately not generated: downloading a record must not create an order.
+- Every export calls `shared_clinical_summary` with the signed-in clinician and
+  patient. It inherits current assignment and sensitive-condition visibility.
+  Hidden conditions are excluded; only the existing generic privacy marker is
+  represented. No imported or extracted candidate is promoted by export.
+- Local record identifiers and stable in-bundle UUID references are explicit.
+  Private external identifiers are not copied from other teams' source documents.
+  Dosage/frequency/instructions retain their stored wording; the exporter does
+  not invent computable dose schedules, missing severity or clinical status.
+- Validate all resources and the collection before returning a file. An invalid,
+  unavailable or oversized core fails without a partial download. Re-import
+  creates pending candidates only and requires the ordinary identity binding and
+  reconciliation path before changing local truth.
+
+This is the supported canonical export subset, not all source evidence, a full
+chart, a clinician-approved handoff, or certification of FHIR R4 conformance.
+Evidence-only import types remain available through authorized original-source
+reads. R4-compatible fields are checked with the installed R4B models and
+synthetic fixtures. External sandbox/profile conformance is a separate acceptance
+pass; INT-003-V's real login/consent journey is not claimed here.
+
+No migration, remote configuration, data backfill or deployment is needed for
+this increment. Both the importer and exporter reuse existing schema and gates.
+
+### Local implementation evidence
+
+- 111 focused backend tests pass across imports, SMART callbacks/routes, limits,
+  identifiers, clinical-core export/re-import, source reads, reprojection and audit.
+  All 12 supported import types have a synthetic retained-source fixture; the
+  canonical export subset round-trips to pending candidates without writing
+  medications, conditions or allergies.
+- Backend Ruff checks and format checks pass across `src/` and `scripts/`;
+  mypy passes for the eight changed source modules.
+- Clinician portal: 803 tests pass, including download/retry/scope-change cases;
+  lint and typecheck pass. The focused source/export suite passes 15 tests after
+  the identifier labels were added.
+- `npm run build -- --webpack` passes. Local Turbopack attempts were blocked by
+  the execution environment's process-port binding restriction; this is not a
+  successful local Turbopack result. Hosted CI still runs the standard build.
+- Documentation links and the three validator tests pass. No live sandbox login,
+  hosted permission query, migration or deployment was run for this increment.
+
 ## Records continuity and reliability execution
+
+Historical October 21 assignment and overlap map. The October 22 scope above
+supersedes its branch and unfinished-handoff instructions.
 
 Requester reassignment October 21: this lane owns MED-002, CON-001, INT-002/003-V
 and the residual reliability/safety acceptance. G/H + PLAN-002 is implemented

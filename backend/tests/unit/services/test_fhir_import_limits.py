@@ -77,6 +77,9 @@ def test_relative_query_pagination_retains_resource_path_and_auth():
         "//other.example/Observation",
         "/fhir/Observation#fragment",
         "/fhir\\other",
+        "/fhir/Observation%00hidden",
+        "/fhir/Observation%0aextra",
+        "https://[invalid/fhir/Observation",
     ],
 )
 def test_rejected_next_url_never_receives_the_bearer_header(url):
@@ -202,7 +205,13 @@ def test_redirect_is_not_followed_even_with_a_redirecting_client():
 
 
 @pytest.mark.parametrize(
-    "context", [{"patient": "synthetic?other=x"}, {"patient": "synthetic", "encounter": "../other"}]
+    "context",
+    [
+        {"patient": "synthetic?other=x"},
+        {"patient": "synthetic", "encounter": "../other"},
+        {"patient": ".."},
+        {"patient": "."},
+    ],
 )
 def test_token_resource_id_cannot_inject_paths_or_queries(context):
     client = service(lambda _: pytest.fail("Malformed context must not trigger HTTP"))

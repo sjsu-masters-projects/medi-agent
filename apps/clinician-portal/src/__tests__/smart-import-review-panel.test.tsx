@@ -129,6 +129,9 @@ describe("SMART import review panel", () => {
 
     get.mockResolvedValueOnce({
       ...reviewResponse.facts[0].source,
+      source_kind: "smart",
+      identifiers: [{ system: "urn:synthetic:MRN", value: "00aBc" }],
+      master_identifier: { system: "urn:synthetic:master", value: "00ABC" },
       raw_resource: { resourceType: "MedicationRequest", id: "med-1" },
     });
     fireEvent.click(screen.getByRole("button", { name: /source/i }));
@@ -148,6 +151,9 @@ describe("SMART import review panel", () => {
           ) === true,
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText("00aBc")).toBeInTheDocument();
+    expect(screen.getByText("00ABC")).toBeInTheDocument();
+    expect(screen.getByText(/do not confirm patient identity/)).toBeInTheDocument();
   });
 
   it("submits a clinician-selected reconciliation decision as JSON", async () => {

@@ -393,7 +393,7 @@ class SmartLaunchService:
                 "SMART launch context", "Token response did not include patient context"
             )
         if any(
-            value and not re.fullmatch(r"[A-Za-z0-9.-]{1,64}", value)
+            value and (value in {".", ".."} or not re.fullmatch(r"[A-Za-z0-9.-]{1,64}", value))
             for value in (patient, encounter)
         ):
             raise ExternalServiceError(
@@ -517,7 +517,10 @@ class SmartLaunchService:
     def _bounded_fhir_url(url: str, *, issuer: str, base: str) -> str:
         if any(ord(char) <= 32 or ord(char) == 127 for char in url) or "\\" in url:
             raise ExternalServiceError("FHIR resource fetch", "Invalid pagination URL")
-        parsed, origin = urlparse(urljoin(base, url)), urlparse(issuer)
+        try:
+            parsed, origin = urlparse(urljoin(base, url)), urlparse(issuer)
+        except ValueError:
+            raise ExternalServiceError("FHIR resource fetch", "Invalid pagination URL") from None
         decoded = unquote(unquote(parsed.path))
         path = posixpath.normpath(decoded)
         prefix = origin.path.rstrip("/")
@@ -528,6 +531,7 @@ class SmartLaunchService:
             or parsed.password
             or parsed.fragment
             or "\\" in decoded
+            or any(ord(char) <= 32 or ord(char) == 127 for char in decoded)
             or "%25" in parsed.path.lower()
             or not (path == prefix or path.startswith(prefix + "/"))
         ):

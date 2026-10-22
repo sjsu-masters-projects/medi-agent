@@ -16,6 +16,7 @@ from app.routers.smart import (
     _clinician_dep,
     _fhir_audit_export_service,
     _fhir_import_review_service,
+    _fhir_record_export_service,
     _service,
 )
 from app.services.smart_launch_service import SmartProviderAuthorizationError
@@ -79,6 +80,35 @@ def test_start_launch_requires_local_clinician_and_returns_redirect_url(
         launch_context=None,
         care_team_id=None,
     )
+
+
+def test_record_export_is_an_authenticated_noncacheable_fhir_download(client, clinician):
+    service = MagicMock()
+    service.export.return_value = {"resourceType": "Bundle", "type": "collection", "entry": []}
+    app.dependency_overrides[_fhir_record_export_service] = lambda: service
+    patient_id = uuid4()
+    response = client.get(f"/api/v1/smart/patients/{patient_id}/record-export")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/fhir+json"
+    assert response.headers["cache-control"] == "no-store"
+    assert "attachment" in response.headers["content-disposition"]
+    service.export.assert_called_once_with(clinician_id=clinician.id, patient_id=patient_id)
+
+
+def test_record_export_propagates_current_assignment_denial(client, clinician):
+    from app.core.exceptions import AuthorizationError
+
+    service = MagicMock()
+    service.export.side_effect = AuthorizationError("unassigned")
+    app.dependency_overrides[_fhir_record_export_service] = lambda: service
+    response = client.get(f"/api/v1/smart/patients/{uuid4()}/record-export")
+    assert response.status_code == 403
+    assert "entry" not in response.json()
+
+
+def test_record_export_requires_login(client):
+    response = client.get(f"/api/v1/smart/patients/{uuid4()}/record-export")
+    assert response.status_code in {401, 403}
 
 
 def test_start_launch_passes_the_chosen_care_team_to_the_service(

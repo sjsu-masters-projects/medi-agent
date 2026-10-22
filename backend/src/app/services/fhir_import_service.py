@@ -6,7 +6,6 @@ import hashlib
 import html
 import json
 import re
-from copy import deepcopy
 from typing import Any, cast
 from uuid import UUID
 
@@ -33,6 +32,7 @@ from app.models.clinical_fact import (
     SourceProvenanceCreate,
 )
 from app.services.clinical_fact_service import ClinicalFactService
+from app.services.fhir_identifiers import source_identifiers
 from app.services.fhir_import_limits import MAX_BUNDLE_DEPTH, MAX_IMPORT_BYTES, MAX_IMPORT_RESOURCES
 
 SUPPORTED_RESOURCE_TYPES = frozenset(
@@ -103,7 +103,7 @@ class FhirImportService:
                 )
 
             mapping_warnings: list[str] = []
-            if resource_type not in SUPPORTED_RESOURCE_TYPES - {"Bundle"}:
+            if resource_type not in SUPPORTED_RESOURCE_TYPES:
                 mapping_warnings.append(
                     f"Unsupported FHIR resource type: {resource_type or 'missing'}."
                 )
@@ -277,12 +277,7 @@ class FhirImportService:
                         "resource_type": resource_type,
                         "resource_id": resource.get("id"),
                         # Source metadata, not clinician-editable clinical fields.
-                        "identifiers": deepcopy(resource.get("identifier") or []),
-                        **(
-                            {"master_identifier": deepcopy(resource["masterIdentifier"])}
-                            if resource.get("masterIdentifier")
-                            else {}
-                        ),
+                        **source_identifiers(resource),
                     },
                     extractor_version="fhir-r4-import/2",
                     care_team_id=care_team_id,

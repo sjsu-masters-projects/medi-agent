@@ -36,6 +36,25 @@ Both generated locks retain the same patched version. Document preview, raster
 preprocessing and OCR regression tests cover this upgrade; never bypass the
 dependency audit to retain an affected image-processing library.
 
+## FHIR import and export (INT-002)
+
+SMART import retrieval is bounded before persistence: 20 pages per query,
+50 requests and 8 MiB per import, 2 MiB per response, 1,000 resources including
+Bundle envelopes and at most eight nested Bundle levels. Oversized input fails;
+it is not silently truncated. Pagination cannot leave the trusted issuer base
+or follow redirects with a bearer token. Source business identifiers remain
+immutable metadata, visible through the existing authorized source-detail API.
+Existing envelopes are read without backfill. Fetch errors omit upstream bodies
+and credentials. These application limits do not establish FHIR conformance.
+
+`GET /api/v1/smart/patients/{patient_id}/record-export` downloads the current
+clinician-visible canonical core as an `application/fhir+json` collection.
+It reuses shared-core authorization and condition privacy, validates the entire
+file before returning it, and sets `Cache-Control: no-store`. It is a subset,
+not an order, full chart or handoff approval. Re-import creates pending candidates.
+No migration or additional environment variable is required. See the
+[mapping and export guide](../docs/smart-fhir-review-mapping.md#identifier-fidelity-and-clinical-core-export).
+
 ## Run
 
 ```bash
@@ -718,19 +737,6 @@ An existing legacy `symptom_event:{report_id}` task is reused when no canonical
 task exists. This compatibility fix changes no migration or clinical review decision.
 See [October 17 acceptance](../docs/evidence/pat-002-b-acceptance-2026-10-17.md) and the
 [read-only preflight/release procedure](../docs/pat-002-b-rollout.md).
-
-## Bounded SMART imports
-
-SMART record downloads share a server-owned budget: 20 pages per query, 50 requests
-per import, 2 MiB per decoded response, 8 MiB total decoded responses and 1,000
-returned resources. Nested Bundle expansion allows eight levels and at most 1,000
-envelope/entry records. Limits reject the import before candidate writes; they do
-not truncate silently. These application limits do not establish FHIR conformance.
-Pagination stays within the trusted issuer's HTTPS origin and base path; redirects,
-cycles and malformed next-page links fail closed. Diagnostic errors omit upstream
-response bodies and tokens. New import provenance retains exact business identifiers
-without making them editable clinical facts or local identity bindings. Existing
-envelopes are not backfilled. See the [interoperability execution checkpoint](../.agent/specs/int-002-003-interoperability-plan.md#records-continuity-and-reliability-execution).
 
 ## Cross-clinic scheduling and clinic tags (CLN-003 slices E and F)
 

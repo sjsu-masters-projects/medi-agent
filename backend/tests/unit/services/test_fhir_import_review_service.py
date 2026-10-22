@@ -202,3 +202,32 @@ def test_original_resource_is_available_only_from_the_explicit_source_read() -> 
         )
         is None
     )
+
+
+def test_legacy_envelope_identifiers_are_exposed_without_backfill_or_value_normalization():
+    db = database()
+    raw = db.store["fhir_import_resources"][0]["raw_resource"]
+    raw["identifier"] = [{"system": "urn:synthetic:MRN", "value": " 00aBc "}]
+    raw["masterIdentifier"] = {"system": "urn:synthetic:master", "value": "00ABC"}
+    service = FhirImportReviewService(db)
+    result = service.get_source(
+        clinician_id=CLINICIAN_ID, fact_id=UUID(PENDING_FACT_ID), patient_id=PATIENT_ID
+    )
+    assert result["identifiers"] == raw["identifier"]
+    assert result["master_identifier"] == raw["masterIdentifier"]
+    assert "identifiers" not in raw
+
+
+def test_source_identifier_read_keeps_the_existing_record_gate():
+    from unittest.mock import MagicMock
+
+    import pytest
+
+    from app.core.exceptions import NotFoundError
+
+    service = FhirImportReviewService(database())
+    service.gate.fact = MagicMock(side_effect=NotFoundError("Clinical fact", PENDING_FACT_ID))
+    with pytest.raises(NotFoundError):
+        service.get_source(
+            clinician_id=CLINICIAN_ID, fact_id=UUID(PENDING_FACT_ID), patient_id=PATIENT_ID
+        )

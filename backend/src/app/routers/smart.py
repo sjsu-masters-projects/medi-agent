@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from supabase import Client
 
 from app.config import settings
@@ -41,6 +41,7 @@ from app.services.clinician_record_gate import ClinicianFactService, ClinicianRe
 from app.services.external_patient_binding_service import ExternalPatientBindingService
 from app.services.fhir_audit_export_service import FhirAuditExportService
 from app.services.fhir_import_review_service import FhirImportReviewService
+from app.services.fhir_record_export_service import FhirRecordExportService
 from app.services.medication_reference_service import MedicationReferenceService
 from app.services.smart_launch_service import (
     SmartLaunchService,
@@ -65,6 +66,28 @@ def _fhir_audit_export_service(db: Client = Depends(get_db)) -> FhirAuditExportS
 
 def _fhir_import_review_service(db: Client = Depends(get_db)) -> FhirImportReviewService:
     return FhirImportReviewService(db)
+
+
+def _fhir_record_export_service(db: Client = Depends(get_db)) -> FhirRecordExportService:
+    return FhirRecordExportService(db)
+
+
+@router.get(
+    "/patients/{patient_id}/record-export", summary="Download the visible clinical-core FHIR subset"
+)
+def export_patient_record(
+    patient_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: FhirRecordExportService = Depends(_fhir_record_export_service),
+) -> JSONResponse:
+    return JSONResponse(
+        service.export(clinician_id=user.id, patient_id=patient_id),
+        media_type="application/fhir+json",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": f'attachment; filename="clinical-core-{patient_id}.fhir.json"',
+        },
+    )
 
 
 def _clinical_reconciliation_service(db: Client = Depends(get_db)) -> ClinicalReconciliationService:
