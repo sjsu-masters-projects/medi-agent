@@ -47,9 +47,6 @@ from app.services.chat_turn_pipeline import (
 )
 from app.services.chat_turn_pipeline import execute_turn
 from app.services.chat_turn_pipeline import failure_label as _failure_label
-from app.services.chat_turn_pipeline import (
-    refresh_conversation_state as _refresh_conversation_state,  # noqa: F401  (kept importable here)
-)
 from app.services.chat_turn_pipeline import report_turn_failure as _report_turn_failure
 from app.services.chat_turn_pipeline import serialize_chat_message as _serialize_chat_message
 from app.services.chat_turn_queue import TurnDispatcher, submit_turn
@@ -64,7 +61,6 @@ from app.utils.localization import resolve_locale_resource, written_language
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-_STATE_REFRESH_ATTEMPTS = 3
 
 # The outermost fallback: triage itself could not be reached. Every other tier is
 # localized through TRIAGE_COPY, so this one is too — a patient who wrote in Spanish

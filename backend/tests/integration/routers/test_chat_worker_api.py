@@ -41,6 +41,10 @@ TURN = "11111111-1111-4111-8111-111111111111"
 MESSAGE = str(uuid4())
 
 
+def _fake_db() -> MagicMock:
+    return MagicMock()
+
+
 @pytest.fixture
 def worker_flag(monkeypatch):
     monkeypatch.setattr(settings, "chat_turns_via_worker", True)
@@ -56,7 +60,7 @@ def patient():
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
         id=PATIENT, email="p@test.test", role="patient"
     )
-    app.dependency_overrides[get_db] = lambda: MagicMock()
+    app.dependency_overrides[get_db] = _fake_db
     yield
     app.dependency_overrides.clear()
 
@@ -164,7 +168,7 @@ def test_only_a_patient_may_send(worker_flag, monkeypatch):
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
         id=PATIENT, email="c@test.test", role="clinician"
     )
-    app.dependency_overrides[get_db] = lambda: MagicMock()
+    app.dependency_overrides[get_db] = _fake_db
     try:
         assert TestClient(app).post("/api/v1/chat/turns", json=body()).status_code == 403
     finally:
@@ -208,7 +212,7 @@ def test_events_are_read_for_the_owner_only(patient, worker_flag, monkeypatch):
 
 def test_the_sweep_endpoint_needs_the_cron_token_and_reports_counts(monkeypatch):
     monkeypatch.setattr(settings, "cron_auth_token", "cron-token")
-    app.dependency_overrides[get_db] = lambda: MagicMock()
+    app.dependency_overrides[get_db] = _fake_db
     sweep = AsyncMock(return_value={"examined": 2, "dispatched": 2, "failed": 0})
     monkeypatch.setattr(TurnDispatcher, "sweep", sweep)
     try:
@@ -227,7 +231,7 @@ def test_the_sweep_endpoint_needs_the_cron_token_and_reports_counts(monkeypatch)
 def worker_app(monkeypatch):
     monkeypatch.setattr(settings, "worker_mode", True)
     application = create_app()
-    application.dependency_overrides[get_db] = lambda: MagicMock()
+    application.dependency_overrides[get_db] = _fake_db
     return application
 
 

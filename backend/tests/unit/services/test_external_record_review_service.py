@@ -231,7 +231,7 @@ def test_route_role_and_scope_validation():
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
         id=actor, email="synthetic@example.invalid", role="patient"
     )
-    app.dependency_overrides[get_db] = lambda: Database()
+    app.dependency_overrides[get_db] = Database
     client = TestClient(app)
     endpoint = "/api/v1/clinicians/me/external-record-reviews"
     assert client.get(endpoint).status_code == 403
