@@ -35,7 +35,7 @@ const {
     fetchChatConversations: vi.fn(),
     fetchChatHistory: vi.fn(),
     getVoiceCapabilities: vi.fn(() => ({ recording: false, recognition: false, synthesis: false })),
-    playAssistantVoiceResponse: vi.fn((_options: { onEnd?: () => void; onStart?: () => void }) => null),
+    playAssistantVoiceResponse: vi.fn<(options: { onEnd?: () => void; onStart?: () => void }) => null>(() => null),
     replace: vi.fn(),
     setConversationOpen: vi.fn(),
     shell: { conversationOpen: false },
@@ -1691,7 +1691,9 @@ describe("Patient chat page", () => {
         expect(screen.getByText("Keep this reply during recovery")).toBeInTheDocument();
     });
 
-    it.each(["ordinary", "private", "cancelled"])("routes dictated audio through its own boundary (%s)", async (scenario) => {
+    it.each(["ordinary", "private", "private-Spanish", "cancelled"])("routes dictated audio through its own boundary (%s)", async (scenario) => {
+        const spokenLocale = scenario === "private-Spanish" ? "es-MX" : "en-US";
+        const transcript = scenario === "private-Spanish" ? "cinco" : "I feel dizzy";
         const privateIntake = scenario !== "ordinary";
         if (privateIntake) vi.mocked(fetchActiveIntake).mockResolvedValue(privateDraft);
         getVoiceCapabilities.mockReturnValue({ recording: true, recognition: false, synthesis: true });
@@ -1745,9 +1747,9 @@ describe("Patient chat page", () => {
 
         await act(async () => {
             voiceSocket.emitMessage({
-                language: "en-US",
+                language: spokenLocale,
                 model: "nova-3",
-                transcript: "I feel dizzy",
+                transcript,
                 type: "transcript_final",
             });
             fireEvent.click(screen.getByRole("button", { name: /Stop voice recording/i }));
@@ -1761,7 +1763,7 @@ describe("Patient chat page", () => {
         // Default behavior: transcript fills the input box; user reviews
         // before sending. NO user_message frame is auto-emitted.
         await waitFor(() => {
-            expect(screen.getByPlaceholderText(/Type or speak/i)).toHaveValue("I feel dizzy");
+            expect(screen.getByPlaceholderText(/Type or speak/i)).toHaveValue(transcript);
         });
         expect(chatSocket.sent.some((event) => JSON.parse(event).type === "user_message")).toBe(
             false,
@@ -1782,7 +1784,7 @@ describe("Patient chat page", () => {
             fireEvent.click(screen.getByRole("button", { name: "Send message" }));
             await waitFor(() => expect(mutateIntake).toHaveBeenCalled());
             expect(vi.mocked(mutateIntake).mock.calls[0][2]).toBe("reply");
-            expect(vi.mocked(mutateIntake).mock.calls[0][3]).toMatchObject({ text: "I feel dizzy", input_mode: "voice", question_id: "severity" });
+            expect(vi.mocked(mutateIntake).mock.calls[0][3]).toMatchObject({ text: transcript, input_mode: "voice", question_id: "severity", locale: spokenLocale });
             expect(chatSocket.sent.some((frame) => JSON.parse(frame).type === "user_message")).toBe(false);
         }
     });
@@ -2061,4 +2063,24 @@ describe("Patient chat page", () => {
                 .toHaveAttribute("href", "/chat?view=follow-up");
         });
     });
+it.each(["queued", "processing"])("keeps private replies usable while the ordinary Nora turn is %s", async (status) => {
+    getVoiceCapabilities.mockReturnValue({ recording: false, recognition: true, synthesis: false });
+    vi.mocked(fetchActiveIntake).mockResolvedValue(privateDraft);
+    renderPage();
+    await screen.findAllByText("Choose your severity");
+    const socket = MockWebSocket.instances[0];
+    await act(async () => {
+        socket.emitOpen();
+        socket.emitMessage({ type: "chat_turns", turns: [{ client_message_id: "pending-source-turn", status,
+            retryable: false, attempt: 1, document_id: null }] });
+    });
+    const microphone = screen.getByRole("button", { name: /Tap to speak/i });
+    expect(microphone).toBeEnabled();
+    expect(microphone).toHaveClass("h-11", "w-11");
+    fireEvent.change(screen.getByRole("textbox", { name: "Message to Nora" }), { target: { value: "five" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(mutateIntake).toHaveBeenCalled());
+    expect(vi.mocked(mutateIntake).mock.calls[0][2]).toBe("reply");
+    expect(socket.sent.some((frame) => JSON.parse(frame).type === "user_message")).toBe(false);
+});
 });

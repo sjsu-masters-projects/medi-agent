@@ -42,6 +42,7 @@ from app.services.chat_service import (
     normalize_session_id,
 )
 from app.services.chat_turn_events import TurnEventReader, TurnWatchSet, watch_turn
+from app.services.chat_turn_execution import TurnChatService
 from app.services.chat_turn_pipeline import (
     conversation_state_from_record as _conversation_state_from_record,
 )
@@ -1025,6 +1026,8 @@ async def _process_chat_message(
     if route == "symptom" and assistant_urgency != "emergency":
         intake = SymptomIntakeService(service.db, current_user)
         try:
+            if isinstance(service, TurnChatService):
+                await service.execution.actions()
             draft = await intake.start(
                 IntakeStart(
                     source_message_id=user_message["id"],

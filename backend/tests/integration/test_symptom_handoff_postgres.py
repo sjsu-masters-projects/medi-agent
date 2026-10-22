@@ -314,7 +314,10 @@ async def test_queued_canonical_report_creates_adr_draft_and_retry_preserves_rev
     assert assessment["suspect_medication_id"] == medication
     assert assessment["status"] == "draft" and assessment["naranjo_answers"] == {}
     db(f"UPDATE adr_assessments SET status='reviewed',reviewed_by='{CLINICIAN}';")
-    # Repeat delivery after a worker crash must not reset a clinician's decision.
+    # Requeue after a failed completion write, without resetting the reviewed assessment.
+    db(
+        f"UPDATE a2a_tasks SET status='retrying',completed_at=NULL,next_retry_at=clock_timestamp() WHERE id='{task_id}';"
+    )
     result = await service.retry_task(task_id)
     assert result["status"] == "completed"
     assert db("SELECT count(*) FROM adr_assessments;") == "1"

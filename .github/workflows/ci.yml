@@ -415,6 +415,10 @@ jobs:
             # The worker queue, events and claim (078).
             files: tests/integration/test_chat_turn_events_postgres.py
             minimums: test_chat_turn_events_postgres=35
+          - name: confirmed-symptoms
+            image: postgres:16-alpine
+            files: tests/integration/test_symptom_intake_postgres.py tests/integration/test_symptom_handoff_postgres.py
+            minimums: test_symptom_intake_postgres=17 test_symptom_handoff_postgres=8
     defaults:
       run:
         working-directory: backend
@@ -430,7 +434,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Pull the PostgreSQL image
-        run: docker pull postgres:16
+        run: docker pull ${{ matrix.image || 'postgres:16' }}
       - name: Pull the PostgREST contract image
         if: matrix.name == 'external-record-reviews'
         run: docker pull postgrest/postgrest:v14.1
@@ -444,6 +448,8 @@ jobs:
           NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER: "1"
           EMAIL_TEST_POSTGRES_DOCKER: "1"
           CHAT_TURN_TEST_POSTGRES_DOCKER: "1"
+          SYMPTOM_INTAKE_TEST_POSTGRES: "1"
+          CHAT_SAFETY_TEST_POSTGRES_DOCKER: "1"
           EXTERNAL_REVIEW_TEST_POSTGREST_DOCKER: "1"
         run: |
           mkdir -p test-results

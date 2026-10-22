@@ -94,3 +94,58 @@ intake flag to pause new ordinary intake; keep safety alert delivery operational
 Do not roll back by dropping guards or restoring unconfirmed writers. Fix forward
 with an additive migration if SQL changes are needed. Inspect retry/dead-letter
 state through the existing operational path; never fabricate successful processing.
+
+
+## Authorized synthetic application — October 18 continuation
+
+The requester explicitly authorized only the exact 071 file above. It was applied
+through the authenticated synthetic project's SQL editor in a guarded transaction;
+the resulting ledger and read-only target preflight pass. The local backend now
+runs intake and the existing retry worker. One patient-confirmed synthetic report
+reached Elena's Symptoms and ADR workspace, with one completed task and one review
+notice. No deployed service configuration or other remote migration changed.
+Candidate-2 approval/activation remains pending. See the October 18 continuation
+in the acceptance record for IDs and actual observations. New main's independent
+071 filename does not authorize renaming this already applied file.
+
+
+The October 18 Spanish browser journey also reached the assigned clinician with
+unknown severity and an unlisted product retained only as testimony; cancellation
+saved no report and a deliberate local backend outage recovered through reload/retry.
+The portal now sends `microphone=(self)` so user-granted dictation can work; camera
+and geolocation stay disabled. This needs the normal separately authorized portal
+rollout. The requester elected to keep physical speech verification pending.
+Candidate-2 remains inactive pending genuine review. The active candidate-1 can be
+verified now using the steps in the acceptance record; do not describe the revised
+candidate or physical microphone path as approved/verified.
+
+
+The tested continuation is draft PR #193 on `fix/confirmed-intake-integration`.
+Concurrent PR #159 now has overlapping ADR/MedWatch changes and a different 076
+handoff migration. Choose/reconcile one delivery path before rollout. The exact
+applied 071 contract in this document remains authoritative for this continuation;
+no 076 execution or applied-file rename is authorized by the earlier 071 approval.
+
+
+## October 18 requester verification update
+
+The requester now reports the app, microphone and phone flows verified. Record
+those as requester-reported manual acceptance; earlier pending notes are historical.
+All 34 checks on implementation commit ca12c39 passed. PR #193 is being prepared
+for peer/safety review without changes to its implementation or active library.
+Candidate-2 remains inactive and pending genuine wording approval; no eligibility
+write or service deployment is authorized by this verification report. Peer/safety
+review and explicit merge/deployment authorization remain separate requirements.
+
+
+## October 19 integration checkpoint
+
+PR #159 has since merged into main. Main 5d46c30 contains the exact applied 071
+handoff file and newer Nora worker/event migrations. PR #193 is now a follow-up
+fix/verification change against that base; it does not replay the feature or
+rename/remove any applied migration. The old 076 handoff draft is not an operator
+instruction. Main's 076 activity-review migration is a different file and is not
+applied by this task. Use the current documented worker rollout for worker flags;
+this readiness work changes no external configuration. Retain the historical
+October 18 manual verification provenance and record any new deployed check
+separately. Candidate-2 is still inactive pending genuine wording review.
