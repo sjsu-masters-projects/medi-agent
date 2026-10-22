@@ -1,9 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { HiStop } from "react-icons/hi2";
-import { CARE_ASSISTANT_NAME, getPatientChatCopy, getChatControlsCopy, getChatRecoveryCopy } from "@/content/chat-copy";
+import { useSelector } from "react-redux";
+import { CARE_ASSISTANT_NAME, getPatientChatCopy, getChatControlsCopy, getChatRecoveryCopy, getVoiceModeCopy } from "@/content/chat-copy";
+import { VoiceModePanel } from "@/components/features/voice-mode-panel";
+import { useVoiceMode } from "@/hooks/use-voice-mode";
+import { voiceAudioSupported } from "@/services/pcm-audio";
+import type { RootState } from "@/store/store";
 import { CareConversations } from "@/components/features/care-conversations";
 import { NoraConversations } from "@/components/features/nora-conversations";
 import { NotificationBell } from "@/components/features/notification-centre";
@@ -81,13 +86,20 @@ export default function ChatPage() {
         handleMicClick, handlePlayAssistantMessage, handleSend, handsFreeMode, input,
         isTyping, loading, messages, openConversation, safetyNotice, sessionId, setInput,
         startNewConversation, retryUnsentMessage, removeUnsentMessage, recoveryTurns, retryTurn, dismissTurn, reconnectChat, reconnecting, turnBusy,
-        voiceError, voiceStatus } = usePatientChatSession(
+        voiceError, voiceStatus, lastAssistantReply, sendVoiceUtterance } = usePatientChatSession(
             intakeComposer.active ? intakeComposer.locale ?? locale : locale,
             routePrivateReply,
             intakeComposer.active,
             Boolean(intakeComposer.accepting && !intakeComposer.busy),
             intakeComposer.revision,
         );
+    const { accessToken, user } = useSelector((state: RootState) => state.auth);
+    const voiceMode = useVoiceMode({
+        patientId: user?.id ?? null, accessToken: accessToken ?? null, scope: sessionId, locale,
+        sendUtterance: sendVoiceUtterance, reply: lastAssistantReply, chatError: error,
+    });
+    const voiceCopy = getVoiceModeCopy(locale);
+    const voiceSupported = useSyncExternalStore(() => () => undefined, voiceAudioSupported, () => false);
     // A drop shorter than RECONNECT_QUIET_MS is invisible: the header keeps saying Connected.
     const [reconnectSlow, setReconnectSlow] = useState(false);
     useEffect(() => {
@@ -124,7 +136,7 @@ export default function ChatPage() {
         .map((message) => message.id === "welcome-message"
             ? { ...message, content: copy.welcomeMessage, language: locale, audioUrl: undefined }
             : message);
-    const voiceBusy = ["listening", "processing", "playing"].includes(voiceStatus);
+    const voiceBusy = ["listening", "processing", "playing"].includes(voiceStatus) || voiceMode.active;
     const back = locale === "es-MX" ? "Volver a mensajes" : "Back to messages";
     const threadOpen = (!inbox && conversation === "assistant") || Boolean(humanThreadId) || followUpMode;
 
@@ -282,7 +294,9 @@ export default function ChatPage() {
                     onReadAloud={(text, language) => handlePlayAssistantMessage({ content: text, language })} />
             </div>
             </div>
-            <form className="shrink-0 -mx-4 mt-auto space-y-1.5 bg-background/95 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+12px)] backdrop-blur-md" onSubmit={(event) => { followLatestRef.current = true; handleSend(event); }}>
+            {voiceMode.snapshot && <VoiceModePanel snapshot={voiceMode.snapshot} locale={locale} remainingSeconds={voiceMode.remainingSeconds} ringRef={voiceMode.ringRef}
+                onTogglePause={voiceMode.togglePause} onEnd={voiceMode.end} onRetry={voiceMode.start} onUseText={voiceMode.end} />}
+            <form hidden={voiceMode.active} className="shrink-0 -mx-4 mt-auto space-y-1.5 bg-background/95 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+12px)] backdrop-blur-md" onSubmit={(event) => { followLatestRef.current = true; handleSend(event); }}>
                 <div className="flex items-end gap-2">
                     <div className="flex min-h-[52px] min-w-0 flex-1 items-end rounded-[26px] border border-line-strong bg-surface pr-1.5 pb-1.5 transition focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/12">
                         <ChatTextarea aria-label={controls.message} className="pl-[18px]" onChange={(event) => setInput(event.target.value)}
@@ -299,6 +313,10 @@ export default function ChatPage() {
                         {voiceStatus === "listening" ? <HiStop aria-hidden className="h-5 w-5" /> : voiceStatus === "processing" ? <ProcessingDots /> : <Icon name="mic" className="h-5 w-5" />}
                     </button>
                     </div>
+                    {voiceSupported && <button type="button" className="ma-press flex h-11 w-11 shrink-0 items-center justify-center self-end rounded-full bg-brand-tint text-brand-ink hover:bg-brand-tint/70 disabled:opacity-40" aria-label={voiceCopy.start} title={voiceCopy.start}
+                        disabled={turnBusy || connectionStatus !== "connected" || intakeComposer.active || voiceStatus === "listening" || voiceStatus === "processing" || !profile} onClick={voiceMode.start}>
+                        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4" /></svg>
+                    </button>}
                     <button className="ma-press flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-brand text-white shadow-[var(--shadow-fab)] hover:bg-brand-hover disabled:opacity-40 disabled:shadow-none"
                         aria-label={controls.send} disabled={turnBusy || (!intakeComposer.active && documentUnavailable) || !input.trim() || (!intakeComposer.active && connectionStatus !== "connected") || intakeComposer.busy || !profile} type="submit"><Icon name="send" /></button>
                 </div>

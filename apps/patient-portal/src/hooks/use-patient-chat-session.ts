@@ -174,12 +174,22 @@ interface PatientChatSessionState {
 
 type AssistantAudioInput = Pick<ChatMessage, "content" | "language"> & Partial<Pick<ChatMessage, "id" | "audioUrl">>;
 
+export interface AssistantReplyEvent {
+    seq: number;
+    text: string;
+    language: ChatLocale;
+    urgent: boolean;
+}
+
 interface PatientChatSessionActions {
     reconnectChat: () => void;
     retryTurn: (id: string) => void;
     dismissTurn: (id: string) => void;
     dismissDocumentContext: () => void;
     dismissSafetyNotice: () => void;
+    lastAssistantReply: AssistantReplyEvent | null;
+    /** One finalized live-voice utterance, sent as an ordinary chat message. */
+    sendVoiceUtterance: (text: string, language: ChatLocale) => "sent" | "handled" | "unavailable";
     retryUnsentMessage: (clientMessageId: string) => void;
     removeUnsentMessage: (clientMessageId: string) => void;
     handleHandsFreeToggle: () => void;
@@ -232,6 +242,8 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     const [assistantDraftStartedAt, setAssistantDraftStartedAt] = useState<string | null>(null);
     const [handsFreeMode, setHandsFreeMode] = useState<boolean>(resolveInitialHandsFree);
     const [voiceError, setVoiceError] = useState<string | null>(null);
+    // The latest completed Nora reply, numbered so live voice mode can speak each one once.
+    const [lastAssistantReply, setLastAssistantReply] = useState<AssistantReplyEvent | null>(null);
     const [voiceInterimTranscript, setVoiceInterimTranscript] = useState("");
     const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>(() => {
         const capabilities = getVoiceCapabilities();
@@ -394,15 +406,16 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         voiceRefs.current.mediaStream = null;
     }
 
-    function sendChatMessage(content: string, audioUrl?: string, mode: "typed" | "voice" = "typed", privateOnly = false): void {
+    function sendChatMessage(content: string, audioUrl?: string, mode: "typed" | "voice" = "typed", privateOnly = false,
+        language: ChatLocale = voiceRefs.current.selectedLanguage): "sent" | "handled" | "unavailable" {
         const trimmedContent = content.trim();
         if (!trimmedContent) {
-            return;
+            return "unavailable";
         }
         voiceRefs.current.dictatedInput = false;
 
         if (privateOnly && voiceRefs.current.privateRecordingScope !== privateScopeRef.current) {
-            setVoiceStatus("idle"); setInput(""); return;
+            setVoiceStatus("idle"); setInput(""); return "unavailable";
         }
 
         const handled = privateReplyRef.current?.(trimmedContent, mode, mode === "voice" ? voiceRefs.current.recordedLanguage ?? voiceRefs.current.selectedLanguage : undefined) ?? "unhandled";
@@ -410,22 +423,26 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             voiceRefs.current.autoPlayNextAssistantMessage = false;
             setVoiceStatus("idle");
             if (handled === "handled") { resetVoiceFeedback(); setInput(""); }
-            return;
+            return handled === "handled" ? "handled" : "unavailable";
         }
 
-        if (privateOnly) { setVoiceStatus("idle"); setInput(""); return; }
+        if (privateOnly) { setVoiceStatus("idle"); setInput(""); return "unavailable"; }
 
         if (!durableReadyRef.current || !socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
             dispatch(setChatError("CHAT_STARTUP_UNAVAILABLE"));
             voiceRefs.current.autoPlayNextAssistantMessage = false;
             setInput((current) => current || trimmedContent);
             setVoiceStatus("idle");
-            return;
+            return "unavailable";
         }
 
         const clientMessageId = crypto.randomUUID();
         if (documentUnavailable || !recovery.send(trimmedContent,
-            voiceRefs.current.selectedLanguage, activeDocumentId, audioUrl, clientMessageId)) return;
+            language, activeDocumentId, audioUrl, clientMessageId)) {
+            // Spoken words are never dropped: they wait in the composer.
+            if (mode === "voice") setInput((current) => current || trimmedContent);
+            return "unavailable";
+        }
 
         // Instant feedback: the message is on screen now, not after the server round trip.
         dispatch(addPendingMessage({
@@ -433,7 +450,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             content: trimmedContent,
             createdAt: new Date().toISOString(),
             id: `pending-${clientMessageId}`,
-            language: voiceRefs.current.selectedLanguage,
+            language,
             patientId: user?.id ?? "",
             role: ChatRole.USER,
         }));
@@ -446,6 +463,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         setSafetyNotice(null);
         resetVoiceFeedback();
         setInput("");
+        return "sent";
     }
 
     function playbackEnded(): () => void {
@@ -1101,6 +1119,12 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                     resetAssistantDraft();
                     dispatch(setTyping(false));
                     dispatch(addMessage(assistantMessage));
+                    setLastAssistantReply((previous) => ({
+                        seq: (previous?.seq ?? 0) + 1,
+                        text: assistantMessage.content,
+                        language: assistantMessage.language ?? voiceRefs.current.selectedLanguage,
+                        urgent: Boolean(payload.escalation_required) && payload.urgency === "emergency",
+                    }));
 
                     // Auto-play only when this turn was voice-initiated.
                     // Typed turns never trigger TTS automatically.
@@ -1537,6 +1561,8 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         dismissSafetyNotice,
         retryUnsentMessage,
         removeUnsentMessage,
+        lastAssistantReply,
+        sendVoiceUtterance: (text: string, language: ChatLocale) => sendChatMessage(text, undefined, "voice", false, language),
         documentContext,
         documentUnavailable,
         error,
