@@ -1,5 +1,6 @@
 """Review inventory reads static source and preserves wording, never imports it."""
 
+import json
 import subprocess
 from types import SimpleNamespace
 
@@ -27,14 +28,14 @@ def test_calendar_labels_and_email_subject_drafts_are_included():
 def test_inventory_does_not_execute_copy(tmp_path, monkeypatch):
     (tmp_path / "copy.py").write_text(
         'raise RuntimeError("must not execute")\n'
-        'COPY = {"en-US": {"label": "Hello"}, "es-MX": {"label": "Hola"}}\n'
+        '_COPY = {"en-US": {"label": "Hello"}, "es-MX": {"label": "Hola"}}\n'
     )
     monkeypatch.setattr(pack, "ROOT", tmp_path)
     assert pack.python_rows("copy.py")[0]["es"] == "Hola"
 
 
 def test_missing_english_counterpart_fails_instead_of_inventing_copy(tmp_path, monkeypatch):
-    (tmp_path / "copy.py").write_text('COPY = {"en-US": {}, "es-MX": {"label": "Hola"}}')
+    (tmp_path / "copy.py").write_text('_COPY = {"en-US": {}, "es-MX": {"label": "Hola"}}')
     monkeypatch.setattr(pack, "ROOT", tmp_path)
     with pytest.raises(KeyError):
         pack.python_rows("copy.py")
@@ -59,10 +60,66 @@ def test_freshness_check_rejects_missing_or_stale_pack(tmp_path, monkeypatch):
     monkeypatch.setattr(pack, "DESTINATION", tmp_path / "pack.md")
     monkeypatch.setattr(pack, "build", lambda: "expected\n")
     monkeypatch.setattr(
-        pack.argparse.ArgumentParser, "parse_args", lambda self: SimpleNamespace(check=True)
+        pack.argparse.ArgumentParser,
+        "parse_args",
+        lambda self: SimpleNamespace(check=True, require_reviewed=False),
     )
     assert pack.main() == 1
     pack.DESTINATION.write_text("old\n")
     assert pack.main() == 1
     pack.DESTINATION.write_text("expected\n")
     assert pack.main() == 0
+
+
+def test_english_clinician_title_description_tuples_are_not_spanish():
+    rows = pack.python_rows("backend/src/app/services/notification_centre_presentation.py")
+    assert not any(
+        str(row["key"]).startswith(("_REVIEW_COPY.", "_CLINIC_REVIEW_COPY.")) for row in rows
+    )
+
+
+def test_acceptance_requires_exact_reviewed_snapshot(tmp_path, monkeypatch):
+    receipt = tmp_path / "review.json"
+    monkeypatch.setattr(pack, "REVIEW_RECEIPT", receipt)
+    monkeypatch.setattr(pack, "snapshot", lambda rows: {"pairs": rows})
+    reviewed = [{"file": "copy.ts", "key": "label", "en": "Hello", "es": "Hola"}]
+    assert not pack.accepted(reviewed)
+    receipt.write_text(
+        json.dumps(
+            {
+                "status": "accepted_for_synthetic_project_interface_use",
+                "snapshot": {"pairs": reviewed},
+            }
+        )
+    )
+    assert pack.accepted(reviewed)
+    assert not pack.accepted([{**reviewed[0], "es": "changed"}])
+    assert not pack.accepted([*reviewed, {**reviewed[0], "key": "new"}])
+    receipt.write_text("not json")
+    assert not pack.accepted(reviewed)
+
+
+def test_source_edit_invalidates_snapshot_even_when_pairs_match(tmp_path, monkeypatch):
+    (tmp_path / "copy.ts").write_text("original source")
+    monkeypatch.setattr(pack, "ROOT", tmp_path)
+    monkeypatch.setattr(pack, "TS_FILES", ("copy.ts",))
+    monkeypatch.setattr(pack, "PY_FILES", ())
+    rows = [{"file": "copy.ts", "key": "label", "en": "Hello", "es": "Hola"}]
+    original = pack.snapshot(rows)
+    (tmp_path / "copy.ts").write_text("new source")
+    assert original["pairs_sha256"] == pack.snapshot(rows)["pairs_sha256"]
+    assert original != pack.snapshot(rows)
+
+
+def test_required_review_fails_before_pack_can_be_refreshed(monkeypatch):
+    monkeypatch.setattr(
+        pack.argparse.ArgumentParser,
+        "parse_args",
+        lambda self: SimpleNamespace(check=True, require_reviewed=True),
+    )
+    monkeypatch.setattr(pack, "load_rows", lambda: [])
+    monkeypatch.setattr(pack, "accepted", lambda rows: False)
+    monkeypatch.setattr(
+        pack, "build", lambda: pytest.fail("must not treat regeneration as acceptance")
+    )
+    assert pack.main() == 1

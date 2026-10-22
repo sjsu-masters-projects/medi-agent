@@ -1,0 +1,98 @@
+# English / Mexican Spanish interface wording review
+
+## Verdict and boundary
+
+Accepted after corrections for synthetic-project interface use on October 22,
+2026. The requester explicitly accepted a model-assisted meaning-and-safety review
+and did not require a separate fluent professional reviewer. This is the review
+method, not a claim of native-speaker, professional translation or clinical
+validation. No external translation service or patient data was used.
+
+All 553 paired inventory entries were compared, including dynamic branches.
+There are 460 distinct source locations; declaration/accessor aliases account for
+the repeated rows. The [paired review pack](../spanish-draft-review-pack.md) and
+[machine-checkable receipt](spanish-interface-wording-2026-10-22.json) identify
+the exact accepted sources and pair fingerprints. This verdict is not a claim
+about every Spanish string elsewhere in the application.
+
+Nine English-only clinician title/description tuples were incorrectly treated as
+English/Spanish pairs in the initial 562-row inventory. They are now excluded,
+not translated: clinician controls intentionally remain English. Extraction is
+limited to the explicitly bilingual tables and covered by a regression test.
+
+## Review criteria
+
+Compared meaning and actor identity rather than literal word order. Checked
+uncertainty and negation; past events versus instructions; patient testimony
+versus clinician decisions; approval and privacy boundaries; saved versus sent
+versus reviewed state; dates, counts, names and placeholders; emergency wording;
+retry/deduplication guidance; voice controls and text fallback.
+
+Both alternatives were reviewed for nullable names/dates, singular/plural counts,
+privacy settings and timer formatting. Clinical original text, historical human
+messages and stored care-plan wording were not rewritten or approved here.
+
+## Results by source
+
+Paths below are relative to the repository root. Each result covers only the
+paired entries included in the inventory, not unrelated runtime behavior.
+
+| Source | Entries | Result |
+| --- | --- | --- |
+| `apps/patient-portal/src/content/chat-copy.ts` | 105 | Accepted after clarifying unavailable-message scope, no automatic reprocessing and the hands-free off action. Existing emergency/contact guidance and text fallbacks retained. |
+| `apps/patient-portal/src/content/care-team-copy.ts` | 41 | Accepted unchanged: private conditions, shared medicines/allergies, ownership, upload routing, reminder continuity and nullable owner/version branches preserve meaning. |
+| `apps/patient-portal/src/content/symptom-history-copy.ts` | 62 | Accepted after removing an unsupported implication that the care team itself marked a report urgent. Reviewed status remains separate. |
+| `apps/patient-portal/src/content/visits-copy.ts` | 75 | Accepted after preserving clinician identity in offer/empty-state labels. Cancellation reasons, timezone fallback, saved-response/refresh errors and date placeholders retained. |
+| `apps/patient-portal/src/app/(app)/profile/profile-copy.ts` | 118 | Accepted after making language switching explicitly a display change. No plan, reminder or completion change is implied. Saved/uncertain errors and non-continuous-monitoring notice retained. |
+| `apps/patient-portal/src/components/features/nora-conversations.tsx` | 8 | Accepted unchanged: incomplete and in-progress replies remain distinct from saved history. |
+| `packages/shared/src/utils/care-conversations.ts` | 58 | Accepted unchanged: recipient identity, uncertain sends, duplicate warning, read-only originals, automatic-translation caveat and clinical-approval boundary retained. |
+| `backend/src/app/services/notification_centre_presentation.py` | 47 | Accepted after restoring omitted task/history, actor, exact-source and original-conversation context. Patient testimony and candidate findings remain explicitly not clinical decisions or confirmed ADRs. |
+| `backend/src/app/services/symptom_report_presenter.py` | 25 | Accepted unchanged: labels, unknown/declined answers, yes/no, dose and concentration remain distinct. Original patient answers are not translated. |
+| `backend/src/app/services/appointment_calendar.py` | 3 | Accepted after explicitly describing the calendar export as a one-time copy; no automatic update or cancellation sync is implied. |
+| `backend/src/app/services/email_service.py` | 11 | Accepted unchanged: subjects describe generic saved events, not diagnoses, delivery guarantees or direct clinician email. |
+
+## Corrections recorded
+
+| Source/key | Problem addressed | Accepted Spanish meaning |
+| --- | --- | --- |
+| Chat `replyUnavailable`, `noRetry` | Conversation-wide scope and technical “execute” wording | The reply to this message is unavailable; the message is not processed again automatically. |
+| Chat `handsFreeOn` | Omitted off action | Hands-free is on; tap to turn it off. |
+| Symptom history `events.flagged_urgent` | Added a care-team actor not established by the source | Marked so the care team can review urgently; no assertion that a clinician already did so. |
+| Visits `offerTitle`, `emptyDetail` | Broadened the responsible clinician to an unspecified team | The clinician offers the visit, without changing the named recipient or available actions. |
+| Profile `languageHelp` | “The plan changes” could imply a clinical change | Approved plan/activity text is displayed in the selected language. |
+| Notification `legacy_update` | Omitted “not a new task” | Historical inbox entry, not new work. |
+| Notification `appointment_response`, `document_review`, `barrier_reported` | Lost patient attribution or exact source direction | Preserve the patient/source and the action to review it. |
+| Notification `adr_review`, `adr_information_answered` | Generic “security” omitted medicine-safety context | Medication-safety review/follow-up, not confirmed diagnosis or causality. |
+| Notification `critical_result` | Lost patient/laboratory context | The patient's source document contains a result the laboratory marked critical. |
+| Notification `care_plan_review` | Literal “open the patient” and unclear task | Open the patient's record for the care-plan item requiring attention. |
+| Notification `safety_flag` | Omitted original conversation direction | Review the original conversation; the automated flag is not a clinical decision. |
+| Calendar `_COPY.1` | Omitted explicit one-time nature | One-time calendar copy; changes and cancellations do not synchronize. |
+
+## Durable acceptance
+
+The receipt stores every source SHA-256, the full paired-entry fingerprint and row
+count. CI runs:
+
+```sh
+python3 backend/scripts/build_spanish_review_pack.py --check --require-reviewed
+```
+
+Missing/malformed receipts, altered source, added/edited pairs and stale generated
+Markdown fail the gate. Regenerating the Markdown alone cannot renew acceptance.
+After a future edit, review the affected pairs and record a new receipt through
+normal review. Do not copy a new hash merely to silence CI.
+
+## Verification and remaining work
+
+Focused source/regression checks are recorded in the
+[review specification](../../.agent/specs/loc-001-interface-review.md).
+The full patient suite passes 989 tests in 91 files; focused backend checks pass
+280 tests. Lint, both portal type-checks, backend mypy, receipt freshness and
+documentation checks pass. These verify code/copy contracts, not live rendering.
+No database migration, remote configuration, clinical approval flag, medication,
+schedule, reminder, patient history or stored message was changed.
+
+This closes the language meaning-and-safety review for the exact paired interface
+snapshot. It does not establish deployed rendering, narrow-screen wrapping,
+physical voice/device behavior, bilingual generated clinical content, an expo
+rehearsal or clinical safety qualification. Those remain their own tasks.

@@ -16,7 +16,7 @@ from app.models.symptom_report_history import (
     TeamReview,
 )
 
-# Row labels in the language the patient used. The Spanish is a draft pending LOC-001 review.
+# Row labels in the language used; LOC-001 project-scope interface review recorded October 22.
 _LABELS: dict[str, dict[str, str]] = {
     "en-US": {
         "description": "What happened",

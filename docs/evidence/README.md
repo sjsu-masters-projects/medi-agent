@@ -34,6 +34,11 @@ which extends ownership and cross-plan behavior.
 
 ## Adding evidence
 
+[October 22 interface wording review](spanish-interface-wording-2026-10-22.md)
+records English/es-MX meaning-and-safety acceptance for the exact paired-source
+snapshot. Its JSON receipt is machine-checkable; it is not clinical validation,
+professional translation certification or a deployed/device acceptance run.
+
 Record the date, commit or revision, environment, synthetic account role, action,
 expected outcome, observed result and remaining gap. Reference identifiers only
 when needed and safe. Do not include credentials, real health data or private reasoning.

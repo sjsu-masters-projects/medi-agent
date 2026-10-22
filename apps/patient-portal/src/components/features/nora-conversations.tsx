@@ -28,7 +28,7 @@ const COPY = {
         loadError: "No se pudieron cargar las conversaciones anteriores.",
         dayTitle: "Conversación del",
         todayTitle: "Conversación de hoy",
-        // Draft wording pending LOC-001 bilingual review.
+        // LOC-001 project-scope interface review recorded October 22.
         unfinished: "Respuesta incompleta",
         replying: "Nora está respondiendo…",
     },

@@ -30,6 +30,17 @@ PY_FILES = (
     "backend/src/app/services/appointment_calendar.py",
     "backend/src/app/services/email_service.py",
 )
+# These are explicitly bilingual tables, not arbitrary two-string tuples. The
+# clinician-only review tables contain an English title and English description.
+PY_PAIR_TABLES = {
+    "_COPY",
+    "_QUESTION_WORDING",
+    "_LABELS",
+    "_PRODUCT_LABELS",
+    "_UNRESOLVED",
+    "_YES_NO",
+}
+REVIEW_RECEIPT = ROOT / "docs/evidence/spanish-interface-wording-2026-10-22.json"
 
 
 def python_rows(file: str) -> list[dict[str, str | int]]:
@@ -39,6 +50,8 @@ def python_rows(file: str) -> list[dict[str, str | int]]:
         if not isinstance(node, ast.Assign | ast.AnnAssign):
             continue
         name = ast.unparse(node.targets[0] if isinstance(node, ast.Assign) else node.target)
+        if name not in PY_PAIR_TABLES:
+            continue
         try:
             value = ast.literal_eval(node.value)
         except (ValueError, TypeError):
@@ -98,7 +111,7 @@ def cell(value: object) -> str:
     )
 
 
-def build() -> str:
+def load_rows() -> list[dict[str, str | int]]:
     result = subprocess.run(
         ["node", "scripts/extract-spanish-review.mjs", *TS_FILES],
         cwd=ROOT,
@@ -106,13 +119,50 @@ def build() -> str:
         text=True,
         check=True,
     )
-    rows = json.loads(result.stdout)
+    rows: list[dict[str, str | int]] = json.loads(result.stdout)
     for file in PY_FILES:
         rows.extend(python_rows(file))
+    return rows
+
+
+def snapshot(rows: list[dict[str, str | int]]) -> dict[str, object]:
+    pairs = [{key: row[key] for key in ("file", "key", "en", "es")} for row in rows]
+    return {
+        "row_count": len(rows),
+        "pairs_sha256": hashlib.sha256(
+            json.dumps(pairs, ensure_ascii=False, sort_keys=True).encode()
+        ).hexdigest(),
+        "source_sha256": {
+            file: hashlib.sha256((ROOT / file).read_bytes()).hexdigest()
+            for file in (*TS_FILES, *PY_FILES)
+        },
+    }
+
+
+def accepted(rows: list[dict[str, str | int]]) -> bool:
+    try:
+        receipt = json.loads(REVIEW_RECEIPT.read_text())
+    except (OSError, ValueError):
+        return False
+    return (
+        isinstance(receipt, dict)
+        and receipt.get("status") == "accepted_for_synthetic_project_interface_use"
+        and receipt.get("snapshot") == snapshot(rows)
+    )
+
+
+def build() -> str:
+    rows = load_rows()
+    reviewed = accepted(rows)
     header = [
-        "# English / Mexican Spanish draft review pack",
+        "# English / Mexican Spanish interface wording review pack",
         "",
-        "Status: pending meaning-and-safety review. This inventory is not approval.",
+        (
+            "Status: accepted for synthetic-project interface use at the recorded snapshot."
+            if reviewed
+            else "Status: pending review; no matching acceptance receipt for this snapshot."
+        ),
+        "See the [dated review record](evidence/spanish-interface-wording-2026-10-22.md).",
         "",
         "This pack collects the source files named by LOC-001 draft markers and linked",
         "requirements, including recovery, voice, care-team ownership/privacy, symptoms,",
@@ -135,13 +185,16 @@ def build() -> str:
         "   deleting a draft comment alone. Clinical plan text still uses in-app bilingual approval.",
         "",
         "A documented demo meaning-and-safety review is sufficient for this project;",
-        "a separate fluent reviewer is not required. This pack itself makes no completed",
-        "review or professional translation/clinical-validation claim.",
+        "a separate fluent reviewer is not required. Acceptance is limited to the exact",
+        "paired interface copy; it is not professional translation or clinical validation.",
+        "The receipt becomes invalid if the reviewed sources or pairs change. Regenerating",
+        "this pack alone never renews acceptance. Clinician-only English title/description",
+        "tuples are excluded; they are not translations.",
         "",
         "## Source snapshot",
         "",
         "Regenerate with `python backend/scripts/build_spanish_review_pack.py`;",
-        "check freshness with `python backend/scripts/build_spanish_review_pack.py --check`.",
+        "check freshness with `python backend/scripts/build_spanish_review_pack.py --check --require-reviewed`.",
         "Install the clinician portal's locked dependencies first for the TypeScript parser.",
         "",
         "| Source | SHA-256 |",
@@ -157,10 +210,15 @@ def build() -> str:
             "",
             f"## Review list ({len(rows)} paired rows)",
             "",
-            "Every row is pending review in this pack. Use the source key to identify duplicates",
+            (
+                "Every listed pair is covered by the matching project-scope review receipt."
+                if reviewed
+                else "Every row requires review at this snapshot."
+            ),
+            "Use the source key to identify duplicate declaration/accessor entries",
             "across screens; do not infer that similar strings have the same clinical context.",
             "",
-            "| Source/key | English (US) | Español (México), draft |",
+            "| Source/key | English (US) | Español (México) |",
             "| --- | --- | --- |",
         ]
     )
@@ -188,7 +246,11 @@ def build() -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--require-reviewed", action="store_true")
     args = parser.parse_args()
+    if args.require_reviewed and not accepted(load_rows()):
+        print("Spanish review receipt is missing or stale; review changed pairs before acceptance.")
+        return 1
     text = build()
     if args.check:
         if not DESTINATION.exists() or DESTINATION.read_text() != text:
