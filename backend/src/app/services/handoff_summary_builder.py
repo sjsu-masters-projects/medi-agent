@@ -137,65 +137,14 @@ class HandoffSummaryBuilder:
 
     def _shared_core(self, clinician_id: UUID, pid: str) -> HandoffSection:
         core = SharedClinicalCoreService(self.db).summary_for_clinician(clinician_id, UUID(pid))
-        profile = f"/patients/{pid}?tab=profile"
         recorders = {
             str(t["care_team_id"]): t for t in core.get("care_teams") or [] if t.get("care_team_id")
         }
-
-        def label(row: dict[str, Any], key: str) -> str:
-            team = recorders.get(str(row.get(key))) or {}
-            name = row.get("recorded_by") or team.get("clinician_name")
-            clinic = team.get("clinic_name")
-            parts = [p for p in (name, clinic) if p]
-            return "Recorded by " + ", ".join(parts) if parts else "Recording team not recorded"
-
-        items: list[HandoffItem] = []
-        for m in core.get("medications") or []:
-            text = " ".join(
-                str(x) for x in (m.get("name"), m.get("dosage"), m.get("frequency")) if x
-            )
-            items.append(
-                HandoffItem(
-                    id=f"medications-{m['id']}",
-                    text=f"Medication: {text}",
-                    detail=_clip(m.get("instructions")),
-                    source=HandoffSource(
-                        table="medications",
-                        id=str(m["id"]),
-                        label=label(m, "recorded_by_care_team_id"),
-                        href=profile,
-                    ),
-                )
-            )
-        for a in core.get("allergies") or []:
-            reaction = ", ".join(str(x) for x in (a.get("reaction"), a.get("severity")) if x)
-            items.append(
-                HandoffItem(
-                    id=f"allergies-{a['id']}",
-                    text=f"Allergy: {a.get('allergen')}",
-                    detail=reaction or None,
-                    source=HandoffSource(
-                        table="allergies",
-                        id=str(a["id"]),
-                        label=label(a, "recorded_by_care_team_id"),
-                        href=profile,
-                    ),
-                )
-            )
-        for c in core.get("conditions") or []:
-            code = f" ({c['icd10_code']})" if c.get("icd10_code") else ""
-            items.append(
-                HandoffItem(
-                    id=f"conditions-{c['id']}",
-                    text=f"Condition: {c.get('name')}{code}",
-                    source=HandoffSource(
-                        table="conditions",
-                        id=str(c["id"]),
-                        label=label(c, "recorded_by_care_team_id"),
-                        href=profile,
-                    ),
-                )
-            )
+        items = [
+            *self._core_items("medications", core.get("medications"), recorders, pid),
+            *self._core_items("allergies", core.get("allergies"), recorders, pid),
+            *self._core_items("conditions", core.get("conditions"), recorders, pid),
+        ]
         if core.get("some_conditions_private"):
             items.append(
                 HandoffItem(
@@ -213,6 +162,47 @@ class HandoffSummaryBuilder:
             "No active medications, allergies or visible conditions are recorded.",
         )
 
+    @staticmethod
+    def _recorded_by(row: dict[str, Any], recorders: dict[str, dict[str, Any]]) -> str:
+        team = recorders.get(str(row.get("recorded_by_care_team_id"))) or {}
+        name = row.get("recorded_by") or team.get("clinician_name")
+        parts = [p for p in (name, team.get("clinic_name")) if p]
+        return "Recorded by " + ", ".join(parts) if parts else "Recording team not recorded"
+
+    def _core_items(
+        self, table: str, rows: Any, recorders: dict[str, dict[str, Any]], pid: str
+    ) -> list[HandoffItem]:
+        items: list[HandoffItem] = []
+        for row in rows or []:
+            text, detail = self._core_text(table, row)
+            items.append(
+                HandoffItem(
+                    id=f"{table}-{row['id']}",
+                    text=text,
+                    detail=detail,
+                    source=HandoffSource(
+                        table=table,
+                        id=str(row["id"]),
+                        label=self._recorded_by(row, recorders),
+                        href=f"/patients/{pid}?tab=profile",
+                    ),
+                )
+            )
+        return items
+
+    @staticmethod
+    def _core_text(table: str, row: dict[str, Any]) -> tuple[str, str | None]:
+        if table == "medications":
+            parts = (row.get("name"), row.get("dosage"), row.get("frequency"))
+            return "Medication: " + " ".join(str(x) for x in parts if x), _clip(
+                row.get("instructions")
+            )
+        if table == "allergies":
+            reaction = ", ".join(str(x) for x in (row.get("reaction"), row.get("severity")) if x)
+            return f"Allergy: {row.get('allergen')}", reaction or None
+        code = f" ({row['icd10_code']})" if row.get("icd10_code") else ""
+        return f"Condition: {row.get('name')}{code}", None
+
     def _team_plan(self, pid: str, care_team_id: str) -> HandoffSection:
         plans = self._rows(
             self.db.table("care_plans")
@@ -221,52 +211,56 @@ class HandoffSummaryBuilder:
             .eq("care_team_id", care_team_id)
             .eq("ownership_state", "owned")
         )
-        owned = [p for p in plans if str(p.get("care_team_id")) == care_team_id]
         items: list[HandoffItem] = []
         note: str | None = None
-        for plan in owned:
-            versions = self._rows(
-                self.db.table("care_plan_versions")
-                .select("id,version_number,approved_at")
-                .eq("care_plan_id", str(plan["id"]))
-                .eq("status", "approved")
-                .order("approved_at", desc=True)
-                .limit(1)
-            )
-            if not versions:
+        for plan in plans:
+            if str(plan.get("care_team_id")) != care_team_id:
                 continue
-            version = versions[0]
-            note = (
-                f"Approved {_day(version.get('approved_at'))}, version {version['version_number']}."
-            )
-            rows = self._rows(
-                self.db.table("care_plan_items")
-                .select("id,title,frequency,instructions,category,is_removed")
-                .eq("plan_version_id", str(version["id"]))
-                .eq("is_removed", False)
-                .order("created_at")
-                .limit(PLAN_ITEM_LIMIT)
-            )
-            for row in rows:
-                items.append(
-                    HandoffItem(
-                        id=f"care_plan_items-{row['id']}",
-                        text=f"{row.get('title')} ({row.get('frequency')})",
-                        detail=_clip(row.get("instructions")),
-                        source=HandoffSource(
-                            table="care_plan_items",
-                            id=str(row["id"]),
-                            label=f"Approved plan version {version['version_number']}",
-                            href=f"/patients/{pid}?tab=care-plan#care-plan-item-{row['id']}",
-                        ),
-                    )
-                )
+            version = self._approved_version(str(plan["id"]))
+            if version:
+                note = f"Approved {_day(version.get('approved_at'))}, version {version['version_number']}."
+                items += self._plan_items(pid, version)
         section = self._section(
             "team_plan", "Your care team's plan", items, "Your care team has no approved plan."
         )
         if items:
             section.note = note
         return section
+
+    def _approved_version(self, plan_id: str) -> dict[str, Any] | None:
+        versions = self._rows(
+            self.db.table("care_plan_versions")
+            .select("id,version_number,approved_at")
+            .eq("care_plan_id", plan_id)
+            .eq("status", "approved")
+            .order("approved_at", desc=True)
+            .limit(1)
+        )
+        return versions[0] if versions else None
+
+    def _plan_items(self, pid: str, version: dict[str, Any]) -> list[HandoffItem]:
+        rows = self._rows(
+            self.db.table("care_plan_items")
+            .select("id,title,frequency,instructions,category,is_removed")
+            .eq("plan_version_id", str(version["id"]))
+            .eq("is_removed", False)
+            .order("created_at")
+            .limit(PLAN_ITEM_LIMIT)
+        )
+        return [
+            HandoffItem(
+                id=f"care_plan_items-{row['id']}",
+                text=f"{row.get('title')} ({row.get('frequency')})",
+                detail=_clip(row.get("instructions")),
+                source=HandoffSource(
+                    table="care_plan_items",
+                    id=str(row["id"]),
+                    label=f"Approved plan version {version['version_number']}",
+                    href=f"/patients/{pid}?tab=care-plan#care-plan-item-{row['id']}",
+                ),
+            )
+            for row in rows
+        ]
 
     def _activity(self, pid: str, access: PatientAccess) -> HandoffSection:
         since = (datetime.now(UTC) - timedelta(days=RECENT_DAYS)).isoformat()

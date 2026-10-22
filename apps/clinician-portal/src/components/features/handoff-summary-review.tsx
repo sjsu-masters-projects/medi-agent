@@ -29,11 +29,11 @@ function stamp(value: string): string {
 }
 
 function SourceChip({ item }: { item: HandoffItem }) {
-    const chip = "inline-flex max-w-full items-center rounded-md border border-line bg-surface-2 px-2 py-0.5 text-xs text-ink-2";
+    const chip = "inline-flex max-w-full min-w-0 items-center rounded-md border border-line bg-surface-2 px-2 py-0.5 text-xs text-ink-2";
     if (item.source.href) {
-        return <Link className={`${chip} break-words hover:bg-sunken hover:text-ink`} href={item.source.href}>Source: {item.source.label}</Link>;
+        return <Link className={`${chip} [overflow-wrap:anywhere] hover:bg-sunken hover:text-ink`} href={item.source.href}>Source: {item.source.label}</Link>;
     }
-    return <span className={`${chip} break-words`}>Source: {item.source.label}</span>;
+    return <span className={`${chip} [overflow-wrap:anywhere]`}>Source: {item.source.label}</span>;
 }
 
 function Section({ section }: { section: HandoffSection }) {
@@ -55,8 +55,8 @@ function Section({ section }: { section: HandoffSection }) {
                 <ul className="space-y-3">
                     {section.items.map((item) => (
                         <li className="min-w-0" key={item.id}>
-                            <p className="break-words text-sm text-ink">{item.text}</p>
-                            {item.detail ? <p className="break-words text-xs text-muted">{item.detail}</p> : null}
+                            <p className="[overflow-wrap:anywhere] text-sm text-ink">{item.text}</p>
+                            {item.detail ? <p className="[overflow-wrap:anywhere] text-xs text-muted">{item.detail}</p> : null}
                             <div className="mt-1"><SourceChip item={item} /></div>
                         </li>
                     ))}
@@ -178,7 +178,7 @@ export function HandoffSummaryReview({ patientId, summaryId }: { patientId: stri
             <header className="flex flex-wrap items-start justify-between gap-3" data-print-hide>
                 <div className="min-w-0">
                     <Link className="text-[13px] font-medium text-primary" href={`/patients/${encodeURIComponent(patientId)}/handoff`}>All handoff summaries</Link>
-                    <h1 className="mt-1 break-words text-[24px] font-semibold leading-tight tracking-[-0.02em] text-ink">{detail.title}</h1>
+                    <h1 className="mt-1 [overflow-wrap:anywhere] text-[24px] font-semibold leading-tight tracking-[-0.02em] text-ink">{detail.title}</h1>
                     <p className="mt-1 text-sm text-muted">Version {detail.current_version}{detail.recipient_label ? ` · for ${detail.recipient_label}` : ""}</p>
                 </div>
                 {approved ? <ApprovalSeal pill>Approved</ApprovalSeal> : <Badge variant="neutral">Draft, not approved</Badge>}
@@ -196,7 +196,7 @@ export function HandoffSummaryReview({ patientId, summaryId }: { patientId: stri
                     <div className="rounded-xl border border-line bg-surface px-4 py-3">
                         <p className="text-sm font-semibold text-ink">{detail.title}</p>
                         <p className="text-xs text-muted">
-                            {detail.patient_name ? `${detail.patient_name} · ` : ""}Built {stamp(detail.version.built_at)} from records visible to the author. Synthetic demo data.
+                            {detail.patient_name ? `${detail.patient_name} · ` : ""}{detail.recipient_label ? `For ${detail.recipient_label} · ` : ""}{approved ? "Approved · " : "Draft · "}Built {stamp(detail.version.built_at)} from records visible to the author. Synthetic demo data.
                         </p>
                         <p className="mt-1 text-xs text-muted" data-print-hide>Assembled without a model. Each line shows the record it came from.</p>
                     </div>
@@ -204,15 +204,15 @@ export function HandoffSummaryReview({ patientId, summaryId }: { patientId: stri
                     {(detail.version.narrative || detail.version.notes) ? (
                         <section className="rounded-xl border border-line bg-surface px-4 py-3 ma-print-section">
                             <h3 className="text-sm font-semibold text-ink">Clinician narrative and notes</h3>
-                            {detail.version.narrative ? <p className="mt-2 whitespace-pre-wrap break-words text-sm text-ink">{detail.version.narrative}</p> : null}
-                            {detail.version.notes ? <p className="mt-2 whitespace-pre-wrap break-words text-sm text-ink-2">{detail.version.notes}</p> : null}
+                            {detail.version.narrative ? <p className="mt-2 whitespace-pre-wrap [overflow-wrap:anywhere] text-sm text-ink">{detail.version.narrative}</p> : null}
+                            {detail.version.notes ? <p className="mt-2 whitespace-pre-wrap [overflow-wrap:anywhere] text-sm text-ink-2">{detail.version.notes}</p> : null}
                             <p className="mt-2 text-xs text-muted">Written by the clinician, not generated.</p>
                         </section>
                     ) : null}
                     {approved && detail.approved_at ? <p className="text-xs text-muted">Approved {stamp(detail.approved_at)}. Not submitted anywhere by MediAgent.</p> : null}
                 </div>
 
-                <aside className="space-y-4" data-print-hide>
+                <aside className="min-w-0 space-y-4" data-print-hide>
                     {!readOnly ? (
                         <section aria-labelledby="handoff-edit" className="rounded-xl border border-line bg-surface p-4">
                             <h2 className="text-sm font-semibold text-ink" id="handoff-edit">Your narrative and notes</h2>

@@ -106,7 +106,7 @@ export function HandoffSummaryList({ patientId }: { patientId: string }) {
                             <li key={item.id}>
                                 <Link className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface px-4 py-3 hover:bg-surface-2" href={`/patients/${encodeURIComponent(patientId)}/handoff/${encodeURIComponent(item.id)}`}>
                                     <span className="min-w-0">
-                                        <span className="block break-words text-sm font-semibold text-ink">{item.title}</span>
+                                        <span className="block [overflow-wrap:anywhere] text-sm font-semibold text-ink">{item.title}</span>
                                         <span className="block text-xs text-muted">Version {item.current_version} · updated {when(item.updated_at)}{item.recipient_label ? ` · for ${item.recipient_label}` : ""}</span>
                                     </span>
                                     <Badge variant={item.status === "approved" ? "success" : "neutral"}>{item.status === "approved" ? "Approved" : "Draft"}</Badge>
