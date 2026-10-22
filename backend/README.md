@@ -771,3 +771,19 @@ decisions, lock order, read-path audit and the API contract:
   `-o timeout=1200` locally if Docker is busy.
 - **Unit helpers**: `tests/unit/services/care_team_fake_db.py` is an in-memory client that
   applies filters as sent, so a forgotten owner filter fails a test.
+
+## Reviewed care-handoff summaries (CON-001)
+
+A clinician drafts, edits, approves and exports a handoff summary for one of their
+patients. Routes live under `/api/v1/care-team/clinician/patients/{patient_id}/handoff-summaries`
+(`routers/handoff_summaries.py`); `HandoffSummaryBuilder` assembles the sections
+deterministically (no model) from records the author may see and reuses the #208 timeline;
+`HandoffSummaryService` owns create/save/approve/export; `handoff_fhir_export.py` renders the
+approved version as a FHIR R4B document Bundle with Provenance. Storage is migration 089
+(append-only versions and audit events, `SECURITY DEFINER` functions for `service_role`
+only, optimistic versions, row locks). Only the approved current version exports, and every
+export is an audit event. Contract and decisions:
+[`.agent/specs/con-001-care-handoff-summary.md`](../.agent/specs/con-001-care-handoff-summary.md).
+Tests: `tests/unit/services/test_handoff_summary.py`,
+`tests/integration/routers/test_handoff_summaries_api.py`, and the opt-in Postgres contract
+`tests/integration/test_care_handoff_summaries_postgres.py` (CI shard `care-handoff`).
