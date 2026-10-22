@@ -1,5 +1,6 @@
 """Tests for StaffService: clinic team management scoped by clinic membership (CLN-003)."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
@@ -183,7 +184,7 @@ async def test_staff_actions_fail_closed_without_a_membership(service):
         service.invite_member(admin_id, "new@example.com", "provider"),
     ):
         with pytest.raises(AuthorizationError):
-            await call
+            await asyncio.wait_for(call, timeout=5)
 
 
 @pytest.mark.asyncio
