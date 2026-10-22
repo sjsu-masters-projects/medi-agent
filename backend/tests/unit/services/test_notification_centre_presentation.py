@@ -669,6 +669,8 @@ def test_review_notice_copy_drops_unsafe_or_missing_metadata():
     )
     long_title = reviewed_item(metadata={"report_title": "x" * 500})
     assert len(present_item(long_title, "patient", "en-US").body) < 200
+
+
 def test_a_shared_handoff_item_names_the_author_links_the_share_and_carries_no_content():
     raw = item(
         event_type="handoff_shared",

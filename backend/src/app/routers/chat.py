@@ -33,14 +33,12 @@ from app.models import ChatMessage, ChatMessageCreate
 from app.models.auth import CurrentUser
 from app.models.chat import ChatConversation, ReplyEvidence
 from app.models.enums import ChatRole, Language
-from app.safety.intake_gate import IntakeSafetyDecision, evaluate_intake_safety
-from app.safety.symptom_offer import symptom_offer_eligible
-from app.models.symptom_intake import IntakeStart
 from app.safety.intake_gate import (
     SAFETY_RULE_VERSION,
     IntakeSafetyDecision,
     evaluate_intake_safety,
 )
+from app.safety.symptom_offer import symptom_offer_eligible
 from app.services.chat_document_catalog import (
     build_document_catalog_reply,
     is_document_catalog_question,
