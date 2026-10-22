@@ -52,6 +52,31 @@ const reviewResponse = {
 };
 
 describe("SMART import review panel", () => {
+  it("does not invent a zero count while loading or after an initial failure", async () => {
+    let reject!: (reason: Error) => void;
+    get.mockImplementation(() => new Promise((_, fail) => { reject = fail; }));
+    render(<SmartImportReviewPanel patientId="patient-1" />);
+    expect(screen.getByText(/Loading imported fact count/)).toBeInTheDocument();
+    expect(screen.queryByText((_, element) => element?.tagName === "P" && /0 facts in this review state/.test(element.textContent ?? ""))).not.toBeInTheDocument();
+    reject(new Error("Unavailable"));
+    expect(await screen.findByText(/Imported fact count unavailable/)).toBeInTheDocument();
+    expect(screen.queryByText((_, element) => element?.tagName === "P" && /0 facts in this review state/.test(element.textContent ?? ""))).not.toBeInTheDocument();
+  });
+
+  it("shows a genuine empty count only after a successful response", async () => {
+    get.mockResolvedValue({ ...reviewResponse, total_count: 0, facts: [] });
+    render(<SmartImportReviewPanel patientId="patient-1" />);
+    expect(await screen.findByText((_, element) => element?.tagName === "P" && /0 facts in this review state/.test(element.textContent ?? ""))).toBeInTheDocument();
+  });
+
+  it("hides the old count while a different review-state filter loads", async () => {
+    get.mockResolvedValueOnce(reviewResponse).mockImplementation(() => new Promise(() => {}));
+    render(<SmartImportReviewPanel patientId="patient-1" />);
+    await screen.findByText("Metformin");
+    fireEvent.click(screen.getByRole("button", { name: /Approved/ }));
+    expect(screen.getByText(/Loading imported fact count/)).toBeInTheDocument();
+    expect(screen.queryByText((_, element) => element?.tagName === "P" && /1 fact in this review state/.test(element.textContent ?? ""))).not.toBeInTheDocument();
+  });
   it.each([
     ["condition", "Diabetes mellitus tipo 2"],
     ["medication", "Metformin 500"],

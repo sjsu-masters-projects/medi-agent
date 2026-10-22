@@ -1128,3 +1128,166 @@ live DV-021 correction recheck. PAT-002-B retains wider private-intake UI checks
 VOI-001-M owns physical voice. AUTH-002 retains enrolled-MFA/real-idle observation.
 SCH-001-V successful scoped transitions do not explain OPS-005 historical
 intermittent failures; bounded logs found no reproduced transport failure.
+
+## Post-208 grouped acceptance
+
+Scope: REC-001/002, NOT-003, MED-001, CLN-001/002. Contract:
+[workflow completion](../.agent/specs/expo-workflow-completion.md).
+Branch `codex/post-208-acceptance` starts from merged main `f235c278`.
+Formal model/provider evaluation is optional; synthetic functional verification,
+approval boundaries and automated safety/access tests remain required.
+
+### Release baseline and authority
+
+October 21: #208 merged/closed. Main CI Pipeline, Frontend CI and backend deployment
+report success. Backend `mediagent-backend-00177-xgh` serves 100% traffic. Refreshed
+deployed patient and clinician tabs are synthetic Rajeev and Elena; no sign-in or
+credential transfer was needed. Patient Today is 0/4; clinician Profile retains
+three active medicines (atorvastatin, lisinopril 20 mg daily, metformin), the glucose
+activity and unconfigured reminders. These are observed UI values, not DB hashes.
+
+The initial read-only Supabase check found 079 absent. After explicit requester
+approval, only the reviewed 079 file and its receipt were committed in one
+transaction under advisory lock 726340181. Ledger application time:
+**2026-10-22 03:40:37.892769 UTC** (October 21 Pacific). Verified SHA-256:
+`6b781b77e48d41f618d131d33fd0a710af5cd585a6172fdd42eb56bee92a947e`.
+Independent read-only checks returned `trigger=true`, `function=true`,
+`all_rls=true`, `browser_access_denied=true`. An intermediate verification query
+failed because replacing Monaco's visible textarea left old SQL in the editor;
+the successful receipt predates that failed read. A fresh query buffer completed
+the permission checks. No second migration application or other schema change.
+No backfill, clinical approval, account deletion or configuration change is included.
+
+### Grouped acceptance matrix
+
+| Group / tasks | Acceptance path | Current result / next action |
+| --- | --- | --- |
+| Release / all six rows | Merge → serving code → reviewed migration identity | Main/deployment success; Timeline visible; only 079 applied with explicit approval, matching receipt and independent security checks above. |
+| Records / REC-001/002, MED-001 | Original/source titles → candidate/local comparison → explicit approved decision → reload/provenance | Authorized Keep existing saved on Rajeev's imported Lisinopril 10 mg tablet with the exact approved synthetic note. Reload retains Approved / Kept Existing. Pending 39→38, approved 0→1; shared inbox 386→385 and Rajeev 39→38. Profile retains all three medicines, Lisinopril 20 mg daily, morning glucose activity and unconfigured reminders; Today remains 0/4. Other lifecycle decisions not exercised live. |
+| Product concern / MED-001, CLN-001 | New explicitly confirmed unlisted concern → assigned alert → exact report → audited acknowledge | Pass October 21: approved Rajeev report confirmed, one forward event; Elena opens/focuses exact report and records one audited acknowledgement. Patient reload and clinician History retain state. No canonical medication, plan, activity or ADR mutation; see exact counts/fingerprints below. |
+| Notifications / NOT-003 | Count/list → single/read-through action → reload; unrelated items unchanged | Patient single read 12→11, then displayed-read 11→0; clinician loaded-read 42→0, all retained after reload. Elena's 40 action items remain unchanged. No source review/approval. Expired-cursor recovery remains unforced live; signing isolation is covered separately by the passing automated tests, not inferred from counts. |
+| Shared inbox / CLN-001 | Exact candidate counts → correct patient/source → scoped refresh; second reviewer/access boundary | Exact source counts update after the saved decision. Willow Terrace filter clears old rows and returns a genuine zero for one assigned patient; All clinics restores scoped work. Maya's 200-candidate capture-time limit is explicit. Existing PostgreSQL/PostgREST access contracts retained; second actor live acceptance and acknowledgement remain. |
+| Timeline / CLN-002 | Actual source dates/coverage → exact disclosure/destination → reload/keyboard/narrow layout | All 12 buckets available, truthful zero rows, no source failure. New reconciled audit event visible after navigation; exact source link focuses its DETAILS ID and exposes only recorded event type. Coverage expands using Enter; refresh succeeds. At measured 423 CSS px, document content width is also 423, no horizontal overflow. Elena's own private-thread links observed; different-actor isolation remains automated, not asserted as a live second-actor test. |
+| Risk / CLN-002 | Versioned factors → actual source dates → unknown/unavailable disclosure | Rajeev explanation exposes rule version outpatient-review-priority-v1, calculation time and actual adherence/medication dates. Missing rated symptoms/open ADR dates explicitly Unknown; recorded-response denominator and non-atomic/current-source limits shown. No risk thresholds or diagnosis changes. |
+
+REC-002 audit query returned exactly `matching_saved_decisions=1`,
+`matching_audits=1`, `nonempty_mutation_snapshots=0`. Actor equality was checked
+between the immutable decision and its audit event. This proves saved attribution,
+not that every lifecycle decision was exercised live. The prior 44 PostgreSQL
+cases retain lifecycle/retry/access/reminder coverage. REC-002's agreed deployed
+decision/reload/provenance path is complete; other tasks retain their own gaps.
+
+### Reproduced presentation defects in this follow-up
+
+- **DV-022:** imported-fact detail count displayed the old filter's total while
+  loading (including 38 pending under the newly selected Approved heading).
+  Initial loading/failure could also imply zero. Fix shows loading/unavailable
+  explicitly and uses singular/plural for confirmed counts.
+- **DV-023:** async reconciliation preview could capture BODY as its focus-return
+  target after the opener was disabled. Escape lost keyboard position. Fix keeps
+  an explicit opener reference; no clinical decision handler changes.
+- **DV-024:** English clinician reference lookup showed Spanish before English.
+  Fix orders the same bounded, validated references English first, retaining
+  Spanish wording, source dates and provenance; no new lookup or chart write.
+
+Local fixes require review/merge/deployment before any live-correction claim.
+Reference lookup itself passed: lisinopril ingredient 29046, official English/
+Spanish MedlinePlus and DailyMed references with source/check/cache dates and
+explicit unchecked clinical coverage. No automatic canonical-field application.
+Evidence screenshots: `/private/tmp/post208-migration079-verified.png`,
+`/private/tmp/post208-keep-existing-persisted.png`,
+`/private/tmp/post208-reconciliation-audit.png`,
+`/private/tmp/post208-medication-comparison.png`.
+
+### Follow-up verification and continuation
+
+Delivery: [PR #209](https://github.com/sjsu-masters-projects/medi-agent/pull/209),
+initial implementation/evidence commit `b11ca2d6`; ready for review, not merged.
+Initial PR policy check passes; remaining CI/preview checks were still running
+when this checkpoint was written. No all-green CI claim.
+
+Commands run against this follow-up branch:
+
+- Clinician `npm test -- --run`: **680 passed, 76 files** (includes async focus,
+  initial failure/genuine zero and filter-loading count regressions).
+- Clinician `npm run lint`, `npx tsc --noEmit`: pass.
+- Clinician `npm run build -- --webpack`: pass. Existing Sentry deprecations and
+  workspace-lockfile warnings remain; no CI build configuration changed.
+- Backend `.venv/bin/python -m pytest tests/unit/services/test_medication_reference_service.py --no-cov -q`:
+  **30 passed**; English-first reference ordering preserves Spanish provenance.
+- Backend notification token/service/presentation and patient-timeline unit suites:
+  **197 passed**. No new live signing-key rotation was performed.
+- Backend `.venv/bin/ruff check src/app/services/medication_reference_service.py tests/unit/services/test_medication_reference_service.py`
+  and `.venv/bin/mypy src/ --ignore-missing-imports`: pass (283 source files).
+- `git diff --check`: pass.
+
+Remaining: REC-001 correction/source lifecycle UI checks, live stale-cursor
+recovery and second-reviewer/access acceptance. DV-022–024 need follow-up PR
+review/merge/deployment and live correction checks. No further remote migration,
+configuration, deployment or merge performed.
+
+### Unlisted-product live acceptance — October 21
+
+Requester explicitly approved one fictional Rajeev report: mild nausea 2/10,
+onset one hour ago, concern about “Synthetic QA herbal tea,” followed by Elena's
+acknowledgement. The initial Nora message was saved; guided fields retained only
+these facts. Location, duration, course, associated/warning symptoms, concomitant
+use, history and outcome were unknown—not invented negatives or chart-derived
+patient testimony. Strength/dose/route/indication/product dates were left blank.
+
+The reviewed preview labelled the product unverified/not on the medication list
+and used no record context. Consent was explicitly selected before confirmation.
+Report **`3f64ed79-630c-4ef3-a78c-98896d4be6fa`**, confirmed
+**2026-10-22 04:53:19.867952 UTC** (October 21 Pacific), survives patient reload
+as “Report saved for care-team review.”
+
+Elena received “Patient-reported product needs review,” explicitly not a confirmed
+ADR. Its Review reported product link opens `?tab=symptoms#symptom-<report_id>`;
+the exact report element receives focus and displays severity 2/10, original
+onset and unverified product, with comparison offered separately. No link/add
+medication action was taken. The initial Nora message also generated a separate
+existing safety flag; it remains unacknowledged, not merged into this product item.
+
+Elena recorded the authorized acknowledgement, with no optional note. Needs
+attention changed **42→41**; product item disappeared from active work and remains
+in History after reload. The UI states that acknowledgement is not clinical
+approval or resolution. The distinct safety flag remains open.
+
+Exact read-only database verification:
+
+| Check | Result |
+| --- | --- |
+| Confirmed report, correct patient/product and null medication FK | 1 |
+| Source-keyed review event with only `review_kind: unlisted_product` metadata | 1 |
+| Acknowledged receipt | 1 |
+| Matching acknowledgement audit, actor equals receipt recipient | 1 |
+| All Rajeev ADR assessments | 0 |
+| Rajeev reminder schedules | 0 |
+
+Before/after ordered full-row JSON fingerprints match (MD5 used only for equality,
+not a security signature): medications `96a94e3e7273ab8b21c439e930bd3336`, care-plan
+versions `01ae12b68ae4b83547ad5c1d069cb670`, obligations
+`c97e30f547df9abd0c4fd5a2936fc858`, ADR assessments
+`d751713988987e9331980363e24189ce` (empty array). Reloaded Profile retains all
+three medicines, Lisinopril 20 mg daily, glucose activity and unconfigured reminders.
+This completes MED-001's agreed deployed source-based review slice; DV-024 remains
+a separately tracked presentation fix, not comprehensive interaction validation.
+
+Screenshots: `/private/tmp/post208-unlisted-preview.png`,
+`/private/tmp/post208-unlisted-alert-arrived.png`,
+`/private/tmp/post208-unlisted-exact-report.png`,
+`/private/tmp/post208-unlisted-history.png`,
+`/private/tmp/post208-unlisted-audit-verified.png`.
+Only browser workflow writes (approved report and acknowledgement) were made;
+SQL was read-only. No new clinical approval, medication, ADR diagnosis or plan change.
+
+### Tracker reconciliation
+
+#208 rows move from In review to Verify deployed, not automatically Done.
+EVA-001 becomes optional P3 research; AI-004's shipped prompt-review slice no longer
+depends on a formal campaign. Runtime acceptance remains in AI-006/SAFE-002.
+PAT-002-C is Ready because confirmed intake is implemented; its patient history
+and full clinician report workflow are not delivered by a generic source timeline.
+CON-001 reuses the merged timeline, retaining handoff/export scope. CI-001 is
+already enforced in code: its old canary prerequisite is retired, with narrow-PR
+selection evidence still needing reconciliation. No CI/runtime safety gate changed.

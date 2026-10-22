@@ -63,6 +63,8 @@ class MedicationReferenceService:
             else None
         )
         result.references = [item for ref in knowledge.references[:3] if (item := _reference(ref))]
+        # Clinician controls are English; retain original Spanish references as supporting material.
+        result.references.sort(key=lambda item: item.locale != "en-US")
         if result.status == "found" and not result.references:
             result.status = "unavailable"
         return result
