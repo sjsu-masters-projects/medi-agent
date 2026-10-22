@@ -24,6 +24,8 @@ class ClinicianMessageRead(BaseModel):
     body: str
     is_read: bool = False
     created_at: str
+    # The confirmed symptom report a hand-off message is about; none for other messages.
+    symptom_report_id: UUID | None = None
 
 
 class ClinicianPatientMessageCreate(BaseModel):

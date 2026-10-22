@@ -3,7 +3,7 @@ import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NOTIFICATION_MIN_GAP_MS, NOTIFICATION_POLL_MS, NotificationProvider, useNotifications } from "@/contexts/notifications-context";
 import { NotificationBell, NotificationCentre } from "@/components/features/notification-centre";
-import { notifications } from "@/services/notifications";
+import { notificationDestination, notifications } from "@/services/notifications";
 import type { NotificationPage, PatientNotification } from "@/types/notifications";
 import { ApiClientError } from "@/services/api";
 
@@ -30,6 +30,23 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("patient notification centre", () => {
+  it("opens the reviewed symptom report from a care-team review notice, in both languages", async () => {
+    const report = "11111111-2222-4333-8444-555555555555";
+    const reviewed = (title: string, label: string): PatientNotification => ({ ...item("review"), event_type: "symptom_report_reviewed", category: "follow_up", title, body: "", action_url: `/symptoms/${report}`, action_label: label, actionable: false });
+    vi.mocked(notifications.list).mockResolvedValue(page([reviewed("Dr. Elena Park (Cardiology) reviewed your symptom report", "View")]));
+    render(<NotificationProvider><NotificationCentre /></NotificationProvider>);
+    expect(await screen.findByRole("link", { name: "View" })).toHaveAttribute("href", `/symptoms/${report}`);
+    cleanup();
+    session.profile.preferredLanguage = "es-MX";
+    vi.mocked(notifications.list).mockResolvedValue(page([reviewed("Dr. Elena Park (Cardiology) revisó tu reporte de síntomas", "Ver")]));
+    render(<NotificationProvider><NotificationCentre /></NotificationProvider>);
+    expect(await screen.findByRole("link", { name: "Ver" })).toHaveAttribute("href", `/symptoms/${report}`);
+  });
+  it("never links a malformed or foreign symptoms path", async () => {
+    for (const bad of ["/symptoms/abc", "//evil.invalid/symptoms/11111111-2222-4333-8444-555555555555"]) {
+      expect(notificationDestination(bad)).toBeNull();
+    }
+  });
   it("localizes load and uncertain write feedback in Spanish while retaining original content", async () => {
     session.profile.preferredLanguage = "es-MX";
     render(<NotificationProvider><NotificationCentre /></NotificationProvider>);

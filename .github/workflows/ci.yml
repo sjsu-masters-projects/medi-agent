@@ -440,6 +440,11 @@ jobs:
             # testimony that applies nothing, idempotency, expiry, immutability, grants.
             files: tests/integration/test_medication_confirmations_postgres.py
             minimums: test_medication_confirmations_postgres=17
+          - name: symptom-review-notifications
+            # The patient notice when a care team reviews a confirmed report and the report id
+            # on the hand-off message (095), on the whole ledger. Disposable containers.
+            files: tests/integration/test_symptom_review_notifications_postgres.py
+            minimums: test_symptom_review_notifications_postgres=8
           - name: care-handoff
             # Reviewed care-handoff summaries (089): ownership, append-only versions, approval
             # and export gating, concurrency. Opt-in env is set by the job.
