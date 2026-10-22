@@ -1,20 +1,20 @@
 -- PLAN-002 / CLN-003 slice G: the notification centre follows record ownership.
 --
 -- 051-079 fan a "shared" notification out to every active care-team link of the patient and
--- authorize a clinician by assignment alone. Since 084-086 a document, a plan, and reviewed
+-- authorize a clinician by assignment alone. Since 083-085 a document, a plan, and reviewed
 -- ADR work belong to ONE care team, so a second team's clinician would be told about, and be
 -- able to open an item for, a record that is not theirs. This migration scopes who receives
 -- and who may open each clinician item. Nothing is rewritten and no history is removed.
 --
 -- Recipients by source (clinician side):
 --   documents (document_review, document_failed)  the owning team; every active team while
---       routing_state = 'unrouted' (one claims it, 085); nobody when a routed document lost
+--       routing_state = 'unrouted' (one claims it, 084); nobody when a routed document lost
 --       its owner link.
 --   care_plan_versions (care_plan_draft)           the team that owns the plan; nobody for an
---       unowned or unassigned plan (those are review items for a clinic's admins, 084).
+--       unowned or unassigned plan (those are review items for a clinic's admins, 083).
 --   adr_assessments (adr_review), adr_information_requests (adr_information_answered)
 --       every team while the assessment is pending (reviewed_by IS NULL), then the
---       reviewing team, as the 085 policy reads it.
+--       reviewing team, as the 084 policy reads it.
 --   critical_result                                every active team: it is safety
 --       information. A team that does not hold the document sees a neutral item whose link
 --       stops at the patient (metadata.source_accessible = false), never the document.
@@ -325,7 +325,7 @@ BEGIN
     ('public.notification_events'::regclass, 'public.notification_receipts'::regclass,
      'public.notification_pending_deliveries'::regclass, 'public.notification_read_audit'::regclass)
     AND NOT relrowsecurity) THEN
-    RAISE EXCEPTION '087: the notification ledger must have RLS enabled';
+    RAISE EXCEPTION '086: the notification ledger must have RLS enabled';
   END IF;
   FOREACH v_function IN ARRAY ARRAY[
     'private.notification_links(uuid,uuid)',
@@ -338,7 +338,7 @@ BEGIN
     IF has_function_privilege('anon', v_function, 'EXECUTE')
        OR has_function_privilege('authenticated', v_function, 'EXECUTE')
        OR NOT has_function_privilege('service_role', v_function, 'EXECUTE') THEN
-      RAISE EXCEPTION '087: wrong execute grants on %', v_function;
+      RAISE EXCEPTION '086: wrong execute grants on %', v_function;
     END IF;
   END LOOP;
   IF (SELECT prosrc FROM pg_proc WHERE oid = 'private.notification_authorized(public.notification_events,uuid,text)'::regprocedure)
@@ -347,12 +347,12 @@ BEGIN
      NOT LIKE '%notification_owner_sees%'
      OR (SELECT prosrc FROM pg_proc WHERE oid = 'private.notification_prepare(uuid,text)'::regprocedure)
      NOT LIKE '%notification_owner_sees%' THEN
-    RAISE EXCEPTION '087: a notification function lost its ownership check';
+    RAISE EXCEPTION '086: a notification function lost its ownership check';
   END IF;
   IF EXISTS (SELECT 1 FROM pg_catalog.pg_proc
               WHERE proname IN ('notification_row', 'notification_centre_operation')
                 AND prosrc ~ 'cl\.id\s*=\s*c\.clinic_id') THEN
-    RAISE EXCEPTION '087: notification clinic labels must come from the care-team link''s clinic';
+    RAISE EXCEPTION '086: notification clinic labels must come from the care-team link''s clinic';
   END IF;
 END
 $verify$;

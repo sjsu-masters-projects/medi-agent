@@ -804,6 +804,10 @@ def test_launch_is_refused_before_any_oauth_step_when_the_owner_is_ambiguous(
             clinician_id=UUID(TWO), patient_id=UUID(PATIENT), issuer="https://x.example/fhir"
         )
     assert caught.value.code == "CARE_TEAM_REQUIRED"
+    # The refusal says plainly what happened and what to do instead.
+    assert "more than one care-team link" in caught.value.message
+    assert "Upload the records as documents" in caught.value.message
+    assert caught.value.details == {"limitation": "smart_launch_single_link_only"}
     service._discover.assert_not_called()
 
 

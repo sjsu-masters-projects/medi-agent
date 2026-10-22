@@ -148,7 +148,7 @@ def timeline_sql(sql):
     ):
         sql((MIGRATIONS / name).read_text())
     # Care-team ownership columns the timeline reads (the real definitions are migrations
-    # 084 and 085; this reduced schema only needs their shape). Shared: unrouted/unowned.
+    # 083 and 084; this reduced schema only needs their shape). Shared: unrouted/unowned.
     sql("""
       ALTER TABLE documents ADD COLUMN IF NOT EXISTS care_team_id uuid,
         ADD COLUMN IF NOT EXISTS routing_state text NOT NULL DEFAULT 'unrouted';

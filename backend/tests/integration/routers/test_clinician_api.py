@@ -1598,6 +1598,7 @@ class TestMedWatchDraftRoutes:
                 "approved_by": str(clinician_id),
                 "approved_at": "2026-10-12T18:00:00+00:00",
                 "discarded_at": None,
+                "care_team_id": db.tables["care_teams"][0]["id"],
             }
         ]
         db.errors["record_medwatch_draft_export"] = api_error("XX000")

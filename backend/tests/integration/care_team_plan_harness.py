@@ -24,11 +24,12 @@ from tests.integration.supabase_roles import create_roles_sql
 MIGRATIONS = Path(__file__).resolve().parents[2] / "src/app/db/migrations"
 # Tests marked with one of these stop just before that migration and apply it themselves.
 BOUNDARIES = {
-    "before_care_team_plans": "084",
-    "before_owned_records": "085",
-    "before_cross_plan_publication": "086",
+    "before_care_team_plans": "083",
+    "before_owned_records": "084",
+    "before_cross_plan_publication": "085",
+    "before_clinical_record_owner": "087",
 }
-FIRST_PLAN_MIGRATION = "084_care_team_plan_ownership.sql"
+FIRST_PLAN_MIGRATION = "083_care_team_plan_ownership.sql"
 # Ledger files the stand-in platform cannot run: pgvector, and the seed-ledger reader.
 SKIPPED = frozenset({"015_drug_knowledge_rag.sql", "021_allow_seed_ledger_read.sql"})
 

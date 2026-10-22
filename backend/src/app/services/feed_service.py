@@ -295,6 +295,28 @@ class FeedService:
                 return [target_id, *[i for i in ids if i != target_id]]
         return [target_id]
 
+    async def combined_groups(
+        self, patient_id: UUID, target_date: date
+    ) -> list[list[tuple[str, str]]]:
+        """Groups of identical live activities as (kind, id) pairs, the entry's own id first.
+
+        The same grouping Today uses, so the reminder dispatcher and the feed always agree
+        on which activities are one entry. Deterministic: members are ordered by creation
+        time then id, and recomputed on every call (nothing is stored).
+        """
+        medications, obligations, plan_items = await asyncio.gather(
+            self._get_medications(patient_id, strict=True),
+            self._get_obligations(patient_id, strict=True),
+            self._get_approved_plan_items(patient_id),
+        )
+        live_meds = self._current_plan_projections(medications, plan_items, target_date)
+        live_obls = self._current_plan_projections(obligations, plan_items, target_date)
+        activities = [("medication", m) for m in live_meds] + [("obligation", o) for o in live_obls]
+        return [
+            [(kind, str(row["id"])) for kind, row in group]
+            for group in group_identical_activities(activities, plan_items)  # type: ignore[arg-type]
+        ]
+
     @staticmethod
     def _plan_owner_for(target: dict[str, Any], snapshot: FeedSnapshot) -> dict[str, Any] | None:
         """The owner of the approved plan an activity came from; None for legacy records."""

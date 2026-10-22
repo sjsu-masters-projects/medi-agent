@@ -509,3 +509,33 @@ def test_a_lost_adoption_race_is_a_conflict() -> None:
     with pytest.raises(ConflictError) as caught:
         svc.adopt(uid(CLINICIAN), uid(UNOWNED_PLAN), care_team_id=uid(TEAM), note="n")
     assert caught.value.code == "PLAN_ALREADY_ADOPTED"
+
+
+def test_taking_an_unowned_record_sends_the_actor_and_team_and_maps_a_lost_race() -> None:
+    db = world()
+    svc = CarePlanReviewService(db)  # type: ignore[arg-type]
+    db.rpc_handlers["assign_clinical_record_owner"] = lambda params: {"replayed": False}
+
+    svc.take_record(uid(CLINICIAN), "adr_assessment", UUID(int=7), care_team_id=uid(TEAM))
+
+    assert db.rpc_calls == [
+        (
+            "assign_clinical_record_owner",
+            {
+                "p_record": "adr_assessment",
+                "p_record_id": str(UUID(int=7)),
+                "p_actor_id": CLINICIAN,
+                "p_care_team_id": TEAM,
+            },
+        )
+    ]
+
+    def lose(name: str, params: dict[str, Any]) -> Any:
+        chain = MagicMock()
+        chain.execute.side_effect = _api_error("40001", "record was taken by someone else")
+        return chain
+
+    db.rpc = lose  # type: ignore[method-assign,assignment]
+    with pytest.raises(ConflictError) as caught:
+        svc.take_record(uid(CLINICIAN), "medwatch_draft", UUID(int=7), care_team_id=uid(TEAM))
+    assert caught.value.code == "RECORD_ALREADY_TAKEN"

@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -238,11 +238,13 @@ async def test_pending_medwatch_count_queries_medwatch_drafts(service, mock_db):
     mock_db.table.return_value = chain
     patient = uuid4()
     service._execute = AsyncMock(  # type: ignore[method-assign]
-        return_value=_response(data=[{"id": "a", "patient_id": str(patient)}])
+        return_value=_response(
+            data=[{"id": "a", "patient_id": str(patient), "care_team_id": "team-1"}]
+        )
     )
 
     count = await service._get_pending_medwatch_count(
-        [patient], service.care_access.for_clinician(uuid4())
+        [patient], ClinicianAccess(str(uuid4()), {str(patient): frozenset({"team-1"})})
     )
 
     assert count == 1
@@ -393,6 +395,7 @@ async def test_review_adr_assessment_calls_atomic_assignment_scoped_rpc(service,
             "p_action": "mark_reviewed",
             "p_note": "Reviewed evidence",
             "p_requested_information": [],
+            "p_care_team_id": ANY,
         },
     )
 
@@ -505,6 +508,7 @@ async def test_request_information_accepts_only_missing_patient_question(service
             "p_action": "request_information",
             "p_note": "Describe what happened after the prior dose change.",
             "p_requested_information": ["dose_response"],
+            "p_care_team_id": ANY,
         },
     )
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response
@@ -21,6 +21,7 @@ from app.models.care_plan import (
     CrossPlanResolutionRequest,
     RetireItemsRequest,
     ReviewItemReplyRequest,
+    TakeRecordRequest,
 )
 from app.services.care_plan_preview_service import CarePlanPreviewService
 from app.services.care_plan_review_service import CarePlanReviewService
@@ -321,6 +322,20 @@ async def adopt_care_plan(
     service: CarePlanReviewService = Depends(_review_service),
 ) -> Any:
     return service.adopt(user.id, care_plan_id, care_team_id=data.care_team_id, note=data.note)
+
+
+@router.post(
+    "/clinician/records/{record}/{record_id}/take",
+    summary="Take up a reviewed ADR assessment or MedWatch draft that has no care team",
+)
+async def take_unowned_record(
+    record: Literal["adr_assessment", "medwatch_draft"],
+    record_id: UUID,
+    data: TakeRecordRequest,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: CarePlanReviewService = Depends(_review_service),
+) -> Any:
+    return service.take_record(user.id, record, record_id, care_team_id=data.care_team_id)
 
 
 @router.post(

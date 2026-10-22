@@ -1,4 +1,4 @@
-"""Notification centre and email follow record ownership (087) in a disposable PostgreSQL 16.
+"""Notification centre and email follow record ownership (086) in a disposable PostgreSQL 16.
 
 A patient with two care teams: a clinician of team B must not be told about, shown, emailed
 about, or able to open an item for a record team A owns. Critical-result alerts and pending
@@ -295,7 +295,7 @@ def test_an_assessment_a_team_has_taken_up_leaves_the_other_teams_centre(sql):
     two_teams(sql)
     adr = assessment(sql)
     receipt = items(sql, OTHER, "adr_review")[0]["id"]
-    # Team A asks the patient for information: the assessment is theirs now (085 policy).
+    # Team A asks the patient for information: the assessment is theirs now (084 policy).
     sql(f"""UPDATE adr_assessments SET reviewed_by='{CLINICIAN}', reviewed_by_care_team_id='{TEAM}',
       last_review_action='request_information' WHERE id='{adr}';""")
 

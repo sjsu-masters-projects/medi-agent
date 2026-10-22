@@ -70,9 +70,10 @@ markers = [
     "slow: long-running corpus tests, such as the Form 3500 PDF read-back",
     "before_clinic_memberships: the PostgreSQL fixture stops before 065 so the test checks its backfill",
     "before_clinic_scheduling: the PostgreSQL fixture stops before 069 so the test checks its backfill",
-    "before_care_team_plans: the PostgreSQL fixture stops before 084 so the test seeds a legacy lineage",
-    "before_owned_records: the PostgreSQL fixture stops before 085 so the test seeds legacy records",
-    "before_cross_plan_publication: the PostgreSQL fixture stops before 086 so the test seeds legacy plans",
+    "before_care_team_plans: the PostgreSQL fixture stops before 083 so the test seeds a legacy lineage",
+    "before_owned_records: the PostgreSQL fixture stops before 084 so the test seeds legacy records",
+    "before_cross_plan_publication: the PostgreSQL fixture stops before 085 so the test seeds legacy plans",
+    "before_clinical_record_owner: the PostgreSQL fixture stops before 087 so the test seeds reviewed records",
 ]
 timeout = 30
 timeout_method = "thread"

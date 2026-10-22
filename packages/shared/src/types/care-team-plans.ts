@@ -146,7 +146,8 @@ export type ReviewItemKind =
     | "cross_plan_conflict"
     | "conflict_acknowledged"
     | "conflict_published_without"
-    | "conflict_reply";
+    | "conflict_reply"
+    | "unowned_clinical_record";
 
 export interface PlanReviewItem {
     id: string;
@@ -326,3 +327,14 @@ export type CareTeamPlanErrorCode =
     | "DOCUMENT_ALREADY_CLAIMED"
     | "DOCUMENT_CLAIM_REQUIRED"
     | "CARE_TEAM_REQUIRED";
+
+/** POST /care-plans/clinician/records/{adr_assessment|medwatch_draft}/{id}/take */
+export interface TakeRecordRequest {
+    care_team_id: string;
+}
+
+/** Notification-centre item for a care-team work item (event_type "care_plan_review"). */
+export interface CarePlanReviewNotificationMetadata {
+    review_kind: ReviewItemKind;
+    care_plan_id: string | null;
+}
