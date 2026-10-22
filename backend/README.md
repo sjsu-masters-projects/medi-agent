@@ -36,6 +36,25 @@ Both generated locks retain the same patched version. Document preview, raster
 preprocessing and OCR regression tests cover this upgrade; never bypass the
 dependency audit to retain an affected image-processing library.
 
+## FHIR import and export (INT-002)
+
+SMART import retrieval is bounded before persistence: 20 pages per query,
+50 requests and 8 MiB per import, 2 MiB per response, 1,000 resources including
+Bundle envelopes and at most eight nested Bundle levels. Oversized input fails;
+it is not silently truncated. Pagination cannot leave the trusted issuer base
+or follow redirects with a bearer token. Source business identifiers remain
+immutable metadata, visible through the existing authorized source-detail API.
+Existing envelopes are read without backfill. Fetch errors omit upstream bodies
+and credentials. These application limits do not establish FHIR conformance.
+
+`GET /api/v1/smart/patients/{patient_id}/record-export` downloads the current
+clinician-visible canonical core as an `application/fhir+json` collection.
+It reuses shared-core authorization and condition privacy, validates the entire
+file before returning it, and sets `Cache-Control: no-store`. It is a subset,
+not an order, full chart or handoff approval. Re-import creates pending candidates.
+No migration or additional environment variable is required. See the
+[mapping and export guide](../docs/smart-fhir-review-mapping.md#identifier-fidelity-and-clinical-core-export).
+
 ## Run
 
 ```bash

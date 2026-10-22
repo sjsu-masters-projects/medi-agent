@@ -103,6 +103,8 @@ class FhirReviewSourceDetailRead(FhirReviewSourceRead):
     """The original synthetic FHIR envelope for clinician source inspection."""
 
     raw_resource: dict[str, Any]
+    identifiers: list[dict[str, Any]] = Field(default_factory=list)
+    master_identifier: dict[str, Any] | None = None
 
 
 class FhirReviewFactRead(ClinicalFactRead):

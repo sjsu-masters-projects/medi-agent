@@ -10,6 +10,7 @@ from supabase import Client
 
 from app.models.clinical_fact import ClinicalFactReviewState
 from app.services.clinician_record_gate import ClinicianRecordGate
+from app.services.fhir_identifiers import source_identifiers
 
 
 class FhirImportReviewService:
@@ -287,4 +288,6 @@ class FhirImportReviewService:
             "source_kind": "smart",
             "import_id": envelope.get("import_id"),
             "raw_resource": envelope.get("raw_resource") or {},
+            # Re-read the immutable envelope, including imports made before mapper v2.
+            **source_identifiers(envelope.get("raw_resource") or {}),
         }

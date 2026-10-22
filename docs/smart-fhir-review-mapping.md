@@ -152,6 +152,28 @@ characters only, long opaque values replaced with `[redacted]`, and at most 200
 characters. A callback whose state is invalid or expired logs the provider error
 but shows only the generic failure.
 
+## Identifier fidelity and clinical-core export
+
+The original-source dialog shows business identifiers separately from editable
+clinical values. The backend reads exact identifier metadata from the stored
+envelope, including imports predating mapper v2. It does not uppercase values,
+remove leading zeroes, backfill records or treat an identifier as proof of identity.
+
+Use **Download clinical record (FHIR)** in External records review to obtain the
+current canonical clinical-core subset. The backend rechecks assignment and
+sensitive-condition permissions on every download. The file contains a minimal
+Patient reference, active medicines as MedicationStatement, visible active
+Conditions and recorded AllergyIntolerances. Source candidates, private documents,
+encounters, observations and care plans are not asserted as canonical by this file.
+The generic `some-conditions-withheld` tag signals limited condition coverage
+without exposing hidden details. This is not a prescription or an approved handoff.
+
+The collection and its resources are validated with the installed R4B models,
+using R4-compatible fields. Re-import is candidate-only and never reapplies an
+approval, changes reminders or modifies a plan. Raw evidence remains available
+through the existing source inspection and reviewed handoff export is a separate
+workflow. See the [completion contract](../.agent/specs/int-002-003-interoperability-plan.md#october-22-completion-scope).
+
 ## Standards references
 
 - [SMART App Launch](https://www.hl7.org/fhir/smart-app-launch/app-launch.html)

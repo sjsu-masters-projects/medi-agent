@@ -1,0 +1,19 @@
+{
+  "resourceType": "Bundle",
+  "id": "synthetic-collection",
+  "type": "collection",
+  "identifier": {"system": "urn:synthetic:bundle", "value": "00Bundle"},
+  "entry": [
+    {"resource": {"resourceType": "Patient", "id": "synthetic-patient", "identifier": [{"system": "urn:synthetic:MRN", "value": "00aBc"}], "name": [{"text": "Synthetic Example"}]}},
+    {"resource": {"resourceType": "Encounter", "id": "synthetic-encounter", "identifier": [{"system": "urn:synthetic:encounter", "value": "00aBc"}], "status": "finished", "class": {"system": "http://terminology.hl7.org/CodeSystem/v3-ActCode", "code": "AMB"}, "subject": {"reference": "Patient/synthetic-patient"}}},
+    {"resource": {"resourceType": "Condition", "id": "synthetic-condition", "identifier": [{"system": "urn:synthetic:condition", "value": "00aBc"}], "subject": {"reference": "Patient/synthetic-patient"}, "code": {"text": "Synthetic condition"}}},
+    {"resource": {"resourceType": "AllergyIntolerance", "id": "synthetic-allergy", "identifier": [{"system": "urn:synthetic:allergy", "value": "00aBc"}], "patient": {"reference": "Patient/synthetic-patient"}, "code": {"text": "Synthetic allergen"}}},
+    {"resource": {"resourceType": "MedicationRequest", "id": "synthetic-order", "identifier": [{"system": "urn:synthetic:order", "value": "00aBc"}], "status": "active", "intent": "order", "subject": {"reference": "Patient/synthetic-patient"}, "medicationCodeableConcept": {"text": "Synthetic medicine"}}},
+    {"resource": {"resourceType": "MedicationStatement", "id": "synthetic-statement", "identifier": [{"system": "urn:synthetic:statement", "value": "00aBc"}], "status": "active", "subject": {"reference": "Patient/synthetic-patient"}, "medicationCodeableConcept": {"text": "Synthetic medicine"}}},
+    {"resource": {"resourceType": "Observation", "id": "synthetic-observation", "identifier": [{"system": "urn:synthetic:observation", "value": "00aBc"}], "status": "final", "code": {"text": "Synthetic measurement"}, "subject": {"reference": "Patient/synthetic-patient"}, "valueQuantity": {"value": 100, "unit": "mg/dL"}}},
+    {"resource": {"resourceType": "DiagnosticReport", "id": "synthetic-report", "identifier": [{"system": "urn:synthetic:report", "value": "00aBc"}], "status": "final", "code": {"text": "Synthetic report"}, "subject": {"reference": "Patient/synthetic-patient"}, "result": [{"reference": "Observation/synthetic-observation"}]}},
+    {"resource": {"resourceType": "Procedure", "id": "synthetic-procedure", "identifier": [{"system": "urn:synthetic:procedure", "value": "00aBc"}], "status": "completed", "subject": {"reference": "Patient/synthetic-patient"}, "code": {"text": "Synthetic procedure"}}},
+    {"resource": {"resourceType": "CarePlan", "id": "synthetic-plan", "identifier": [{"system": "urn:synthetic:plan", "value": "00aBc"}], "status": "active", "intent": "plan", "subject": {"reference": "Patient/synthetic-patient"}, "title": "Synthetic evidence only"}},
+    {"resource": {"resourceType": "DocumentReference", "id": "synthetic-document", "identifier": [{"system": "urn:synthetic:document", "value": "00aBc"}], "masterIdentifier": {"system": "urn:synthetic:master", "value": "00ABC"}, "status": "current", "subject": {"reference": "Patient/synthetic-patient"}, "content": [{"attachment": {"contentType": "text/plain", "title": "Synthetic record"}}]}}
+  ]
+}

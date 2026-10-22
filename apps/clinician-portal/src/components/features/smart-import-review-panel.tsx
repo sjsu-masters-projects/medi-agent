@@ -6,6 +6,7 @@ import { Card, Modal, Skeleton } from "@/components/ui";
 import { ApprovalSeal } from "@/components/ui/approval-seal";
 import { Icon } from "@/components/ui/icons";
 import { api } from "@/services/api";
+import { ClinicalCoreExport } from "@/components/features/clinical-core-export";
 import type { RootState } from "@/store/store";
 
 type ReviewState = "pending_review" | "approved" | "rejected";
@@ -152,6 +153,8 @@ interface ReviewResponse {
 
 interface SourceDetail extends ReviewSource {
   raw_resource: Record<string, unknown>;
+  identifiers?: Array<{ system?: string; value?: string; use?: string }>;
+  master_identifier?: { system?: string; value?: string } | null;
 }
 
 const PAGE_SIZE = 25;
@@ -769,6 +772,8 @@ export function SmartImportReviewPanel({
           <Icon name="refresh" aria-hidden="true" className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> {loading ? "Refreshing…" : "Refresh"}
         </button>
       </div>
+
+      <ClinicalCoreExport patientId={patientId} token={token} />
 
       <ol aria-label="Review steps" className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px] text-muted">
         {["Inspect provenance", "Compare with the local chart", "Record a clinician decision"].map((step, index) => (
@@ -1647,6 +1652,14 @@ export function SmartImportReviewPanel({
                 ? ` · version ${source.detail.version_id}`
                 : ""}
             </p>
+            {source.detail.source_kind === "smart" && <div className="space-y-2 text-sm text-ink-2">
+              <p className="font-medium">Source business identifiers</p>
+              <p className="text-muted">Source metadata only. These identifiers do not confirm patient identity or approve a clinical value.</p>
+              {(source.detail.identifiers?.length || source.detail.master_identifier) ? <ul className="space-y-1 [overflow-wrap:anywhere]">
+                {source.detail.identifiers?.map((identifier, index) => <li key={index}>{identifier.system || "System not supplied"}: <span className="whitespace-pre-wrap font-mono">{identifier.value ?? "Value not supplied"}</span>{identifier.use ? ` (${identifier.use})` : ""}</li>)}
+                {source.detail.master_identifier && <li>Master identifier: {source.detail.master_identifier.system || "System not supplied"}: <span className="whitespace-pre-wrap font-mono">{source.detail.master_identifier.value ?? "Value not supplied"}</span></li>}
+              </ul> : <p>None recorded by the source.</p>}
+            </div>}
             <pre className="max-h-[60vh] overflow-auto rounded-xl bg-rail p-4 font-mono text-xs leading-relaxed text-rail-ink">
               {JSON.stringify(source.detail.raw_resource, null, 2)}
             </pre>
