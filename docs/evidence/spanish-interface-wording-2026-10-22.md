@@ -68,6 +68,22 @@ paired entries included in the inventory, not unrelated runtime behavior.
 | Notification `safety_flag` | Omitted original conversation direction | Review the original conversation; the automated flag is not a clinical decision. |
 | Calendar `_COPY.1` | Omitted explicit one-time nature | One-time calendar copy; changes and cancellations do not synchronize. |
 
+## Addendum: completion batch 2 (October 22)
+
+Completion batch 2 (PAT-002-C review notifications, CON-001 handoff sharing) added four
+paired notification strings. They received the same model-assisted meaning-and-safety
+review, on the requester's authority (no human bilingual reviewer is required for this
+synthetic project). All other differences at this snapshot are moved line numbers.
+
+| Source/key | Review | Accepted Spanish |
+| --- | --- | --- |
+| Notification `symptom_report_reviewed.0` | Accurate; uses the app's "equipo de atención" and "reporte de síntomas" | Tu equipo de atención revisó tu reporte de síntomas |
+| Notification `symptom_report_reviewed.1` | Accurate, tú register, no clinical claim | Consulta tu reporte de síntomas. |
+| Notification `handoff_shared.0` | **Corrected.** "Resumen de traspaso" reads as an administrative transfer; Mexican clinical usage for a care handoff is "entrega" | Un colega compartió un resumen de entrega |
+| Notification `handoff_shared.1` | Accurate; keeps both boundaries (read-only, no record access); "expediente" is the Mexican term for the clinical record | Abre el resumen aprobado. Es de solo lectura; compartirlo no da acceso al expediente. |
+
+The receipt below was regenerated after this review, not to silence the gate.
+
 ## Durable acceptance
 
 The receipt stores every source SHA-256, the full paired-entry fingerprint and row

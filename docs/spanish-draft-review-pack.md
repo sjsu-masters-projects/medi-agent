@@ -45,12 +45,12 @@ Install the clinician portal's locked dependencies first for the TypeScript pars
 | [apps/patient-portal/src/app/(app)/profile/profile-copy.ts](../apps/patient-portal/src/app/%28app%29/profile/profile-copy.ts) | `a8df7495058e93e633c6adb8f75bc7958c7226dbe72820d7734f70ba1a0e2bcc` |
 | [apps/patient-portal/src/components/features/nora-conversations.tsx](../apps/patient-portal/src/components/features/nora-conversations.tsx) | `017df3a9f82e7ff9eaf1910f08129969133aba6e8cd7e0f03a85558f14a9d3c9` |
 | [packages/shared/src/utils/care-conversations.ts](../packages/shared/src/utils/care-conversations.ts) | `283f87a82d5ba91f6e0430b1a9a37e25f874197105661317a8089f798b6010b5` |
-| [backend/src/app/services/notification_centre_presentation.py](../backend/src/app/services/notification_centre_presentation.py) | `2ee382468d66325a99685ed9fc489bc414008845a12ce6e4e2a853dbe2fbabc2` |
+| [backend/src/app/services/notification_centre_presentation.py](../backend/src/app/services/notification_centre_presentation.py) | `95a29b933d63c6754728004b664387d38d1258093b13845da02541b7acf73817` |
 | [backend/src/app/services/symptom_report_presenter.py](../backend/src/app/services/symptom_report_presenter.py) | `0933ef4a7c4ad8b67120be941b9661105f081b01696f82c8c6e3ccefc00284f6` |
 | [backend/src/app/services/appointment_calendar.py](../backend/src/app/services/appointment_calendar.py) | `321826d7839e1e15f867e02cebfc8555c71a95cf9ff030825f5ea4d7ed7bb569` |
 | [backend/src/app/services/email_service.py](../backend/src/app/services/email_service.py) | `8ff3f52ed394057bfb4e9121b2fb65523939ec5cc5a18de97b0770a049b328bb` |
 
-## Review list (553 paired rows)
+## Review list (557 paired rows)
 
 Every listed pair is covered by the matching project-scope review receipt.
 Use the source key to identify duplicate declaration/accessor entries
@@ -559,19 +559,23 @@ across screens; do not infer that similar strings have the same clinical context
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.adr_information_requested.1` | Answer a few questions in the app about a symptom you already reported. Describe only what already happened. | Responde en la app unas preguntas sobre un síntoma que ya reportaste. Describe solo lo que ya pasó. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.adr_information_answered.0` | Patient answered medication-safety follow-up | El paciente respondió al seguimiento de seguridad de medicamentos |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.adr_information_answered.1` | A patient sent answers to follow-up questions. Review the updated evidence; this is not a clinical decision. | Un paciente envió respuestas a preguntas de seguimiento. Revisa la evidencia actualizada; esto no es una decisión clínica. |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.symptom_report_reviewed.0` | Your care team reviewed your symptom report | Tu equipo de atención revisó tu reporte de síntomas |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.symptom_report_reviewed.1` | See your symptom report. | Consulta tu reporte de síntomas. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.critical_result.0` | Critical test result reported | Resultado crítico de laboratorio reportado |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.critical_result.1` | A patient's document reports a result the laboratory marked critical. Open the document to review it. | Un documento del paciente informa un resultado que el laboratorio marcó como crítico. Ábrelo para revisarlo. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.care_plan_review.0` | Care-team work item | Tarea del equipo de atención |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.care_plan_review.1` | A care-plan item needs your care team. Open the patient to see it. | Un elemento del plan de atención requiere la atención de tu equipo. Abre el expediente del paciente para verlo. |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.handoff_shared.0` | A colleague shared a handoff summary | Un colega compartió un resumen de entrega |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.handoff_shared.1` | Open the approved summary. It is read-only; sharing does not give access to the record. | Abre el resumen aprobado. Es de solo lectura; compartirlo no da acceso al expediente. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.safety_flag.0` | Patient safety flag needs review | Aviso de seguridad del paciente pendiente de revisión |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.safety_flag.1` | An automated flag was saved. Review the original conversation; this is not a clinical decision. | Se guardó un aviso automático. Revisa la conversación original; esto no es una decisión clínica. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.med_reminder.0` | Medication reminder | Recordatorio de medicamento |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.med_reminder.1` | It's on your Today list. | Está en tu lista de Hoy. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.obligation_reminder.0` | Care-plan reminder | Recordatorio del plan de cuidado |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.obligation_reminder.1` | It's on your Today list. | Está en tu lista de Hoy. |
-| backend/src/app/services/notification_centre_presentation.py:155 / `_QUESTION_WORDING.reappeared_on_rechallenge.0` | Whether the symptom came back after restarting this medicine | Si el síntoma volvió después de reiniciar este medicamento |
-| backend/src/app/services/notification_centre_presentation.py:155 / `_QUESTION_WORDING.dose_response.0` | Whether the symptom changed after a dose change your clinician directed | Si el síntoma cambió después de un cambio de dosis indicado por tu profesional de salud |
-| backend/src/app/services/notification_centre_presentation.py:155 / `_QUESTION_WORDING.similar_previous_reaction.0` | Whether you have had a similar reaction to this medicine before | Si has tenido antes una reacción similar a este medicamento |
+| backend/src/app/services/notification_centre_presentation.py:170 / `_QUESTION_WORDING.reappeared_on_rechallenge.0` | Whether the symptom came back after restarting this medicine | Si el síntoma volvió después de reiniciar este medicamento |
+| backend/src/app/services/notification_centre_presentation.py:170 / `_QUESTION_WORDING.dose_response.0` | Whether the symptom changed after a dose change your clinician directed | Si el síntoma cambió después de un cambio de dosis indicado por tu profesional de salud |
+| backend/src/app/services/notification_centre_presentation.py:170 / `_QUESTION_WORDING.similar_previous_reaction.0` | Whether you have had a similar reaction to this medicine before | Si has tenido antes una reacción similar a este medicamento |
 | backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.description` | What happened | Qué pasó |
 | backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.location` | Where | Dónde |
 | backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.onset` | When it started | Cuándo empezó |

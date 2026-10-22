@@ -142,7 +142,7 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
     "handoff_shared": (
         "A colleague shared a handoff summary",
         "Open the approved summary. It is read-only; sharing does not give access to the record.",
-        "Un colega compartió un resumen de traspaso",
+        "Un colega compartió un resumen de entrega",
         "Abre el resumen aprobado. Es de solo lectura; compartirlo no da acceso al expediente.",
     ),
     "safety_flag": (

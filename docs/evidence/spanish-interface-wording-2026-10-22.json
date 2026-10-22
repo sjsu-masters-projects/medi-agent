@@ -5,8 +5,8 @@
   "scope": "exact paired interface copy only; no professional translation or clinical validation",
   "evidence": "spanish-interface-wording-2026-10-22.md",
   "snapshot": {
-    "row_count": 553,
-    "pairs_sha256": "268930c6b77fd2913a6812148d1a260a8a6c95cbc9513501e35c1bf78ad39f6a",
+    "row_count": 557,
+    "pairs_sha256": "c7775216ee74cb0713bae3eb902488cfb676c06a36e07a7cc21a7acd2303e8e4",
     "source_sha256": {
       "apps/patient-portal/src/content/chat-copy.ts": "68a36cfc9b2fd6a4724fb0f60b3f29ae0f66d83bc367d332363db6192af39d9a",
       "apps/patient-portal/src/content/care-team-copy.ts": "043b9a1eb79c7803a2f2e581463ac018fbf5917a34dc15713cdc6d8247eaedd9",
@@ -15,10 +15,17 @@
       "apps/patient-portal/src/app/(app)/profile/profile-copy.ts": "a8df7495058e93e633c6adb8f75bc7958c7226dbe72820d7734f70ba1a0e2bcc",
       "apps/patient-portal/src/components/features/nora-conversations.tsx": "017df3a9f82e7ff9eaf1910f08129969133aba6e8cd7e0f03a85558f14a9d3c9",
       "packages/shared/src/utils/care-conversations.ts": "283f87a82d5ba91f6e0430b1a9a37e25f874197105661317a8089f798b6010b5",
-      "backend/src/app/services/notification_centre_presentation.py": "2ee382468d66325a99685ed9fc489bc414008845a12ce6e4e2a853dbe2fbabc2",
+      "backend/src/app/services/notification_centre_presentation.py": "95a29b933d63c6754728004b664387d38d1258093b13845da02541b7acf73817",
       "backend/src/app/services/symptom_report_presenter.py": "0933ef4a7c4ad8b67120be941b9661105f081b01696f82c8c6e3ccefc00284f6",
       "backend/src/app/services/appointment_calendar.py": "321826d7839e1e15f867e02cebfc8555c71a95cf9ff030825f5ea4d7ed7bb569",
       "backend/src/app/services/email_service.py": "8ff3f52ed394057bfb4e9121b2fb65523939ec5cc5a18de97b0770a049b328bb"
     }
-  }
+  },
+  "addenda": [
+    {
+      "date": "2026-10-22",
+      "scope": "completion batch 2: four notification pairs (symptom_report_reviewed, handoff_shared); one correction",
+      "method": "requester_accepted_model_assisted_bilingual_meaning_and_safety_review"
+    }
+  ]
 }

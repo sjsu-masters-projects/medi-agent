@@ -446,6 +446,7 @@ jobs:
             files: tests/integration/test_symptom_review_notifications_postgres.py
             minimums: test_symptom_review_notifications_postgres=8
           - name: chat-safety
+            image: postgres:16-alpine
             # Safety-floor alerts: every floor rule is accepted, typed and delivered (059, 097),
             # plus the per-turn safety audit. Disposable containers, no remote database.
             files: tests/integration/test_chat_safety_postgres.py
