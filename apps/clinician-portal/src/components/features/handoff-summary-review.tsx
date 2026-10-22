@@ -12,9 +12,9 @@ import {
     fetchHandoffSummary,
     saveHandoffSummary,
     type HandoffDetail,
-    type HandoffItem,
-    type HandoffSection,
 } from "@/services/handoff-summaries";
+import { HandoffSharePanel } from "@/components/features/handoff-share-panel";
+import { Section, stamp } from "@/components/features/handoff-section";
 
 const EVENT_LABELS: Record<string, string> = {
     created: "Draft built",
@@ -22,49 +22,11 @@ const EVENT_LABELS: Record<string, string> = {
     refreshed: "Rebuilt from current records",
     approved: "Approved",
     exported: "Exported",
+    shared: "Shared",
+    share_revoked: "Share revoked",
+    shared_viewed: "Opened by recipient",
+    shared_exported: "Exported by recipient",
 };
-
-function stamp(value: string): string {
-    return value.replace("T", " ").slice(0, 16);
-}
-
-function SourceChip({ item }: { item: HandoffItem }) {
-    const chip = "inline-flex max-w-full min-w-0 items-center rounded-md border border-line bg-surface-2 px-2 py-0.5 text-xs text-ink-2";
-    if (item.source.href) {
-        return <Link className={`${chip} [overflow-wrap:anywhere] hover:bg-sunken hover:text-ink`} href={item.source.href}>Source: {item.source.label}</Link>;
-    }
-    return <span className={`${chip} [overflow-wrap:anywhere]`}>Source: {item.source.label}</span>;
-}
-
-function Section({ section }: { section: HandoffSection }) {
-    const [open, setOpen] = useState(true);
-    const panel = `handoff-section-${section.key}`;
-    return (
-        <section className="rounded-xl border border-line bg-surface ma-print-section" data-testid={`section-${section.key}`}>
-            <h3>
-                <button aria-controls={panel} aria-expanded={open} className="flex min-h-11 w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm font-semibold text-ink" onClick={() => setOpen(!open)} type="button">
-                    <span>{section.title}</span>
-                    <span className="flex items-center gap-2 text-xs font-normal text-muted">
-                        {section.status === "unavailable" ? <Badge variant="danger">Unavailable</Badge> : `${section.items.length} ${section.items.length === 1 ? "line" : "lines"}`}
-                        <span aria-hidden="true">{open ? "−" : "+"}</span>
-                    </span>
-                </button>
-            </h3>
-            <div className={`border-t border-line px-4 py-3 ${open ? "" : "hidden print:block"}`} id={panel}>
-                {section.note ? <p className={`mb-2 text-sm ${section.status === "unavailable" ? "font-medium text-risk-ink" : "text-muted"}`} role={section.status === "unavailable" ? "alert" : undefined}>{section.note}</p> : null}
-                <ul className="space-y-3">
-                    {section.items.map((item) => (
-                        <li className="min-w-0" key={item.id}>
-                            <p className="[overflow-wrap:anywhere] text-sm text-ink">{item.text}</p>
-                            {item.detail ? <p className="[overflow-wrap:anywhere] text-xs text-muted">{item.detail}</p> : null}
-                            <div className="mt-1"><SourceChip item={item} /></div>
-                        </li>
-                    ))}
-                </ul>
-            </div>
-        </section>
-    );
-}
 
 /** Review, edit, approve and export one handoff summary. */
 export function HandoffSummaryReview({ patientId, summaryId }: { patientId: string; summaryId: string }) {
@@ -76,6 +38,7 @@ export function HandoffSummaryReview({ patientId, summaryId }: { patientId: stri
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
     const [confirming, setConfirming] = useState(false);
+    const [sharing, setSharing] = useState(false);
 
     const adopt = useCallback((next: HandoffDetail) => {
         setDetail(next);
@@ -239,8 +202,9 @@ export function HandoffSummaryReview({ patientId, summaryId }: { patientId: stri
                             <Button disabled={busy || approved || dirty || readOnly || unavailable} onClick={() => setConfirming(true)} variant="approve">Approve</Button>
                             <Button disabled={busy || !canExport} onClick={() => void exportAs("print")} variant="secondary">Print</Button>
                             <Button disabled={busy || !canExport} onClick={() => void exportAs("fhir")} variant="secondary">Export FHIR</Button>
+                            <Button disabled={busy || !canExport} onClick={() => setSharing(true)} variant="secondary">Share</Button>
                         </div>
-                        {!approved ? <p className="mt-2 text-xs text-muted">Export is available once this version is approved. Editing an approved summary returns it to draft.</p> : null}
+                        {!approved ? <p className="mt-2 text-xs text-muted">Export and sharing are available once this version is approved. Editing an approved summary returns it to draft.</p> : null}
                     </section>
 
                     <section aria-labelledby="handoff-history" className="rounded-xl border border-line bg-surface p-4">
@@ -257,13 +221,15 @@ export function HandoffSummaryReview({ patientId, summaryId }: { patientId: stri
                         <ul className="mt-1 space-y-1">
                             {detail.events.map((event, index) => (
                                 <li className="text-xs text-muted" key={`${event.created_at}-${index}`}>
-                                    {EVENT_LABELS[event.event_type] ?? event.event_type}{event.export_format ? ` (${event.export_format})` : ""} · v{event.version} · {stamp(event.created_at)}
+                                    {EVENT_LABELS[event.event_type] ?? event.event_type}{event.recipient_name && event.event_type.startsWith("share") ? ` with ${event.recipient_name}` : ""}{event.export_format ? ` (${event.export_format})` : ""} · v{event.version} · {stamp(event.created_at)}
                                 </li>
                             ))}
                         </ul>
                     </section>
                 </aside>
             </div>
+
+            <HandoffSharePanel onChanged={() => void load()} onClose={() => setSharing(false)} open={sharing} summaryId={summaryId} version={detail.current_version} />
 
             <Modal onClose={() => setConfirming(false)} open={confirming} title="Approve this handoff summary?">
                 <p className="text-sm text-ink-2">Approving version {detail.current_version} confirms you reviewed every section and line. It can then be exported. Editing it later returns it to draft.</p>

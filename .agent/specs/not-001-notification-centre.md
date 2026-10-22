@@ -147,6 +147,12 @@ Browser writes/event creation are denied; server API and database access both
 enforce ownership/assignment. Revocation denies notification details and targets.
 Existing patient notification endpoints and reminder rows remain compatible.
 
+Symptom-report review (PAT-002-C follow-up, migration 095): a care team marking a confirmed
+report reviewed captures one patient `symptom_report_reviewed` event per (report, team) in the
+review's transaction (key `symptom_report_reviews:<report>:<team>`). History only, link
+`/symptoms/<report>`, copy from the reviewer name, specialty and the patient's own report title,
+mapped to no email category. Spec: pat-002-b plan section 30.1.
+
 ## Acceptance and rollout
 
 - Atomic capture, delivery retry, duplicate and concurrent read tests.

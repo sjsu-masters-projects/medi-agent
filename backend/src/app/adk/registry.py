@@ -43,6 +43,7 @@ class Workload(StrEnum):
     CARE_PLAN_CLASSIFICATION = "care_plan_classification"
     CARE_PLAN_TRANSLATION = "care_plan_translation"
     SOAP = "soap"
+    CONVERSATION_SUMMARY = "conversation_summary"
 
 
 class Transport(StrEnum):
@@ -305,6 +306,19 @@ _ROUTES: Final[dict[Workload, WorkloadRoute]] = {
         deterministic="leave the item untranslated for the clinician to retry or write",
         enabled_setting="care_plan_translation_ai_enabled",
         max_output_tokens=8192,
+        thinking_level="LOW",
+    ),
+    # Rewrites the stored rolling summary of an older conversation after a completed turn. No one
+    # waits on it, it never decides anything clinical, and a failure leaves the previous summary
+    # and the recent messages exactly as they were.
+    Workload.CONVERSATION_SUMMARY: WorkloadRoute(
+        workload=Workload.CONVERSATION_SUMMARY,
+        primary=FLASH,
+        fallback=None,
+        budget_seconds=15.0,
+        deterministic="keep the previous summary; the turn reads the recent messages only",
+        enabled_setting="conversation_summary_ai_enabled",
+        max_output_tokens=1024,
         thinking_level="LOW",
     ),
 }

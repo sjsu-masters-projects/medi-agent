@@ -13,6 +13,8 @@ from uuid import uuid4
 
 import pytest
 
+from app.safety.triage_floor import FLOOR_RULE_URGENCY
+
 pytestmark = pytest.mark.skipif(
     os.environ.get("CHAT_SAFETY_TEST_POSTGRES") != "1",
     reason="explicit opt-in disposable PostgreSQL safety check",
@@ -213,6 +215,7 @@ def sql(postgres):
         "010_chat_state_and_a2a_tasks.sql",
         "051_health_knowledge_and_chat_sessions.sql",
         "059_chat_safety_alerts.sql",
+        "097_medication_error_safety_persistence.sql",
     ):
         execute((MIGRATIONS / name).read_text())
     execute(f"""
@@ -234,13 +237,22 @@ def sql(postgres):
                 child.wait(timeout=10)
 
 
-def record_sql(*, patient=PATIENT, turn=TURN, content="Synthetic chest pain"):
+def record_sql(
+    *,
+    patient=PATIENT,
+    turn=TURN,
+    content="Synthetic chest pain",
+    rule="emergency_symptom_keyword",
+    language="en-US",
+    extra=None,
+):
     payload = json.dumps(
         {
+            **(extra or {}),
             "content": content,
             "session_id": "nora-safety-test",
-            "language": "en-US",
-            "safety_rule": "emergency_symptom_keyword",
+            "language": language,
+            "safety_rule": rule,
             "rule_version": "triage-floor/1",
             "response_text": "Synthetic SQL-only response fixture",
         }
@@ -342,3 +354,161 @@ def test_concurrent_record_reuses_one_turn(sql):
         assert process.wait(timeout=10) == 0, process.stderr.read()
     assert sql("SELECT count(*) FROM chat_messages;") == "2"
     assert sql("SELECT count(*) FROM chat_safety_alerts;") == "1"
+
+
+# ---------------------------------------------------------------------------
+# SAFE-002: every rule the floor can emit is accepted, typed and alerted
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("language", ["en-US", "es-MX"])
+@pytest.mark.parametrize("rule", sorted(FLOOR_RULE_URGENCY))
+def test_every_floor_rule_is_saved_with_its_urgency_and_alerts_the_care_team(sql, rule, language):
+    """The guard that would have caught urgent_medication_error being rejected."""
+    saved = json.loads(sql(record_sql(rule=rule, language=language)))
+    assert saved["urgency"] == FLOOR_RULE_URGENCY[rule]
+    assert sql("SELECT count(*) FROM chat_messages;") == "2"
+    assert sql("SELECT safety_rule || '/' || urgency FROM chat_safety_alerts;") == (
+        f"{rule}/{FLOOR_RULE_URGENCY[rule]}"
+    )
+    sent = json.loads(sql(deliver_sql()))
+    assert sent[0]["clinicians_notified"] == 1
+    assert json.loads(sql(deliver_sql())) == []
+    assert sql("SELECT count(*) FROM clinician_messages;") == "1"
+    body = sql("SELECT body FROM clinician_messages;")
+    if rule == "urgent_medication_error":
+        assert "(urgent/medication_question)" in body
+        assert "not an emergency alert" in body
+        assert sql("SELECT subject FROM clinician_messages;").startswith("Same-day review")
+        assert sql("SELECT intent FROM chat_messages WHERE role::text='assistant';") == (
+            "medication_question"
+        )
+    else:
+        assert "(emergency/" in body
+
+
+def test_medication_error_retry_and_concurrency_create_one_alert(sql):
+    first = sql.start(record_sql(rule="urgent_medication_error"))
+    second = sql.start(record_sql(rule="urgent_medication_error"))
+    for process in (first, second):
+        assert process.wait(timeout=10) == 0, process.stderr.read()
+    sql(record_sql(rule="urgent_medication_error"))
+    assert sql("SELECT count(*) FROM chat_safety_alerts;") == "1"
+    sql("SET ROLE service_role; SELECT public.deliver_chat_safety_alerts();")
+    deliveries = [
+        sql.start("SET ROLE service_role; SELECT public.deliver_chat_safety_alerts();")
+        for _ in range(2)
+    ]
+    for process in deliveries:
+        assert process.wait(timeout=10) == 0, process.stderr.read()
+    assert sql("SELECT count(*) FROM clinician_messages;") == "1"
+
+
+def test_unknown_rules_and_mismatched_urgency_are_rejected(sql):
+    sql(record_sql(rule="not_a_floor_rule"), succeeds=False)
+    sql(record_sql(rule="urgent_medication_error", extra={"urgency": "emergency"}), succeeds=False)
+    sql(record_sql(rule="emergency_symptom_keyword", extra={"urgency": "urgent"}), succeeds=False)
+    assert sql("SELECT count(*) FROM chat_safety_alerts;") == "0"
+    sql(
+        f"""
+        INSERT INTO chat_messages(id, patient_id, content, role, language) VALUES
+          ('{TURN}', '{PATIENT}', 'Synthetic', 'user', 'en-US'),
+          ('{OTHER}', '{PATIENT}', 'Synthetic', 'assistant', 'en-US');
+        INSERT INTO chat_safety_alerts(id, patient_id, source_message_id, assistant_message_id,
+          safety_rule, urgency, rule_version)
+          VALUES ('{TURN}', '{PATIENT}', '{TURN}', '{OTHER}', 'urgent_medication_error',
+            'emergency', 'triage-floor/1');
+        """,
+        succeeds=False,
+    )
+
+
+def test_alert_urgency_is_immutable(sql):
+    sql(record_sql(rule="urgent_medication_error"))
+    sql("UPDATE chat_safety_alerts SET urgency='emergency';", succeeds=False)
+
+
+def audit_sql(*, patient=PATIENT, turn=TURN, role="service_role", **fields):
+    payload = {
+        "safety_rule": "adverse_effect_signal",
+        "rule_version": "triage-floor/1",
+        "model_urgency": "routine",
+        "final_urgency": "urgent",
+        "outcome": "urgency_raised",
+        "escalation_required": True,
+        **fields,
+    }
+    body = json.dumps(payload).replace("'", "''")
+    return (
+        f"SET ROLE {role}; SELECT public.record_chat_turn_safety_audit('{patient}','{turn}',"
+        f"'{body}'::jsonb);"
+    )
+
+
+def test_turn_audit_is_idempotent_typed_and_holds_no_message_text(sql):
+    first = json.loads(sql(audit_sql()))
+    again = json.loads(sql(audit_sql()))
+    assert (
+        first
+        == again
+        == {
+            "turn_id": TURN,
+            "safety_rule": "adverse_effect_signal",
+            "outcome": "urgency_raised",
+        }
+    )
+    assert sql("SELECT count(*) FROM chat_turn_safety_audits;") == "1"
+    columns = sql(
+        "SELECT string_agg(column_name, ',') FROM information_schema.columns "
+        "WHERE table_name='chat_turn_safety_audits';"
+    )
+    assert "content" not in columns and "message" not in columns
+    # Same turn id for a different patient is not an alias for someone else's audit.
+    sql(audit_sql(patient=OTHER), succeeds=False)
+    # An escalation the model chose itself.
+    other_turn = "00000000-0000-0000-0000-000000000009"
+    json.loads(
+        sql(
+            audit_sql(
+                turn=other_turn,
+                safety_rule="model_classification",
+                model_urgency="urgent",
+                outcome="model_escalated",
+            )
+        )
+    )
+    assert sql("SELECT count(*) FROM chat_turn_safety_audits;") == "2"
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"safety_rule": "invented_rule"},
+        {"outcome": "something_else"},
+        {"final_urgency": "routine"},
+        {"model_urgency": "urgent"},  # urgency_raised requires the urgency to differ
+        {"rule_version": "triage-floor/2"},
+        {"outcome": "model_escalated", "model_urgency": "urgent"},  # needs model_classification
+    ],
+)
+def test_invalid_audit_is_rejected(sql, fields):
+    sql(audit_sql(**fields), succeeds=False)
+    assert sql("SELECT count(*) FROM chat_turn_safety_audits;") == "0"
+
+
+@pytest.mark.parametrize("role", ["anon", "authenticated"])
+def test_audit_is_backend_only_and_immutable(sql, role):
+    sql(audit_sql())
+    sql(audit_sql(role=role, turn=OTHER), succeeds=False)
+    sql(f"SET ROLE {role}; SELECT * FROM chat_turn_safety_audits;", succeeds=False)
+    sql("SET ROLE service_role; SELECT * FROM chat_turn_safety_audits;", succeeds=False)
+    sql("UPDATE chat_turn_safety_audits SET final_urgency='emergency';", succeeds=False)
+    sql("DELETE FROM chat_turn_safety_audits;", succeeds=False)
+
+
+def test_migration_097_reapplies_cleanly_without_losing_alerts(sql):
+    sql(record_sql(rule="urgent_medication_error"))
+    sql((MIGRATIONS / "097_medication_error_safety_persistence.sql").read_text())
+    assert sql("SELECT safety_rule || '/' || urgency FROM chat_safety_alerts;") == (
+        "urgent_medication_error/urgent"
+    )

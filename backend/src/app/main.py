@@ -169,6 +169,7 @@ def create_app() -> FastAPI:
         documents,
         email_preferences,
         feed,
+        handoff_shares,
         handoff_summaries,
         medication_confirmations,
         medications,
@@ -257,6 +258,9 @@ def create_app() -> FastAPI:
     )
     application.include_router(
         handoff_summaries.router, prefix=f"{api}/care-team", tags=["Handoff summaries"]
+    )
+    application.include_router(
+        handoff_shares.router, prefix=f"{api}/care-team", tags=["Handoff summaries"]
     )
     application.include_router(feed.router, prefix=f"{api}/feed", tags=["Feed"])
     application.include_router(cron.router, prefix=f"{api}/cron", tags=["Cron"])

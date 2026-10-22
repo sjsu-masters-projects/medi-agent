@@ -51,6 +51,7 @@ from app.adk.agents.care_coordinator import (
     build_care_coordinator,
     route_for_intent,
 )
+from app.adk.evidence import build_evidence, care_plan_ids_of, tool_names_of
 from app.adk.grounding import (
     StreamingReplyFilter,
     cited_sources,
@@ -62,6 +63,7 @@ from app.adk.grounding import (
 )
 from app.adk.models.resilient import DRAFT_RESET_KEY, ResilientLlm
 from app.adk.plugins import LOCALE_STATE_KEY
+from app.adk.recap import build_recap
 from app.adk.runner import build_runner
 from app.adk.tools import (
     DOCUMENT_CONTEXT_STATE_KEY,
@@ -77,6 +79,7 @@ from app.core.observability import record_chat_fallback
 from app.core.structured_logging import log_event
 from app.models.generation import GenerationErrorCode, GenerationProviderError
 from app.safety import TRIAGE_COPY, apply_safety_override, deterministic_safety_floor
+from app.safety.escalation import override_rule_id
 from app.utils.localization import resolve_locale_resource
 
 logger = logging.getLogger(__name__)
@@ -175,6 +178,7 @@ class CareCoordinatorRuntime:
         language: str,
         document_context: dict[str, Any] | None = None,
         earlier_messages: list[dict[str, Any]] | None = None,
+        conversation_summary: str | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Yield `classification`, then `chunk`s, then `complete` for one turn."""
         text = message.strip()
@@ -205,9 +209,9 @@ class CareCoordinatorRuntime:
         # The stored conversation is the source of the recap when the caller has it; the
         # in-process session is lost on every restart and deploy.
         recap = (
-            recap_from_messages(earlier_messages)
+            recap_from_messages(earlier_messages, conversation_summary)
             if earlier_messages is not None
-            else recent_conversation(prior_events)
+            else recent_conversation(prior_events, conversation_summary)
         )
         turn_state: dict[str, Any] = {
             RECENT_CONVERSATION_STATE_KEY: recap,
@@ -226,6 +230,8 @@ class CareCoordinatorRuntime:
         shown: list[str] = []
         sources: list[dict[str, Any]] = []
         tool_results: list[str] = []
+        tools_used: list[str] = []
+        plan_ids: list[str] = []
 
         model_started = time.monotonic()
         model_seen: list[str] = []
@@ -267,7 +273,15 @@ class CareCoordinatorRuntime:
                     if decision is not None and not classified:
                         intent, urgency, reason, escalate = _apply_floor_rules(decision, text)
                         classified = True
-                        yield _classification(intent, urgency, reason, escalate)
+                        model_urgency = str(decision.get("urgency") or "routine")
+                        yield _classification(
+                            intent,
+                            urgency,
+                            reason,
+                            escalate,
+                            model_urgency=model_urgency,
+                            override_rule=override_rule_id(text, model_urgency, urgency),
+                        )
 
                     if _is_draft_reset(event):
                         # The model failed after text was shown and the backup is answering
@@ -283,6 +297,8 @@ class CareCoordinatorRuntime:
                     if used is not None:
                         sources = used
                     tool_results.extend(_tool_results_of(event))
+                    tools_used.extend(tool_names_of(event))
+                    plan_ids.extend(care_plan_ids_of(event))
 
                     if event.author == COORDINATOR_AGENT_NAME:
                         # Internal working notes. Never shown to the patient.
@@ -361,6 +377,7 @@ class CareCoordinatorRuntime:
         # patient's documents are cited the same way as reference pages, in one line.
         answer = plain_reply(without_source_lines(answer))
         cited_documents: list[str] = []
+        cited: list[dict[str, Any]] = []
         if sources:
             cited = cited_sources(sources, answer)
             cited_documents = [
@@ -398,6 +415,8 @@ class CareCoordinatorRuntime:
             "fallback_used": False,
             # The server attaches these documents' results to the saved reply.
             "cited_documents": cited_documents,
+            # What the reply rested on, stored beside the saved reply (never shown as text).
+            "evidence": build_evidence(tools=tools_used, cited=cited, care_plan_ids=plan_ids),
         }
 
 
@@ -418,51 +437,26 @@ def _tool_results_of(event: Any) -> list[str]:
     ]
 
 
-_RECAP_TURNS = 3
-_RECAP_CHARS = 280
-
-
-def recent_conversation(events: list[Any]) -> str:
-    """The last few patient messages and Nora replies as plain text, for the coordinator.
+def recent_conversation(events: list[Any], summary: str | None = None) -> str:
+    """The recap built from in-process session events (used when stored messages are absent).
 
     Tool calls, tool results and internal notes are left out on purpose: replaying them
     is what made the coordinator skip the current turn's decision.
     """
-    lines: list[str] = []
+    messages: list[dict[str, Any]] = []
     for event in events:
         if getattr(event, "partial", False):
             continue
         author = getattr(event, "author", "")
-        speaker = (
-            "Patient" if author == "user" else "Nora" if author == RESPONDER_AGENT_NAME else None
-        )
-        if speaker:
-            lines.extend(_recap_line(speaker, _text_of(event)))
-    return _recap(lines)
+        role = "user" if author == "user" else "assistant" if author == RESPONDER_AGENT_NAME else ""
+        if role:
+            messages.append({"role": role, "content": _text_of(event)})
+    return build_recap(messages, summary)
 
 
-def recap_from_messages(messages: list[dict[str, Any]]) -> str:
+def recap_from_messages(messages: list[dict[str, Any]], summary: str | None = None) -> str:
     """The same recap, built from stored chat messages rather than in-process events."""
-    lines: list[str] = []
-    for message in messages:
-        role = str(message.get("role") or "")
-        speaker = "Patient" if role == "user" else "Nora" if role == "assistant" else None
-        if speaker:
-            lines.extend(_recap_line(speaker, str(message.get("content") or "")))
-    return _recap(lines)
-
-
-def _recap_line(speaker: str, text: str) -> list[str]:
-    flat = " ".join(without_source_lines(text).split())
-    if not flat:
-        return []
-    clipped = flat if len(flat) <= _RECAP_CHARS else flat[: _RECAP_CHARS - 1] + "…"
-    return [f"{speaker}: {clipped}"]
-
-
-def _recap(lines: list[str]) -> str:
-    recent = lines[-2 * _RECAP_TURNS :]
-    return "\n".join(recent) if recent else "(none: this is the first message)"
+    return build_recap(messages, summary)
 
 
 def _apply_floor_rules(decision: dict[str, Any], message: str) -> tuple[str, str, str, bool]:
@@ -481,8 +475,19 @@ def _apply_floor_rules(decision: dict[str, Any], message: str) -> tuple[str, str
     return intent, urgency, reason, urgency in {"urgent", "emergency"}
 
 
-def _classification(intent: str, urgency: str, reason: str, escalate: bool) -> dict[str, Any]:
+def _classification(
+    intent: str,
+    urgency: str,
+    reason: str,
+    escalate: bool,
+    *,
+    model_urgency: str | None = None,
+    override_rule: str | None = None,
+) -> dict[str, Any]:
+    """`model_urgency` and `override_rule` feed the SAFE-002 audit; no message text."""
     return {
+        "model_urgency": model_urgency or urgency,
+        "override_rule": override_rule,
         "type": "classification",
         "intent": intent,
         "urgency": urgency,

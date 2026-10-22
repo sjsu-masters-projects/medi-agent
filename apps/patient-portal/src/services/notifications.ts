@@ -26,5 +26,5 @@ export const notifications = {
 export function notificationDestination(value: string | null): string | null {
   if (!value || !value.startsWith("/") || value.startsWith("//") || /[\\\s]/.test(value)) return null;
   const url = new URL(value, "https://patient.invalid");
-  return url.origin === "https://patient.invalid" && ["/chat", "/today", "/visits", "/records", "/reminders"].includes(url.pathname) ? value : null;
+  return url.origin === "https://patient.invalid" && (["/chat", "/today", "/visits", "/records", "/reminders"].includes(url.pathname) || /^\/symptoms\/[0-9a-f-]{36}$/i.test(url.pathname)) ? value : null;
 }

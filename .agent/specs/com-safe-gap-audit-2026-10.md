@@ -136,3 +136,16 @@ Static read of `backend/src/app` (services, routers, `safety/`, `adk/`, `db/migr
 canonical fixture, `scripts/verify_authorization_denials.py`, both portals' `src` trees by grep,
 and the listed tests by name and count. No test, script, migration or service was run, and no
 environment was contacted. Portal UI was searched by keyword only, not read in full.
+
+## Update 2026-10-22: SAFE-002 medication-error slice (migration 097, not applied)
+
+- `urgent_medication_error` is accepted by `record_chat_safety_turn`; `chat_safety_alerts` gains a typed
+  `urgency` (emergency rules = emergency, medication error = urgent, tied by CHECK; immutable). Care-team
+  recipients are unchanged; the clinician message is worded per rule (en-US, "not an emergency alert").
+  Patient copy is unchanged. The WebSocket `assistant_start` and `assistant_complete` events now use the verdict urgency.
+- `FLOOR_RULE_URGENCY` (`safety/triage_floor.py`) lists every rule the floor emits. Guard tests enumerate it
+  against the migration (unit) and the RPC and delivery (PostgreSQL, `chat-safety` CI shard, which was not previously in CI).
+- Thin audit: `chat_turn_safety_audits` (turn id, rule id and version, model and final urgency, outcome, no message
+  text) written by `record_chat_turn_safety_audit`, idempotent per turn, best-effort with one retry, only when
+  `apply_safety_override` raised urgency or the model escalated. Clean turns are not recorded. This is a separate RPC
+  because `record_chat_safety_turn` creates the turn's messages. Voice, intake and document-chat paths are not retrofitted.

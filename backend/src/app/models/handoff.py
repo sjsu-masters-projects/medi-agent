@@ -119,6 +119,8 @@ class HandoffEvent(BaseModel):
     version: int
     export_format: str | None = None
     actor_id: UUID
+    recipient_id: UUID | None = None
+    recipient_name: str | None = None
     created_at: datetime
 
 
@@ -133,4 +135,107 @@ class HandoffExportResponse(BaseModel):
     format: ExportFormat
     summary: HandoffDetail
     # The FHIR R4 document Bundle for format "fhir"; absent for the printable view.
+    bundle: dict[str, Any] | None = None
+
+
+# ── Sharing an approved version with a colleague ─────────────────────────────────────────────
+
+
+class HandoffShareRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: int = Field(ge=1, le=200)
+    recipient_id: UUID
+
+
+class HandoffClinicRef(BaseModel):
+    id: UUID
+    name: str
+
+
+class HandoffRecipient(BaseModel):
+    clinician_id: UUID
+    first_name: str
+    last_name: str
+    specialty: str
+    clinics: list[HandoffClinicRef]
+    bases: list[Literal["care_team", "clinic_member"]]
+
+
+class HandoffShare(BaseModel):
+    id: UUID
+    summary_id: UUID
+    version: int
+    recipient_id: UUID
+    recipient_name: str | None = None
+    recipient_specialty: str | None = None
+    shared_at: datetime
+    revoked_at: datetime | None = None
+    # True when the call changed nothing (already shared / already revoked).
+    replayed: bool | None = None
+
+
+class HandoffNewer(BaseModel):
+    share_id: UUID
+    version: int
+
+
+class SharedHandoffItem(BaseModel):
+    share_id: UUID
+    summary_id: UUID
+    version: int
+    title: str
+    purpose: HandoffPurpose
+    patient_id: UUID
+    patient_name: str
+    author_name: str
+    author_specialty: str
+    shared_at: datetime
+    approved_at: datetime
+    newer: HandoffNewer | None = None
+
+
+class SharedHandoffDetail(BaseModel):
+    """What a recipient may see: the shared version only. No team, audit or record links."""
+
+    share_id: UUID
+    summary_id: UUID
+    version: int
+    title: str
+    purpose: HandoffPurpose
+    patient_id: UUID
+    patient_name: str
+    author_id: UUID
+    author_name: str
+    author_specialty: str
+    author_clinic: str | None = None
+    shared_at: datetime
+    approved_by: UUID
+    approved_by_name: str | None = None
+    approved_at: datetime
+    built_at: datetime
+    sections: list[HandoffSection]
+    narrative: str | None = None
+    notes: str | None = None
+    newer: HandoffNewer | None = None
+
+    @field_validator("sections")
+    @classmethod
+    def _without_record_links(cls, sections: list[HandoffSection]) -> list[HandoffSection]:
+        # The links open the patient's record, which the recipient may not hold.
+        for section in sections:
+            for item in section.items:
+                item.source = HandoffSource(kind=item.source.kind, label=item.source.label)
+        return sections
+
+
+class SharedHandoffExportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    format: ExportFormat
+
+
+class SharedHandoffExportResponse(BaseModel):
+    format: ExportFormat
+    summary: SharedHandoffDetail
     bundle: dict[str, Any] | None = None

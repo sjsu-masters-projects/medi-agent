@@ -1897,6 +1897,7 @@ interface ClinicianMessageResponse {
     body: string;
     is_read: boolean;
     created_at: string;
+    symptom_report_id?: string | null;
 }
 
 interface ClinicianMessageInboxResponse extends ClinicianMessageResponse {
@@ -1923,6 +1924,7 @@ function normalizeClinicianMessage(msg: ClinicianMessageResponse): ClinicianMess
         body: msg.body,
         isRead: msg.is_read,
         createdAt: msg.created_at,
+        symptomReportId: msg.symptom_report_id ?? null,
     };
 }
 

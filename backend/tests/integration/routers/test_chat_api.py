@@ -206,6 +206,10 @@ class TestChatWebSocket:
         async def _fetch_active_care_teams(_self, patient_id):
             return []
 
+        async def _no_summary(_self, patient_id, session_id):
+            return None
+
+        monkeypatch.setattr("app.routers.chat.ChatService.get_conversation_summary", _no_summary)
         monkeypatch.setattr(
             "app.routers.chat.ChatService.get_or_create_conversation_state",
             _get_or_create_state,

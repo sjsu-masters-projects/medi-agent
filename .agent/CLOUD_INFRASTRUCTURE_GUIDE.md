@@ -86,8 +86,20 @@ Their triggers are in section 5.
 - One person owns the Vercel projects (Hobby plan): `mediagent-patient` and
   `mediagent-clinician`, linked to `apps/patient-portal` and `apps/clinician-portal`.
 - Environment variables are set in the Vercel project settings.
-- Teammates do not need Vercel accounts; the GitHub integration builds every push and
-  posts a preview link on the PR.
+- Teammates do not need Vercel accounts.
+- **Only `main` deploys, and only when the portal changed** (October 22). The Hobby plan
+  rate-limits deployments, and building both portals on every pushed branch — including
+  backend-only commits — exhausted the daily allowance and left production on an old build.
+  Each portal's `vercel.json` sets `ignoreCommand` to
+  `scripts/vercel-ignore-build.sh <app>`. It skips every non-`main` branch (CI's portal lint,
+  typecheck, tests and `next build` already gate PRs), and on `main` skips unless
+  `apps/<app>`, `packages/shared` or the script itself changed since
+  `VERCEL_GIT_PREVIOUS_SHA`. It builds whenever it cannot compare: no earlier deployment, a
+  shallow clone without that commit, or not a git checkout. PRs therefore show the two Vercel
+  checks as "skipped (Ignored Build Step)" rather than preview links.
+- **After a rate-limit window** ("Deployment rate limited — retry in 24 hours"): once it
+  resets, open each project → Deployments → the latest `main` deployment → ⋯ → Redeploy, then
+  check both portals. Redeploying is a manual action and does not need a new commit.
 
 ### 5. Scheduled jobs (Cloud Scheduler) and run logs
 Cloud Scheduler triggers a small set of backend jobs, and the backend fans out to the

@@ -20,6 +20,7 @@ from app.models import ChatMessage
 from app.services.chat_service import ChatService, ConversationStateConflictError
 from app.services.chat_turn_execution import TurnChatService, TurnEmitter
 from app.services.chat_turn_service import ChatTurnService, TurnExecution, public_turn
+from app.services.conversation_summary import schedule_refresh
 
 logger = logging.getLogger(__name__)
 _STATE_REFRESH_ATTEMPTS = 3
@@ -154,6 +155,44 @@ async def report_turn_failure(
         logger.warning("Saved chat status temporarily unavailable: %s", failure_label(recover_exc))
 
 
+async def _after_completion(
+    service: ChatService,
+    staged: TurnChatService,
+    saved: dict[str, Any],
+    context: dict[str, Any],
+    incoming: Any,
+) -> None:
+    """Work that follows a delivered reply: its evidence, then the conversation summary.
+
+    Neither is allowed to change the turn's outcome. The reply is already saved and shown; a
+    failure here is logged by class only and the next turn simply has less context or the
+    evidence row is missing."""
+    patient_id, session_id = str(context["patient_id"]), str(context["session_id"])
+    try:
+        if staged.evidence:
+            async with asyncio.timeout(5):
+                await ChatService(service.db).record_reply_evidence(
+                    patient_id, session_id, str(saved["id"]), staged.evidence
+                )
+    except Exception as exc:
+        log_event(
+            logger,
+            "chat_turn.evidence_not_saved",
+            level=logging.WARNING,
+            message=f"Reply evidence was not saved: {failure_label(exc)}",
+            outcome="timeout" if isinstance(exc, TimeoutError) else type(exc).__name__,
+        )
+    try:
+        schedule_refresh(
+            service,
+            patient_id=patient_id,
+            session_id=session_id,
+            language=str(getattr(incoming.language, "value", incoming.language)),
+        )
+    except Exception as exc:
+        logger.warning("Conversation summary not scheduled: %s", failure_label(exc))
+
+
 def conversation_state_from_record(record: dict[str, Any]) -> dict[str, Any]:
     return {
         "turn_count": int(record.get("turn_count") or 0),
@@ -247,6 +286,7 @@ async def execute_turn(
             duration_ms=int((time.monotonic() - started_at) * 1000),
         )
         outcome["status"] = "completed"
+        await _after_completion(service, staged, saved, context, incoming)
         return state
     except asyncio.CancelledError:
         outcome["status"] = "cancelled"

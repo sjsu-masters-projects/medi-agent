@@ -118,6 +118,13 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
         "Un paciente envió respuestas a preguntas de seguimiento. Revisa la evidencia "
         "actualizada; esto no es una decisión clínica.",
     ),
+    # PAT-002-C follow-up. History only; the Spanish is a draft pending LOC-001 review.
+    "symptom_report_reviewed": (
+        "Your care team reviewed your symptom report",
+        "See your symptom report.",
+        "Tu equipo de atención revisó tu reporte de síntomas",
+        "Consulta tu reporte de síntomas.",
+    ),
     "critical_result": (
         "Critical test result reported",
         "A patient's document reports a result the laboratory marked critical. Open the document to review it.",
@@ -129,6 +136,14 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
         "A care-plan item needs your care team. Open the patient to see it.",
         "Tarea del equipo de atención",
         "Un elemento del plan de atención requiere la atención de tu equipo. Abre el expediente del paciente para verlo.",
+    ),
+    # Clinician-only news; the name comes from the event, never stored clinical text. The
+    # Spanish pair is an unapproved draft (LOC-001): no patient ever receives it.
+    "handoff_shared": (
+        "A colleague shared a handoff summary",
+        "Open the approved summary. It is read-only; sharing does not give access to the record.",
+        "Un colega compartió un resumen de entrega",
+        "Abre el resumen aprobado. Es de solo lectura; compartirlo no da acceso al expediente.",
     ),
     "safety_flag": (
         "Patient safety flag needs review",
@@ -196,6 +211,7 @@ _SOURCE_LABELS = {
     "symptom_reports": "Confirmed patient symptom report",
     "clinician_messages": "Earlier operational notice",
     "notifications": "Reminder or earlier notification",
+    "care_handoff_shares": "Shared handoff summary",
 }
 
 
@@ -358,6 +374,18 @@ _LINKS: dict[str, Callable[[dict[str, Any], str], Destination]] = {
 
 
 def destination(row: dict[str, Any], role: str) -> Destination:
+    if row["event_type"] == "symptom_report_reviewed":
+        # Patient-only: the report the review is about (the history detail screen).
+        report = _identifier(row.get("source_id"))
+        return (
+            f"/symptoms/{report}" if report and role == "patient" else None,
+            "View report",
+            "Ver reporte",
+        )
+    if row["event_type"] == "handoff_shared":
+        share = _identifier(row.get("source_id"))
+        link = f"/handoff-shared/{share}" if share else "/handoff-shared"
+        return (link, "Open shared summary", "Abrir resumen compartido")
     if row["event_type"] == "adr_information_requested" and role == "patient":
         # Since 063 the source is the request itself; earlier items name the assessment.
         # The follow-up view resolves either.
@@ -387,6 +415,25 @@ def _questions(row: dict[str, Any], spanish: bool) -> str:
     return "\n\n" + heading + "\n" + "\n".join(lines)
 
 
+def _review_notice_copy(row: dict[str, Any], spanish: bool) -> tuple[str, str]:
+    """Who reviewed which report, from the saved event: no answers, no clinical content."""
+    meta = _metadata(row)
+    name, specialty = _name(meta.get("clinician_name")), _name(meta.get("specialty"))
+    title = _name(meta.get("report_title"))
+    who = f"Dr. {name}" if name else ("Tu equipo de atención" if spanish else "Your care team")
+    if specialty:
+        who += f" ({specialty})"
+    if spanish:
+        return (
+            f"{who} revisó tu reporte de síntomas",
+            f"Tu reporte: \u201c{title}\u201d." if title else "Consulta tu reporte de síntomas.",
+        )
+    return (
+        f"{who} reviewed your symptom report",
+        f"Your report: \u201c{title}\u201d." if title else "See your symptom report.",
+    )
+
+
 def _display_copy(row: dict[str, Any], role: str, spanish: bool) -> tuple[str, str]:
     kind = str(row["event_type"])
     if kind == "safety_flag" and row.get("source_type") == "symptom_reports":
@@ -403,6 +450,11 @@ def _display_copy(row: dict[str, Any], role: str, spanish: bool) -> tuple[str, s
             "A result the laboratory marked critical was reported for this patient. The "
             "document is held by another care team of this patient. Check on the patient.",
         )
+    if kind == "symptom_report_reviewed":
+        return _review_notice_copy(row, spanish)
+    if kind == "handoff_shared" and _name(_metadata(row).get("actor_name")):
+        author = _name(_metadata(row).get("actor_name"))
+        return (f"{author} shared a handoff summary", _COPY["handoff_shared"][1])
     if kind == "care_plan_review" and _is_clinic_scope(row):
         return _CLINIC_REVIEW_COPY.get(
             str(_metadata(row).get("review_kind")), _CLINIC_REVIEW_DEFAULT

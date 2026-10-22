@@ -714,6 +714,8 @@ export interface ClinicianMessage {
     body: string;
     isRead: boolean;
     createdAt: string;
+    /** The confirmed symptom report a hand-off message is about; absent for other messages. */
+    symptomReportId?: string | null;
 }
 
 // ── Patient Summary (clinician dashboard view) ────

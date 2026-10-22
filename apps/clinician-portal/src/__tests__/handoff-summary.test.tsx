@@ -10,6 +10,9 @@ import {
     exportHandoffSummary,
     fetchHandoffSummary,
     listHandoffSummaries,
+    listHandoffShares,
+    listShareCandidates,
+    listSharedWithMe,
     saveHandoffSummary,
     type HandoffDetail,
 } from "@/services/handoff-summaries";
@@ -27,6 +30,11 @@ vi.mock("@/services/handoff-summaries", () => ({
     saveHandoffSummary: vi.fn(),
     approveHandoffSummary: vi.fn(),
     exportHandoffSummary: vi.fn(),
+    listSharedWithMe: vi.fn(),
+    listShareCandidates: vi.fn(),
+    listHandoffShares: vi.fn(),
+    shareHandoffSummary: vi.fn(),
+    revokeHandoffShare: vi.fn(),
 }));
 
 const detail = (over: Partial<HandoffDetail> = {}): HandoffDetail => ({
@@ -51,6 +59,9 @@ const detail = (over: Partial<HandoffDetail> = {}): HandoffDetail => ({
 const approved = () => detail({ status: "approved", approved_version: 2, approved_by: "c1", approved_at: "2026-10-21T11:00:00Z" });
 
 beforeEach(() => {
+    vi.mocked(listSharedWithMe).mockResolvedValue([]);
+    vi.mocked(listShareCandidates).mockResolvedValue([]);
+    vi.mocked(listHandoffShares).mockResolvedValue([]);
     vi.mocked(fetchHandoffSummary).mockResolvedValue(detail());
     window.print = vi.fn();
 });

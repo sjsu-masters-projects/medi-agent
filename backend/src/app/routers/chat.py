@@ -18,7 +18,12 @@ from supabase import Client
 from app.adk.chat_runtime import CareCoordinatorRuntime
 from app.config import settings
 from app.core import authorization_reasons as reasons
-from app.core.exceptions import AuthorizationError, ExternalServiceError, ValidationError
+from app.core.exceptions import (
+    AuthorizationError,
+    ExternalServiceError,
+    NotFoundError,
+    ValidationError,
+)
 from app.core.llm_failures import categorize_llm_failure
 from app.core.observability import record_chat_fallback
 from app.core.security import decode_access_token, get_current_user
@@ -26,9 +31,13 @@ from app.core.structured_logging import log_event, set_actor
 from app.db.connection import get_db
 from app.models import ChatMessage, ChatMessageCreate
 from app.models.auth import CurrentUser
-from app.models.chat import ChatConversation
+from app.models.chat import ChatConversation, ReplyEvidence
 from app.models.enums import ChatRole, Language
-from app.safety.intake_gate import IntakeSafetyDecision, evaluate_intake_safety
+from app.safety.intake_gate import (
+    SAFETY_RULE_VERSION,
+    IntakeSafetyDecision,
+    evaluate_intake_safety,
+)
 from app.safety.symptom_offer import symptom_offer_eligible
 from app.services.chat_document_catalog import (
     build_document_catalog_reply,
@@ -142,12 +151,37 @@ def _safety_turn_payload(options: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _turn_audit_payload(
+    *,
+    model_urgency: str,
+    urgency: str,
+    override_rule: str | None,
+    escalation_required: bool,
+) -> dict[str, Any] | None:
+    """SAFE-002: a turn is audited only when urgency was raised or the model escalated it.
+    Rule id, version, urgencies and outcome only; never message text."""
+    if override_rule is not None:
+        outcome, rule = "urgency_raised", override_rule
+    elif escalation_required and urgency in {"urgent", "emergency"}:
+        outcome, rule = "model_escalated", "model_classification"
+    else:
+        return None
+    return {
+        "safety_rule": rule,
+        "rule_version": SAFETY_RULE_VERSION,
+        "model_urgency": model_urgency,
+        "final_urgency": urgency,
+        "outcome": outcome,
+        "escalation_required": escalation_required,
+    }
+
+
 def _safety_completion(record: dict[str, Any], decision: IntakeSafetyDecision) -> dict[str, Any]:
     return {
         "type": "assistant_complete",
         "message": _serialize_chat_message(record["assistant_message"]),
         "intent": decision.verdict.intent,
-        "urgency": "emergency",
+        "urgency": decision.verdict.urgency,
         "escalation_required": True,
         "persistence_status": record["persistence_status"],
         "safety_rule": decision.verdict.safety_rule,
@@ -157,7 +191,11 @@ def _safety_completion(record: dict[str, Any], decision: IntakeSafetyDecision) -
 
 async def _send_safety_direction(websocket: WebSocket, decision: IntakeSafetyDecision) -> None:
     await websocket.send_json(
-        {"type": "assistant_start", "intent": decision.verdict.intent, "urgency": "emergency"}
+        {
+            "type": "assistant_start",
+            "intent": decision.verdict.intent,
+            "urgency": decision.verdict.urgency,
+        }
     )
     for chunk in _chunk_text(decision.response_text):
         await websocket.send_json({"type": "assistant_chunk", "content": chunk})
@@ -645,6 +683,22 @@ async def list_chat_conversations(
     return [ChatConversation.model_validate(row) for row in rows]
 
 
+@router.get("/evidence/{patient_id}/{message_id}", response_model=ReplyEvidence)
+async def get_reply_evidence(
+    patient_id: UUID,
+    message_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    service: ChatService = Depends(_get_service),
+) -> Any:
+    """The evidence one of Nora's replies used. Same access as the chat history: the patient
+    for their own replies, an actively assigned clinician for their patient's."""
+    await _ensure_chat_access(current_user, patient_id, service.db)
+    row = await service.get_reply_evidence(str(patient_id), str(message_id))
+    if row is None:
+        raise NotFoundError("Reply evidence", str(message_id))
+    return ReplyEvidence.model_validate({**row, "message_id": str(row["message_id"])})
+
+
 async def _execute_turn(
     run: TurnRun,
     service: ChatService,
@@ -924,6 +978,18 @@ def _watch_inflight_worker_turns(
             )
 
 
+async def _stored_summary(service: ChatService, patient_id: str, session_id: str) -> str | None:
+    """The conversation's stored summary, or None: a missing or slow summary never fails a reply."""
+    try:
+        async with asyncio.timeout(3):
+            row = await service.get_conversation_summary(patient_id, session_id)
+    except Exception as exc:
+        logger.warning("Conversation summary not read: %s", _failure_label(exc))
+        return None
+    text = str(row.get("summary") or "").strip() if isinstance(row, dict) else ""
+    return text or None
+
+
 async def _process_chat_message(
     websocket: Any, service: ChatService, context: dict[str, Any]
 ) -> dict[str, Any]:
@@ -968,9 +1034,12 @@ async def _process_chat_message(
 
     assistant_content = ""
     cited_documents: list[str] = []
+    evidence: dict[str, Any] | None = None
     assistant_intent = "general"
     assistant_urgency = "routine"
     escalation_required = False
+    model_urgency = "routine"
+    override_rule: object = None
     route = "triage"
     assistant_start_sent = False
     streamed_response = False
@@ -978,6 +1047,7 @@ async def _process_chat_message(
     # emergency, never for an information question); the model's route can only add to it.
     symptom_offer = False
 
+    summary = await _stored_summary(service, str(patient_id), session_id)
     try:
         # The patient's own record is read by the coordinator through a tool
         # rather than pushed in here, so the identifier travels and the record
@@ -992,6 +1062,7 @@ async def _process_chat_message(
             document_context=document_context,
             # Stored messages, not the process's memory, so a restart keeps context.
             earlier_messages=conversation_history[:-1],
+            conversation_summary=summary,
         )
         async for event in stream_iter:
             ev_type = event.get("type")
@@ -1006,6 +1077,8 @@ async def _process_chat_message(
                         incoming.content, route=route, urgency=assistant_urgency
                     )
                 )
+                model_urgency = str(event.get("model_urgency") or assistant_urgency)
+                override_rule = event.get("override_rule")
 
                 await websocket.send_json(
                     {
@@ -1046,6 +1119,8 @@ async def _process_chat_message(
             elif ev_type == "complete":
                 assistant_content = str(event.get("response_text", "")).strip()
                 cited_documents = [str(item) for item in event.get("cited_documents") or [] if item]
+                reply_evidence = event.get("evidence")
+                evidence = reply_evidence if isinstance(reply_evidence, dict) else None
     except Exception as exc:
         fallback_reason = categorize_llm_failure(exc)
         record_chat_fallback(layer="L3_outer", reason=fallback_reason)
@@ -1062,9 +1137,11 @@ async def _process_chat_message(
         assistant_content = resolve_locale_resource(incoming.language, OUTER_FALLBACK_COPY)[
             "outer_fallback"
         ]
+        evidence = None
         assistant_intent = "general"
         assistant_urgency = "routine"
         escalation_required = False
+        override_rule = None
         route = "triage"
         symptom_offer = False
 
@@ -1078,6 +1155,7 @@ async def _process_chat_message(
             {"type": "symptom_intake_offer", "source_message_id": str(user_message["id"])}
         ]
         if route == "symptom":
+            evidence = None  # the acknowledgement replaces the reply and rests on no sources
             assistant_content = resolve_locale_resource(incoming.language, SYMPTOM_OFFER_ACK_COPY)[
                 "ack"
             ]
@@ -1116,6 +1194,7 @@ async def _process_chat_message(
             "language": written_language(assistant_content, incoming.language),
             "session_id": session_id,
             "attachments": attachments,
+            "evidence": evidence,
         },
     )
     if attachments and not assistant_message.get("attachments"):
@@ -1168,6 +1247,16 @@ async def _process_chat_message(
                 }
             )
     if escalation_required:
+        audit = _turn_audit_payload(
+            model_urgency=model_urgency,
+            urgency=assistant_urgency,
+            override_rule=override_rule if isinstance(override_rule, str) else None,
+            escalation_required=escalation_required,
+        )
+        if audit is not None:
+            await ChatSafetyService(service.db).record_audit_safely(
+                str(patient_id), str(user_message["id"]), audit
+            )
         clinicians_notified = await service.notify_assigned_clinicians(
             patient_id=str(patient_id),
             payload={

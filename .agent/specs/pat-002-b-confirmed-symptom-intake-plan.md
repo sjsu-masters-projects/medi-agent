@@ -1339,3 +1339,35 @@ and the explicit **Confirm and share** are unchanged. The intake API is reused, 
 - **Known follow-ups.** Hands-free mode does not read the offer line aloud (a patient can still
   answer yes by voice). The offer is not recomputed for messages saved before this change.
 
+
+### 30.1 Follow-ups: review notice and hand-off report link (migration 095, October 22, 2026)
+
+Requester decision (October 22): both follow-ups from section 30's known gaps are in.
+
+- **Patient notice.** When a care team marks a confirmed report reviewed, the patient's
+  notification centre gets one History item per (report, care team): "Dr. Park (Cardiology)
+  reviewed your symptom report" (`symptom_report_reviewed`, category `follow_up`, source
+  `symptom_reports`), body `Your report: "<title the patient wrote>"`, link
+  `/symptoms/{report}`. An AFTER INSERT trigger on `symptom_report_reviews` captures it in the
+  review's own transaction, keyed `symptom_report_reviews:<report>:<team>` (the review's primary
+  key), so replays and concurrent repeats converge on one event; a rolled-back review leaves
+  nothing. The event stores only the reviewer name, the team's specialty and the report title
+  (capped); never answers, provenance or the safety outcome. Never actionable, never an action
+  item. Only "reviewed" exists: nothing records viewed or replied. Reviews recorded before 095
+  are not announced late. Spanish copy is a draft pending LOC-001 native review.
+- **Email.** No email category fits this event, so `private.email_preference` is NULL for it and
+  no preference can turn it into email (asserted in the migration and in a contract test).
+  Adding a category would be a new product decision.
+- **Hand-off report link.** `clinician_messages.symptom_report_id` (nullable, `ON DELETE SET NULL`)
+  is written by the hand-off. The clinician's Earlier messages list shows "Open symptom report",
+  linking `/patients/{patient}?tab=symptoms#symptom-{id}`. Existing hand-off rows are linked only
+  when the `review_handoff` audit row names exactly one report with the same patient, subject and
+  exact body, written in the same transaction; the rest stay unlinked. Who can read a message is
+  unchanged.
+- **Patient portal fix.** The notification destination allowlist now admits
+  `/symptoms/<uuid>` (and nothing else under `/symptoms`), otherwise the link would have been
+  dropped.
+- **Verification.** Unit (presentation, migration text, router field), Postgres contract
+  `test_symptom_review_notifications_postgres.py` (8 cases: once per team, replay and concurrency,
+  rollback, denials, patient-only read, no email, hand-off link, backfill and re-apply, no late
+  announcement; CI shard `symptom-review-notifications`), and vitest in both portals.

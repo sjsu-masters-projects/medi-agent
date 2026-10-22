@@ -634,3 +634,75 @@ def test_a_clinic_level_work_item_names_no_patient_and_links_the_clinic_page(rev
     assert shown.action_url == f"/care-plan-reviews?clinic={clinic}&item={raw['source_id']}"
     assert "patient" not in shown.title.lower()
     assert str(shown.clinic_id) == clinic
+
+
+def reviewed_item(**changes: Any) -> dict[str, Any]:
+    fields: dict[str, Any] = {
+        "event_type": "symptom_report_reviewed",
+        "category": "follow_up",
+        "source_type": "symptom_reports",
+        "actionable": False,
+        "metadata": {
+            "care_team_id": str(uuid4()),
+            "clinician_name": "Alex Park",
+            "specialty": "Cardiology",
+            "report_title": "Headache after lunch",
+        },
+    }
+    return item(**{**fields, **changes})
+
+
+def test_review_notice_names_the_team_and_the_patients_own_report_title_in_both_languages():
+    raw = reviewed_item()
+    english = present_item(raw, "patient", "en-US")
+    spanish = present_item(raw, "patient", "es-MX")
+    assert english.title == "Dr. Alex Park (Cardiology) reviewed your symptom report"
+    assert english.body == "Your report: “Headache after lunch”."
+    assert spanish.title == "Dr. Alex Park (Cardiology) revisó tu reporte de síntomas"
+    assert spanish.body == "Tu reporte: “Headache after lunch”."
+    # History only: a link, no call to act, nothing to acknowledge, no clinical content.
+    assert not english.actionable and not english.can_acknowledge
+    assert english.action_label == "View" and spanish.action_label == "Ver"
+    assert english.category == "follow_up"
+
+
+def test_review_notice_links_the_patients_report_detail_and_nobody_else():
+    raw = reviewed_item()
+    assert present_item(raw, "patient", "en-US").action_url == f"/symptoms/{raw['source_id']}"
+    assert destination(raw, "patient")[1:] == ("View report", "Ver reporte")
+    # Clinicians never receive this event; if one somehow rendered it, it links nothing.
+    assert destination(raw, "clinician")[0] is None
+
+
+def test_review_notice_copy_drops_unsafe_or_missing_metadata():
+    raw = reviewed_item(
+        metadata={"clinician_name": str(uuid4()), "specialty": " ", "report_title": None}
+    )
+    shown = present_item(raw, "patient", "en-US")
+    assert shown.title == "Your care team reviewed your symptom report"
+    assert shown.body == "See your symptom report."
+    assert present_item(raw, "patient", "es-MX").title == (
+        "Tu equipo de atención revisó tu reporte de síntomas"
+    )
+    long_title = reviewed_item(metadata={"report_title": "x" * 500})
+    assert len(present_item(long_title, "patient", "en-US").body) < 200
+
+
+def test_a_shared_handoff_item_names_the_author_links_the_share_and_carries_no_content():
+    raw = item(
+        event_type="handoff_shared",
+        category="follow_up",
+        source_type="care_handoff_shares",
+        actionable=False,
+        metadata={"actor_name": "Elena Park", "version": 2, "secret": "Lisinopril"},
+    )
+
+    shown = present_item(raw, "clinician", "en-US")
+
+    assert shown.title == "Elena Park shared a handoff summary"
+    assert shown.action_url == f"/handoff-shared/{raw['source_id']}"
+    assert shown.actionable is False and shown.action_label == "View"
+    assert shown.source_label == "Shared handoff summary"
+    assert "Lisinopril" not in shown.model_dump_json()
+    nameless = present_item({**raw, "metadata": {}}, "clinician", "en-US")
+    assert nameless.title == "A colleague shared a handoff summary"
