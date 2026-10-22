@@ -778,6 +778,33 @@ describe("Patient chat page", () => {
         expect(screen.getByText("Please stay hydrated and rest today.")).toBeInTheDocument();
     });
 
+    it("withdraws a draft on assistant_reset, shows the replacement, and ends with one saved bubble", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const socket = MockWebSocket.instances[0];
+        await act(async () => {
+            socket.emitOpen();
+            socket.emitMessage({ type: "assistant_start", intent: "general", urgency: "routine" });
+            socket.emitMessage({ type: "assistant_chunk", content: "Half an answer. " });
+        });
+        expect(screen.getByText(/Half an answer/)).toBeInTheDocument();
+        await act(async () => { socket.emitMessage({ type: "assistant_reset" }); });
+        expect(screen.queryByText(/Half an answer/)).not.toBeInTheDocument();
+        await act(async () => { socket.emitMessage({ type: "assistant_chunk", content: "Please contact your care team." }); });
+        expect(screen.getByText(/Please contact your care team\./)).toBeInTheDocument();
+        await act(async () => {
+            socket.emitMessage({
+                type: "assistant_complete",
+                message: {
+                    audio_url: null, content: "Please contact your care team.", created_at: "2026-04-17T10:01:00Z",
+                    id: "assistant-9", intent: "general", language: "en", patient_id: "patient-1", role: "assistant",
+                },
+            });
+        });
+        expect(screen.getAllByText("Please contact your care team.")).toHaveLength(1);
+        expect(screen.queryByText(/Half an answer/)).not.toBeInTheDocument();
+    });
+
     describe("results cards", () => {
         const resultsAttachment = {
             type: "document_results",

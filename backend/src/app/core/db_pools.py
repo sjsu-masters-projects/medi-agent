@@ -22,12 +22,14 @@ NOTIFICATION_POOL_SIZE = 3
 CHAT_TURN_POOL_SIZE = 4
 DISPATCH_POOL_SIZE = 2
 EVENTS_POOL_SIZE = 3
+TELEMETRY_POOL_SIZE = 1
 # Running plus waiting calls allowed per pool. Beyond this the call is refused at once (HTTP
 # 503 with Retry-After) instead of queueing without bound behind a slow dependency.
 NOTIFICATION_MAX_PENDING = 12
 CHAT_TURN_MAX_PENDING = 32
 DISPATCH_MAX_PENDING = 16
 EVENTS_MAX_PENDING = 24
+TELEMETRY_MAX_PENDING = 2
 
 _notification_pool = ThreadPoolExecutor(
     max_workers=NOTIFICATION_POOL_SIZE, thread_name_prefix="notification-db"
@@ -43,10 +45,15 @@ _dispatch_pool = ThreadPoolExecutor(max_workers=DISPATCH_POOL_SIZE, thread_name_
 # own bulkhead and can never starve the turn control calls on the chat-turn pool.
 _events_pool = ThreadPoolExecutor(max_workers=EVENTS_POOL_SIZE, thread_name_prefix="turn-events")
 
+# Availability counter flushes: one thread, at most one running and one waiting.
+_telemetry_pool = ThreadPoolExecutor(
+    max_workers=TELEMETRY_POOL_SIZE, thread_name_prefix="telemetry-db"
+)
+
 logger = logging.getLogger(__name__)
 # Counters are touched only on the event loop thread (before submit and in the awaiting
 # coroutine's finally), so they need no lock.
-_pending = {"notification": 0, "chat_turn": 0, "dispatch": 0, "events": 0}
+_pending = {"notification": 0, "chat_turn": 0, "dispatch": 0, "events": 0, "telemetry": 0}
 
 
 async def _run(name: str, pool: ThreadPoolExecutor, limit: int, call: Callable[[], T]) -> T:
@@ -81,3 +88,7 @@ async def run_dispatch(call: Callable[[], T]) -> T:
 
 async def run_events_db(call: Callable[[], T]) -> T:
     return await _run("events", _events_pool, EVENTS_MAX_PENDING, call)
+
+
+async def run_telemetry_db(call: Callable[[], T]) -> T:
+    return await _run("telemetry", _telemetry_pool, TELEMETRY_MAX_PENDING, call)

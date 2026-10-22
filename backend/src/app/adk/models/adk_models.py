@@ -27,7 +27,7 @@ from google.adk.models import BaseLlm, FallbackModel, Gemini
 from google.adk.models.lite_llm import LiteLlm
 from pydantic import PrivateAttr
 
-from app.adk.models.resilient import ResilientLlm
+from app.adk.models.resilient import ReplyRoute, ResilientLlm
 from app.adk.models.vertex_maas import litellm_model_id, vertex_openapi_base_url
 from app.adk.registry import ModelSpec, Transport, Workload, route_for
 from app.clients.vertex_auth import google_adc_bearer
@@ -138,17 +138,35 @@ def adk_model_for_workload(workload: Workload) -> BaseLlm:
     independently by the next patient turn.
     """
     route = route_for(workload)
-    primary = _bounded_model(route.primary, timeout_seconds=route.budget_seconds)
+    # Only the patient's reply is shown while it is written; every other route stays whole.
+    stream_text = workload is Workload.REPLY
+    primary = _bounded_model(
+        route.primary,
+        timeout_seconds=route.budget_seconds,
+        workload=workload,
+        stream_text=stream_text,
+    )
     if route.fallback is None:
         return primary
     fallback = _bounded_model(
-        route.fallback, timeout_seconds=route.budget_seconds, fallback_candidate=True
+        route.fallback,
+        timeout_seconds=route.budget_seconds,
+        fallback_candidate=True,
+        workload=workload,
+        stream_text=stream_text,
     )
+    if stream_text and isinstance(primary, ResilientLlm) and isinstance(fallback, ResilientLlm):
+        return ReplyRoute(model=primary.model, candidates=[primary, fallback])
     return FallbackModel(models=[primary, fallback])
 
 
 def _bounded_model(
-    spec: ModelSpec, *, timeout_seconds: float | None, fallback_candidate: bool = False
+    spec: ModelSpec,
+    *,
+    timeout_seconds: float | None,
+    fallback_candidate: bool = False,
+    workload: Workload | None = None,
+    stream_text: bool = False,
 ) -> BaseLlm:
     delegate = adk_model_for(spec)
     if timeout_seconds is None:
@@ -166,4 +184,6 @@ def _bounded_model(
             else settings.vertex_ai_location
         ),
         fallback_candidate=fallback_candidate,
+        stream_text=stream_text,
+        workload=workload.value if workload is not None else "unknown",
     )

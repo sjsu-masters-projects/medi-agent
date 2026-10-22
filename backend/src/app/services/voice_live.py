@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, cast
 from uuid import uuid4
 
-from app.adk.grounding import without_source_lines
+from app.adk.grounding import StreamingReplyFilter, without_source_lines
 from app.config import settings
 from app.core.structured_logging import log_event
 from app.models.enums import Language, coerce_locale
@@ -517,12 +517,16 @@ class SentenceChunker:
     def __init__(self, *, max_chars: int) -> None:
         self._max = max_chars
         self._buffer = ""
+        # Source lines are dropped whole, by line, before any sentence is cut: a source title
+        # can contain a full stop, and the part after it must not be read out as a sentence.
+        self._lines = StreamingReplyFilter()
 
     def feed(self, delta: str) -> list[str]:
-        self._buffer += delta
+        self._buffer += self._lines.feed(delta)
         return self._drain(final=False)
 
     def finish(self) -> list[str]:
+        self._buffer += self._lines.finish()
         return self._drain(final=True)
 
     def _drain(self, *, final: bool) -> list[str]:

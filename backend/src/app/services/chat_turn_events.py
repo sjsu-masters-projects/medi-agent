@@ -31,8 +31,10 @@ from app.services.chat_turn_service import public_turn
 logger = logging.getLogger(__name__)
 
 READ_TIMEOUT_SECONDS = 8
-POLL_ACTIVE_SECONDS = 0.5
-POLL_MAX_IDLE_SECONDS = 2.0
+# Short enough that a sentence written by the worker reaches a listening patient quickly, long
+# enough that an idle viewer costs about one small indexed read a second.
+POLL_ACTIVE_SECONDS = 0.3
+POLL_MAX_IDLE_SECONDS = 1.0
 STATUS_CHECK_EVERY = 6  # idle polls between checks of the turn row (a terminal event may be absent)
 MAX_WATCHERS = 200
 BATCH = 200
@@ -171,8 +173,20 @@ def event_to_messages(
     kind, payload = event.get("type"), event.get("payload") or {}
     out: list[dict[str, Any]] = []
     if kind == "started":
+        run = int(payload.get("run") or 0)
+        if state.get("started") and run > int(state.get("run") or 0):
+            # The worker lost the turn and another run took it over: its draft starts again,
+            # so what this viewer showed is withdrawn rather than left to look stuck.
+            out.append({"type": "assistant_reset"})
+            state.update(started=False, text="", epoch=0)
+        state["run"] = run
         out.append({"type": "chat_turn", "turn": public_turn({**base, "status": "processing"})})
     elif kind == "draft":
+        epoch = int(payload.get("epoch") or 0)
+        if epoch > int(state.get("epoch") or 0):
+            if state.get("text"):
+                out.append({"type": "assistant_reset"})
+            state.update(epoch=epoch, text="")
         if not state.get("started"):
             out.append(
                 {
@@ -273,7 +287,7 @@ async def watch_turn(
             return
         idle = 0 if events else idle + 1
         await asyncio.sleep(
-            POLL_ACTIVE_SECONDS if events else min(POLL_MAX_IDLE_SECONDS, 0.5 + 0.25 * idle)
+            POLL_ACTIVE_SECONDS if events else min(POLL_MAX_IDLE_SECONDS, 0.4 + 0.2 * idle)
         )
     log_event(
         logger,

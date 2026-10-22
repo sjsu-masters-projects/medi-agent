@@ -56,6 +56,11 @@ export interface AssistantChunkEvent {
     content: string;
 }
 
+/** The reply shown so far is withdrawn (the model failed after it began, or a retry restarted it). */
+export interface AssistantResetEvent {
+    type: "assistant_reset";
+}
+
 export interface ChatHistoryEvent {
     type: "chat_history";
     messages: ChatMessageApi[];
@@ -150,6 +155,7 @@ export type ChatSocketEvent =
     | AppointmentCreatedEvent
     | AppointmentProposalEvent
     | AssistantChunkEvent
+    | AssistantResetEvent
     | AssistantCompleteEvent
     | AssistantStartEvent
     | ChatContextLoadedEvent

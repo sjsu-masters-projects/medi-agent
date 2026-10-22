@@ -17,7 +17,7 @@ MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "src" / "app" / "db" / "m
 # Applied 067 filenames stay immutable. Only that exact historical pair is allowed;
 # an additional file at 067 must still fail rather than silently changing history.
 LEGACY_SHARED_SEQUENCES = frozenset({11, 38, 39, 40, 41, 42, 43, 47, 48, 51})
-RESERVED_SEQUENCES = frozenset()  # All formerly reserved LOC-003 files now exist.
+RESERVED_SEQUENCES = frozenset()  # No open branch holds a reserved number ahead of this one.
 LEGACY_SHARED_FILENAME_GROUPS = frozenset(
     {
         frozenset(
