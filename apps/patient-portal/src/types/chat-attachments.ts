@@ -14,4 +14,14 @@ export interface ChatDocumentResultsAttachment {
     results: DocumentResult[];
 }
 
-export type ChatAttachment = ChatDocumentResultsAttachment;
+/**
+ * Set by the server when the patient's own message describes a reportable, non-emergency
+ * symptom or possible side effect. It only asks; nothing is drafted until the patient says yes.
+ */
+export interface ChatSymptomOfferAttachment {
+    type: "symptom_intake_offer";
+    /** The patient's message the private note would be about. */
+    sourceMessageId: string;
+}
+
+export type ChatAttachment = ChatDocumentResultsAttachment | ChatSymptomOfferAttachment;

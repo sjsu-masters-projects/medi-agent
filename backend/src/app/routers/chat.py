@@ -28,8 +28,8 @@ from app.models import ChatMessage, ChatMessageCreate
 from app.models.auth import CurrentUser
 from app.models.chat import ChatConversation
 from app.models.enums import ChatRole, Language
-from app.models.symptom_intake import IntakeStart
 from app.safety.intake_gate import IntakeSafetyDecision, evaluate_intake_safety
+from app.safety.symptom_offer import symptom_offer_eligible
 from app.services.chat_document_catalog import (
     build_document_catalog_reply,
     is_document_catalog_question,
@@ -42,7 +42,6 @@ from app.services.chat_service import (
     normalize_session_id,
 )
 from app.services.chat_turn_events import TurnEventReader, TurnWatchSet, watch_turn
-from app.services.chat_turn_execution import TurnChatService
 from app.services.chat_turn_pipeline import (
     conversation_state_from_record as _conversation_state_from_record,
 )
@@ -57,11 +56,34 @@ from app.services.chat_turn_service import (
     public_turn,
     turn_budget,
 )
-from app.services.symptom_intake_service import SymptomIntakeService
 from app.utils.localization import resolve_locale_resource, written_language
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# Shown when the model labels a turn a reportable symptom: an acknowledgement only. The
+# offer to note it is a typed attachment the portal renders under this message.
+# Spanish wording is a draft pending LOC-001 approval.
+SYMPTOM_OFFER_ACK_COPY: dict[str, dict[str, str]] = {
+    "default": {
+        "ack": (
+            "I'm sorry you're dealing with that. Nothing is shared with your care team "
+            "unless you choose to."
+        )
+    },
+    Language.EN.value: {
+        "ack": (
+            "I'm sorry you're dealing with that. Nothing is shared with your care team "
+            "unless you choose to."
+        )
+    },
+    Language.ES.value: {
+        "ack": (
+            "Lamento que estés pasando por eso. No se comparte nada con tu equipo de "
+            "atención a menos que tú lo decidas."
+        )
+    },
+}
 
 # The outermost fallback: triage itself could not be reached. Every other tier is
 # localized through TRIAGE_COPY, so this one is too — a patient who wrote in Spanish
@@ -952,6 +974,9 @@ async def _process_chat_message(
     route = "triage"
     assistant_start_sent = False
     streamed_response = False
+    # Decided from the patient's message by the deterministic path (never for an
+    # emergency, never for an information question); the model's route can only add to it.
+    symptom_offer = False
 
     try:
         # The patient's own record is read by the coordinator through a tool
@@ -975,6 +1000,12 @@ async def _process_chat_message(
                 assistant_urgency = str(event.get("urgency", "routine"))
                 route = str(event.get("route", "triage"))
                 escalation_required = bool(event.get("escalation_required", False))
+                symptom_offer = bool(
+                    settings.symptom_intake_enabled
+                    and symptom_offer_eligible(
+                        incoming.content, route=route, urgency=assistant_urgency
+                    )
+                )
 
                 await websocket.send_json(
                     {
@@ -998,7 +1029,7 @@ async def _process_chat_message(
                 # that answer away and left the patient reading "I am having
                 # trouble answering right now". Nothing replaces an emergency
                 # reply, so there is nothing to protect the patient from seeing.
-                if route == "symptom" and assistant_urgency != "emergency":
+                if route == "symptom" and symptom_offer:
                     await stream_iter.aclose()
                     break
             elif ev_type == "chunk":
@@ -1035,45 +1066,22 @@ async def _process_chat_message(
         assistant_urgency = "routine"
         escalation_required = False
         route = "triage"
+        symptom_offer = False
 
     delegation_events: list[dict[str, Any]] = []
-    if route == "symptom" and assistant_urgency != "emergency":
-        intake = SymptomIntakeService(service.db, current_user)
-        try:
-            if isinstance(service, TurnChatService):
-                await service.execution.actions()
-            draft = await intake.start(
-                IntakeStart(
-                    source_message_id=user_message["id"],
-                    session_id=session_id,
-                )
-            )
-            await websocket.send_json(
-                {
-                    "type": "symptom_intake_updated",
-                    "intake_id": draft["intake_id"],
-                    "revision": draft["revision"],
-                }
-            )
-            assistant_content = (
-                "Tu borrador privado está abierto. Puedes responder a Nora por texto o voz. "
-                "Revisa y confirma antes de compartirlo."
-                if incoming.language == Language.ES
-                else "Your private draft is open. You can answer Nora by text or voice. "
-                "Review and confirm before sharing."
-            )
-        except Exception:
-            # If the guided form or its schema is unavailable, do not imply that a
-            # symptom report or ADR record was saved.
-            assistant_content = (
-                "La captura guiada de síntomas no está disponible. No se guardó un informe de síntomas."
-                if incoming.language == Language.ES
-                else "Guided symptom intake is unavailable. No symptom report was saved."
-            )
-            await websocket.send_json({"type": "symptom_intake_unavailable"})
-        assistant_intent = "symptom"
-        # Guided intake replaces automatic persistence, not triage. Preserve an
-        # urgent classification so assigned clinicians still receive the same alert.
+    offer_attachments: list[dict[str, Any]] = []
+    if symptom_offer:
+        # Offer only. Nothing is drafted or saved until the patient says yes, and the
+        # draft stays private until they confirm. Urgent triage and clinician alerts
+        # are unchanged and independent of this offer.
+        offer_attachments = [
+            {"type": "symptom_intake_offer", "source_message_id": str(user_message["id"])}
+        ]
+        if route == "symptom":
+            assistant_content = resolve_locale_resource(incoming.language, SYMPTOM_OFFER_ACK_COPY)[
+                "ack"
+            ]
+            assistant_intent = "symptom"
 
     # If we never sent assistant_start (e.g. exception before classification),
     # emit it now so the client transitions out of "loading" state.
@@ -1098,7 +1106,7 @@ async def _process_chat_message(
         await asyncio.to_thread(service.result_attachments, str(patient_id), cited_documents)
         if cited_documents
         else []
-    )
+    ) + offer_attachments
     assistant_message = await service.save_message(
         patient_id=str(patient_id),
         data={

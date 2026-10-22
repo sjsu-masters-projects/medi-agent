@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Provider } from "react-redux";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ChatPage from "@/app/(app)/chat/page";
@@ -803,6 +803,45 @@ describe("Patient chat page", () => {
         });
         expect(screen.getAllByText("Please contact your care team.")).toHaveLength(1);
         expect(screen.queryByText(/Half an answer/)).not.toBeInTheDocument();
+    });
+
+    describe("symptom note offer", () => {
+        const message = (id: string, content: string, attachments?: unknown) => ({
+            audio_url: null, content, created_at: "2026-10-22T10:01:00Z", id, intent: "symptom", language: "en-US",
+            patient_id: "patient-1", role: "assistant", ...(attachments === undefined ? {} : { attachments }),
+        });
+        const offer = [{ type: "symptom_intake_offer", source_message_id: "user-turn-1" }];
+        async function open(messages: unknown[]) {
+            renderPage();
+            await screen.findByText(getPatientChatCopy(Language.EN).welcomeMessage);
+            await act(async () => { MockWebSocket.instances[0].emitOpen(); MockWebSocket.instances[0].emitMessage({ type: "chat_history", messages }); });
+        }
+
+        it("shows no start control on an ordinary chat", async () => {
+            await open([message("a1", "You take metformin 500 mg twice daily.")]);
+            expect(await screen.findByText(/metformin 500 mg/)).toBeInTheDocument();
+            expect(screen.queryByText("Start a symptom draft")).not.toBeInTheDocument();
+            expect(screen.queryByRole("group", { name: /note this for your care team/ })).not.toBeInTheDocument();
+        });
+
+        it("offers conversationally under the symptom reply and remembers Not now across a reload", async () => {
+            await open([message("a2", "I'm sorry you're dealing with that.", offer)]);
+            const group = await screen.findByRole("group", { name: /note this for your care team/ });
+            expect(within(group).getByRole("button", { name: "Yes, let’s do it" })).toBeInTheDocument();
+            fireEvent.click(within(group).getByRole("button", { name: "Not now" }));
+            expect(screen.queryByRole("group", { name: /note this for your care team/ })).not.toBeInTheDocument();
+            cleanup();
+            MockWebSocket.instances.length = 0;
+            await open([message("a2", "I'm sorry you're dealing with that.", offer)]);
+            expect(await screen.findByText(/dealing with that/)).toBeInTheDocument();
+            expect(screen.queryByRole("group", { name: /note this for your care team/ })).not.toBeInTheDocument();
+        });
+
+        it("hides an offer once a newer message follows it", async () => {
+            await open([message("a3", "I'm sorry you're dealing with that.", offer), { ...message("a4", "Anything else?"), intent: "general" }]);
+            expect(await screen.findByText("Anything else?")).toBeInTheDocument();
+            expect(screen.queryByRole("group", { name: /note this for your care team/ })).not.toBeInTheDocument();
+        });
     });
 
     describe("results cards", () => {
