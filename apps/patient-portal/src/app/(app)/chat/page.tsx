@@ -76,7 +76,7 @@ export default function ChatPage() {
     const wasFollowUp = useRef(false);
     const privateReply = useRef<PrivateReplyHandler | null>(null);
     const registerPrivateReply = useCallback((handler: PrivateReplyHandler | null) => { privateReply.current = handler; }, []);
-    const routePrivateReply = useCallback<PrivateReplyHandler>((text, mode) => privateReply.current?.(text, mode) ?? "unhandled", []);
+    const routePrivateReply = useCallback<PrivateReplyHandler>((text, mode, spokenLocale) => privateReply.current?.(text, mode, spokenLocale) ?? "unhandled", []);
     const [intakeComposer, setIntakeComposer] = useState<IntakeComposerState>({ active: false, busy: false, revision: "" });
     const updateIntakeComposer = useCallback((next: IntakeComposerState) => {
         setIntakeComposer((previous) => previous.active === next.active && previous.busy === next.busy && previous.revision === next.revision && previous.locale === next.locale && previous.accepting === next.accepting ? previous : next);
@@ -309,7 +309,7 @@ export default function ChatPage() {
                         }}
                         placeholder={voiceStatus === "listening" ? controls.listening : voiceStatus === "processing" ? controls.transcribing : copy.inputPlaceholder} value={input} />
                     <button className={`ma-press flex h-11 w-11 shrink-0 items-center justify-center rounded-full disabled:opacity-40 ${voiceStatus === "listening" ? "bg-danger-ink text-white" : "bg-surface-2 text-ink-2 hover:bg-line-strong"}`} aria-label={voiceStatus === "listening" ? controls.stopVoice : voiceStatus === "playing" ? controls.interrupt : controls.speak} aria-pressed={voiceStatus === "listening"}
-                        disabled={turnBusy || (!intakeComposer.active && documentUnavailable) || voiceStatus === "unsupported" || voiceStatus === "processing" || intakeComposer.busy || !profile} onClick={handleMicClick} type="button">
+                        disabled={(!intakeComposer.active && (turnBusy || documentUnavailable)) || voiceStatus === "unsupported" || voiceStatus === "processing" || intakeComposer.busy || !profile} onClick={handleMicClick} type="button">
                         {voiceStatus === "listening" ? <HiStop aria-hidden className="h-5 w-5" /> : voiceStatus === "processing" ? <ProcessingDots /> : <Icon name="mic" className="h-5 w-5" />}
                     </button>
                     </div>
@@ -318,7 +318,7 @@ export default function ChatPage() {
                         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4" /></svg>
                     </button>}
                     <button className="ma-press flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-brand text-white shadow-[var(--shadow-fab)] hover:bg-brand-hover disabled:opacity-40 disabled:shadow-none"
-                        aria-label={controls.send} disabled={turnBusy || (!intakeComposer.active && documentUnavailable) || !input.trim() || (!intakeComposer.active && connectionStatus !== "connected") || intakeComposer.busy || !profile} type="submit"><Icon name="send" /></button>
+                        aria-label={controls.send} disabled={(!intakeComposer.active && (turnBusy || documentUnavailable)) || !input.trim() || (!intakeComposer.active && connectionStatus !== "connected") || intakeComposer.busy || !profile} type="submit"><Icon name="send" /></button>
                 </div>
                 {handsFreeMode && <p className="px-2 text-xs text-brand-ink">{controls.autoPlay}</p>}
                 {!profile && <p className="px-2 text-sm text-muted" role="status">{controls.profileRequired}</p>}

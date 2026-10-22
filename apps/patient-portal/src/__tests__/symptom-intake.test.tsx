@@ -185,7 +185,7 @@ it("routes spoken answers privately and never treats spoken assent as confirmati
     mutate.mockResolvedValue({ ...draft, revision: 1 });
     render(<Provider store={store}><SymptomIntakePanel locale="en-US" registerReply={register} onReadAloud={reader} handsFree /></Provider>);
     await screen.findByText("Type or speak your answer below. You can say “not sure” or “skip”.");
-    expect(reader).toHaveBeenCalledWith(expect.stringContaining("Choose your severity"), "en-US");
+    await waitFor(() => expect(reader).toHaveBeenCalledWith(expect.stringContaining("Choose your severity"), "en-US"));
     const handler = register.mock.calls.at(-1)?.[0];
     act(() => { expect(handler("cinco", "voice", "es-MX")).toBe("handled"); });
     await waitFor(() => expect(mutate).toHaveBeenCalled());
@@ -201,6 +201,34 @@ it("requires a separate acceptance of source suggestions", async () => {
     fireEvent.click(screen.getByText("Use this answer"));
     await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(mutate.mock.calls[0][3]).toMatchObject({ value: 5, state: "answered" });
+});
+
+it("does not carry an unsaved answer into another draft at the same revision", async () => {
+    const register = vi.fn();
+    mutate.mockRejectedValue(new Error("synthetic connection loss"));
+    render(<Provider store={store}><SymptomIntakePanel locale="en-US" registerReply={register} /></Provider>);
+    await screen.findByText("Type or speak your answer below. You can say “not sure” or “skip”.");
+    act(() => { register.mock.calls.at(-1)?.[0]("five", "typed"); });
+    await screen.findByText("Your answer — not yet verified as saved");
+    active.mockResolvedValue({ ...draft, intake_id: "another-synthetic-intake" });
+    act(() => window.dispatchEvent(new Event("symptom-intake-updated")));
+    await waitFor(() => expect(screen.queryByText("Your answer — not yet verified as saved")).not.toBeInTheDocument());
+    expect(screen.queryByText("five")).not.toBeInTheDocument();
+});
+
+it("does not carry a correction question into a new draft", async () => {
+    const register = vi.fn();
+    active.mockResolvedValue({ ...draft, current_question: null, can_review: true,
+        answers: { severity: { question_id: "severity", state: "unknown", value: null, wording: "", locale: "en-US" } } });
+    render(<Provider store={store}><SymptomIntakePanel locale="en-US" registerReply={register} /></Provider>);
+    await screen.findByText("What you reported");
+    fireEvent.click(screen.getByText("What you reported"));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit$/ }));
+    expect(screen.getByText("Type or speak your answer below. You can say “not sure” or “skip”.")).toBeInTheDocument();
+    const description = { id: "description", answer_type: "text" as const, wording: { "en-US": "Describe the new symptom", "es-MX": "Describe el nuevo síntoma" } };
+    active.mockResolvedValue({ ...draft, intake_id: "new-draft", current_question: description, questions: [description, question] });
+    act(() => window.dispatchEvent(new Event("symptom-intake-updated")));
+    expect(await screen.findByText("Describe the new symptom", { selector: "p" })).toBeInTheDocument();
 });
 
 it("preserves an uncertain mutation identity across a token refresh", async () => {

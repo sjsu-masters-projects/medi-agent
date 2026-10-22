@@ -2,7 +2,7 @@
 
 **Prepared:** October 10, 2026
 
-**State:** B1–B11 implemented; requester-reported question approval, matching eligibility and authenticated local synthetic acceptance recorded October 12. PR #159 remains in review; no deploy or merge.
+**State:** Base B1–B11 merged through #159 and activated; current acceptance is tracked in TASKS.md. PR #193 contains residual integration fixes, not a second intake implementation. Historical slice receipts below retain their original scope and dates.
 
 **Task:** PAT-002-B in [TASKS.md](../TASKS.md)
 
@@ -1154,3 +1154,103 @@ denial and connectivity interruption. Record actual evidence and remaining relea
 gates. Prepare a concrete rollout preflight before asking for exact migration,
 configuration/deployment and merge authorization; never treat a green CI run as
 peer review or deployed acceptance.
+
+
+## 26. October 18 continuation
+
+The exact additive 071 migration was explicitly authorized, applied in a guarded
+transaction and verified by ledger/readiness reads. A synthetic patient confirmation
+produced one completed ADR task, one assessment awaiting clinician review and one
+assigned-clinician notice; the real assigned clinician UI shows both the confirmed
+summary and existing ADR workspace. An unassigned canonical fixture is denied and
+audited. Candidate-2 remains pending genuine approval; no clinical review signature
+or professional decision was fabricated. Details and remaining patient login,
+Spanish/physical voice/mobile checks are in the dated acceptance record.
+
+Main advanced overnight to 582c397 (Nora recovery, session lifecycle and notification
+performance). Integrate that existing work without expanding PAT-002-B or renaming
+applied migration files, then rerun owning regressions and required checks. Add the
+25 intake SQL cases to required CI with zero-skips/minimum-count enforcement.
+
+
+October 18 final local continuation: fresh durable Spanish turn completed after the
+identity fix; Spanish confirmation reached the assigned clinician with null unknown
+severity and no medication row for the unlisted product. A cancelled draft has zero
+reports. A deliberate backend outage retained the answer and recovered by the normal
+reload/retry path. Same-revision draft replacement no longer shows an old unsaved
+answer. Microphone policy now permits the portal's own origin; browser permission
+is still required. Requester explicitly left physical speech verification pending.
+Patient 768/focused 117 pass; other integrated checks are recorded in the acceptance
+record. Candidate-2, phone acceptance, current-head CI, peer review and authorized
+merge/deployment remain release gates.
+
+
+Delivery moved to isolated draft [#193](https://github.com/sjsu-masters-projects/medi-agent/pull/193)
+on `fix/confirmed-intake-integration` after #159 received concurrent ADR/MedWatch
+work and a differing 076 migration. #159 was preserved without force push. Select
+or reconcile the overlapping delivery path before merge; only the exact 071 was
+authorized/applied. See the acceptance record for the coordination evidence.
+
+
+Final correction selection is now draft-bound as well as pending-answer display.
+The regression and all 769 patient cases, lint/typecheck/build pass. All 34 CI checks
+passed on 0855608 before that patient-only follow-up (3,700 backend passes, 89.08%
+coverage and all SQL jobs, including the enforced 25 intake contracts). Keep the
+new head's result distinct; no backend/SQL code changed afterward.
+
+
+## 27. Requester manual acceptance and PR readiness — October 18
+
+The requester clarified that the app, microphone and phone flows are verified.
+Record requester-reported manual acceptance without inventing per-device details,
+audio traces, independent validation or peer approval. All 34 checks passed on
+ca12c39, including the final correction-selection regression, full backend coverage
+and all SQL matrix gates. Current main is already included and GitHub reports the
+PR mergeable with no conflicts. Prepare #193 for review; preserve #159.
+
+Candidate-2 remains inactive/pending: the requester did not report its wording
+approval. Do not change its status, active library or remote eligibility. The team
+contract still requires genuine peer/safety review, and merge/deployment need exact
+authorization. This step changes evidence/docs only; its current CI result belongs
+on the PR, separate from the already green implementation receipt.
+
+
+## 28. October 19 readiness continuation after #159 merged
+
+Main advanced to 5d46c30 and independently merged #159. Integrate that current base
+in an isolated worktree, retaining the existing worker/event protocol, locale/feed
+fixes and conditional ADR claims. Keep PR #193 focused on remaining corrections,
+pending-answer identity, same-origin microphone permission, private composer and
+voice-locale routing, the draft-opening action fence and enforced intake SQL tests.
+The exact applied 071 remains unchanged; no database migration or remote action is
+part of integration. Update the local SQL adapter for the current conditional claim
+and real retry state; do not weaken or bypass the runtime worker.
+
+Record post-integration commands/results in the acceptance file and current CI on
+the PR. Previous 34f34d3 passed all 34 checks; that does not prove this new merge.
+Requester-reported manual acceptance stays tied to its original implementation.
+Candidate-2 remains inactive; genuine peer/safety review and separately authorized
+merge/deployment remain prerequisites. The full intake and ADR work merged through
+#159 is base behavior, not newly implemented scope for #193.
+
+## 29. October 21 current-main review
+
+Review #193 against merged #209 (`36972470`) in an isolated checkout; do not mix
+the separate records/continuity work or G/H plan implementation into this PR.
+Resolve the board in favour of current accepted evidence, retain main's 44px
+microphone target and existing PostgreSQL/PostgREST CI jobs, and use the current
+report-keyed task identity in the real-worker test adapter.
+
+Acceptance: a replacement draft never displays the preceding draft's unsaved
+answer or correction selection; private replies and the microphone remain usable
+during queued/processing ordinary turns; spoken locale reaches the private reply
+API; a rejected durable action fence cannot open an intake. Confirmation still
+requires the explicit patient checkbox/button, with no report or ADR creation
+from private draft answers. Candidate-2 activation remains out of scope.
+
+The intake/handoff matrix must run all 17/8 SQL cases without skips. Run patient,
+backend and clinician regressions, lint/type checks, migration validation and
+portal builds; record exact final results in the dated acceptance document and
+on #193. Resolve existing code-quality comments without broad refactoring. No
+migration bytes, library selection, hosted configuration, deployment or merge
+is authorized by this review. Physical audio/device acceptance remains VOI-001-M.

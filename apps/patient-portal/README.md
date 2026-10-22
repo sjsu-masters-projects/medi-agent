@@ -270,7 +270,9 @@ hands-free mode prompts are read aloud and listening resumes after playback;
 local pause detection ends an answer after speech and 1.8 seconds of silence when
 Web Audio is available (15 seconds of initial silence; 60-second recording limit).
 The microphone button remains a manual stop. No analysis samples are stored;
-unknown/skip and explicitly accepting a source suggestion are supported. Ambiguous
+the portal permits microphone access only for its own origin, and the browser's
+microphone permission is still required. Camera and geolocation remain disabled.
+Unknown/skip and explicitly accepting a source suggestion are supported. Ambiguous
 numbers need clarification. Private STT recordings are not stored as chat audio;
 private TTS has no chat message ID. Late recordings cannot answer a different
 revision. Detailed fields remain available as a fallback. Read the preview, select
