@@ -276,6 +276,8 @@ export function useFeedData(locale: Locale = "en-US") {
     reportBarrier,
     refreshFeed,
     summary: feed.locale === locale ? feed.summary : defaultFeedSummary,
+    careTeamFilters: feed.locale === locale ? (feed.careTeamFilters ?? []) : [],
+    contactClinic: feed.locale === locale ? Boolean(feed.contactClinic) : false,
     tasks: feed.locale === locale ? feed.tasks : [],
   };
 }

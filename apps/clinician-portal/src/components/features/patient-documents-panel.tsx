@@ -6,6 +6,8 @@ import { Modal } from "@/components/ui";
 import { AiChip } from "@/components/ui/ai-chip";
 import { Icon } from "@/components/ui/icons";
 import { ProcessingDots } from "@/components/ui/motion";
+import { ClaimDocumentDialog, UnroutedBadge } from "@/components/features/claim-document-dialog";
+import { errorCode } from "@/services/care-team-plans";
 import { DocumentSummary } from "@/components/features/document-summary";
 import { DocumentSourceViewer } from "@/components/features/document-source-viewer";
 import { ExtractedFactCandidates } from "@/components/features/extracted-fact-candidates";
@@ -80,6 +82,15 @@ export function PatientDocumentsPanel({
     const [retryingSummaryId, setRetryingSummaryId] = useState<string | null>(null);
     const [rejectingDocumentId, setRejectingDocumentId] = useState<string | null>(null);
     const [rejectNote, setRejectNote] = useState("");
+    // PLAN-002: documents the server says are unrouted, and ones I have just claimed.
+    const [forcedClaim, setForcedClaim] = useState<Set<string>>(new Set());
+    const [claimed, setClaimed] = useState<Set<string>>(new Set());
+    const [claimingDocument, setClaimingDocument] = useState<ClinicianPatientDocument | null>(null);
+    const needsClaim = (doc: ClinicianPatientDocument) => !claimed.has(doc.id) && (doc.routingState === "unrouted" || forcedClaim.has(doc.id));
+    const requireClaim = (documentId: string) => {
+        setForcedClaim((current) => new Set(current).add(documentId));
+        setReviewError("This upload is not routed to a care team yet. Claim it before you approve or reject it.");
+    };
     const [sourceDocument, setSourceDocument] = useState<ClinicianPatientDocument | null>(null);
     const [source, setSource] = useState<ClinicianDocumentSource | null>(null);
     const [sourceError, setSourceError] = useState<string | null>(null);
@@ -147,6 +158,10 @@ export function PatientDocumentsPanel({
             await approveDocumentReview(patientId, documentId);
             onRefresh();
         } catch (error) {
+            if (errorCode(error) === "DOCUMENT_CLAIM_REQUIRED") {
+                requireClaim(documentId);
+                return;
+            }
             setReviewError(
                 error instanceof Error ? error.message : "Unable to approve document review.",
             );
@@ -168,6 +183,12 @@ export function PatientDocumentsPanel({
             setRejectingDocumentId(null);
             setRejectNote("");
         } catch (error) {
+            if (errorCode(error) === "DOCUMENT_CLAIM_REQUIRED") {
+                requireClaim(rejectingDocumentId);
+                setRejectingDocumentId(null);
+                setRejectNote("");
+                return;
+            }
             setReviewError(
                 error instanceof Error ? error.message : "Unable to reject document review.",
             );
@@ -390,7 +411,21 @@ export function PatientDocumentsPanel({
                                         </button>
                                     ) : null}
                                     {doc.uploadedByRole === UploaderRole.PATIENT &&
-                                        doc.reviewStatus === DocumentReviewStatus.PENDING && (
+                                        doc.reviewStatus === DocumentReviewStatus.PENDING && needsClaim(doc) && (
+                                            <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+                                                <UnroutedBadge />
+                                                <button
+                                                    aria-label={`Claim ${doc.fileName}`}
+                                                    className="ma-press inline-flex h-8 items-center justify-center rounded-lg border border-primary-line bg-primary-tint px-3 text-[13px] font-semibold text-primary hover:bg-surface"
+                                                    onClick={() => { setReviewError(null); setClaimingDocument(doc); }}
+                                                    type="button"
+                                                >
+                                                    Claim
+                                                </button>
+                                            </div>
+                                        )}
+                                    {doc.uploadedByRole === UploaderRole.PATIENT &&
+                                        doc.reviewStatus === DocumentReviewStatus.PENDING && !needsClaim(doc) && (
                                             <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
                                                 <button
                                                     className="ma-press inline-flex h-8 items-center justify-center rounded-lg bg-ok px-3 text-[13px] font-semibold text-white hover:bg-ok-strong disabled:cursor-not-allowed disabled:bg-track disabled:text-[#94A3B8]"
@@ -582,6 +617,27 @@ export function PatientDocumentsPanel({
                     />
                 ) : null}
             </Modal>
+            {claimingDocument ? (
+                <ClaimDocumentDialog
+                    claimableCareTeamIds={[]}
+                    documentId={claimingDocument.id}
+                    fileName={claimingDocument.fileName}
+                    onAlreadyClaimed={() => {
+                        setClaimingDocument(null);
+                        setReviewError("Another care team claimed this document first. It is no longer yours to review.");
+                        onRefresh();
+                    }}
+                    onClaimed={() => {
+                        const id = claimingDocument.id;
+                        setClaimed((current) => new Set(current).add(id));
+                        setClaimingDocument(null);
+                        onRefresh();
+                    }}
+                    onClose={() => setClaimingDocument(null)}
+                    open
+                    patientId={patientId}
+                />
+            ) : null}
         </div>
     );
 }

@@ -6,6 +6,7 @@ import { useSelector } from "react-redux";
 import { Button, Card, EmptyState, Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { ProcessingDots } from "@/components/ui/motion";
+import { errorCode } from "@/services/care-team-plans";
 import { api } from "@/services/api";
 import type { RootState } from "@/store/store";
 
@@ -132,7 +133,9 @@ export default function SmartImportPage() {
             }
             window.location.assign(result.authorization_url);
         } catch (launchError) {
-            setError(launchError instanceof Error ? launchError.message : "Unable to start SMART launch.");
+            setError(errorCode(launchError) === "CARE_TEAM_REQUIRED"
+                ? "SMART launch works with one care-team link to a patient, and you have more than one. Nothing was started. Upload the records as documents instead."
+                : launchError instanceof Error ? launchError.message : "Unable to start SMART launch.");
             setLaunchStatus(null);
             setStarting(false);
         }

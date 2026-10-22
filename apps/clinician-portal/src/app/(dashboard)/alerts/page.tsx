@@ -22,6 +22,7 @@ function AlertsContent() {
       <div className="flex flex-wrap items-center gap-3">
         <ClinicFilterField filter={clinicFilter} />
         <Link href={clinicFilter.clinicId ? `/review-queue?clinic=${encodeURIComponent(clinicFilter.clinicId)}` : "/review-queue"} className="inline-flex min-h-9 items-center rounded-lg border border-line-strong bg-surface px-3 text-sm font-medium text-ink-2 hover:bg-surface-2">Patient upload reviews</Link>
+        <Link href={clinicFilter.clinicId ? `/care-plan-reviews?clinic=${encodeURIComponent(clinicFilter.clinicId)}` : "/care-plan-reviews"} className="inline-flex min-h-9 items-center rounded-lg border border-line-strong bg-surface px-3 text-sm font-medium text-ink-2 hover:bg-surface-2">Care plan reviews</Link>
         <p className="text-sm text-muted" role="status">{summary.error || !summary.data ? "Counts unavailable" : `${clinicFilter.multi && clinicFilter.clinicId ? "All clinics: " : ""}${summary.data.action_item_count} need attention · ${summary.data.unread_count} unread`}</p>
       </div>
     </div>

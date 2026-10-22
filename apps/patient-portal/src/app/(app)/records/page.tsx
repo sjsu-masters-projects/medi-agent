@@ -30,6 +30,9 @@ import {
   type DocumentApiRecord,
 } from "@/services/documents";
 import { hashDocumentFile, uploadDocumentToStorage } from "@/services/storage";
+import { apiErrorCode, fetchUploadCareTeamOptions, type DocumentRoutingChoice } from "@/services/care-team-routing";
+import { ConditionsPrivacy } from "@/components/features/conditions-privacy";
+import { UploadCareTeamPicker } from "@/components/features/upload-care-team-picker";
 import { hydrateSession, logout } from "@/store/slices/auth-slice";
 import type { AppDispatch, RootState } from "@/store/store";
 import {
@@ -41,6 +44,7 @@ import {
   getDocumentTypeLabel,
   normalizeLocale,
   type Document,
+  type UploadCareTeamOption,
 } from "@/types";
 import { getEffectiveSessionExpiresAt } from "../../../../../../packages/shared/src/utils/jwt-expiry";
 
@@ -275,6 +279,7 @@ export default function RecordsPage() {
   const [readbackActive, setReadbackActive] = useState(false);
   const [parsingDocIds, setParsingDocIds] = useState<Set<string>>(new Set());
   const [uploading, setUploading] = useState(false);
+  const [routingPrompt, setRoutingPrompt] = useState<{ file: File; options: UploadCareTeamOption[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const activePollsRef = useRef(new Set<string>());
   const { accessToken, expiresAt, refreshToken, user } = useSelector(
@@ -482,6 +487,25 @@ export default function RecordsPage() {
       return;
     }
 
+    event.target.value = "";
+    setPageError(null);
+    setParseError(null);
+    // PLAN-002: ask which care team the document is for before anything is uploaded. When
+    // the care teams cannot be read, the server's own routing rule applies and any
+    // CARE_TEAM_REQUIRED answer reopens this question.
+    if (accessToken) {
+      setUploading(true);
+      const options = await fetchUploadCareTeamOptions(accessToken);
+      setUploading(false);
+      if (options && options.length > 0) {
+        setRoutingPrompt({ file, options });
+        return;
+      }
+    }
+    await uploadFile(file);
+  }
+
+  async function uploadFile(file: File, routing?: DocumentRoutingChoice) {
     setPageError(null);
     setParseError(null);
     setUploading(true);
@@ -511,6 +535,7 @@ export default function RecordsPage() {
           source_clinic: "Patient uploaded document",
           content_hash: contentHash,
           start_ingestion: true,
+          ...(routing ?? {}),
         },
         { token: session.accessToken },
       );
@@ -519,13 +544,20 @@ export default function RecordsPage() {
       // Candidate-only ingestion runs in the background. It never updates
       // the patient's canonical profile until a clinician reconciles it.
       void pollForParsedStatus(nextDocument.id);
-    } catch {
+    } catch (error) {
+      if (apiErrorCode(error) === "CARE_TEAM_REQUIRED" && accessToken) {
+        // The server needs an explicit choice: ask, then upload the same file.
+        const options = await fetchUploadCareTeamOptions(accessToken);
+        if (options && options.length > 0) {
+          setRoutingPrompt({ file, options });
+          return;
+        }
+      }
       setPageError(
         copy("Upload failed. Please refresh your records before trying again."),
       );
     } finally {
       setUploading(false);
-      event.target.value = "";
     }
   }
 
@@ -746,6 +778,22 @@ export default function RecordsPage() {
           ref={fileInputRef}
           type="file"
         />
+        {routingPrompt ? (
+          <UploadCareTeamPicker
+            key={routingPrompt.file.name}
+            open
+            locale={locale}
+            fileName={routingPrompt.file.name}
+            options={routingPrompt.options}
+            busy={uploading}
+            onCancel={() => setRoutingPrompt(null)}
+            onConfirm={(choice) => {
+              const file = routingPrompt.file;
+              setRoutingPrompt(null);
+              void uploadFile(file, choice);
+            }}
+          />
+        ) : null}
         <div className="space-y-3 px-4 pt-4 empty:hidden">
           {documentUnavailable && <p role="alert" className="rounded-2xl bg-danger-tint p-3 text-sm text-danger-ink">{spanish ? "Este documento no está disponible. Actualiza tus registros." : "This document is unavailable. Refresh your records."}</p>}
           {uploading ? (
@@ -885,6 +933,7 @@ export default function RecordsPage() {
             </section>
           ))}
         </div>
+        {!loading && !pageError ? <ConditionsPrivacy locale={locale} /> : null}
         <Modal
           onClose={closeDocumentModal}
           open={Boolean(selectedDocument)}
