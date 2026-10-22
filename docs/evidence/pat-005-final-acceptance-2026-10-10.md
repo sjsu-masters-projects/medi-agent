@@ -1,4 +1,4 @@
-# PAT-005 final acceptance follow-up — October 10, 2026
+# PAT-005 final acceptance follow-up: October 10, 2026
 
 Synthetic Morgan Ellis / Elena Park only. This is prototype acceptance evidence,
 not a clinical, compliance, or production-readiness certification.

@@ -1,4 +1,4 @@
-# PAT-002-B review closure — October 17, 2026
+# PAT-002-B review closure: October 17, 2026
 
 Scope: requester-authorized chat questions and typed/spoken answers, explicit
 confirmation button, unverified product testimony, durable handoff to existing ADR
@@ -49,13 +49,13 @@ The CLI has no database URL configured; the Supabase SQL editor requires sign-in
 Approved candidate-1 and its recorded October 12 requester-reported approval remain
 unchanged. Candidate-2 is **pending review** for its exact new severity anchors and
 unconditional concomitant-product question. No approval is invented or inherited.
-See [rollout procedure](pat-002-b-rollout.md) for the exact migration checksum,
+See [rollout procedure](../pat-002-b-rollout.md) for the exact migration checksum,
 review package and separate eligibility/deployment/merge actions.
 
 ## Follow-along acceptance path
 
 Use the existing fictional patient and assigned fictional clinician from
-[demo environment](demo-environment.md). Obtain credentials from the team's secret
+[demo environment](../demo-environment.md). Obtain credentials from the team's secret
 store; do not copy them into documentation. A fresh seed/reset is unnecessary.
 
 1. Open `http://localhost:3000/chat`, then Nora. Type

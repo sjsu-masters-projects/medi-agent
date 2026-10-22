@@ -390,7 +390,7 @@ The existing retry worker re-drives pending delivery; it must remain enabled
 these turns. Non-emergency reports still use the old flow; private intake APIs
 and confirmation are not implemented. See the
 [B2 walkthrough and exact local test steps](../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md#18-b2--safety-takes-priority-october-10-2026)
-and [checkpoint evidence and limitations](../docs/pat-002-b-acceptance-2026-10-10.md).
+and [checkpoint evidence and limitations](../docs/evidence/pat-002-b-acceptance-2026-10-10.md).
 Migration 059 requires separate authorization before any remote application.
 
 ```
@@ -694,7 +694,7 @@ genuine paired-locale review. Matching immutable database eligibility is require
 never restores automatic report insertion. Source binding requires a new backend-saved
 Nora user turn with a session ID; old unbound transcript rows remain readable.
 
-Run the [acceptance commands and synthetic journey](../docs/pat-002-b-acceptance-2026-10-12.md).
+Run the [acceptance commands and synthetic journey](../docs/evidence/pat-002-b-acceptance-2026-10-12.md).
 No model is needed for question selection or preview. Exact patient-named product
 context is limited to 4 medications, 5 approved facts and 2 cited 500-character excerpts.
 `POST /{intake_id}/reply` accepts a current question, revision, mutation identity,
@@ -716,7 +716,7 @@ The post-confirmation service reuses the transaction's `confirmed_symptom:{repor
 task key, including queued tasks, rather than creating a second screening task.
 An existing legacy `symptom_event:{report_id}` task is reused when no canonical
 task exists. This compatibility fix changes no migration or clinical review decision.
-See [October 17 acceptance](../docs/pat-002-b-acceptance-2026-10-17.md) and the
+See [October 17 acceptance](../docs/evidence/pat-002-b-acceptance-2026-10-17.md) and the
 [read-only preflight/release procedure](../docs/pat-002-b-rollout.md).
 
 ## Cross-clinic scheduling and clinic tags (CLN-003 slices E and F)

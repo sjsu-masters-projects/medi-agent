@@ -269,5 +269,5 @@ decision support, not a causality verdict or automatic MedWatch submission. Exis
 clinician-authored ADR requests are presented to the patient under Care Team, not Nora.
 PAT-002-C's timeline remains separate.
 
-See [the contract and acceptance evidence](../docs/pat-002-b-acceptance-2026-10-12.md)
+See [the contract and acceptance evidence](../docs/evidence/pat-002-b-acceptance-2026-10-12.md)
 for exact endpoints, recovery behavior and rollout prerequisites.

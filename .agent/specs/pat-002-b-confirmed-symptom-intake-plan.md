@@ -859,7 +859,7 @@ require separate exact authorization.
    with stubbed providers/database; they do not prove the planned boundary.
 5. Compare the adopted API/state contracts with the current diagram. There is no
    new UI or endpoint to click at B1. Exact local outcomes are in
-   [the acceptance evidence](../../docs/pat-002-b-acceptance-2026-10-10.md).
+   [the acceptance evidence](../../docs/evidence/pat-002-b-acceptance-2026-10-10.md).
 
 How to explain this checkpoint: “Today, Nora can save an extracted symptom before
 the patient checks it. We have mapped where to replace that save with a private
@@ -992,7 +992,7 @@ How to explain this checkpoint: “An emergency gets the existing reviewed direc
 first. Its care-team alert is saved and retried separately, so it does not depend
 on answering questions or confirming a symptom report.”
 
-See [exact verification results and remaining prerequisites](../../docs/pat-002-b-acceptance-2026-10-10.md#b2-verification).
+See [exact verification results and remaining prerequisites](../../docs/evidence/pat-002-b-acceptance-2026-10-10.md#b2-verification).
 Next checkpoint: B3 — versioned approved-question loading and truthful
 answered/unknown/declined semantics. Genuine library approval remains outstanding.
 
@@ -1053,7 +1053,7 @@ focus and alert outages have focused recovery coverage (B10). Required automated
 checks, contract/architecture/rollout documentation and the C handoff are recorded
 (B11). Safety alerts remain independent even across stale-revision/cancellation races.
 
-See [October 12 acceptance evidence](../../docs/pat-002-b-acceptance-2026-10-12.md)
+See [October 12 acceptance evidence](../../docs/evidence/pat-002-b-acceptance-2026-10-12.md)
 for exact per-increment commands and the synthetic follow-along journey. B11's local
 verification includes a real service-to-disposable-PostgreSQL journey using explicitly
 synthetic test eligibility; it is not library approval or authenticated deployed
@@ -1085,7 +1085,7 @@ conversation still clears the old history and ignores its late socket events.
 Replies follow the bottom instantly, pause while reading older messages, and resume
 when returning to the bottom or sending a typed message. This is a bounded Nora
 regression fix within the existing PR, with no new clinical workflow or remote action.
-The [October 12 acceptance evidence](../../docs/pat-002-b-acceptance-2026-10-12.md#nora-scrolling-follow-up--october-12)
+The [October 12 acceptance evidence](../../docs/evidence/pat-002-b-acceptance-2026-10-12.md#nora-scrolling-follow-up--october-12)
 records 530 patient tests, lint/type/build results, exact manual steps and observed
 stable desktop/mobile scroll position. Offline chat and unavailable draft recovery
 remain target limitations; no successful live confirmation is claimed.
@@ -1098,7 +1098,7 @@ the retries unbounded. Nora now omits unavailable symptom context with an explic
 availability field for the record tool, preserves the confirmed-only boundary,
 and limits short-lived reconnection cycles. Generic initialization errors close safely.
 Local browser checks now show Connected; intake recovery is still unavailable until
-authorized rollout. The [connection acceptance evidence](../../docs/pat-002-b-acceptance-2026-10-12.md#nora-connection-follow-up--october-12)
+authorized rollout. The [connection acceptance evidence](../../docs/evidence/pat-002-b-acceptance-2026-10-12.md#nora-connection-follow-up--october-12)
 records 86 backend/532 patient tests, lint/type/build checks and manual steps.
 No migration, clinical report, library approval or broader turn-recovery task is included.
 
@@ -1120,7 +1120,7 @@ The same report ID recovered after refresh. Her assigned clinician Elena saw the
 patient-confirmed summary and an unknown severity label; a separate draft was
 cancelled. The Mexican Spanish portal showed the approved Spanish question wording
 and cancel flow; the patient's original English preference was restored. See the
-[acceptance record](../../docs/pat-002-b-acceptance-2026-10-12.md#approved-library-local-acceptance--october-12)
+[acceptance record](../../docs/evidence/pat-002-b-acceptance-2026-10-12.md#approved-library-local-acceptance--october-12)
 for exact observations and remaining denial/outage/touch/deployed checks.
 
 This checkpoint supersedes the historical pending-library and missing-migration

@@ -2,7 +2,7 @@
 
 **Status:** Verify deployed — merged and deployed in #145 (`0cf4c93`); follow-ups are LOC-002 · **Owner:** Rajeev · **Supersedes:** the "one clinician-reviewed
 locale per approved plan" rule in `pat-005-clinician-approved-today-feed-plan.md`
-(§ locale attestation) and `docs/portal-ui-ux-review-2026-10-10.md` (language section).
+(§ locale attestation) and `docs/evidence/portal-ui-ux-review-2026-10-10.md` (language section).
 
 ## Pending interface wording review
 

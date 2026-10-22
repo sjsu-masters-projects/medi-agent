@@ -206,10 +206,14 @@ so run `backend/scripts/appointment-clinician-overlap-preflight.sql` (read-only)
 appointments in the hosted project. A read-only audit on October 17 found no public table with RLS
 off and no browser-role SELECT or INSERT on a public table.
 
-### Message-translation integrity, wording verification and display provenance (080–082 and 088) — not yet applied
+### Message-translation integrity, wording verification and display provenance (080–082 and 088)
 
-Pending the requester's authorization; nothing here has been applied to a hosted project.
-Apply in order, after main's `079_unlisted_product_review_alerts.sql`, before deploying #203's backend:
+October 22 operator receipt: the requester supplied successful `COMMIT` and ledger inserts
+for 080, 081, 082 and 088, followed by `Migration ledger is synchronized`. Care-team
+083–087 were already applied and skipped. This records the supplied output, not an
+independent hosted checksum/security audit. #203 merged as `dace6a8d` afterward.
+For a new environment, apply in ledger order after 079 (including care-team 083–087
+before 088), before deploying the backend that requires these contracts:
 
 1. `080_message_translation_integrity.sql` — `AFTER DELETE` triggers on
    `care_conversation_messages` and `chat_messages` that remove a deleted message's stored
@@ -317,7 +321,7 @@ again when the worker later succeeds. Verify service-only RPC execution, browser
 denial, assignment changes, rollback/retry and operational alert deduplication
 on the authorized target. Disposable local SQL checks cover selected migrations
 and platform stubs, not that target's complete Supabase setup or grants. See
-[B2 evidence and reproduction commands](pat-002-b-acceptance-2026-10-10.md#b2-verification).
+[B2 evidence and reproduction commands](evidence/pat-002-b-acceptance-2026-10-10.md#b2-verification).
 
 Private drafts, explicit report confirmation and revoked browser report writes
 remain later work. Migration 027's service-role SELECT grant does not remove the
@@ -466,7 +470,7 @@ manifest selected `candidate-1`, matching eligibility metadata were published vi
 `set_symptom_question_eligibility`, and the local backend was restarted with
 `SYMPTOM_INTAKE_ENABLED=true`. An authenticated fictional patient confirmation and
 assigned-clinician summary then passed locally, as recorded in the
-[acceptance evidence](pat-002-b-acceptance-2026-10-12.md#approved-library-local-acceptance--october-12).
+[acceptance evidence](evidence/pat-002-b-acceptance-2026-10-12.md#approved-library-local-acceptance--october-12).
 The deployed backend setting and deployed acceptance remain separate.
 
 | Migration | SHA-256 |
@@ -493,7 +497,7 @@ substitute the disposable SQL fixtures' approval reference into a runtime manife
 
 Rollback disables intake and its ordinary writes while preserving drafts, confirmed
 reports and durable safety-alert retry. It must not restore automatic unconfirmed
-report insertion. See [the acceptance record](pat-002-b-acceptance-2026-10-12.md) for
+report insertion. See [the acceptance record](evidence/pat-002-b-acceptance-2026-10-12.md) for
 local SQL constraints, manual acceptance, dependency reproducibility and the C handoff.
 
 

@@ -179,7 +179,7 @@ the two-portal handoff. Subsequently, #191 merged, migration 076 was recorded
 applied, and the October 19 Rajeev/Elena deployed message-to-draft path was
 exercised with an exact-item focus defect. The patient locale switch was also
 exercised and restored, with a transient mixed-language render after navigation.
-See the [deployed recheck](../../docs/deployed-recheck-2026-10-11.md#task-verdicts).
+See the [deployed recheck](../../docs/evidence/deployed-recheck-2026-10-11.md#task-verdicts).
 Mobile 360/390/430 and clinician desktop screenshots, keyboard/reduced-motion
 journeys, approved-plan publication after handoff, actual provider responses and
 professional bilingual review remain unrecorded. COM-002's later audit, retry,

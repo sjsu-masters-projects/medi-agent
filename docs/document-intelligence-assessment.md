@@ -66,7 +66,7 @@ security guarantees are defined by migrations 034 and 036; invocation telemetry 
    review state.
 
 The scheduled demo operation and five-document consolidation are recorded in the
-[worker guide](document-ingestion-worker.md) and [PAT-005 acceptance](pat-005-final-acceptance-2026-10-10.md).
+[worker guide](document-ingestion-worker.md) and [PAT-005 acceptance](evidence/pat-005-final-acceptance-2026-10-10.md).
 Do not treat older pending-deployment notes as the current board.
 
 Historic tool comparisons, price snapshots, and preliminary benchmark narratives are retained

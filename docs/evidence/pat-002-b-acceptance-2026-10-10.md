@@ -1,4 +1,4 @@
-# PAT-002-B local checkpoint evidence — October 10, 2026
+# PAT-002-B local checkpoint evidence: October 10, 2026
 
 Scope: B1 source audit and B2 safety-first chat/independent alerts. Owner: Tushar.
 Branch: `feature/confirmed-symptom-intake`, based on local `main`/`origin/main`
@@ -6,8 +6,8 @@ Branch: `feature/confirmed-symptom-intake`, based on local `main`/`origin/main`
 peer/safety approval, merge and deployed acceptance are not claimed.
 
 The authoritative contract, inventory, learning explanation and exact source
-walkthrough are in [plan section 17](../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md#17-b1--source-audit-and-interface-contract-october-10-2026)
-and the [B2 demonstration](../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md#18-b2--safety-takes-priority-october-10-2026).
+walkthrough are in [plan section 17](../../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md#17-b1--source-audit-and-interface-contract-october-10-2026)
+and the [B2 demonstration](../../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md#18-b2--safety-takes-priority-october-10-2026).
 TASKS.md remains the sole task tracker. This file records observed evidence.
 
 ## B1 verification
@@ -172,7 +172,7 @@ must use a clean lock installation. Sentry reports an existing deprecated config
 option; no external configuration was changed.
 
 Exact demonstration commands and the conditional manual browser journey are in
-[plan section 18](../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md#18-b2--safety-takes-priority-october-10-2026).
+[plan section 18](../../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md#18-b2--safety-takes-priority-october-10-2026).
 No claim is made that the new code runs in the currently configured shared
 environment. Persisted delivery does not imply clinician read/acknowledgment.
 

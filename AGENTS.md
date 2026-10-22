@@ -86,5 +86,5 @@ it here.
 
 Maintain shared instructions in this file. Do not create `.cursorrules`, copy
 the guidance into multiple files, or commit personal preferences. See
-[`docs/contributor-agent-workflow.md`](docs/contributor-agent-workflow.md) for
-the maintainer guide and first-task checklist.
+[CONTRIBUTING.md](CONTRIBUTING.md) for the first-task checklist and
+[documentation maintenance](docs/maintaining-docs.md) for the maintainer guide.
