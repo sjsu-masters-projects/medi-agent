@@ -20,6 +20,7 @@ import { FeedTaskStatus, normalizeLocale, type Locale, type FeedTask } from "@/t
 import { ApprovedPlanDetails } from "@/components/features/approved-plan-details";
 import { NotificationBell } from "@/components/features/notification-centre";
 import { ADRFollowUpEntryRow } from "@/components/features/adr-follow-up-entry-row";
+import { MedicationQuestionCards } from "@/components/features/medication-question-cards";
 import { CareTeamFilterChips, ContactClinicCard, hasMultipleOwners, taskMatchesFilter } from "@/components/features/care-team-owner";
 import { getCareTeamCopy } from "@/content/care-team-copy";
 
@@ -221,6 +222,7 @@ export default function TodayPage() {
             </section>
 
             <div className="space-y-5 pt-[18px]">
+                <MedicationQuestionCards locale={locale} />
                 <div className="px-4 empty:hidden"><ADRFollowUpEntryRow locale={locale} /></div>
                 {showOwner && careTeamFilters.length > 0 ? <CareTeamFilterChips filters={careTeamFilters} value={filterAvailable ? careTeamFilter : "all"} onChange={setCareTeamFilter} locale={locale} /> : null}
                 {contactClinic ? <ContactClinicCard locale={locale} /> : null}

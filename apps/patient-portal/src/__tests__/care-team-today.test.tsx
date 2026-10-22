@@ -13,6 +13,7 @@ const { markComplete, useFeedData, usePatientProfile } = vi.hoisted(() => ({
 vi.mock("@/hooks/use-feed-data", () => ({ useFeedData }));
 vi.mock("@/hooks/use-patient-profile", () => ({ usePatientProfile }));
 vi.mock("@/hooks/use-pending-adr-follow-ups", () => ({ usePendingADRFollowUps: () => ({ count: 0, loaded: true }) }));
+vi.mock("@/hooks/use-medication-questions", () => ({ useMedicationQuestions: () => ({ items: [], loaded: true, refresh: () => {} }) }));
 
 function owner(overrides: Partial<PlanOwner> = {}): PlanOwner {
     return { care_plan_id: "plan-cardio", care_team_id: "team-cardio", ownership_state: "owned", specialty: "Cardiology", clinician_name: "Dr. Park", clinic_id: "c1", clinic_name: "Cedar Grove", unowned_notice: false, ...overrides };

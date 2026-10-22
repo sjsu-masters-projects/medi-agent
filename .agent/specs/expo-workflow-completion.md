@@ -182,6 +182,55 @@ independent root, the domain-derived fallback does not protect against compromis
 of the shared root. Deployment/rotation invalidates old 15-minute snapshots/cursors:
 refresh after replicas converge, never recreate clinical events or change sessions.
 
+## MED-002 — Clinician reconciliation experience and patient confirmation
+
+Requester un-deferred MED-002 on October 22. It reuses the shipped REC-002 reconciliation
+decision path (`apply_clinical_fact_reconciliation`, migrations 029–032); nothing there is
+rebuilt.
+
+### Gap analysis
+
+| MED-002 requirement | Already shipped | Gap closed here |
+| --- | --- | --- |
+| Side-by-side source comparison | Reconcile modal: imported candidate beside the matched local record, per-field selection, selected-field preview, conservative review flags, DailyMed/MedlinePlus reference (MED-001/REC-002). | None for candidate versus approved list. Comparison is candidate against local matches, not every source at once; a simultaneous patient/clinician/document/FHIR matrix stays out of scope. The patient's answer now appears as an extra evidence row. |
+| Accept, reject, edit | Add, update selected fields, keep existing, reject, correct (REC-002, 44 PostgreSQL cases). | None. |
+| Defer | `defer` decision with required note; filter by deferred state. | None. |
+| Request patient confirmation | Absent. | Clinician "Ask the patient to confirm"; patient question; patient testimony returned as evidence (below). |
+| Evidence, provenance, confidence, time | Source identifiers, uncertainty, lineage, timestamps in the review panel. | Answer shown with time and "not verified". |
+| Approved changes reach both portals and FHIR export | Approved medications drive Today/Records; the audit and handoff FHIR bundles read the shared record. | Unchanged. No new export is claimed; deployed export recheck remains open. |
+
+### Patient confirmation contract (migration 093)
+
+- A clinician on an active care-team link asks one plain question about one pending medication
+  fact: about the imported version, or about a matched approved medication of the same patient.
+  The request belongs to that link (`care_team_id`); a clinician who cannot see the fact, holds
+  no active link, or names another link is refused and the API answers not found.
+- The patient sees it on Today: "Are you still taking Metformin 500 mg twice daily?" with Yes,
+  No I stopped, It changed (a note of up to 500 characters is required) and Not sure, in en-US
+  and es-MX. The es-MX wording is a **draft pending LOC-001**. The cadence uses the reviewed
+  phrase table when it recognises the text and is otherwise shown as written. The card says
+  the answer changes no medicine or reminder.
+- The answer is **patient testimony**. Nothing writes to `medications`, `clinical_facts`, plans
+  or reminders. The clinician sees it in the reconcile modal as unverified evidence and decides
+  through the existing decision.
+- Idempotent: the client request id is the primary key; a repeat returns the stored request, and
+  a second ask for the same fact and link while one is open returns it. One answer per request;
+  the same answer again is a replay, a different one is a 409. Ten open requests per patient.
+- Expires after 14 days on the database clock; an expired request is hidden from the patient,
+  not answerable (422) and shown to the clinician as expired. A fresh ask retires it. Answered
+  requests leave the patient's list after seven days.
+- Audited by append-only events (ids and types only). Requests are immutable except the single
+  open to answered or open to expired transition. Data API roles reach nothing.
+- Lock order: lock-free authorization, patient advisory lock, request row. No locks across calls.
+
+Not built: a notification-centre or email alert for the question (the patient finds it on Today
+within a minute; a push is a follow-up), clinician cancel, and a clinician list of all open
+questions (they are read per fact in the reconcile modal).
+
+Evidence: 21 router/service tests, 17 PostgreSQL contract cases (CI shard
+`medication-confirmations`), 5 clinician and 7 patient component tests. Screenshots (API mocked)
+were reviewed at 390 and 1280 px in both locales with no horizontal scroll.
+
 ## Verification and CI
 
 October 21 combined runs:
