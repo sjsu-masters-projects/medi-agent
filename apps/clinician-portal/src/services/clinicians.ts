@@ -22,6 +22,8 @@ import {
     type UploaderRole,
 } from "@/types";
 import { readStoredSession } from "@/services/auth-session";
+import type { CarePlanScope, PublishCarePlanResult } from "@/types";
+import { scopeQuery } from "@/utils/care-plan-scope";
 import { ApiClientError } from "@/services/api";
 import { reportedProduct } from "@/utils/reported-product";
 import type {
@@ -1639,17 +1641,19 @@ export async function fetchClinicianCarePlan(patientId: string): Promise<CarePla
 
 export async function fetchClinicianCarePlanReviewContext(
     patientId: string,
+    scope?: CarePlanScope,
 ): Promise<CarePlanReviewContext> {
     return apiFetch<CarePlanReviewContext>(
-        `/api/v1/care-plans/clinician/patients/${patientId}/review-context`,
+        `/api/v1/care-plans/clinician/patients/${patientId}/review-context${scopeQuery(scope)}`,
     );
 }
 
 export async function fetchClinicianCarePlanGeneration(
     patientId: string,
+    scope?: CarePlanScope,
 ): Promise<CarePlanGeneration | null> {
     return apiFetch<CarePlanGeneration | null>(
-        `/api/v1/care-plans/clinician/patients/${patientId}/generation`,
+        `/api/v1/care-plans/clinician/patients/${patientId}/generation${scopeQuery(scope)}`,
     );
 }
 
@@ -1720,10 +1724,15 @@ export async function approveClinicianCarePlan(
     patientId: string,
     planId: string,
     note: string,
-): Promise<{ status: string }> {
+    options?: { idempotencyKey?: string; excludedItemIds?: string[] },
+): Promise<{ status: string } & Partial<PublishCarePlanResult>> {
     return apiFetch(`/api/v1/care-plans/clinician/patients/${patientId}/${planId}/approve`, {
         method: "POST",
-        body: JSON.stringify({ note }),
+        body: JSON.stringify({
+            note,
+            ...(options?.idempotencyKey ? { idempotency_key: options.idempotencyKey } : {}),
+            ...(options?.excludedItemIds?.length ? { excluded_item_ids: options.excludedItemIds } : {}),
+        }),
     });
 }
 
@@ -1745,8 +1754,11 @@ export async function fetchBackTranslation(
     );
 }
 
-export async function retryClinicianCarePlanGeneration(patientId: string): Promise<{ status: string }> {
-    return apiFetch(`/api/v1/care-plans/clinician/patients/${patientId}/retry-generation`, {
+export async function retryClinicianCarePlanGeneration(
+    patientId: string,
+    scope?: CarePlanScope,
+): Promise<{ status: string }> {
+    return apiFetch(`/api/v1/care-plans/clinician/patients/${patientId}/retry-generation${scopeQuery(scope)}`, {
         method: "POST",
     });
 }

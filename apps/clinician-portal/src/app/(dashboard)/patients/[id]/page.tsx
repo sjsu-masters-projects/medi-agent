@@ -15,10 +15,12 @@ import { SymptomTimeline } from "@/components/features/symptom-timeline";
 import { ChatTranscript } from "@/components/features/chat-transcript";
 import { PatientDocumentsPanel } from "@/components/features/patient-documents-panel";
 import { PatientAppointmentsPanel } from "@/components/features/patient-appointments-panel";
-import { CarePlanPanel } from "@/components/features/care-plan-panel";
+import { CarePlanArea } from "@/components/features/care-plan-area";
+import { OtherCareTeams, SharedAllergiesCard, SharedConditionsCard, recordedByText, sharedSummaryApplies, useSharedSummary } from "@/components/features/shared-clinical-summary";
 import { SmartImportReviewPanel } from "@/components/features/smart-import-review-panel";
 import Link from "next/link";
 import { usePatientDetail } from "@/hooks/use-patient-detail";
+import { usePatientReviewCount } from "@/hooks/use-patient-review-count";
 import type { RootState } from "@/store/store";
 import { PatientADRPanel } from "@/components/features/patient-adr-panel";
 import { PatientTimeline } from "@/components/features/patient-timeline";
@@ -42,7 +44,7 @@ const TABS: Array<{ id: TabId; label: string; icon: IconName }> = [
     { id: "appointments", label: "Appointments", icon: "cal" },
 ];
 
-function PatientTabs({ activeTab, onChange }: { activeTab: TabId; onChange: (tab: TabId) => void }) {
+function PatientTabs({ activeTab, onChange, badges }: { activeTab: TabId; onChange: (tab: TabId) => void; badges?: Partial<Record<TabId, number>> }) {
     const bar = useRef<HTMLDivElement>(null);
     const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
     useLayoutEffect(() => {
@@ -97,6 +99,7 @@ function PatientTabs({ activeTab, onChange }: { activeTab: TabId; onChange: (tab
                 >
                     <Icon name={icon} className={`hidden h-4 w-4 shrink-0 xl:block ${activeTab === id ? "text-primary" : ""}`} />
                     <span>{label}</span>
+                    {badges?.[id] ? <span aria-label={`${badges[id]} open review item${badges[id] === 1 ? "" : "s"}`} className="rounded-md bg-warn px-1.5 font-mono text-[10px] font-semibold text-white" role="img">{badges[id]}</span> : null}
                 </button>
             ))}
             {indicator ? <span aria-hidden="true" className="pointer-events-none absolute bottom-0 left-0 h-0.5 rounded-full bg-primary transition-[transform,width] duration-[240ms] ease-[cubic-bezier(.2,.8,.2,1)]" style={{ transform: `translateX(${indicator.left}px)`, width: indicator.width }} /> : null}
@@ -133,6 +136,11 @@ function formatReminderSchedule(
     return `${dayLabel} · ${timeLabel}`;
 }
 
+function RecordedByLine({ medicationId, summary }: { medicationId: string; summary: NonNullable<ReturnType<typeof useSharedSummary>["summary"]> }) {
+    const recorded = recordedByText(summary.medications.find((entry) => entry.id === medicationId)?.recorded_by);
+    return recorded ? <span className="block break-words text-[11px] font-normal text-muted">Recorded by {recorded}</span> : null;
+}
+
 // ── Patient Deep Dive Page ─────────────────────────────────────────────────────
 
 function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string; enabled: boolean }) {
@@ -156,6 +164,11 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
     }
 
     const { patient, loadingProfile, generatingSoap, error, loadFailure, reload, generateSoap } = usePatientDetail(patientId, enabled);
+    // PLAN-002: the shared clinical summary only changes this tab for a patient with several care teams
+    // or private conditions; for everyone else the record looks exactly as before.
+    const sharedSummary = useSharedSummary(patientId, enabled && activeTab === "profile");
+    const reviewCount = usePatientReviewCount(patientId, enabled);
+    const crossTeam = sharedSummaryApplies(sharedSummary.summary) ? sharedSummary.summary : null;
 
     useLayoutEffect(() => {
         if (!hasMounted || activeTab !== "symptoms" || !patient) return;
@@ -288,7 +301,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
             </section>
 
             {/* Tab navigation: underline bar with one sliding indicator */}
-            <PatientTabs activeTab={activeTab} onChange={setActiveTab} />
+            <PatientTabs activeTab={activeTab} badges={{ "care-plan": reviewCount }} onChange={setActiveTab} />
 
             {/* Tab panels */}
             <div className={activeTab === "care-plan" ? "flex min-h-0 flex-1 flex-col" : "rounded-2xl border border-line bg-surface p-6 shadow-[var(--shadow-card)]"}>
@@ -313,7 +326,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
 
                         <div className="grid gap-4 md:grid-cols-2">
                             {/* Conditions */}
-                            <section className="rounded-[14px] border border-line bg-surface p-5">
+                            {crossTeam ? <SharedConditionsCard summary={crossTeam} /> : <section className="rounded-[14px] border border-line bg-surface p-5">
                                 <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
                                     Active Conditions
                                 </h3>
@@ -332,10 +345,10 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                         ))}
                                     </ul>
                                 )}
-                            </section>
+                            </section>}
 
                             {/* Allergies */}
-                            <section className="rounded-[14px] border border-line bg-surface p-5">
+                            {crossTeam ? <SharedAllergiesCard summary={crossTeam} /> : <section className="rounded-[14px] border border-line bg-surface p-5">
                                 <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
                                     Allergies
                                 </h3>
@@ -359,7 +372,9 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                         ))}
                                     </ul>
                                 )}
-                            </section>
+                            </section>}
+
+                            {crossTeam ? <OtherCareTeams summary={crossTeam} /> : null}
 
                             {/* Active Medications */}
                             <section className="overflow-hidden rounded-[14px] border border-line bg-surface md:col-span-2">
@@ -397,6 +412,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                                                 <Icon name="pill" className="h-4 w-4 shrink-0 text-muted" />
                                                                 {med.name}
                                                             </span>
+                                                            {crossTeam ? <RecordedByLine medicationId={med.id} summary={crossTeam} /> : null}
                                                             {med.genericName && (
                                                                 <span className="ml-1 text-xs font-normal text-muted">
                                                                     ({med.genericName})
@@ -690,7 +706,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                 )}
                 {activeTab === "appointments" && <PatientAppointmentsPanel patientId={patientId} />}
                 {activeTab === "timeline" && <PatientTimeline key={patientId} patientId={patientId} />}
-                {activeTab === "care-plan" && <CarePlanPanel patientId={patientId} onPublished={() => void reload()} />}
+                {activeTab === "care-plan" && <CarePlanArea patientId={patientId} onPublished={() => void reload()} reviewId={searchParams.get("review")} />}
             </div>
         </div>
     );

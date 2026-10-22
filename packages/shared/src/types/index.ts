@@ -464,6 +464,9 @@ export interface ClinicianPatientDocument {
     reviewedAt?: string;
     reviewNote?: string;
     reviewer?: DocumentReviewer | null;
+    /** PLAN-002: "unrouted" means the patient chose "Not sure"; a care team must claim it. */
+    routingState?: "routed" | "unrouted";
+    careTeamId?: string | null;
 }
 
 export interface DocumentReviewQueueItem {
@@ -487,6 +490,10 @@ export interface DocumentReviewQueueItem {
     createdAt: string;
     uploadedByRole: UploaderRole;
     reviewStatus: DocumentReviewStatus;
+    /** PLAN-002: an unrouted ("Not sure") upload cannot be approved or rejected until claimed. */
+    needsClaim?: boolean;
+    claimableCareTeamIds?: string[];
+    careTeamId?: string | null;
 }
 
 export interface AdherenceLog {

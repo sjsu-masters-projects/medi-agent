@@ -291,3 +291,38 @@ export interface PatientApprovedPlanSummary extends PlanOwner {
     version_number: number;
     approved_at: string | null;
 }
+
+// ── Clinician: exact care-team links and document claims ─────────────────────────────────
+
+/** `GET /care-plans/clinician/patients/{patient_id}/care-team-options`: my exact active links. */
+export interface ClinicianCareTeamOption {
+    care_team_id: string;
+    patient_id: string;
+    clinician_id: string;
+    clinic_id: string;
+    clinic_name: string | null;
+}
+
+/** Selects one of my plans when I hold several links (`care_team_id` and/or `care_plan_id`). */
+export interface CarePlanScope {
+    careTeamId?: string;
+    carePlanId?: string;
+}
+
+/** `POST /documents/{id}/claim` result. */
+export interface DocumentClaimResult {
+    document_id: string;
+    care_team_id: string;
+    status: string;
+    replayed: boolean;
+}
+
+/** Error codes of this feature, carried in the `{"error": {"code"}}` envelope. */
+export type CareTeamPlanErrorCode =
+    | "CROSS_PLAN_CONFLICT"
+    | "IDEMPOTENCY_KEY_REUSED"
+    | "CONFLICT_CHANGED"
+    | "PLAN_ALREADY_ADOPTED"
+    | "DOCUMENT_ALREADY_CLAIMED"
+    | "DOCUMENT_CLAIM_REQUIRED"
+    | "CARE_TEAM_REQUIRED";
