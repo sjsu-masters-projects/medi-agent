@@ -257,8 +257,19 @@ queue does, as the invoker account), Artifact Registry (the platform pulls the i
 metric writers (Cloud Run ships container stdout without them; Sentry uses its DSN). If you want
 them explicit anyway, run the script with `--with-observability-writers`.
 
-The jobs (`mediagent-document-ingestion`, `mediagent-health-knowledge-refresh`) and any Scheduler
-caller are not changed and keep the deployer account. Moving them is a separate change.
+The two Cloud Run Jobs get their own account, `mediagent-jobs-runtime`, in the same script run:
+
+| Account | Role | Scope | Why (derived from the code) |
+| --- | --- | --- | --- |
+| `mediagent-jobs-runtime` | `roles/aiplatform.user` | project | `document_ingestion` runs the Gemini extraction and summary services; `health_knowledge_refresh` does not call Vertex but shares the account |
+| | `roles/secretmanager.secretAccessor` | the 4 Supabase secrets, each individually | Both jobs inject exactly `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET` |
+| `github-actions-deployer` (unchanged) | `roles/iam.serviceAccountUser` | on `mediagent-jobs-runtime` | `gcloud run jobs deploy --service-account` needs actAs |
+
+Cloud Scheduler needs no new account: the two job triggers already use dedicated invoker-only
+accounts (`mediagent-doc-ingest-sched`, `mediagent-knowledge-sched`, each `run.invoker` on its
+own job and nothing project-wide), and the reminder and Nora dispatch triggers authenticate with
+the `X-Cron-Auth` secret. Deployment sets the job identity from the repository variable
+`CLOUD_RUN_JOBS_RUNTIME_SA`; unset keeps the deployer.
 
 The requester runs, in order:
 
@@ -267,6 +278,7 @@ scripts/setup-runtime-service-accounts.sh            # dry run: prints every com
 scripts/setup-runtime-service-accounts.sh --apply    # creates the accounts and grants the roles above
 gh variable set CLOUD_RUN_API_RUNTIME_SA --body mediagent-api-runtime@medi-agent-490106.iam.gserviceaccount.com
 gh variable set CLOUD_RUN_WORKER_RUNTIME_SA --body mediagent-worker-runtime@medi-agent-490106.iam.gserviceaccount.com
+gh variable set CLOUD_RUN_JOBS_RUNTIME_SA --body mediagent-jobs-runtime@medi-agent-490106.iam.gserviceaccount.com
 ```
 
 The accounts and grants come first (they are inert); the variables are what switch the next deploy
@@ -279,7 +291,18 @@ for s in "$API_SERVICE" "$WORKER_SERVICE"; do
 done
 ```
 
-Then send one synthetic Nora message in both portals and follow the turn in Cloud Logging. A
+For the jobs (read-only), after the deploy:
+
+```bash
+for j in mediagent-document-ingestion mediagent-health-knowledge-refresh; do
+  gcloud run jobs describe "$j" --project "$PROJECT" --region "$REGION" \
+    --format 'value(name,spec.template.spec.template.spec.serviceAccountName)'
+done
+```
+
+Then run each job once from the Scheduler console (or wait for the next tick) and confirm
+`status="success"` in Cloud Logging; `PERMISSION_DENIED` on a secret or on Vertex means a grant is
+missing. Then send one synthetic Nora message in both portals and follow the turn in Cloud Logging. A
 `PERMISSION_DENIED` naming a role means a grant is missing; for Vertex AI add
 `roles/serviceusage.serviceUsageConsumer` to the affected account only if the error says so.
 
@@ -294,10 +317,25 @@ Then send one synthetic Nora message in both portals and follow the turn in Clou
    `gcloud iam service-accounts delete <email> --project "$PROJECT"`. The bindings the script made
    on the queue, secrets and invoker account disappear with the account's principal (stale `deleted:`
    entries can be cleaned with `remove-iam-policy-binding`).
-4. Optional hardening after a week of clean traffic, with explicit authorization: remove
-   `aiplatform.user`, project-wide `secretmanager.secretAccessor`, `ml.admin` and the queue and
-   invoker bindings from `github-actions-deployer` if no job still needs them. The two Cloud Run
-   Jobs still run as it today, so keep `secretAccessor` and `aiplatform.user` until they move.
+4. Jobs: delete `CLOUD_RUN_JOBS_RUNTIME_SA` and re-run the workflow, or immediately
+   `gcloud run jobs update <job> --service-account github-actions-deployer@medi-agent-490106.iam.gserviceaccount.com --project "$PROJECT" --region "$REGION"`.
+   The deployer's bindings are untouched until step 5.
+5. Trimming the deployer, last and only with explicit authorization, after the three variables are
+   set, a deploy succeeded, a Nora turn, an ingestion run and a knowledge refresh passed, and a
+   week of clean traffic:
+
+   ```bash
+   scripts/setup-runtime-service-accounts.sh --trim-deployer           # dry run: preconditions, live identity check, removals
+   scripts/setup-runtime-service-accounts.sh --trim-deployer --apply   # refuses while anything still runs as the deployer
+   ```
+
+   It removes project-wide `secretmanager.secretAccessor`, `aiplatform.user`, `ml.admin`,
+   `run.developer` (subset of `run.admin`) and `artifactregistry.writer` (subset of
+   `artifactregistry.admin`). Kept: `run.admin`, `artifactregistry.admin`/`repoAdmin`,
+   `iam.serviceAccountUser` (actAs, and needed for rollback), `serviceusage.serviceUsageConsumer`
+   and `iam.serviceAccountTokenCreator` (purpose not established; review separately). Each removal
+   prints its own rollback, the matching `gcloud projects add-iam-policy-binding ... --role <role>
+   --condition=None`. Re-run Deploy Backend once afterwards to prove deploying still works.
 
 ## Rollback
 

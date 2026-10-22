@@ -73,6 +73,11 @@ the API:
 - `mediagent-health-knowledge-refresh` — `python -m app.workers.health_knowledge_refresh`,
   1 CPU, 512Mi, task timeout 1800s, no retries.
 
+The Jobs run as `mediagent-jobs-runtime` once the repository variable `CLOUD_RUN_JOBS_RUNTIME_SA` is
+set (otherwise `github-actions-deployer`): Vertex AI user plus the four Supabase secrets, nothing
+else. The Scheduler callers are already invoker-only accounts. Setup, order, rollback and the
+optional `--trim-deployer` step: [`docs/chat-worker-setup.md`](../docs/chat-worker-setup.md#least-privilege-runtime-accounts).
+
 Each Job declares its whole runtime contract with `--set-env-vars` and `--set-secrets`
 (Supabase secrets come from Secret Manager), so redeploying it is also the creation path.
 Their triggers are in section 5.
