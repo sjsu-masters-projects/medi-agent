@@ -88,6 +88,21 @@ describe("patient detail load states", () => {
             window.history.replaceState(null, "", previous);
         }
     });
+    it("shows the confirmation time formatted in the patient's zone and never re-cases patient text", async () => {
+        mocks.tab = "symptoms";
+        mocks.fetch.mockResolvedValue({ ...patient(), timezone: "America/Los_Angeles", symptom_reports: [
+            { id: "r1", patientId: "synthetic-a", symptom: "Mareo al levantarme", severity: 6,
+                confirmationState: "patient_confirmed", confirmedAt: "2026-10-20T17:00:00+00:00",
+                flaggedForAdr: false, createdAt: "2026-10-20T17:00:00Z" },
+        ] });
+        render(<PatientPage />);
+        const row = await screen.findByText(/Patient-confirmed ·/);
+        expect(row).toHaveTextContent("Patient-confirmed · Oct 20, 2026, 10:00 AM");
+        expect(row.textContent).not.toMatch(/T17:00|\+00:00/);
+        const title = screen.getAllByText("Mareo al levantarme").find((el) => el.tagName === "P")!;
+        expect(title).toBeInTheDocument();
+        expect(title.className).not.toMatch(/capitalize/);
+    });
     it("shows SOAP draft review context without exposing provider names or changing stored provenance", async () => {
         mocks.tab = "soap";
         const note = { subjective: "Patient report", objective: "Recorded observations", assessment: "Draft assessment",

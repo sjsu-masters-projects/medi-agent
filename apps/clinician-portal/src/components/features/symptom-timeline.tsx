@@ -94,7 +94,7 @@ function CustomTooltip({
     return (
         <div className="rounded-xl border border-line bg-surface px-3.5 py-2.5 shadow-[var(--shadow-pop)]">
             <p className="mb-1 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">{point.date}</p>
-            <p className="text-sm font-semibold capitalize text-ink">{point.symptom}</p>
+            <p className="text-sm font-semibold text-ink">{point.symptom}</p>
             <p className={`text-sm font-medium ${severityText(point.severity)}`}>
                 Severity: <span className="font-mono">{point.severity === null ? "Unknown / not provided" : `${point.severity}/10`}</span>
             </p>

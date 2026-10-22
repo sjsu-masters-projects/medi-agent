@@ -551,11 +551,11 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                                     }`}
                                                 />
                                                 <div className="min-w-0">
-                                                    <p className="text-sm font-medium capitalize text-ink">
+                                                    <p className="text-sm font-medium text-ink">
                                                         {s.symptom}
                                                     </p>
                                                     <p className="mt-0.5 text-xs text-muted">{s.confirmationState === "patient_confirmed"
-                                                        ? `Patient-confirmed${s.confirmedAt ? ` · ${s.confirmedAt}` : ""}`
+                                                        ? `Patient-confirmed${s.confirmedAt ? ` · ${formatConfirmedAt(s.confirmedAt, patient.timezone)}` : ""}`
                                                         : "Historical report — patient confirmation not recorded"}</p>
                                                     {s.confirmedSummary && <details className="mt-2 text-sm"><summary className="min-h-11 cursor-pointer py-2">Confirmed patient summary</summary><p className="whitespace-pre-wrap">{s.confirmedSummary}</p></details>}
                                                     {s.reportedProduct && <div className="mt-2 max-w-prose break-words rounded-lg bg-surface-2 p-2 text-xs text-ink-2">
@@ -730,6 +730,16 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
             {openSymptomReport && <SymptomReportPanel patientId={patientId} reportId={openSymptomReport} onClose={() => setOpenSymptomReport(null)} />}
         </div>
     );
+}
+
+/** Patient-entered text is never re-cased; the time is shown in the patient's own zone. */
+function formatConfirmedAt(value: string, timezone?: string): string {
+    const options: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "short" };
+    try {
+        return formatClinicianDateTime(value, { ...options, timeZone: timezone || "UTC" });
+    } catch {
+        return formatClinicianDateTime(value, { ...options, timeZone: "UTC" });
+    }
 }
 
 export default function PatientDeepDivePage() {
