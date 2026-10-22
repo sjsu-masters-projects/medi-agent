@@ -6,6 +6,10 @@ is applied, so the real notification pipeline, email capture and intake function
 Opt-in: ``CARE_TEAM_PLANS_TEST_POSTGRES_DOCKER=1``. Synthetic data only.
 """
 
+# ruff: noqa: F811 -- the harness fixtures are imported (not a plugin) so that, in a combined run,
+# another module's fixtures named ``sql``/``postgres`` cannot shadow them and point this file at a
+# different container and schema.
+
 from __future__ import annotations
 
 import json
@@ -26,12 +30,12 @@ from tests.integration.care_team_plan_harness import (
     TEAM,
     THIRD,
     link,
+    postgres,  # noqa: F401
     seed_people,
+    sql,  # noqa: F401
 )
 from tests.integration.test_care_team_notifications_postgres import centre
 from tests.integration.test_symptom_intake_postgres import call_sql, confirmation, ready
-
-pytest_plugins = ["tests.integration.care_team_plan_harness"]
 
 pytestmark = [
     pytest.mark.timeout(600),
