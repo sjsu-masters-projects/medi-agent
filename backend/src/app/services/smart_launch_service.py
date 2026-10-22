@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import logging
+import posixpath
 import re
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
-from urllib.parse import urlencode, urljoin, urlparse
+from urllib.parse import unquote, urlencode, urljoin, urlparse
 from uuid import UUID
 
 import httpx
@@ -21,6 +23,7 @@ from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, ExternalServiceError, ValidationError
 from app.services.clinician_record_gate import ClinicianRecordGate
 from app.services.document_routing_service import DocumentRoutingService
+from app.services.fhir_import_limits import MAX_PAGES_PER_QUERY, MAX_RESPONSE_BYTES, FhirFetchBudget
 from app.services.fhir_import_service import FhirImportService
 
 logger = logging.getLogger(__name__)
@@ -389,10 +392,23 @@ class SmartLaunchService:
             raise ExternalServiceError(
                 "SMART launch context", "Token response did not include patient context"
             )
+        if any(
+            value and not re.fullmatch(r"[A-Za-z0-9.-]{1,64}", value)
+            for value in (patient, encounter)
+        ):
+            raise ExternalServiceError(
+                "SMART launch context", "Malformed resource identity in context"
+            )
         resources: list[dict[str, Any]] = []
+        budget = FhirFetchBudget()
         for resource_type, query in self._resource_queries(patient, encounter):
             url = f"{issuer}/{resource_type}{query}"
-            resources.extend(self._get_bundle_resources(url=url, headers=headers, issuer=issuer))
+            resources.extend(
+                self._get_bundle_resources(url=url, headers=headers, issuer=issuer, budget=budget)
+            )
+        # Includes nested Bundles: reject the complete over-limit input before
+        # _create_import or any candidate/source persistence is reached.
+        FhirImportService.expand_bundles(resources)
         return resources, {"patient": patient, "encounter": encounter}
 
     @staticmethod
@@ -415,46 +431,110 @@ class SmartLaunchService:
         return queries
 
     def _get_bundle_resources(
-        self, *, url: str, headers: dict[str, str], issuer: str
+        self,
+        *,
+        url: str,
+        headers: dict[str, str],
+        issuer: str,
+        budget: FhirFetchBudget | None = None,
     ) -> list[dict[str, Any]]:
         resources: list[dict[str, Any]] = []
         next_url: str | None = url
+        budget = budget if budget is not None else FhirFetchBudget()
+        visited: set[str] = set()
         while next_url:
-            try:
-                response = self.http.get(next_url, headers=headers)
-                response.raise_for_status()
-                payload = response.json()
-            except (httpx.HTTPError, ValueError) as exc:
-                raise ExternalServiceError("FHIR resource fetch", str(exc)) from None
+            next_url = self._bounded_fhir_url(next_url, issuer=issuer, base=url)
+            if next_url in visited:
+                raise ExternalServiceError("FHIR resource fetch", "Pagination cycle detected")
+            if len(visited) >= MAX_PAGES_PER_QUERY:
+                raise ExternalServiceError("FHIR resource fetch", "Pagination page limit exceeded")
+            visited.add(next_url)
+            budget.request()
+            payload = self._read_fhir_response(next_url, headers, budget)
             if not isinstance(payload, dict):
                 raise ExternalServiceError("FHIR resource fetch", "Invalid FHIR response")
             if payload.get("resourceType") != "Bundle":
+                budget.add_resources(1)
                 resources.append(payload)
                 break
-            resources.extend(
+            entries = payload.get("entry", [])
+            if not isinstance(entries, list):
+                raise ExternalServiceError("FHIR resource fetch", "Invalid Bundle entries")
+            page = [
                 entry["resource"]
-                for entry in payload.get("entry", [])
+                for entry in entries
                 if isinstance(entry, dict) and isinstance(entry.get("resource"), dict)
-            )
-            next_url = self._next_bundle_url(payload, issuer)
+            ]
+            budget.add_resources(len(page))
+            resources.extend(page)
+            next_url = self._next_bundle_url(payload, issuer, current_url=next_url)
         return resources
 
+    def _read_fhir_response(
+        self, url: str, headers: dict[str, str], budget: FhirFetchBudget
+    ) -> Any:
+        try:
+            with self.http.stream("GET", url, headers=headers, follow_redirects=False) as response:
+                response.raise_for_status()
+                data = bytearray()
+                for chunk in response.iter_bytes(chunk_size=65536):
+                    budget.consume(len(chunk))
+                    if len(data) + len(chunk) > MAX_RESPONSE_BYTES:
+                        raise ExternalServiceError(
+                            "FHIR resource fetch", "Response byte limit exceeded"
+                        )
+                    data.extend(chunk)
+                return json.loads(data)
+        except (httpx.HTTPError, ValueError):
+            # Never echo a provider URL, access token or response body into diagnostics.
+            raise ExternalServiceError(
+                "FHIR resource fetch", "Could not read a valid bounded response"
+            ) from None
+
     @staticmethod
-    def _next_bundle_url(bundle: dict[str, Any], issuer: str) -> str | None:
-        for link in bundle.get("link", []):
-            if (
-                isinstance(link, dict)
-                and link.get("relation") == "next"
-                and isinstance(link.get("url"), str)
-            ):
-                url = link["url"]
-                parsed = urlparse(urljoin(issuer + "/", url))
-                if parsed.scheme != "https" or parsed.netloc != urlparse(issuer).netloc:
-                    raise ExternalServiceError(
-                        "FHIR resource fetch", "Rejected pagination URL outside issuer"
-                    )
-                return parsed.geturl()
-        return None
+    def _next_bundle_url(
+        bundle: dict[str, Any], issuer: str, *, current_url: str | None = None
+    ) -> str | None:
+        links = bundle.get("link", [])
+        if not isinstance(links, list):
+            raise ExternalServiceError("FHIR resource fetch", "Invalid Bundle links")
+        next_links = [
+            link for link in links if isinstance(link, dict) and link.get("relation") == "next"
+        ]
+        if not next_links:
+            return None
+        if (
+            len(next_links) != 1
+            or not isinstance(next_links[0].get("url"), str)
+            or not next_links[0]["url"]
+        ):
+            raise ExternalServiceError("FHIR resource fetch", "Invalid next-page link")
+        return SmartLaunchService._bounded_fhir_url(
+            next_links[0]["url"], issuer=issuer, base=current_url or issuer.rstrip("/") + "/"
+        )
+
+    @staticmethod
+    def _bounded_fhir_url(url: str, *, issuer: str, base: str) -> str:
+        if any(ord(char) <= 32 or ord(char) == 127 for char in url) or "\\" in url:
+            raise ExternalServiceError("FHIR resource fetch", "Invalid pagination URL")
+        parsed, origin = urlparse(urljoin(base, url)), urlparse(issuer)
+        decoded = unquote(unquote(parsed.path))
+        path = posixpath.normpath(decoded)
+        prefix = origin.path.rstrip("/")
+        if (
+            parsed.scheme != "https"
+            or parsed.netloc != origin.netloc
+            or parsed.username
+            or parsed.password
+            or parsed.fragment
+            or "\\" in decoded
+            or "%25" in parsed.path.lower()
+            or not (path == prefix or path.startswith(prefix + "/"))
+        ):
+            raise ExternalServiceError(
+                "FHIR resource fetch", "Rejected pagination URL outside issuer"
+            )
+        return parsed.geturl()
 
     def _import_care_team(
         self, clinician_id: UUID, patient_id: UUID, care_team_id: UUID | None = None

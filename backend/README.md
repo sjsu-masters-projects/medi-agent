@@ -719,6 +719,19 @@ task exists. This compatibility fix changes no migration or clinical review deci
 See [October 17 acceptance](../docs/evidence/pat-002-b-acceptance-2026-10-17.md) and the
 [read-only preflight/release procedure](../docs/pat-002-b-rollout.md).
 
+## Bounded SMART imports
+
+SMART record downloads share a server-owned budget: 20 pages per query, 50 requests
+per import, 2 MiB per decoded response, 8 MiB total decoded responses and 1,000
+returned resources. Nested Bundle expansion allows eight levels and at most 1,000
+envelope/entry records. Limits reject the import before candidate writes; they do
+not truncate silently. These application limits do not establish FHIR conformance.
+Pagination stays within the trusted issuer's HTTPS origin and base path; redirects,
+cycles and malformed next-page links fail closed. Diagnostic errors omit upstream
+response bodies and tokens. New import provenance retains exact business identifiers
+without making them editable clinical facts or local identity bindings. Existing
+envelopes are not backfilled. See the [interoperability execution checkpoint](../.agent/specs/int-002-003-interoperability-plan.md#records-continuity-and-reliability-execution).
+
 ## Cross-clinic scheduling and clinic tags (CLN-003 slices E and F)
 
 Every appointment and offer group carries `clinic_id` (and `clinician_id`) copied from its care-team

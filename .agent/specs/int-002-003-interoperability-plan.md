@@ -11,6 +11,58 @@ import a bounded synthetic patient record, preserve the original FHIR resources 
 provenance, and show the imported context in the clinician portal. This is a sandbox
 demonstration only; it does not claim production EHR connectivity or real-PHI support.
 
+## Records continuity and reliability execution
+
+Requester reassignment October 21: this lane owns MED-002, CON-001, INT-002/003-V
+and the residual reliability/safety acceptance. G/H + PLAN-002 is implemented
+separately. Branch `codex/records-continuity-acceptance` starts at merged #209
+(`36972470`); no remote migration/configuration, clinical decisions, deployment or
+merge is authorized by this implementation plan.
+
+| Area | Reuse, not rebuild | Residual work / acceptance |
+| --- | --- | --- |
+| MED-002 | REC-002 comparison, selected-field add/update, keep, reject, defer and immutable audit are shipped/accepted. | Identify request-patient-confirmation gap; explicit source-bound questions/replies must never approve or alter medication. Approved updates must appear in reviewed export. |
+| CON-001 | CLN-002 source-linked bounded timeline is shipped. | Evidence-linked handoff snapshot, explicit clinician review and portable export; source/visibility recheck at creation, review and export. No invented history or another team's private source. |
+| INT-002 | Raw envelopes, source IDs/versions, review candidates and audit export exist. | Normalized business identifiers without changing raw resources, bounded fetch/Bundle expansion, validated approved-data export and round-trip fixtures. No R4 conformance claim from R4B models alone. |
+| INT-003-V | EHR launch accepted; standalone reaches sandbox login. | One separately authorized synthetic standalone login/consent → local review handoff. Never infer this from the EHR run or alter external clinical truth. |
+| OPS-005 / SCH-001-V | Real outage/quiet renewal and successful visit/export rechecks recorded. | Correlate reproduced failure using request metadata; historical unexplained failures stay honest. Remaining scheduling action/conflict/calendar checks need exact synthetic-write approval. |
+| SAFE/AI | Deterministic safety/approval/audit and SOAP registry/retry code exist; formal model benchmarking optional. | Inventory real supported routes, verify bounded mild-symptom/low-mood/Spanish and SOAP failure behaviour. Do not add fake executor/test endpoints or reopen optional professional evaluation. |
+
+First coding slice: identifier fidelity plus bounded SMART retrieval and recursive
+Bundle handling. All limit failures must happen before an import is created or
+candidate writes start. Preserve original source JSON and case-sensitive identifier
+values; never turn an external identifier into local patient/clinical authority.
+Then implement reviewed continuity/export through existing authorized provenance
+reads, keeping the new shared-core/visibility contract as an integration dependency.
+
+### October 21 implementation checkpoint
+
+- Local only: `fhir_import_limits.py`, `smart_launch_service.py`,
+  `fhir_import_service.py`, and `test_fhir_import_limits.py`.
+- Shared fetch budget: 20 pages/query, 50 requests/import, 2 MiB/response,
+  8 MiB/import and 1,000 returned resources; nested Bundle expansion additionally
+  permits at most eight levels and 1,000 envelope/entry records. These are application
+  limits, not FHIR standard limits. Oversized input fails rather than importing a
+  silently truncated record. Existing per-resource validation semantics are unchanged.
+- Query-relative pagination keeps the current resource path. Redirects, cycles,
+  malformed/ambiguous next links, control characters, cross-origin links and paths
+  outside the trusted issuer base are rejected before following them with a bearer.
+- New mapper provenance retains exact `identifier` and `masterIdentifier` content
+  separately from editable clinical values. Raw source JSON remains unchanged;
+  existing envelopes are not backfilled and identifiers confer no local authority.
+- Verification: backend `.venv/bin/python -m pytest` with `--no-cov -q` over
+  `tests/unit/services/test_{fhir_import_limits,fhir_import_service,smart_launch_service,fhir_candidate_reprojection_service,fhir_audit_actor_clinics,fhir_import_review_service}.py`,
+  `tests/integration/routers/test_smart_api.py`, `tests/unit/tools/test_fhir_builder.py`,
+  `tests/unit/db/test_smart_import_service_role_grants.py` and
+  `tests/unit/scripts/test_reproject_fhir_candidates_script.py`: **86 passed**.
+  Ruff check/format and mypy on the three changed source modules pass.
+  No hosted database, real OAuth exchange, migration or deployment was exercised.
+- Next: expose identifier metadata through authorized source reads (including older
+  envelopes), then reviewed handoff/export with current source authorization.
+  MED-002 patient-confirmation requests, standalone SMART acceptance, historical
+  RCA, scheduling and bounded SAFE/AI acceptance remain open; no task is closed
+  merely by the limits tests. Keep G/H and PLAN-002 out of this lane.
+
 ## Starting point (September 2026, historical)
 
 - The backend has an extraction-oriented FHIR builder for Condition,

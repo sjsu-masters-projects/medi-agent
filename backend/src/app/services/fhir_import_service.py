@@ -6,6 +6,7 @@ import hashlib
 import html
 import json
 import re
+from copy import deepcopy
 from typing import Any, cast
 from uuid import UUID
 
@@ -32,6 +33,7 @@ from app.models.clinical_fact import (
     SourceProvenanceCreate,
 )
 from app.services.clinical_fact_service import ClinicalFactService
+from app.services.fhir_import_limits import MAX_BUNDLE_DEPTH, MAX_IMPORT_BYTES, MAX_IMPORT_RESOURCES
 
 SUPPORTED_RESOURCE_TYPES = frozenset(
     {
@@ -143,17 +145,35 @@ class FhirImportService:
 
     @staticmethod
     def expand_bundles(resources: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Preserve raw Bundle envelopes and recursively expose their entries for mapping."""
+        """Bound the complete expansion before any source/candidate is persisted."""
+        try:
+            encoded = json.dumps(resources, allow_nan=False).encode("utf-8")
+        except (ValueError, TypeError, RecursionError):
+            raise ValidationError(
+                "FHIR import must contain finite, acyclic JSON resources"
+            ) from None
+        if len(encoded) > MAX_IMPORT_BYTES:
+            raise ValidationError("FHIR import byte limit exceeded")
         flattened: list[dict[str, Any]] = []
-        for resource in resources:
-            if resource.get("resourceType") != "Bundle":
-                flattened.append(resource)
-                continue
+        pending = [(resource, 0) for resource in reversed(resources)]
+        while pending:
+            resource, depth = pending.pop()
+            if not isinstance(resource, dict):
+                raise ValidationError("FHIR import entries must be JSON objects")
+            if depth > MAX_BUNDLE_DEPTH:
+                raise ValidationError("FHIR Bundle nesting limit exceeded")
             flattened.append(resource)
-            for entry in resource.get("entry", []):
+            if len(flattened) > MAX_IMPORT_RESOURCES:
+                raise ValidationError("FHIR import resource limit exceeded")
+            if resource.get("resourceType") != "Bundle":
+                continue
+            entries = resource.get("entry", [])
+            if not isinstance(entries, list):
+                raise ValidationError("FHIR Bundle entries must be an array")
+            for entry in reversed(entries):
                 nested = entry.get("resource") if isinstance(entry, dict) else None
                 if isinstance(nested, dict):
-                    flattened.extend(FhirImportService.expand_bundles([nested]))
+                    pending.append((nested, depth + 1))
         return flattened
 
     @staticmethod
@@ -256,8 +276,15 @@ class FhirImportService:
                     document_location={
                         "resource_type": resource_type,
                         "resource_id": resource.get("id"),
+                        # Source metadata, not clinician-editable clinical fields.
+                        "identifiers": deepcopy(resource.get("identifier") or []),
+                        **(
+                            {"master_identifier": deepcopy(resource["masterIdentifier"])}
+                            if resource.get("masterIdentifier")
+                            else {}
+                        ),
                     },
-                    extractor_version="fhir-r4-import/1",
+                    extractor_version="fhir-r4-import/2",
                     care_team_id=care_team_id,
                 ),
                 citations=[
