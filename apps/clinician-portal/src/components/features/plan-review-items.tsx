@@ -6,7 +6,7 @@ import { ClinicChip } from "@/components/features/clinic-chip";
 import { InstructionLines } from "@/components/features/cross-plan-conflicts";
 import { AdoptPlanDialog, RetireItemsDialog } from "@/components/features/unowned-plan-dialogs";
 import { Icon } from "@/components/ui/icons";
-import { errorCode, replyToReviewItem, takeRecord } from "@/services/care-team-plans";
+import { errorCode, replyToReviewItem, resolveConflictReply, takeRecord } from "@/services/care-team-plans";
 import type { ClinicReviewItem, ConflictMedication, PlanReviewItem, ReviewItemKind } from "@/types";
 import { formatClinicianDateTime } from "@/utils/dates";
 
@@ -91,6 +91,24 @@ export function PlanReviewItemRow({ item, patientLabel, clinicName, highlighted,
         } finally { setBusy(false); }
     }
 
+    const [keepBothOpen, setKeepBothOpen] = useState(false);
+    const [keepReason, setKeepReason] = useState("");
+
+    async function resolveReply(action: "accept" | "keep_both") {
+        if (busy || (action === "keep_both" && !keepReason.trim())) return;
+        setBusy(true); setError(null);
+        try {
+            const result = await resolveConflictReply(item.id, action, action === "keep_both" ? keepReason.trim() : undefined);
+            setOutcome({ kind: "replied", message: action === "keep_both"
+                ? "Both instructions are kept with your reason. Your draft can be published."
+                : result.still_blocking
+                    ? "Reply accepted. The conflict still blocks your draft: keep both with a reason, or adjust your plan."
+                    : "Reply accepted. The conflict no longer blocks your draft." });
+        } catch (cause) {
+            setError(errorCode(cause) === "CONFLICT_CHANGED" ? "This conflict has changed since the reply. Reload and review it again." : cause instanceof Error ? cause.message : "Unable to resolve this reply.");
+        } finally { setBusy(false); }
+    }
+
     async function answer() {
         if (busy || (needsReply && !reply.trim())) return;
         setBusy(true); setError(null);
@@ -152,12 +170,23 @@ export function PlanReviewItemRow({ item, patientLabel, clinicName, highlighted,
             <div className="flex flex-wrap items-center gap-2">
                 {canAnswer ? <button className="ma-press inline-flex h-8 items-center rounded-lg bg-primary px-3 text-[13px] font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-track disabled:text-[#94A3B8]" disabled={busy || (needsReply && !reply.trim())} onClick={() => void answer()} type="button">{busy ? "Saving…" : needsReply ? "Send reply" : "Mark as seen"}</button> : null}
                 {needsReply ? <Link className="ma-press inline-flex h-8 items-center rounded-lg border border-line-strong bg-surface px-3 text-[13px] font-medium text-ink-2 hover:bg-surface-2" href={planHref}>Adjust my plan</Link> : null}
+                {fromAsker ? <>
+                    <button className="ma-press inline-flex h-8 items-center rounded-lg bg-primary px-3 text-[13px] font-semibold text-white hover:bg-primary-hover disabled:opacity-60" disabled={busy} onClick={() => void resolveReply("accept")} type="button">{busy && !keepBothOpen ? "Saving…" : "Accept their answer"}</button>
+                    <button aria-expanded={keepBothOpen} className="ma-press inline-flex h-8 items-center rounded-lg border border-line-strong bg-surface px-3 text-[13px] font-medium text-ink-2 hover:bg-surface-2" onClick={() => setKeepBothOpen((open) => !open)} type="button">Keep both instructions</button>
+                    <Link className="ma-press inline-flex h-8 items-center rounded-lg border border-line-strong bg-surface px-3 text-[13px] font-medium text-ink-2 hover:bg-surface-2" href={planHref}>Adjust my plan</Link>
+                </> : null}
                 {record && recordId ? <button className="ma-press inline-flex h-8 items-center rounded-lg bg-primary px-3 text-[13px] font-semibold text-white hover:bg-primary-hover disabled:opacity-60" disabled={busy} onClick={() => void take()} type="button">{busy ? "Taking…" : `Take this ${recordLabel}`}</button> : null}
                 {unowned && item.care_plan_id ? <>
                     <button className="ma-press inline-flex h-8 items-center rounded-lg bg-primary px-3 text-[13px] font-semibold text-white hover:bg-primary-hover" onClick={() => setDialog("adopt")} type="button">Adopt this plan</button>
                     <button className="ma-press inline-flex h-8 items-center rounded-lg border border-line-strong bg-surface px-3 text-[13px] font-medium text-ink-2 hover:bg-surface-2" onClick={() => setDialog("retire")} type="button">Retire items</button>
                 </> : null}
             </div>
+            {fromAsker && keepBothOpen ? <div>
+                <label className="block text-[13px] font-medium text-ink-2" htmlFor={`${replyId}-keep`}>Reason for keeping both (required)</label>
+                <textarea className="mt-1 min-h-20 w-full rounded-[10px] border border-line-strong bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)]" id={`${replyId}-keep`} maxLength={REPLY_MAX} onChange={(event) => setKeepReason(event.target.value)} value={keepReason} />
+                <button className="ma-press mt-2 inline-flex h-8 items-center rounded-lg bg-primary px-3 text-[13px] font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-track disabled:text-[#94A3B8]" disabled={busy || !keepReason.trim()} onClick={() => void resolveReply("keep_both")} type="button">{busy ? "Saving…" : "Keep both with this reason"}</button>
+            </div> : null}
+            {fromAsker ? <p className="text-xs text-muted">Accepting only closes this reply; your draft stays blocked until the conflict is resolved.</p> : null}
             {needsReply ? <p className="text-xs text-muted">Your reply informs the other care team. It does not release their publication block.</p> : null}
         </div>}
 
@@ -177,8 +206,14 @@ const CLINIC_KIND_TEXT: Partial<Record<ReviewItemKind, string>> = {
     unassigned_legacy_plan: "A legacy care plan at this clinic could not be assigned to a care team.",
 };
 
-export function ClinicReviewItemRow({ item, clinicName }: { item: ClinicReviewItem; clinicName?: string | null }) {
-    return <li className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-[22px] py-3 last:border-b-0">
+export function ClinicReviewItemRow({ item, clinicName, highlighted }: { item: ClinicReviewItem; clinicName?: string | null; highlighted?: boolean }) {
+    const row = useRef<HTMLLIElement>(null);
+    useEffect(() => {
+        if (!highlighted) return;
+        row.current?.scrollIntoView?.({ block: "center" });
+        row.current?.focus({ preventScroll: true });
+    }, [highlighted]);
+    return <li className={`flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-[22px] py-3 outline-none last:border-b-0 ${highlighted ? "bg-primary-tint ring-2 ring-inset ring-primary-line" : ""}`} id={`review-item-${item.id}`} ref={row} tabIndex={-1}>
         <span className="min-w-0 flex-1 basis-64 text-sm text-ink-2">{CLINIC_KIND_TEXT[item.kind] ?? "A care plan at this clinic needs review."}</span>
         <ClinicChip name={clinicName} />
         <time className="text-xs text-muted" dateTime={item.created_at}>{formatClinicianDateTime(item.created_at)}</time>

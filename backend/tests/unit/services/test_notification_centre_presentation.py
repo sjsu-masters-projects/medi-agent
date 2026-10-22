@@ -595,3 +595,25 @@ def test_care_team_work_items_name_the_kind_link_to_the_patient_and_carry_no_rec
     )
     assert shown.source_label == "Care-team work item"
     assert present_item({**raw, "metadata": {"review_kind": "unknown"}}, "clinician", "en-US").title
+
+
+@pytest.mark.parametrize("review_kind", ["unowned_plan", "unassigned_legacy_plan", "other"])
+def test_a_clinic_level_work_item_names_no_patient_and_links_the_clinic_page(review_kind):
+    clinic = str(uuid4())
+    raw = item(
+        event_type="care_plan_review",
+        category="care_plans",
+        source_type="care_plan_review_items",
+        patient_id=None,
+        patient_name="Maria Garcia",
+        clinic_id=clinic,
+        metadata={"review_kind": review_kind, "scope": "clinic", "clinic_id": clinic},
+    )
+
+    shown = present_item(raw, "clinician", "en-US")
+
+    assert shown.patient_name is None
+    assert "Maria" not in shown.model_dump_json() and "undefined" not in shown.model_dump_json()
+    assert shown.action_url == f"/care-plan-reviews?clinic={clinic}&item={raw['source_id']}"
+    assert "patient" not in shown.title.lower()
+    assert str(shown.clinic_id) == clinic

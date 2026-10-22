@@ -804,11 +804,52 @@ def test_launch_is_refused_before_any_oauth_step_when_the_owner_is_ambiguous(
             clinician_id=UUID(TWO), patient_id=UUID(PATIENT), issuer="https://x.example/fhir"
         )
     assert caught.value.code == "CARE_TEAM_REQUIRED"
-    # The refusal says plainly what happened and what to do instead.
-    assert "more than one care-team link" in caught.value.message
-    assert "Upload the records as documents" in caught.value.message
-    assert caught.value.details == {"limitation": "smart_launch_single_link_only"}
     service._discover.assert_not_called()
+
+
+def test_launch_refuses_a_team_that_is_not_the_callers_before_any_oauth_step(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "smart_client_id", "sandbox-client")
+    service = SmartLaunchService(_world())  # type: ignore[arg-type]
+    service._discover = MagicMock()  # type: ignore[method-assign]
+    with pytest.raises(ValidationError):
+        service.start_launch(
+            clinician_id=UUID(TWO),
+            patient_id=UUID(PATIENT),
+            issuer="https://x.example/fhir",
+            care_team_id=UUID(OTHER_TEAM),
+        )
+    service._discover.assert_not_called()
+
+
+def test_launch_records_the_chosen_team_and_the_callback_stamps_the_import_with_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "smart_client_id", "sandbox-client")
+    db = _world()
+    service = SmartLaunchService(db)  # type: ignore[arg-type]
+    service._validate_issuer = lambda issuer: issuer  # type: ignore[method-assign]
+    service._cipher = lambda: MagicMock(  # type: ignore[method-assign]
+        encrypt=lambda raw: b"ciphertext"
+    )
+    service._discover = lambda _issuer: {  # type: ignore[method-assign]
+        "authorization_endpoint": "https://x.example/authorize",
+        "token_endpoint": "https://x.example/token",
+    }
+    monkeypatch.setattr(SmartLaunchService, "_redirect_uri", staticmethod(lambda: "https://r"))
+    service.start_launch(
+        clinician_id=UUID(TWO),
+        patient_id=UUID(PATIENT),
+        issuer="https://x.example/fhir",
+        care_team_id=UUID(TWO_B),
+    )
+    session = db.tables["smart_launch_sessions"][0]
+    assert session["care_team_id"] == TWO_B
+    # The callback re-checks the recorded team against the caller's current links.
+    assert str(service._import_care_team(UUID(TWO), UUID(PATIENT), UUID(TWO_B))) == TWO_B
+    with pytest.raises(ValidationError):
+        service._import_care_team(UUID(TWO), UUID(PATIENT), UUID(OTHER_TEAM))
 
 
 def test_imported_candidates_carry_the_importing_team_on_their_provenance() -> None:

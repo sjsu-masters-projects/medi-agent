@@ -96,7 +96,7 @@ function CarePlanReviewsContent() {
                 <h2 className="text-[15px] font-semibold text-ink" id="review-clinic-work">Clinic work</h2>
                 <p className="mt-0.5 text-xs text-muted">You are an administrator here. This shows that work exists, not which patient or activity.</p>
             </div>
-            <ul>{clinicItems.map((item) => <ClinicReviewItemRow clinicName={clinicFilter.multi ? clinicName(item.target_clinic_id) : null} item={item} key={item.id} />)}</ul>
+            <ul>{clinicItems.map((item) => <ClinicReviewItemRow highlighted={highlightId === item.id} clinicName={clinicFilter.multi ? clinicName(item.target_clinic_id) : null} item={item} key={item.id} />)}</ul>
         </section> : null}
     </div>;
 }

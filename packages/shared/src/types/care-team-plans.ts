@@ -46,6 +46,8 @@ export interface ClinicianPlanListEntry {
     active_version_id?: string | null;
     draft_version_id?: string | null;
     latest_version_number?: number | null;
+    /** The live approved version's number (not the draft's), for "Approved v3". */
+    approved_version_number?: number | null;
     generation?: Record<string, unknown> | null;
     /** Present only for unowned or unassigned plans: my care teams that may adopt it. */
     adoptable_by_care_team_ids?: string[];

@@ -107,6 +107,13 @@ class ReviewItemReplyRequest(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
 
 
+class ResolveConflictReplyRequest(BaseModel):
+    """Accept the other team's answer, or keep both instructions with a written reason."""
+
+    action: Literal["accept", "keep_both"]
+    reason: str | None = Field(default=None, max_length=2000)
+
+
 class AdoptPlanRequest(BaseModel):
     care_team_id: UUID
     note: str = Field(min_length=1, max_length=2000)

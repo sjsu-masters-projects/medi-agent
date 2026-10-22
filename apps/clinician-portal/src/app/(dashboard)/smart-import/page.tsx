@@ -6,7 +6,7 @@ import { useSelector } from "react-redux";
 import { Button, Card, EmptyState, Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { ProcessingDots } from "@/components/ui/motion";
-import { errorCode } from "@/services/care-team-plans";
+import { CareTeamSelect, useCareTeamChoice } from "@/components/features/care-team-select";
 import { api } from "@/services/api";
 import type { RootState } from "@/store/store";
 
@@ -49,6 +49,8 @@ export default function SmartImportPage() {
     const token = useSelector((state: RootState) => state.auth.accessToken);
     const [patients, setPatients] = useState<AssignedPatient[]>([]);
     const [patientId, setPatientId] = useState("");
+    const careTeam = useCareTeamChoice(patientId, Boolean(patientId));
+    const [careTeamPrompted, setCareTeamPrompted] = useState(false);
     const [loading, setLoading] = useState(true);
     const [starting, setStarting] = useState(false);
     const [launchStatus, setLaunchStatus] = useState<string | null>(null);
@@ -111,6 +113,10 @@ export default function SmartImportPage() {
             setError("The EHR launch context is incomplete. Return to the EHR and launch again.");
             return;
         }
+        if (careTeam.missing) {
+            setCareTeamPrompted(true);
+            return;
+        }
         setStarting(true);
         setLaunchStatus("Preparing the secure SMART authorization session…");
         setError(null);
@@ -119,6 +125,7 @@ export default function SmartImportPage() {
                 "/api/v1/smart/launch",
                 {
                     patient_id: patientId,
+                    ...(careTeam.careTeamId ? { care_team_id: careTeam.careTeamId } : {}),
                     ...(hasEhrLaunch ? { issuer: ehrIssuer, launch_context: ehrLaunchContext } : {}),
                 },
                 { token },
@@ -133,9 +140,10 @@ export default function SmartImportPage() {
             }
             window.location.assign(result.authorization_url);
         } catch (launchError) {
-            setError(errorCode(launchError) === "CARE_TEAM_REQUIRED"
-                ? "SMART launch works with one care-team link to a patient, and you have more than one. Nothing was started. Upload the records as documents instead."
-                : launchError instanceof Error ? launchError.message : "Unable to start SMART launch.");
+            if (careTeam.handleError(launchError)) {
+                setCareTeamPrompted(true);
+                setError("Choose which care team this import belongs to, then launch again. Nothing was started.");
+            } else setError(launchError instanceof Error ? launchError.message : "Unable to start SMART launch.");
             setLaunchStatus(null);
             setStarting(false);
         }
@@ -190,7 +198,7 @@ export default function SmartImportPage() {
                                 className="h-[42px] w-full rounded-[10px] border border-line-strong bg-surface px-3.5 text-sm text-ink outline-none transition focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)] disabled:bg-surface-2 disabled:text-muted"
                                 disabled={starting}
                                 value={patientId}
-                                onChange={(event) => setPatientId(event.target.value)}
+                                onChange={(event) => { setPatientId(event.target.value); careTeam.setValue(""); setCareTeamPrompted(false); }}
                             >
                                 {patients.map((patient) => (
                                     <option key={patient.id} value={patient.id}>
@@ -199,6 +207,7 @@ export default function SmartImportPage() {
                                 ))}
                             </select>
                         </div>
+                        <CareTeamSelect onChange={careTeam.setValue} options={careTeam.options} required={careTeam.required} showRequired={careTeamPrompted} value={careTeam.value} />
                         {hasEhrLaunch ? (
                             <div className="flex items-start gap-2.5 rounded-xl border border-primary-line bg-primary-tint px-4 py-3 text-sm text-ai-ink">
                                 <Icon name="link" className="mt-0.5 h-4 w-4 shrink-0" />

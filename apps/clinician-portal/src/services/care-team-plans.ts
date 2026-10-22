@@ -121,6 +121,13 @@ export function replyToReviewItem(itemId: string, note?: string): Promise<{ id: 
     return api.post(`${plansRoot}/review-items/${encodeURIComponent(itemId)}/reply`, note ? { note } : {}, { token: token() });
 }
 
+/** The asking clinician closes the other team's reply: accept it, or keep both with a reason. */
+export function resolveConflictReply(
+    itemId: string, action: "accept" | "keep_both", reason?: string,
+): Promise<{ id: string; status: string; replayed: boolean; still_blocking?: boolean }> {
+    return api.post(`${plansRoot}/review-items/${encodeURIComponent(itemId)}/resolve`, { action, ...(reason ? { reason } : {}) }, { token: token() });
+}
+
 export function fetchUnownedActivities(patientId: string, carePlanId: string): Promise<UnownedPlanActivities> {
     return api.get<UnownedPlanActivities>(
         `${plansRoot}/patients/${encodeURIComponent(patientId)}/plans/${encodeURIComponent(carePlanId)}/activities`,

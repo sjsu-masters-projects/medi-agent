@@ -377,6 +377,11 @@ the settings and history UI.
 
 ### Known limitations
 
+- Slice G follow-ups closed by migration 092: a clinician with two links to one patient can now
+  run a SMART import by choosing the care team (required select; fail closed on a team that
+  is not theirs); clinic-admin review items reach only that clinic's admins in the
+  notification centre without patient detail; conflict replies can be resolved by the asking
+  clinician. Details: [PLAN-002 known limitations](plan-002-care-plans-per-care-team.md#known-limitations).
 - Clinician signup returns `ACCOUNT_EXISTS` for an already registered email, which allows
   account enumeration. Accepted for now because Supabase signup already discloses it and the
   portal needs the copy to send the clinician to sign in. Follow-up: a neutral response plus an

@@ -267,7 +267,35 @@ _REVIEW_COPY = {
 }
 
 
+# Clinic-level work for a clinic's admins. Never names a patient; fixed wording only.
+_CLINIC_REVIEW_COPY = {
+    "unowned_plan": (
+        "A care plan at your clinic has no care team",
+        "A care team that ended left approved activities in a patient's Today. Open the "
+        "clinic review page to see who can adopt it. Nothing was removed.",
+    ),
+    "unassigned_legacy_plan": (
+        "A care plan at your clinic needs an owner",
+        "An older care plan could not be assigned to one care team. Open the clinic review "
+        "page. Nothing was removed.",
+    ),
+}
+_CLINIC_REVIEW_DEFAULT = (
+    "Clinic care-plan work item",
+    "A care-plan item at your clinic needs attention. Open the clinic review page.",
+)
+
+
+def _is_clinic_scope(row: dict[str, Any]) -> bool:
+    return row.get("event_type") == "care_plan_review" and _metadata(row).get("scope") == "clinic"
+
+
 def _review_link(row: dict[str, Any], role: str) -> Destination:
+    if _is_clinic_scope(row):
+        clinic = _identifier(_metadata(row).get("clinic_id")) or _identifier(row.get("clinic_id"))
+        item = _identifier(row.get("source_id"))
+        link = f"/care-plan-reviews?clinic={clinic}&item={item}" if clinic and item else None
+        return (link, "Open clinic review", "Abrir revisión de la clínica")
     patient, item = _identifier(row.get("patient_id")), _identifier(row.get("source_id"))
     link = f"/patients/{patient}?tab=care-plan&review={item}" if patient and item else None
     return (link, "Open care-team item", "Abrir tarea del equipo")
@@ -375,6 +403,10 @@ def _display_copy(row: dict[str, Any], role: str, spanish: bool) -> tuple[str, s
             "A result the laboratory marked critical was reported for this patient. The "
             "document is held by another care team of this patient. Check on the patient.",
         )
+    if kind == "care_plan_review" and _is_clinic_scope(row):
+        return _CLINIC_REVIEW_COPY.get(
+            str(_metadata(row).get("review_kind")), _CLINIC_REVIEW_DEFAULT
+        )
     if kind == "care_plan_review":
         review = _REVIEW_COPY.get(str(_metadata(row).get("review_kind")))
         if review:
@@ -424,7 +456,11 @@ def present_item(row: dict[str, Any], role: str, locale: str) -> CentreItem:
         ),
         actionable=actionable,
         can_acknowledge=actionable and role == "clinician" and bool(row.get("can_acknowledge")),
-        patient_name=_name(row.get("patient_name")) if role == "clinician" else None,
+        patient_name=(
+            _name(row.get("patient_name"))
+            if role == "clinician" and not _is_clinic_scope(row)
+            else None
+        ),
         clinic_name=_name(row.get("clinic_name")),
         clinic_id=_identifier(row.get("clinic_id")) if role == "clinician" else None,
         source_label=_SOURCE_LABELS.get(str(row.get("source_type")))

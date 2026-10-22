@@ -13,7 +13,7 @@ vi.mock("@/services/clinicians", () => ({ fetchDashboard: vi.fn() }));
 vi.mock("@/hooks/use-clinic-filter", async () => (await import("@/test/clinic-filter-mock")).clinicFilterModule);
 vi.mock("@/services/care-team-plans", async (original) => ({
     ...(await original<typeof import("@/services/care-team-plans")>()),
-    fetchReviewItems: vi.fn(), replyToReviewItem: vi.fn(), fetchUnownedActivities: vi.fn(), adoptCarePlan: vi.fn(), retireCarePlanItems: vi.fn(), takeRecord: vi.fn(),
+    fetchReviewItems: vi.fn(), replyToReviewItem: vi.fn(), resolveConflictReply: vi.fn(), fetchUnownedActivities: vi.fn(), adoptCarePlan: vi.fn(), retireCarePlanItems: vi.fn(), takeRecord: vi.fn(),
 }));
 
 const item = (extra: Partial<PlanReviewItem>): PlanReviewItem => ({
@@ -50,6 +50,38 @@ describe("care plan review items", () => {
         await waitFor(() => expect(plans.replyToReviewItem).toHaveBeenCalledWith("r1", "200 mg works"));
         expect(await screen.findByText(/Reply sent/)).toBeInTheDocument();
         expect(within(row).getByRole("link", { name: "Open care plan" })).toHaveAttribute("href", "/patients/p1?tab=care-plan");
+    });
+
+    it("lets the asker accept a reply and says the blocker remains when it does", async () => {
+        load([item({ kind: "conflict_reply" })]);
+        vi.mocked(plans.resolveConflictReply).mockResolvedValue({ id: "r1", status: "resolved", replayed: false, still_blocking: true });
+        render(<CarePlanReviewsPage />);
+        const row = await screen.findByRole("listitem", { name: "The other care team replied" });
+        fireEvent.click(within(row).getByRole("button", { name: "Accept their answer" }));
+        await waitFor(() => expect(plans.resolveConflictReply).toHaveBeenCalledWith("r1", "accept", undefined));
+        expect(await screen.findByText(/still blocks your draft/)).toBeInTheDocument();
+    });
+
+    it("keeps both instructions only with a written reason", async () => {
+        load([item({ kind: "conflict_reply" })]);
+        vi.mocked(plans.resolveConflictReply).mockResolvedValue({ id: "r1", status: "resolved", replayed: false, still_blocking: false });
+        render(<CarePlanReviewsPage />);
+        const row = await screen.findByRole("listitem", { name: "The other care team replied" });
+        fireEvent.click(within(row).getByRole("button", { name: "Keep both instructions" }));
+        const confirm = within(row).getByRole("button", { name: "Keep both with this reason" });
+        expect(confirm).toBeDisabled();
+        fireEvent.change(within(row).getByRole("textbox", { name: /Reason for keeping both/ }), { target: { value: "Confirmed with the prescriber" } });
+        fireEvent.click(confirm);
+        await waitFor(() => expect(plans.resolveConflictReply).toHaveBeenCalledWith("r1", "keep_both", "Confirmed with the prescriber"));
+        expect(await screen.findByText(/Both instructions are kept/)).toBeInTheDocument();
+    });
+
+    it("focuses the clinic-level item named by a notification link", async () => {
+        nav.search = "clinic=c1&item=ci1";
+        vi.mocked(plans.fetchReviewItems).mockResolvedValue({ items: [], clinic_items: [{ id: "ci1", care_plan_id: "plan-1", kind: "unowned_plan", target_clinic_id: "c1", status: "open", created_at: "2026-10-20T12:00:00Z" }] as never });
+        render(<CarePlanReviewsPage />);
+        await screen.findByText(/has no care team and needs an owner/);
+        await waitFor(() => expect(document.getElementById("review-item-ci1")).toHaveFocus());
     });
 
     it("focuses the item named by a notification link", async () => {

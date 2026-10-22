@@ -224,6 +224,9 @@ def test_the_plan_list_shows_other_teams_metadata_only_and_who_may_adopt_an_unow
     mine, theirs, unowned = by_id[MY_PLAN], by_id[THEIR_PLAN], by_id[UNOWNED_PLAN]
     assert mine["is_mine"] and mine["draft_version_id"] == MY_VERSION
     assert mine["active_version_id"] == "dddddddd-dddd-4ddd-8ddd-ddddddddddd9"
+    # The live approved version's own number, even while a newer draft exists.
+    assert mine["approved_version_number"] == 1
+    assert mine["latest_version_number"] > mine["approved_version_number"]
     assert theirs["is_mine"] is False and theirs["approved_at"] == "2026-10-02"
     assert theirs["owner"] == {
         "specialty": "Orthopaedics",
@@ -231,7 +234,13 @@ def test_the_plan_list_shows_other_teams_metadata_only_and_who_may_adopt_an_unow
         "clinic_id": OTHER_CLINIC,
         "clinic_name": "Birch",
     }
-    for hidden in ("draft_version_id", "active_version_id", "generation", "latest_version_number"):
+    for hidden in (
+        "draft_version_id",
+        "active_version_id",
+        "generation",
+        "latest_version_number",
+        "approved_version_number",
+    ):
         assert hidden not in theirs and hidden not in unowned
     assert unowned["adoptable_by_care_team_ids"] == [TEAM]
     assert unowned["owner"]["clinician_name"] == "Dr Gone"

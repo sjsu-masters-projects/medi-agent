@@ -77,7 +77,30 @@ def test_start_launch_requires_local_clinician_and_returns_redirect_url(
         patient_id=patient_id,
         issuer="https://sandbox.example/fhir",
         launch_context=None,
+        care_team_id=None,
     )
+
+
+def test_start_launch_passes_the_chosen_care_team_to_the_service(
+    client, smart_service, clinician
+) -> None:
+    patient_id, team_id = uuid4(), uuid4()
+    smart_service.start_launch.return_value = {
+        "authorization_url": "https://sandbox.example/authorize?state=opaque",
+        "expires_at": datetime.now(UTC) + timedelta(minutes=10),
+    }
+
+    response = client.post(
+        "/api/v1/smart/launch",
+        json={
+            "patient_id": str(patient_id),
+            "issuer": "https://sandbox.example/fhir",
+            "care_team_id": str(team_id),
+        },
+    )
+
+    assert response.status_code == 200
+    assert smart_service.start_launch.call_args.kwargs["care_team_id"] == team_id
 
 
 def test_start_launch_binds_ehr_launch_context_to_local_clinician_and_patient(
@@ -104,6 +127,7 @@ def test_start_launch_binds_ehr_launch_context_to_local_clinician_and_patient(
         patient_id=patient_id,
         issuer="https://sandbox.example/fhir",
         launch_context="opaque-ehr-handle",
+        care_team_id=None,
     )
 
 
@@ -149,7 +173,11 @@ def test_standalone_launch_may_omit_issuer_for_server_configuration(
 
     assert response.status_code == 200
     smart_service.start_launch.assert_called_once_with(
-        clinician_id=clinician.id, patient_id=patient_id, issuer=None, launch_context=None
+        clinician_id=clinician.id,
+        patient_id=patient_id,
+        issuer=None,
+        launch_context=None,
+        care_team_id=None,
     )
 
 

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -14,6 +16,7 @@ from supabase import Client
 from app.core.exceptions import ValidationError
 from app.core.job_logging import JobRunLog
 from app.db.supabase_execute import execute_async
+from app.services.activity_grouping import norm_text
 from app.services.email_service import EmailDeliveryService
 from app.services.feed_service import FeedService
 from app.services.health_knowledge_service import HealthKnowledgeService
@@ -51,6 +54,13 @@ class CronService:
     # Scheduler run leaves no gap. After a longer pause the next run starts at "now":
     # reminders for medicines that were due an hour ago are no longer useful.
     MAX_REMINDER_CATCH_UP = timedelta(minutes=60)
+    # Reading the combined-entry grouping: a few quick attempts inside a small total budget
+    # (the dispatcher must finish well inside its Scheduler interval).
+    GROUPING_RETRY_DELAYS = (0.2, 0.5)
+    GROUPING_RETRY_BUDGET_SECONDS = 3.0
+    # With grouping unavailable, an occurrence due at least this far beyond the next run's
+    # start may wait for that run; anything sooner is sent now, one per identity.
+    MAX_GROUPING_DEFER_LATENESS = timedelta(minutes=5)
 
     def __init__(self, db: Client) -> None:
         self.db = db
@@ -151,8 +161,15 @@ class CronService:
         for row in cast(list[dict[str, Any]], response.data or []):
             if (row.get("metadata") or {}).get("dry_run"):
                 continue
-            window_end = (row.get("summary") or {}).get("window_end")
-            return self._parse_timestamp(str(window_end)) if window_end else None
+            recorded = row.get("summary") or {}
+            window_end = recorded.get("window_end")
+            if not window_end:
+                return None
+            end = self._parse_timestamp(str(window_end))
+            # Occurrences deferred because grouping was unavailable are picked up again by
+            # starting the next window at the earliest of them (bounded by the catch-up cap).
+            resume = recorded.get("resume_from")
+            return min(end, self._parse_timestamp(str(resume))) if resume else end
         return None
 
     async def run_health_knowledge_refresh(self, *, limit: int = 150) -> dict[str, Any]:
@@ -352,7 +369,7 @@ class CronService:
         }
 
     @staticmethod
-    def _empty_schedule_summary() -> dict[str, int]:
+    def _empty_schedule_summary() -> dict[str, Any]:
         return {
             "medication_candidates": 0,
             "medication_created": 0,
@@ -370,7 +387,7 @@ class CronService:
         window_start: datetime,
         window_end: datetime,
         dry_run: bool,
-    ) -> dict[str, int]:
+    ) -> dict[str, Any]:
         summary = self._empty_schedule_summary()
         if self.db is None:
             return summary
@@ -378,7 +395,9 @@ class CronService:
         schedules = await self._fetch_enabled_reminder_schedules()
         if not schedules:
             return summary
-        schedules = await self._collapse_combined_schedules(schedules, window_end, summary)
+        schedules, ungrouped_patients = await self._collapse_combined_schedules(
+            schedules, window_end, summary
+        )
 
         medication_map = await self._fetch_medication_display_map(
             [str(row["target_id"]) for row in schedules if row.get("target_type") == "medication"]
@@ -411,6 +430,16 @@ class CronService:
                 )
             )
 
+        if ungrouped_patients:
+            candidate_rows = self._safe_ungrouped_candidates(
+                candidate_rows,
+                ungrouped_patients,
+                medication_map=medication_map,
+                obligation_map=obligation_map,
+                window_end=window_end,
+                summary=summary,
+            )
+
         existing_keys = await self._fetch_existing_notification_keys(
             [row["dedupe_key"] for row in candidate_rows]
         )
@@ -429,35 +458,62 @@ class CronService:
                 summary[f"{target_type}_created"] += 1
         return summary
 
+    async def _read_combined_groups(
+        self, patient_id: str, local_date: Any, deadline: float, summary: dict[str, Any]
+    ) -> list[list[tuple[str, str]]] | None:
+        """The patient's combined entries, retried with bounded backoff; None if unreadable.
+
+        At most ``len(GROUPING_RETRY_DELAYS) + 1`` attempts, and no attempt starts after the
+        run-wide ``deadline``, so a degraded database cannot stall the dispatcher.
+        """
+        assert self.db is not None
+        for attempt in range(len(self.GROUPING_RETRY_DELAYS) + 1):
+            try:
+                return await FeedService(self.db).combined_groups(UUID(patient_id), local_date)
+            except Exception:  # noqa: BLE001 - any read failure falls back safely
+                if attempt >= len(self.GROUPING_RETRY_DELAYS):
+                    break
+                delay = self.GROUPING_RETRY_DELAYS[attempt]
+                if time.monotonic() + delay >= deadline:
+                    break
+                summary["grouping_retries"] = summary.get("grouping_retries", 0) + 1
+                await asyncio.sleep(delay)
+        return None
+
     async def _collapse_combined_schedules(
-        self, schedules: list[dict[str, Any]], window_end: datetime, summary: dict[str, int]
-    ) -> list[dict[str, Any]]:
+        self, schedules: list[dict[str, Any]], window_end: datetime, summary: dict[str, Any]
+    ) -> tuple[list[dict[str, Any]], set[str]]:
         """One reminder per occurrence for a combined Today entry (PLAN-002 decision 5).
 
         Identical activities of several plans are one entry in Today, with one reminder. The
         entry's own schedule wins; if it has none, the first member that does is used. The
         notification is keyed on the entry's id, so the key is the same on every run and for
-        every retry, and the existing unique key makes concurrent dispatcher runs safe. If
-        grouping cannot be read, reminders still go out (ungrouped) and the failure is logged.
+        every retry, and the existing unique key makes concurrent dispatcher runs safe.
+
+        The grouping read is retried with bounded backoff. A patient whose grouping is still
+        unreadable is returned in the second value: their reminders are never sent ungrouped
+        (see ``_safe_ungrouped_candidates``). Only a patient with two or more schedules can
+        have a combined entry, so only they are affected.
         """
         by_patient: dict[str, list[dict[str, Any]]] = {}
         for schedule in schedules:
             by_patient.setdefault(str(schedule["patient_id"]), []).append(schedule)
         dropped: set[str] = set()
         primary_of: dict[str, str] = {}
+        ungrouped: set[str] = set()
+        deadline = time.monotonic() + self.GROUPING_RETRY_BUDGET_SECONDS
         for patient_id, owned in by_patient.items():
             if len(owned) < 2 or self.db is None:
                 continue
             local_date = window_end.astimezone(
                 ZoneInfo(str(owned[0].get("timezone") or "UTC"))
             ).date()
-            try:
-                groups = await FeedService(self.db).combined_groups(UUID(patient_id), local_date)
-            except Exception:
-                logger.warning(
-                    "Reminder grouping unavailable; sending ungrouped for patient %s", patient_id
-                )
+            groups = await self._read_combined_groups(patient_id, local_date, deadline, summary)
+            if groups is None:
+                # Counted, never logged with an identifier.
+                logger.warning("Reminder grouping unavailable after retries for one patient")
                 summary["grouping_unavailable"] = summary.get("grouping_unavailable", 0) + 1
+                ungrouped.add(patient_id)
                 continue
             for group in groups:
                 primary = group[0][1]
@@ -481,7 +537,85 @@ class CronService:
         for row in kept:
             if str(row["id"]) in primary_of:
                 row["group_primary_id"] = primary_of[str(row["id"])]
-        return kept
+        return kept, ungrouped
+
+    @staticmethod
+    def _activity_identity(target_type: str, target: dict[str, Any]) -> tuple[str, ...]:
+        """What makes two reminders the same activity when grouping is unavailable.
+
+        Deliberately narrower than the feed's grouping (it cannot see plan items): kind plus
+        the normalised name or description, dose, frequency and instructions. Two items with
+        the same identity are one reminder; items that differ in any of these keep their own.
+        """
+        if target_type == "medication":
+            return (
+                "medication",
+                norm_text(target.get("name")),
+                norm_text(target.get("dosage")),
+                norm_text(target.get("frequency")),
+                norm_text(target.get("instructions")),
+            )
+        return (
+            "obligation",
+            norm_text(target.get("description")),
+            norm_text(target.get("frequency")),
+            norm_text(target.get("notes")),
+        )
+
+    def _safe_ungrouped_candidates(
+        self,
+        candidate_rows: list[dict[str, Any]],
+        ungrouped_patients: set[str],
+        *,
+        medication_map: dict[str, dict[str, Any]],
+        obligation_map: dict[str, dict[str, Any]],
+        window_end: datetime,
+        summary: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Reminders for patients whose combined grouping could not be read.
+
+        Never zero for a due dose, never two for one entry:
+
+        * An occurrence due late enough that the next run (about ``window_end``) still
+          delivers it within ``MAX_GROUPING_DEFER_LATENESS`` waits for that run, which reads
+          the grouping again. The next window is told where to resume (``resume_from``).
+        * Anything sooner is sent now, once per (activity identity, scheduled time): the
+          lowest target id of identical activities represents them, so the key is stable.
+        """
+        keep_after = window_end - self.MAX_GROUPING_DEFER_LATENESS
+        result: list[dict[str, Any]] = []
+        chosen: dict[tuple[str, tuple[str, ...], str], dict[str, Any]] = {}
+        deferred_from: datetime | None = None
+        deferred = 0
+        deduped = 0
+        for row in sorted(candidate_rows, key=lambda r: str(r["metadata"]["target_id"])):
+            if str(row["patient_id"]) not in ungrouped_patients:
+                result.append(row)
+                continue
+            meta = row["metadata"]
+            due = self._parse_timestamp(str(meta["scheduled_at"]))
+            if due >= keep_after:
+                deferred += 1
+                deferred_from = due if deferred_from is None else min(deferred_from, due)
+                continue
+            target_map = medication_map if meta["target_type"] == "medication" else obligation_map
+            identity = self._activity_identity(
+                str(meta["target_type"]), target_map.get(str(meta["target_id"])) or {}
+            )
+            key = (str(row["patient_id"]), identity, str(meta["scheduled_at"]))
+            if key in chosen:
+                deduped += 1
+                continue
+            chosen[key] = row
+            result.append(row)
+        if deferred:
+            summary["reminders_deferred"] = deferred
+            if deferred_from is not None:
+                summary["resume_from"] = self._iso(deferred_from)
+            logger.warning("Deferred %d reminders to the next run (grouping unavailable)", deferred)
+        if deduped:
+            summary["reminders_deduped_by_identity"] = deduped
+        return result
 
     async def _ensure_job_not_running(self, job_name: str) -> None:
         cutoff = self._iso(self._utc_now() - timedelta(hours=self.RUNNING_STALE_AFTER_HOURS))
