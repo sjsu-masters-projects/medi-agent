@@ -335,7 +335,9 @@ class EmailDeliveryService:
                 if role == "clinician"
                 else str(metadata.get("clinician_id") or "")
             )
-            if clinician_id and patient_id:
+            if role == "clinician" and clinician_id:
+                clinic_id = await self._owner_clinic(event, clinician_id)
+            if not clinic_id and clinician_id and patient_id:
                 links = await self._rows(
                     self.db.table("care_teams")
                     .select("clinic_id")
@@ -369,6 +371,51 @@ class EmailDeliveryService:
             self.db.table("clinics").select("display_name").eq("id", clinic_id).limit(1)
         )
         return str(clinic[0].get("display_name") or "") if clinic else ""
+
+    async def _owner_clinic(self, event: dict[str, Any], clinician_id: str) -> str:
+        """The clinic of the care team that owns the record a notice is about.
+
+        Only when this clinician holds that link, so a notice about a team's own document, plan or
+        reviewed assessment names that team's clinic even when the clinician has other links to
+        the same patient. Anything else (a shared alert, an unrouted document) returns "".
+        """
+        source_id = str(event.get("source_id") or "")
+        source_type = event.get("source_type")
+        owners = {
+            "documents": ("documents", "care_team_id"),
+            "adr_assessments": ("adr_assessments", "reviewed_by_care_team_id"),
+        }
+        team_id = ""
+        if source_id and source_type in owners:
+            table, column = owners[str(source_type)]
+            found = await self._rows(
+                self.db.table(table).select(column).eq("id", source_id).limit(1)
+            )
+            team_id = str(found[0].get(column) or "") if found else ""
+        elif source_id and source_type == "care_plan_versions":
+            version = await self._rows(
+                self.db.table("care_plan_versions")
+                .select("care_plan_id")
+                .eq("id", source_id)
+                .limit(1)
+            )
+            plan_id = str(version[0].get("care_plan_id") or "") if version else ""
+            if plan_id:
+                plan = await self._rows(
+                    self.db.table("care_plans").select("care_team_id").eq("id", plan_id).limit(1)
+                )
+                team_id = str(plan[0].get("care_team_id") or "") if plan else ""
+        if not team_id:
+            return ""
+        links = await self._rows(
+            self.db.table("care_teams")
+            .select("clinic_id")
+            .eq("id", team_id)
+            .eq("clinician_id", clinician_id)
+            .eq("status", "active")
+            .limit(1)
+        )
+        return str(links[0].get("clinic_id") or "") if links else ""
 
     def _payload(self, row: dict[str, Any], clinic: str = "") -> dict[str, Any]:
         if isinstance(row.get("payload"), dict):

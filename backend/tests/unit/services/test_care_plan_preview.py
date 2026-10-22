@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
+from tests.unit.services.care_plan_ownership_stub import stub_ownership
 
 from app.core.exceptions import AuthorizationError, ValidationError
 from app.models.care_plan import CarePlanTodayPreviewRead
@@ -200,8 +201,9 @@ def preview_service():
     service = CarePlanPreviewService(MagicMock())
     item = activity(id=str(PATIENT))
     service.plans.publication_snapshot = MagicMock(return_value=({"version_number": 2}, [item]))
-    service.plans._plans = MagicMock(return_value=[])
-    service.db.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value.data = []
+    stub_ownership(service.plans)
+    service.plans._versions = MagicMock(return_value=[])
+    service.db.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = []
     service.feed._get_patient = AsyncMock(return_value={"timezone": "America/Los_Angeles"})
     service.feed._get_medications = AsyncMock(return_value=[])
     service.feed._get_obligations = AsyncMock(return_value=[])
@@ -263,7 +265,10 @@ async def test_newly_present_matching_medication_blocks_create_preview():
             "route": "oral",
         },
     )
-    service.feed._get_medications.return_value = [{"id": "med", "name": "Metformin"}]
+    service.plans._own_plan_item_ids = MagicMock(return_value={"own"})
+    service.feed._get_medications.return_value = [
+        {"id": "med", "name": "Metformin", "care_plan_item_id": "own"}
+    ]
     with pytest.raises(ValidationError, match="already exists"):
         await service.preview(CLINICIAN, PATIENT, PLAN)
     service.db.rpc.assert_not_called()

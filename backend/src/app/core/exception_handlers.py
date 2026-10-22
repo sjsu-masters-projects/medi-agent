@@ -122,7 +122,7 @@ async def _validation_handler(_: Request, exc: ValidationError) -> JSONResponse:
 
 
 async def _conflict_handler(_: Request, exc: ConflictError) -> JSONResponse:
-    return _error_response(409, exc.code, exc.message)
+    return _error_response(409, exc.code, exc.message, details=exc.details)
 
 
 async def _external_service_handler(request: Request, exc: ExternalServiceError) -> JSONResponse:

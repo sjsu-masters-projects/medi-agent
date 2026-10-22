@@ -243,6 +243,9 @@ def _safety_link(row: dict[str, Any], role: str) -> Destination:
         link = f"/patients/{patient}?tab=symptoms#symptom-{source}" if patient and source else None
         return (link, "Review reported product", "Revisar producto reportado")
     if row["event_type"] == "critical_result":
+        if _metadata(row).get("source_accessible") is False:
+            # Shared safety information; the document itself belongs to another care team.
+            return (f"/patients/{patient}" if patient else None, "Open patient", "Abrir paciente")
         link = (
             f"/patients/{patient}?tab=documents#document-{source}" if patient and source else None
         )
@@ -311,6 +314,13 @@ def _display_copy(row: dict[str, Any], role: str, spanish: bool) -> tuple[str, s
             "Patient-reported product needs review",
             "A confirmed symptom report names a product not uniquely linked to the recorded "
             "medication list. Review identity before linking or adding. This is not a confirmed ADR.",
+        )
+    if kind == "critical_result" and _metadata(row).get("source_accessible") is False:
+        # The result is safety information for every team; the document is another team's.
+        return (
+            "Critical test result reported",
+            "A result the laboratory marked critical was reported for this patient. The "
+            "document is held by another care team of this patient. Check on the patient.",
         )
     if kind == "appointment_changed" and _metadata(row).get("status") == "cancelled":
         kind = "appointment_cancelled"

@@ -24,10 +24,10 @@ from tests.integration.care_team_plan_harness import (
     THIRD_TEAM,
     finish,
     link,
-    postgres,  # noqa: F401 - fixture
     seed_people,
-    sql,  # noqa: F401 - fixture
 )
+
+pytest_plugins = ["tests.integration.care_team_plan_harness"]
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("CARE_TEAM_PLANS_TEST_POSTGRES_DOCKER") != "1",
@@ -91,9 +91,9 @@ def test_single_link_approver_owns_the_legacy_plan_and_nothing_is_rewritten(sql)
     assert sql(f"SELECT care_plan_item_id FROM medications WHERE id='{MEDICATION}'") == ITEM
     assert sql(f"SELECT care_plan_item_id FROM obligations WHERE id='{OBLIGATION}'") == ITEM_2
     assert sql("SELECT count(*) FROM care_plan_versions WHERE care_plan_id IS NULL") == "0"
-    assert sql("SELECT event_type||':'||(event_data->>'basis') FROM care_plan_ownership_events") == (
-        "backfill_assigned:approver_single_link"
-    )
+    assert sql(
+        "SELECT event_type||':'||(event_data->>'basis') FROM care_plan_ownership_events"
+    ) == ("backfill_assigned:approver_single_link")
 
 
 @pytest.mark.before_care_team_plans
@@ -159,10 +159,16 @@ def test_legacy_plan_of_an_ended_link_is_unowned_and_keeps_its_activities(sql):
     assert plans(sql) == [("-", "unowned", "native")]
     assert sql(f"SELECT is_active FROM medications WHERE id='{MEDICATION}'") == "t"
     # The remaining team and the ended link's clinic admins are told; admins see no patient.
-    assert sql(f"""SELECT count(*) FROM care_plan_review_items
-      WHERE kind='unowned_plan' AND target_care_team_id='{OTHER_TEAM}'""") == "1"
-    assert sql(f"""SELECT count(*) FROM care_plan_review_items
-      WHERE kind='unowned_plan' AND target_clinic_id='{CLINIC}'""") == "1"
+    assert (
+        sql(f"""SELECT count(*) FROM care_plan_review_items
+      WHERE kind='unowned_plan' AND target_care_team_id='{OTHER_TEAM}'""")
+        == "1"
+    )
+    assert (
+        sql(f"""SELECT count(*) FROM care_plan_review_items
+      WHERE kind='unowned_plan' AND target_clinic_id='{CLINIC}'""")
+        == "1"
+    )
 
 
 @pytest.mark.before_care_team_plans
@@ -185,7 +191,9 @@ def test_patients_without_plans_get_none_and_open_requests_without_an_owner_clos
 
 
 def new_plan(sql, team):
-    return sql(f"SET ROLE service_role; SELECT private.ensure_care_plan('{team}');").splitlines()[-1]
+    return sql(f"SET ROLE service_role; SELECT private.ensure_care_plan('{team}');").splitlines()[
+        -1
+    ]
 
 
 def add_draft(sql, plan, number=1, patient=PATIENT):
@@ -287,15 +295,39 @@ def test_ending_a_link_makes_the_plan_unowned_and_changes_no_activity_or_medicat
 
     sql(f"UPDATE care_teams SET status='inactive' WHERE id='{TEAM}';")
 
-    assert sql(f"SELECT ownership_state||':'||coalesce(care_team_id::text,'-') FROM care_plans WHERE id='{plan}'") == "unowned:-"
-    assert sql(f"SELECT owner_snapshot->>'clinician_name' FROM care_plans WHERE id='{plan}'") == "Elena Park"
-    assert sql("SELECT string_agg(is_active::text,',') FROM (SELECT is_active FROM medications UNION ALL SELECT is_active FROM obligations) x") == "true,true"
+    assert (
+        sql(
+            f"SELECT ownership_state||':'||coalesce(care_team_id::text,'-') FROM care_plans WHERE id='{plan}'"
+        )
+        == "unowned:-"
+    )
+    assert (
+        sql(f"SELECT owner_snapshot->>'clinician_name' FROM care_plans WHERE id='{plan}'")
+        == "Elena Park"
+    )
+    assert (
+        sql(
+            "SELECT string_agg(is_active::text,',') FROM (SELECT is_active FROM medications UNION ALL SELECT is_active FROM obligations) x"
+        )
+        == "true,true"
+    )
     assert sql(f"SELECT status FROM care_plan_versions WHERE care_plan_id='{plan}'") == "approved"
-    assert sql(f"""SELECT count(*) FROM care_plan_review_items WHERE care_plan_id='{plan}'
-      AND kind='unowned_plan' AND target_care_team_id='{OTHER_TEAM}' AND status='open'""") == "1"
-    assert sql(f"""SELECT count(*) FROM care_plan_review_items WHERE care_plan_id='{plan}'
-      AND target_clinic_id='{CLINIC}' AND status='open'""") == "1"
-    assert sql(f"SELECT event_type FROM care_plan_ownership_events WHERE care_plan_id='{plan}' ORDER BY created_at DESC LIMIT 1") == "team_ended"
+    assert (
+        sql(f"""SELECT count(*) FROM care_plan_review_items WHERE care_plan_id='{plan}'
+      AND kind='unowned_plan' AND target_care_team_id='{OTHER_TEAM}' AND status='open'""")
+        == "1"
+    )
+    assert (
+        sql(f"""SELECT count(*) FROM care_plan_review_items WHERE care_plan_id='{plan}'
+      AND target_clinic_id='{CLINIC}' AND status='open'""")
+        == "1"
+    )
+    assert (
+        sql(
+            f"SELECT event_type FROM care_plan_ownership_events WHERE care_plan_id='{plan}' ORDER BY created_at DESC LIMIT 1"
+        )
+        == "team_ended"
+    )
 
 
 def test_no_remaining_team_still_keeps_the_activities_and_tells_only_the_clinic(sql):
@@ -307,8 +339,18 @@ def test_no_remaining_team_still_keeps_the_activities_and_tells_only_the_clinic(
 
     assert sql(f"SELECT ownership_state FROM care_plans WHERE id='{plan}'") == "unowned"
     assert sql("SELECT count(*) FROM medications WHERE is_active") == "1"
-    assert sql(f"SELECT count(*) FROM care_plan_review_items WHERE care_plan_id='{plan}' AND target_care_team_id IS NOT NULL") == "0"
-    assert sql(f"SELECT count(*) FROM care_plan_review_items WHERE care_plan_id='{plan}' AND target_clinic_id='{CLINIC}'") == "1"
+    assert (
+        sql(
+            f"SELECT count(*) FROM care_plan_review_items WHERE care_plan_id='{plan}' AND target_care_team_id IS NOT NULL"
+        )
+        == "0"
+    )
+    assert (
+        sql(
+            f"SELECT count(*) FROM care_plan_review_items WHERE care_plan_id='{plan}' AND target_clinic_id='{CLINIC}'"
+        )
+        == "1"
+    )
 
 
 def test_deleting_a_clinician_account_hands_the_plan_over_without_losing_the_name(sql):
@@ -320,7 +362,10 @@ def test_deleting_a_clinician_account_hands_the_plan_over_without_losing_the_nam
     sql(f"DELETE FROM clinicians WHERE id='{CLINICIAN}';")
 
     assert sql(f"SELECT ownership_state FROM care_plans WHERE id='{plan}'") == "unowned"
-    assert sql(f"SELECT owner_snapshot->>'clinician_name' FROM care_plans WHERE id='{plan}'") == "Elena Park"
+    assert (
+        sql(f"SELECT owner_snapshot->>'clinician_name' FROM care_plans WHERE id='{plan}'")
+        == "Elena Park"
+    )
     assert sql("SELECT count(*) FROM medications WHERE is_active") == "1"
 
 
@@ -362,19 +407,39 @@ def test_adoption_makes_the_plan_theirs_and_closes_the_review_items(sql):
     result = sql(adopt(sql, plan, OTHER, OTHER_TEAM)).splitlines()[-1]
 
     assert '"status": "adopted"' in result
-    assert sql(f"SELECT ownership_state||':'||care_team_id||':'||origin FROM care_plans WHERE id='{plan}'") == f"owned:{OTHER_TEAM}:adopted"
-    assert sql(f"SELECT count(*) FROM care_plan_review_items WHERE care_plan_id='{plan}' AND status='open'") == "0"
-    assert sql(f"SELECT actor_id FROM care_plan_ownership_events WHERE care_plan_id='{plan}' AND event_type='plan_adopted'") == OTHER
+    assert (
+        sql(
+            f"SELECT ownership_state||':'||care_team_id||':'||origin FROM care_plans WHERE id='{plan}'"
+        )
+        == f"owned:{OTHER_TEAM}:adopted"
+    )
+    assert (
+        sql(
+            f"SELECT count(*) FROM care_plan_review_items WHERE care_plan_id='{plan}' AND status='open'"
+        )
+        == "0"
+    )
+    assert (
+        sql(
+            f"SELECT actor_id FROM care_plan_ownership_events WHERE care_plan_id='{plan}' AND event_type='plan_adopted'"
+        )
+        == OTHER
+    )
     # Activities, and their link to the same item, are unchanged.
     assert sql(f"SELECT care_plan_item_id FROM medications WHERE id='{MEDICATION}'") == ITEM
 
 
 def test_adoption_by_a_stranger_or_an_ended_link_is_refused_neutrally(sql):
     plan = unowned_with_two_candidates(sql)
-    seed = "INSERT INTO auth.users VALUES('00000000-0000-0000-0000-0000000000f1');" + f"INSERT INTO clinicians(id,email,first_name,last_name,specialty,clinic_id) VALUES('00000000-0000-0000-0000-0000000000f1','x@synthetic.invalid','No','Link','Derm','{CLINIC}');"
+    seed = (
+        "INSERT INTO auth.users VALUES('00000000-0000-0000-0000-0000000000f1');"
+        + f"INSERT INTO clinicians(id,email,first_name,last_name,specialty,clinic_id) VALUES('00000000-0000-0000-0000-0000000000f1','x@synthetic.invalid','No','Link','Derm','{CLINIC}');"
+    )
     sql(seed)
 
-    stranger = sql(adopt(sql, plan, "00000000-0000-0000-0000-0000000000f1", OTHER_TEAM), succeeds=False)
+    stranger = sql(
+        adopt(sql, plan, "00000000-0000-0000-0000-0000000000f1", OTHER_TEAM), succeeds=False
+    )
     ended = sql(adopt(sql, plan, CLINICIAN, TEAM), succeeds=False)
     wrong_actor = sql(adopt(sql, plan, THIRD, OTHER_TEAM), succeeds=False)
 
@@ -404,12 +469,22 @@ def test_concurrent_adoption_has_exactly_one_winner_and_a_replay_is_safe(sql):
     assert "adopted by someone else" in losers[0][2]
     owner = sql(f"SELECT care_team_id FROM care_plans WHERE id='{plan}'")
     assert owner in (OTHER_TEAM, THIRD_TEAM)
-    assert sql(f"SELECT count(*) FROM care_plan_ownership_events WHERE care_plan_id='{plan}' AND event_type='plan_adopted'") == "1"
+    assert (
+        sql(
+            f"SELECT count(*) FROM care_plan_ownership_events WHERE care_plan_id='{plan}' AND event_type='plan_adopted'"
+        )
+        == "1"
+    )
     # The winner repeating the call gets the same result; nothing is audited twice.
     actor = OTHER if owner == OTHER_TEAM else THIRD
     again = sql(adopt(sql, plan, actor, owner)).splitlines()[-1]
     assert '"replayed": true' in again
-    assert sql(f"SELECT count(*) FROM care_plan_ownership_events WHERE care_plan_id='{plan}' AND event_type='plan_adopted'") == "1"
+    assert (
+        sql(
+            f"SELECT count(*) FROM care_plan_ownership_events WHERE care_plan_id='{plan}' AND event_type='plan_adopted'"
+        )
+        == "1"
+    )
 
 
 def test_an_adopted_plan_can_coexist_with_the_adopters_own_plan(sql):
@@ -435,11 +510,23 @@ def test_retiring_items_turns_off_only_those_activities_and_is_audited(sql):
     assert '"retired": 1' in result and '"remaining": 1' in result
     assert sql(f"SELECT is_active FROM obligations WHERE id='{OBLIGATION}'") == "f"
     assert sql(f"SELECT is_active FROM medications WHERE id='{MEDICATION}'") == "t"
-    assert sql(f"SELECT retired_by FROM care_plan_item_retirements WHERE item_id='{ITEM_2}'") == THIRD
-    assert sql(f"SELECT count(*) FROM care_plan_review_items WHERE care_plan_id='{plan}' AND status='open'") != "0"
+    assert (
+        sql(f"SELECT retired_by FROM care_plan_item_retirements WHERE item_id='{ITEM_2}'") == THIRD
+    )
+    assert (
+        sql(
+            f"SELECT count(*) FROM care_plan_review_items WHERE care_plan_id='{plan}' AND status='open'"
+        )
+        != "0"
+    )
 
     sql(retire(sql, plan, THIRD, THIRD_TEAM, [ITEM], reason="Stopped by the prescriber"))
-    assert sql(f"SELECT count(*) FROM care_plan_review_items WHERE care_plan_id='{plan}' AND status='open'") == "0"
+    assert (
+        sql(
+            f"SELECT count(*) FROM care_plan_review_items WHERE care_plan_id='{plan}' AND status='open'"
+        )
+        == "0"
+    )
 
 
 def test_another_teams_owned_plan_cannot_be_retired_from(sql):
@@ -457,7 +544,9 @@ def test_another_teams_owned_plan_cannot_be_retired_from(sql):
 def test_retirement_needs_a_reason(sql):
     plan = unowned_with_two_candidates(sql)
 
-    assert "reason is required" in sql(retire(sql, plan, THIRD, THIRD_TEAM, [ITEM], reason=" "), succeeds=False)
+    assert "reason is required" in sql(
+        retire(sql, plan, THIRD, THIRD_TEAM, [ITEM], reason=" "), succeeds=False
+    )
 
 
 # ── Audit and grants ───────────────────────────────────────────────────────────────────────
@@ -475,7 +564,10 @@ def test_ownership_trail_is_append_only_for_every_role(sql):
     ):
         assert "append-only" in sql(statement, succeeds=False)
     for role in ("service_role", "authenticated", "anon"):
-        error = sql(f"SET ROLE {role}; UPDATE care_plan_ownership_events SET event_type='x';", succeeds=False)
+        error = sql(
+            f"SET ROLE {role}; UPDATE care_plan_ownership_events SET event_type='x';",
+            succeeds=False,
+        )
         assert "permission denied" in error
 
 
@@ -483,8 +575,15 @@ def test_ownership_trail_is_append_only_for_every_role(sql):
 def test_browser_roles_cannot_touch_the_new_tables_or_functions(sql, role):
     seed_people(sql)
     link(sql, TEAM, CLINICIAN, CLINIC)
-    for table in ("care_plans", "care_plan_ownership_events", "care_plan_review_items", "care_plan_item_retirements"):
-        assert "permission denied" in sql(f"SET ROLE {role}; SELECT count(*) FROM {table};", succeeds=False)
+    for table in (
+        "care_plans",
+        "care_plan_ownership_events",
+        "care_plan_review_items",
+        "care_plan_item_retirements",
+    ):
+        assert "permission denied" in sql(
+            f"SET ROLE {role}; SELECT count(*) FROM {table};", succeeds=False
+        )
     for call in (
         f"public.adopt_care_plan('{TEAM}','{OTHER}','{TEAM}','x')",
         "private.ensure_care_plan('" + TEAM + "')",
@@ -498,7 +597,9 @@ def test_clinician_direct_reads_of_plan_rows_follow_the_owning_link(sql):
     link(sql, TEAM, CLINICIAN, CLINIC)
     link(sql, OTHER_TEAM, OTHER, OTHER_CLINIC)
     mine, _ = approved_plan(sql, TEAM)
-    sql(f"INSERT INTO care_plan_versions(patient_id,care_plan_id,version_number,status) VALUES('{PATIENT}','{new_plan(sql, OTHER_TEAM)}',1,'draft');")
+    sql(
+        f"INSERT INTO care_plan_versions(patient_id,care_plan_id,version_number,status) VALUES('{PATIENT}','{new_plan(sql, OTHER_TEAM)}',1,'draft');"
+    )
 
     def visible(clinician):
         return sql(f"""SET ROLE authenticated; SET request.jwt.claim.sub='{clinician}';
@@ -508,6 +609,9 @@ def test_clinician_direct_reads_of_plan_rows_follow_the_owning_link(sql):
     # assigned to the same patient.
     assert visible(CLINICIAN) == "1"
     assert visible(OTHER) == "1"
-    assert sql(f"""SET ROLE authenticated; SET request.jwt.claim.sub='{OTHER}';
-      SELECT count(*) FROM care_plan_items;""").splitlines()[-1] == "0"
+    assert (
+        sql(f"""SET ROLE authenticated; SET request.jwt.claim.sub='{OTHER}';
+      SELECT count(*) FROM care_plan_items;""").splitlines()[-1]
+        == "0"
+    )
     assert mine

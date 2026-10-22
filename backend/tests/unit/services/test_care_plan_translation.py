@@ -18,6 +18,7 @@ from app.models.generation import (
 )
 from app.services import care_plan_service, care_plan_translation
 from app.services.care_plan_service import CarePlanService
+from tests.unit.services.care_plan_ownership_stub import stub_ownership
 from app.services.care_plan_translation import (
     detect_locale,
     draft_translations,
@@ -134,7 +135,7 @@ async def test_invalid_response_drafts_nothing(monkeypatch) -> None:
 def _service(items: list[dict[str, Any]]) -> tuple[MagicMock, CarePlanService]:
     db = MagicMock()
     service = CarePlanService(db)
-    service._require_assignment = MagicMock()  # type: ignore[method-assign]
+    stub_ownership(service)
     service._draft = MagicMock(return_value={"id": str(PLAN)})  # type: ignore[method-assign]
     service._items = MagicMock(return_value=items)  # type: ignore[method-assign]
     service._audit = MagicMock()  # type: ignore[method-assign]
@@ -180,7 +181,7 @@ async def test_unavailable_translation_never_fails_generation(monkeypatch) -> No
     monkeypatch.setattr(service, "_log_translation_outcome", logged)
 
     await service._generate(
-        {"patient_id": str(PATIENT), "request_id": str(UUID(int=1)), "source_watermark": "x"}
+        {"patient_id": str(PATIENT), "care_plan_id": str(UUID(int=9)), "request_id": str(UUID(int=1)), "source_watermark": "x"}
     )
 
     db.rpc.assert_called_once()

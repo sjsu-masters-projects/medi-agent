@@ -260,6 +260,17 @@ BEGIN
 END;
 $$;
 
+-- The backend creates a link's plan on first use; the caller must hold that link.
+CREATE FUNCTION public.ensure_care_plan_for_clinician(p_care_team_id uuid, p_actor_id uuid)
+RETURNS uuid LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
+BEGIN
+  IF NOT private.clinician_holds_link(p_actor_id, p_care_team_id) THEN
+    RAISE EXCEPTION 'care team unavailable' USING ERRCODE = '42501';
+  END IF;
+  RETURN private.ensure_care_plan(p_care_team_id);
+END;
+$$;
+
 -- ── 7. Backfill: existing lineages move to the care team that approved them ───────────────
 -- Basis, in order: the approving clinician's only link to the patient; the one link the
 -- approved activities were projected for; the patient's only care team. Any other case is
@@ -850,6 +861,7 @@ REVOKE ALL ON FUNCTION
   public.request_care_plan_generation(uuid, timestamptz),
   public.claim_pending_care_plan_generation(integer),
   public.guard_care_plan_publication(),
+  public.ensure_care_plan_for_clinician(uuid, uuid),
   public.adopt_care_plan(uuid, uuid, uuid, text),
   public.retire_care_plan_items(uuid, uuid, uuid, uuid[], text)
   FROM PUBLIC, anon, authenticated;
@@ -865,6 +877,7 @@ GRANT EXECUTE ON FUNCTION
   public.request_care_plan_generation(uuid, timestamptz),
   public.claim_pending_care_plan_generation(integer),
   public.guard_care_plan_publication(),
+  public.ensure_care_plan_for_clinician(uuid, uuid),
   public.adopt_care_plan(uuid, uuid, uuid, text),
   public.retire_care_plan_items(uuid, uuid, uuid, uuid[], text)
   TO service_role;
@@ -899,6 +912,7 @@ BEGIN
     'public.request_care_plan_generation_for_plan(uuid,timestamptz)',
     'public.request_care_plan_generation(uuid,timestamptz)',
     'public.claim_pending_care_plan_generation(integer)',
+    'public.ensure_care_plan_for_clinician(uuid,uuid)',
     'private.ensure_care_plan(uuid)', 'private.care_team_left()'] LOOP
     IF has_function_privilege('anon', v_function, 'EXECUTE')
        OR has_function_privilege('authenticated', v_function, 'EXECUTE')

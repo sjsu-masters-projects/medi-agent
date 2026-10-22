@@ -26,6 +26,7 @@ _OPEN_REQUESTS = ("pending", "processing", "retry")
 @dataclass(frozen=True)
 class RefreshProposal:
     patient_id: str
+    care_plan_id: str
     plan_version_id: str
     version_number: int
     plan_status: str
@@ -49,18 +50,19 @@ class BilingualRefreshService:
     def proposals(self, *, patient_id: UUID | None = None) -> list[RefreshProposal]:
         query = (
             self.db.table("care_plan_versions")
-            .select("id, patient_id, version_number, status")
+            .select("id, patient_id, care_plan_id, version_number, status")
             .in_("status", ["draft", "approved"])
         )
         if patient_id is not None:
             query = query.eq("patient_id", str(patient_id))
         versions = cast(list[dict[str, Any]], query.execute().data or [])
-        by_patient: dict[str, dict[str, dict[str, Any]]] = {}
+        # Each care plan is refreshed on its own; nothing here crosses plans.
+        by_plan: dict[str, dict[str, dict[str, Any]]] = {}
         for version in versions:
-            by_patient.setdefault(str(version["patient_id"]), {})[str(version["status"])] = version
-        queued = self._patients_with_open_requests(list(by_patient))
+            by_plan.setdefault(str(version["care_plan_id"]), {})[str(version["status"])] = version
+        queued = self._plans_with_open_requests(list(by_plan))
         proposals: list[RefreshProposal] = []
-        for patient, plans in sorted(by_patient.items()):
+        for care_plan, plans in sorted(by_plan.items()):
             # An open draft is where review happens; translate it rather than queue another.
             plan = plans.get("draft") or plans.get("approved")
             if plan is None:
@@ -70,11 +72,12 @@ class BilingualRefreshService:
             )
             if not missing:
                 continue
-            if plan["status"] == "approved" and patient in queued:
+            if plan["status"] == "approved" and care_plan in queued:
                 continue  # The queued generation already produces a reviewable draft.
             proposals.append(
                 RefreshProposal(
-                    patient_id=patient,
+                    patient_id=str(plan["patient_id"]),
+                    care_plan_id=care_plan,
                     plan_version_id=str(plan["id"]),
                     version_number=int(plan["version_number"]),
                     plan_status=str(plan["status"]),
@@ -95,20 +98,20 @@ class BilingualRefreshService:
                 UUID(proposal.plan_version_id), None, "bilingual_refresh_drafted", diagnostics
             )
             return {**proposal.to_dict(), **diagnostics}
-        self.plans.request_generation(UUID(proposal.patient_id), datetime.now(UTC))
+        self.plans.request_generation_for_plan(UUID(proposal.care_plan_id), datetime.now(UTC))
         return {**proposal.to_dict(), "generation_requested": True}
 
-    def _patients_with_open_requests(self, patients: list[str]) -> set[str]:
-        if not patients:
+    def _plans_with_open_requests(self, plans: list[str]) -> set[str]:
+        if not plans:
             return set()
         rows = cast(
             list[dict[str, Any]],
             self.db.table("care_plan_generation_requests")
-            .select("patient_id")
-            .in_("patient_id", patients)
+            .select("care_plan_id")
+            .in_("care_plan_id", plans)
             .in_("status", list(_OPEN_REQUESTS))
             .execute()
             .data
             or [],
         )
-        return {str(row["patient_id"]) for row in rows}
+        return {str(row["care_plan_id"]) for row in rows}

@@ -11,7 +11,6 @@ comes from the repository migrations. Synthetic data only; nothing touches a hos
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 import time
@@ -111,32 +110,65 @@ def postgres():
     container = f"mediagent-care-plan-test-{uuid4().hex}"
     subprocess.run(
         [
-            docker, "run", "--detach", "--pull=never", "--network=none", "--name", container,
-            "--env", "POSTGRES_HOST_AUTH_METHOD=trust", "postgres:16",
+            docker,
+            "run",
+            "--detach",
+            "--pull=never",
+            "--network=none",
+            "--name",
+            container,
+            "--env",
+            "POSTGRES_HOST_AUTH_METHOD=trust",
+            "postgres:16",
         ],
-        check=True, capture_output=True, text=True, timeout=60,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     try:
         for _ in range(200):
             ready = subprocess.run(
-                [docker, "exec", container, "sh", "-c",
-                 'test "$(head -n 1 /var/lib/postgresql/data/postmaster.pid)" = 1 '
-                 "&& pg_isready -U postgres"],
-                capture_output=True, timeout=10,
+                [
+                    docker,
+                    "exec",
+                    container,
+                    "sh",
+                    "-c",
+                    'test "$(head -n 1 /var/lib/postgresql/data/postmaster.pid)" = 1 '
+                    "&& pg_isready -U postgres",
+                ],
+                capture_output=True,
+                timeout=10,
             )
             if ready.returncode == 0:
                 break
             time.sleep(0.1)
         else:
             pytest.fail("Disposable PostgreSQL did not become ready")
-        base = [docker, "exec", "--interactive", container, "psql", "-U", "postgres", "-X",
-                "-Atq", "-v", "ON_ERROR_STOP=1"]
-        subprocess.run(base, input=create_roles_sql(), check=True, capture_output=True,
-                       text=True, timeout=60)
+        base = [
+            docker,
+            "exec",
+            "--interactive",
+            container,
+            "psql",
+            "-U",
+            "postgres",
+            "-X",
+            "-Atq",
+            "-v",
+            "ON_ERROR_STOP=1",
+        ]
+        subprocess.run(
+            base, input=create_roles_sql(), check=True, capture_output=True, text=True, timeout=60
+        )
 
         def run(database: str, statement: str) -> None:
             result = subprocess.run(
-                [*base, "-d", database], input=statement, capture_output=True, text=True,
+                [*base, "-d", database],
+                input=statement,
+                capture_output=True,
+                text=True,
                 timeout=180,
             )
             assert result.returncode == 0, result.stderr
@@ -155,35 +187,54 @@ def postgres():
         run("tpl_post", migration_sql(from_name=previous))
         yield base
     finally:
-        subprocess.run([docker, "rm", "--force", "--volumes", container], check=False,
-                       capture_output=True, timeout=30)
+        subprocess.run(
+            [docker, "rm", "--force", "--volumes", container],
+            check=False,
+            capture_output=True,
+            timeout=30,
+        )
 
 
 @pytest.fixture
 def sql(postgres, request):
     """Run SQL in a fresh database cloned from the right template; ``execute.start`` forks."""
-    boundary = next((value for marker, value in BOUNDARIES.items()
-                     if request.node.get_closest_marker(marker) is not None), None)
+    boundary = next(
+        (
+            value
+            for marker, value in BOUNDARIES.items()
+            if request.node.get_closest_marker(marker) is not None
+        ),
+        None,
+    )
     database = "plan_" + uuid4().hex
     subprocess.run(
         [*postgres, "-d", "postgres"],
         input=f"CREATE DATABASE {database} TEMPLATE {'tpl_' + boundary if boundary else 'tpl_post'};",
-        check=True, capture_output=True, text=True, timeout=60,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     command = [*postgres, "-d", database]
     children: list[subprocess.Popen[str]] = []
 
     def execute(statement: str, *, succeeds: bool = True) -> str:
         result = subprocess.run(
-            command, input="SET statement_timeout='10s';\n" + statement,
-            capture_output=True, text=True, timeout=60,
+            command,
+            input="SET statement_timeout='10s';\n" + statement,
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
         assert (result.returncode == 0) is succeeds, result.stderr
         return result.stdout.strip() if succeeds else result.stderr
 
     def start(statement: str, name: str) -> subprocess.Popen[str]:
         process = subprocess.Popen(
-            command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
         )
         children.append(process)
@@ -197,7 +248,8 @@ def sql(postgres, request):
     execute.start = start  # type: ignore[attr-defined]
     execute.command = command  # type: ignore[attr-defined]
     execute.apply_plan_migrations = lambda: execute(  # type: ignore[attr-defined]
-        migration_sql(from_name=boundary or "999"))
+        migration_sql(from_name=boundary or "999")
+    )
     try:
         yield execute
     finally:
@@ -233,7 +285,14 @@ def seed_people(sql, *, second_clinic_for_clinician: bool = False) -> None:
           VALUES('{CLINICIAN}','{OTHER_CLINIC}','provider','active');""")
 
 
-def link(sql, team: str, clinician: str, clinic: str, patient: str = PATIENT,
-         role: str = "specialist", status: str = "active") -> None:
+def link(
+    sql,
+    team: str,
+    clinician: str,
+    clinic: str,
+    patient: str = PATIENT,
+    role: str = "specialist",
+    status: str = "active",
+) -> None:
     sql(f"""INSERT INTO care_teams(id,patient_id,clinician_id,role,status,clinic_id)
       VALUES('{team}','{patient}','{clinician}','{role}','{status}','{clinic}');""")
