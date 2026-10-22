@@ -258,6 +258,16 @@ def sql(postgres, request):
             if child.poll() is None:
                 child.terminate()
                 child.wait(timeout=10)
+        # Each case owns this UUID-named disposable database. Release it immediately
+        # rather than retaining every cloned ledger until the module container exits.
+        subprocess.run(
+            [*postgres, "-d", "postgres"],
+            input=f"DROP DATABASE IF EXISTS {database} WITH (FORCE);",
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
 
 
 def finish(process: subprocess.Popen[str]) -> tuple[int, str, str]:

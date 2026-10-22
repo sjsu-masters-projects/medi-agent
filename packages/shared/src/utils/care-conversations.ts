@@ -1,7 +1,9 @@
 import type {
   CareConversation,
   CareConversationMessage,
+  ConfirmedTranslation,
   ConversationMessagePage,
+  ConversationPreviewResult,
   ConversationRecipient,
   MessageTranslationResult,
 } from "../types/care-conversations";
@@ -33,16 +35,38 @@ export function createConversationService(api: ConversationTransport) {
         `${root}/${encodeURIComponent(id)}/messages?limit=50${before ? `&before=${encodeURIComponent(before)}` : ""}`,
         { token, signal },
       ),
-    send: (token: string, id: string, body: string, clientMessageId: string, carePlanItemId?: string) =>
+    // `confirmedTranslation` is the previewed wording a clinician approved (LOC-003); the
+    // server re-checks it against the message body and stores it as the message's translation.
+    send: (
+      token: string,
+      id: string,
+      body: string,
+      clientMessageId: string,
+      carePlanItemId?: string,
+      confirmedTranslation?: ConfirmedTranslation | null,
+    ) =>
       api.post<CareConversationMessage>(
         `${root}/${encodeURIComponent(id)}/messages`,
-        { body: body.trim(), client_message_id: clientMessageId, ...(carePlanItemId ? { care_plan_item_id: carePlanItemId } : {}) },
+        {
+          body: body.trim(),
+          client_message_id: clientMessageId,
+          ...(carePlanItemId ? { care_plan_item_id: carePlanItemId } : {}),
+          ...(confirmedTranslation ? { confirmed_translation: confirmedTranslation } : {}),
+        },
         { token },
       ),
     reviewActivity: (token: string, id: string, messageId: string) =>
       api.post<{ patient_id: string; plan_id: string; item_id: string }>(
         `${root}/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/activity-review`,
         {}, { token },
+      ),
+    // LOC-003: what the patient will receive for an unsent reply, with its English
+    // back-translation. Clinician-only, and nothing is stored.
+    preview: (token: string, id: string, body: string, signal?: AbortSignal) =>
+      api.post<ConversationPreviewResult>(
+        `${root}/${encodeURIComponent(id)}/messages/preview`,
+        { body },
+        { token, signal },
       ),
     // Translates ONE message into the viewer's language (stored once on the server).
     translate: (token: string, id: string, messageId: string, signal?: AbortSignal) =>
@@ -91,16 +115,29 @@ export function mergeConversationMessages(
 
 export const MAX_PARALLEL_TRANSLATIONS = 3;
 
+/** The least a message must be for its pending translation to be requested. */
+export interface TranslatablePending {
+  id: string;
+  translation_pending?: boolean;
+}
+
 /**
  * Ask for the translation of every pending message that has not been requested yet, at most
  * `limit` at a time. Each result (or failure: the original simply stays) is reported through
  * `apply` as it arrives; nothing here blocks reading, typing or sending.
+ *
+ * Generic over the result type so the same queue serves care-team messages and the Nora
+ * transcript in the clinician's Chat tab (LOC-003), which translate through different
+ * endpoints but follow the same rule: a read never calls the model.
  */
-export async function requestPendingTranslations(
-  messages: CareConversationMessage[],
+export async function requestPendingTranslations<
+  Result,
+  Message extends TranslatablePending = CareConversationMessage,
+>(
+  messages: Message[],
   requested: Set<string>,
-  translate: (messageId: string) => Promise<MessageTranslationResult>,
-  apply: (messageId: string, result: MessageTranslationResult | null) => void,
+  translate: (messageId: string) => Promise<Result>,
+  apply: (messageId: string, result: Result | null) => void,
   isActive: () => boolean,
   limit: number = MAX_PARALLEL_TRANSLATIONS,
 ): Promise<void> {
@@ -108,7 +145,7 @@ export async function requestPendingTranslations(
   for (const message of queue) requested.add(message.id);
   const worker = async () => {
     for (let message = queue.shift(); message; message = queue.shift()) {
-      let result: MessageTranslationResult | null = null;
+      let result: Result | null = null;
       try {
         result = await translate(message.id);
       } catch {
@@ -132,6 +169,7 @@ export function applyTranslationResult(
     translation: result.translation,
     translation_locale: result.translation_locale,
     translation_guard_passed: result.translation_guard_passed,
+    translation_model_id: result.translation_model_id,
     translation_pending: false,
   };
 }
@@ -170,6 +208,16 @@ export function getConversationCopy(locale: string) {
     activityNotCurrent: "Esta actividad ya no pertenece al plan actual.",
     // Draft for LOC-001 review, not approved wording.
     translating: "Traduciendo…",
+    // LOC-003 item 5, patient side. Drafts for LOC-001 review, NOT approved wording.
+    aboutTranslation: "Acerca de esta traducción",
+    aboutTranslationTitle: "Esta traducción es automática",
+    translationMayErr: "La hizo una computadora, no una persona, y puede tener errores.",
+    translationModel: (model: string) => `La hizo el modelo ${model}.`,
+    translationModelUnknown: "No se registró qué modelo la hizo.",
+    translationOriginalIsRecord: "El mensaje original es el que cuenta. Tu equipo de atención lee el original, no la traducción.",
+    translationGuards: "Revisamos que los números, las dosis y los nombres de los medicamentos sean iguales en los dos idiomas. Si algo no coincide, no mostramos la traducción.",
+    translationAsk: "Si algo no te queda claro, pregúntale a tu equipo de atención.",
+    close: "Cerrar",
   } : {
     recipient: "Choose recipient", choose: "Select a person", open: "Open conversation",
     threads: "Conversations", empty: "No conversations yet.", noRecipients: "No linked recipients available.",
@@ -202,6 +250,16 @@ export function getConversationCopy(locale: string) {
     activityAttached: "Attached plan activity",
     activityNotCurrent: "This activity is no longer part of the current plan.",
     translating: "Translating…",
+    // LOC-003 item 5, patient side.
+    aboutTranslation: "About this translation",
+    aboutTranslationTitle: "This translation is automatic",
+    translationMayErr: "A computer made it, not a person, and it may contain errors.",
+    translationModel: (model: string) => `It was made by the ${model} model.`,
+    translationModelUnknown: "Which model made it was not recorded.",
+    translationOriginalIsRecord: "The original message is the one that counts. Your care team reads the original, not the translation.",
+    translationGuards: "We check that numbers, doses and medication names are the same in both languages. If something does not match, we do not show the translation.",
+    translationAsk: "If anything is unclear, ask your care team.",
+    close: "Close",
   };
 }
 

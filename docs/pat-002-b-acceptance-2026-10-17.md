@@ -386,6 +386,12 @@ seed/reset, service configuration, deployment or merge is performed by this step
 
 ## October 21 — PR #193 review against merged #209
 
+**Delivery receipt, October 22:** #193 merged as `37224b2f` after all 41 PR checks passed.
+Main CI, frontend CI and automatic backend deployment succeeded. No additional migration,
+flag change or manual deployment is required by #193. The local review evidence below
+does not close the remaining deployed/private-intake or separately tracked physical-voice
+acceptance cases.
+
 Integrated `origin/main` at `36972470` without rewriting shared history. Resolved
 four conflicts: retain current task-board acceptance, main's 44px microphone
 target, all existing PostgreSQL/PostgREST CI lanes, and current report-keyed worker

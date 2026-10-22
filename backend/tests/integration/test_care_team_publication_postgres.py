@@ -131,10 +131,12 @@ def add_item(
     }
     sql(f"""INSERT INTO care_plan_items(id,plan_version_id,source_fact_id,category,title,
         instructions,frequency,medication,conflict,source_locale,wording,wording_origin,
-        wording_verified,confidence_score,is_removed)
+        wording_verified,wording_verification,confidence_score,is_removed)
       VALUES('{item}','{version}','{source}','{category}',$t${title}$t$,$t${instructions}$t$,
         $t${frequency}$t$,$m${json.dumps(medication)}$m$,$c${json.dumps(conflict)}$c$,'en-US',
-        $w${json.dumps(wording)}$w$,'{{}}',true,0.99,{str(removed).lower()});""")
+        $w${json.dumps(wording)}$w$,'{{}}',true,
+        '{{"checks_passed":true,"fixture":"synthetic-publication-contract"}}',
+        0.99,{str(removed).lower()});""")
     return item
 
 

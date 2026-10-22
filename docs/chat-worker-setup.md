@@ -24,7 +24,8 @@ export WORKER_SERVICE=mediagent-chat-worker
 export QUEUE=nora-turns
 export INVOKER_SA_NAME=nora-turn-invoker
 export INVOKER_SA="${INVOKER_SA_NAME}@${PROJECT}.iam.gserviceaccount.com"
-# The service account both Cloud Run services already run as (see deploy-backend.yml).
+# The service account both Cloud Run services ran as before the least-privilege accounts
+# below existed (see deploy-backend.yml). Steps 5 and 6 use whichever account the service runs as.
 export RUNTIME_SA="github-actions-deployer@${PROJECT}.iam.gserviceaccount.com"
 ```
 
@@ -125,6 +126,10 @@ export WORKER_URL="$(gcloud run services describe "$WORKER_SERVICE" --project "$
 
 ## 7. API service environment (changes Cloud Run; the flag stays off)
 
+The workflow now sets this environment on every deploy from the repository variables in
+"Repository variables" below, so the manual command here is only the first-time path or an
+emergency edit; a later deploy overwrites it with the variable values.
+
 ```bash
 gcloud run services update "$API_SERVICE" --project "$PROJECT" --region "$REGION" \
   --update-env-vars "CLOUD_TASKS_PROJECT=${PROJECT},CLOUD_TASKS_LOCATION=${REGION},CLOUD_TASKS_QUEUE=${QUEUE},CHAT_WORKER_URL=${WORKER_URL},CHAT_WORKER_INVOKER_SA=${INVOKER_SA}"
@@ -181,6 +186,119 @@ gcloud scheduler jobs create http nora-turn-dispatch-sweep --project "$PROJECT" 
    ```
 10. Only after step 9 passes: phase 2 is verified. The API keeps `--no-cpu-throttling` until phase 5.
 
+## Repository variables
+
+`.github/workflows/deploy-backend.yml` sets every non-secret runtime setting on the API and
+worker services from repository variables (Settings, Secrets and variables, Actions, Variables).
+The first workflow step fails the run, before anything is built, if a required variable is
+missing, naming the variable and the command to set it. Secrets are never variables: the workflow
+references Secret Manager secrets by name (`--update-secrets ENV=SECRET:VERSION`); their values are
+managed only in Secret Manager. The workflow uses `--update-env-vars` and `--update-secrets`, so
+settings it does not name (portal and callback URLs, SMART client settings, Sentry and Resend
+options, `SYMPTOM_INTAKE_ENABLED`) stay as configured.
+
+| Variable | Required | Service | Purpose | Example (non-secret) |
+| --- | --- | --- | --- | --- |
+| `CLOUD_TASKS_PROJECT` | yes | API | Project that owns the Nora queue | `medi-agent-490106` |
+| `CLOUD_TASKS_LOCATION` | yes | API | Queue region | `us-central1` |
+| `CLOUD_TASKS_QUEUE` | yes | API | Queue name | `nora-turns` |
+| `CHAT_WORKER_URL` | yes | API (the deploy also sets it on the worker from its real URL) | Worker https URL, no path or trailing slash; also the OIDC audience by default | `https://mediagent-chat-worker-<hash>-uc.a.run.app` |
+| `CHAT_WORKER_INVOKER_SA` | yes | API and worker | The only caller the worker accepts; the account the queue signs its token as | `nora-turn-invoker@medi-agent-490106.iam.gserviceaccount.com` |
+| `CHAT_TURNS_VIA_WORKER` | yes, `true` or `false` | API | Feature flag: queue each turn instead of running it in the API | `false` |
+| `DEPLOY_CHAT_WORKER` | no | worker deploy | `true` creates and updates the worker service | `true` |
+| `CLOUD_RUN_API_RUNTIME_SA` | no | API | Runtime account for the API; unset keeps the current account | `mediagent-api-runtime@medi-agent-490106.iam.gserviceaccount.com` |
+| `CLOUD_RUN_WORKER_RUNTIME_SA` | no | worker | Runtime account for the worker; unset keeps the current account | `mediagent-worker-runtime@medi-agent-490106.iam.gserviceaccount.com` |
+
+Set them once (placeholders only; the requester runs these, nothing here has):
+
+```bash
+gh variable set CLOUD_TASKS_PROJECT --body <project-id>
+gh variable set CLOUD_TASKS_LOCATION --body <region>
+gh variable set CLOUD_TASKS_QUEUE --body <queue-name>
+gh variable set CHAT_WORKER_URL --body <worker-https-url>
+gh variable set CHAT_WORKER_INVOKER_SA --body <invoker-service-account-email>
+gh variable set CHAT_TURNS_VIA_WORKER --body <true-or-false>   # match the value live today
+gh variable set CLOUD_RUN_API_RUNTIME_SA --body <api-runtime-service-account-email>      # after the script
+gh variable set CLOUD_RUN_WORKER_RUNTIME_SA --body <worker-runtime-service-account-email> # after the script
+```
+
+Read the current live values (names are safe to print; read the values yourself from the console
+or `gcloud run services describe`, they are not secrets) so the variables match what is deployed
+and the first workflow run changes nothing.
+
+Secret references the workflow sets (names only):
+
+- API: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`,
+  `GOOGLE_API_KEY`, `DEEPGRAM_API_KEY`, `BACKEND_SENTRY_DSN`, `CRON_AUTH_TOKEN`, `RESEND_API_KEY`,
+  `SMART_STATE_ENCRYPTION_KEY` (secret `MEDIAGENT_SMART_STATE_KEY`), and
+  `NOTIFICATION_TOKEN_SIGNING_SECRET` (pinned to version `1`, as live today).
+- Worker: the four Supabase secrets.
+
+## Least-privilege runtime accounts
+
+Both services used to run as `github-actions-deployer`, which also holds deploy, Artifact Registry,
+`run.admin`, `ml.admin` and project-wide Secret Manager rights. A compromised request would have
+inherited all of them. Two accounts replace it at runtime; the deployer keeps deploy rights and
+only gains permission to act as them.
+
+| Account | Role | Scope | Why (derived from the code) |
+| --- | --- | --- | --- |
+| `mediagent-api-runtime` | `roles/aiplatform.user` | project | Gemini on Vertex AI through Application Default Credentials (`clients/vertex_auth.py`, `adk/models`) |
+| | `roles/cloudtasks.enqueuer` | queue `nora-turns` only | `create_task` in `services/chat_turn_queue.py`; nothing else on Tasks is called |
+| | `roles/iam.serviceAccountUser` | `nora-turn-invoker` only | Attach the invoker's OIDC token to a task |
+| | `roles/secretmanager.secretAccessor` | the 11 API secrets, each individually | Values injected as environment variables at start |
+| `mediagent-worker-runtime` | `roles/aiplatform.user` | project | The worker runs the Nora pipeline |
+| | `roles/secretmanager.secretAccessor` | the 4 Supabase secrets, each individually | Database access |
+| `github-actions-deployer` (unchanged) | `roles/iam.serviceAccountUser` | on each new account | `gcloud run deploy --service-account` needs actAs on the target |
+
+Not granted, deliberately: Cloud Storage (the code uses Supabase Storage over the Supabase
+credentials, not Google storage), `run.invoker` (the API never calls the worker directly; the
+queue does, as the invoker account), Artifact Registry (the platform pulls the image), and log or
+metric writers (Cloud Run ships container stdout without them; Sentry uses its DSN). If you want
+them explicit anyway, run the script with `--with-observability-writers`.
+
+The jobs (`mediagent-document-ingestion`, `mediagent-health-knowledge-refresh`) and any Scheduler
+caller are not changed and keep the deployer account. Moving them is a separate change.
+
+The requester runs, in order:
+
+```bash
+scripts/setup-runtime-service-accounts.sh            # dry run: prints every command, changes nothing
+scripts/setup-runtime-service-accounts.sh --apply    # creates the accounts and grants the roles above
+gh variable set CLOUD_RUN_API_RUNTIME_SA --body mediagent-api-runtime@medi-agent-490106.iam.gserviceaccount.com
+gh variable set CLOUD_RUN_WORKER_RUNTIME_SA --body mediagent-worker-runtime@medi-agent-490106.iam.gserviceaccount.com
+```
+
+The accounts and grants come first (they are inert); the variables are what switch the next deploy
+over. Verify after that deploy (read-only):
+
+```bash
+for s in "$API_SERVICE" "$WORKER_SERVICE"; do
+  gcloud run services describe "$s" --project "$PROJECT" --region "$REGION" \
+    --format 'value(status.latestReadyRevisionName,spec.template.spec.serviceAccountName)'
+done
+```
+
+Then send one synthetic Nora message in both portals and follow the turn in Cloud Logging. A
+`PERMISSION_DENIED` naming a role means a grant is missing; for Vertex AI add
+`roles/serviceusage.serviceUsageConsumer` to the affected account only if the error says so.
+
+### Rollback of the runtime accounts
+
+1. Fast: delete the two variables (`gh variable delete CLOUD_RUN_API_RUNTIME_SA`, same for the
+   worker) and re-run the workflow. The next revision runs as `github-actions-deployer` again; no
+   other change is needed because its bindings were never removed.
+2. Immediate, without a deploy: `gcloud run services update <service> --service-account
+   github-actions-deployer@medi-agent-490106.iam.gserviceaccount.com --project "$PROJECT" --region "$REGION"`.
+3. Remove the new accounts only after step 1, when no revision uses them:
+   `gcloud iam service-accounts delete <email> --project "$PROJECT"`. The bindings the script made
+   on the queue, secrets and invoker account disappear with the account's principal (stale `deleted:`
+   entries can be cleaned with `remove-iam-policy-binding`).
+4. Optional hardening after a week of clean traffic, with explicit authorization: remove
+   `aiplatform.user`, project-wide `secretmanager.secretAccessor`, `ml.admin` and the queue and
+   invoker bindings from `github-actions-deployer` if no job still needs them. The two Cloud Run
+   Jobs still run as it today, so keep `secretAccessor` and `aiplatform.user` until they move.
+
 ## Rollback
 
 - **Fast, no deploy:** set `CHAT_TURNS_VIA_WORKER=false` on the API service. New turns run
@@ -193,6 +311,8 @@ gcloud scheduler jobs create http nora-turn-dispatch-sweep --project "$PROJECT" 
   the queue and the invoker account. Migration 078 is inert and needs no rollback.
 
 ## Settings reference
+
+Repository variables that feed these settings are listed under "Repository variables".
 
 | Setting | Where | Default | Meaning |
 | --- | --- | --- | --- |

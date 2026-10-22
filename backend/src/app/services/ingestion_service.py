@@ -299,10 +299,17 @@ class IngestionService:
     async def _translate_spanish_facts(
         self, patient_id: UUID, document_id: UUID, registered: Any
     ) -> None:
-        """LOC-003: Write English display fields for facts extracted from Spanish documents."""
+        """LOC-003: Write English display fields for facts extracted from Spanish documents.
+
+        One model call covers a batch of this document's Spanish facts rather than one call
+        per fact. Every fact is marked either way: an English fact records ``en-US`` so it is
+        not re-checked, and a Spanish fact whose translation failed or was rejected by a guard
+        records ``es-MX`` with no ``display_value``, which the review screen shows as
+        untranslated with the original Spanish text.
+        """
         from app.services.fact_display_translation import (
             is_spanish_fact,
-            translate_fact_to_english,
+            translate_facts_to_english,
         )
 
         if not getattr(registered, "created", 0):
@@ -321,29 +328,51 @@ class IngestionService:
         except Exception:
             logger.warning("LOC-003: could not load facts for translation", exc_info=True)
             return
+
+        spanish: list[tuple[str, str, dict[str, Any]]] = []
+        english_ids: list[str] = []
         for fact in facts:
             fact_type = str(fact.get("fact_type") or "")
             value = cast(dict[str, Any], fact.get("value") or {})
-            if not is_spanish_fact(value, fact_type):
-                # Mark English facts so they're not re-checked next run.
-                with contextlib.suppress(Exception):
-                    self.db.table("clinical_facts").update({"display_locale": "en-US"}).eq(
-                        "id", str(fact["id"])
-                    ).execute()
-                continue
-            try:
-                english_fields = await translate_fact_to_english(fact_type, value)
-                if english_fields:
-                    self.db.table("clinical_facts").update(
-                        {"display_locale": "es-MX", "display_value": english_fields}
-                    ).eq("id", str(fact["id"])).execute()
-                else:
-                    # Translation failed guard check; mark as Spanish with no English display.
-                    self.db.table("clinical_facts").update({"display_locale": "es-MX"}).eq(
-                        "id", str(fact["id"])
-                    ).execute()
-            except Exception:
-                logger.warning("LOC-003: fact translation failed for %s", fact["id"], exc_info=True)
+            if is_spanish_fact(value, fact_type):
+                spanish.append((str(fact["id"]), fact_type, value))
+            else:
+                english_ids.append(str(fact["id"]))
+
+        self._mark_fact_display_locale(english_ids, "en-US")
+        if not spanish:
+            return
+
+        try:
+            translated = await translate_facts_to_english(spanish)
+        except Exception:
+            logger.warning("LOC-003: fact translation batch failed", exc_info=True)
+            translated = {}
+
+        # A rejected or failed translation still marks the fact Spanish, so the review
+        # screen can say it is untranslated instead of silently showing Spanish as English.
+        self._mark_fact_display_locale(
+            [fact_id for fact_id, _, _ in spanish if fact_id not in translated], "es-MX"
+        )
+        for fact_id, accepted in translated.items():
+            with contextlib.suppress(Exception):
+                self.db.table("clinical_facts").update(
+                    {
+                        "display_locale": "es-MX",
+                        "display_value": accepted.fields,
+                        # LOC-003 item 5: the model is stored with the text it produced.
+                        "display_model_id": accepted.model_id,
+                    }
+                ).eq("id", fact_id).execute()
+
+    def _mark_fact_display_locale(self, fact_ids: list[str], locale: str) -> None:
+        """Record the language a batch of facts was extracted in; never fails ingestion."""
+        if not fact_ids:
+            return
+        with contextlib.suppress(Exception):
+            self.db.table("clinical_facts").update({"display_locale": locale}).in_(
+                "id", fact_ids
+            ).execute()
 
     def _finish_unvalidated_model_output(
         self,

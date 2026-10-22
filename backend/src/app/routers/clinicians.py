@@ -39,6 +39,7 @@ from app.models.adr import (
 )
 from app.models.auth import CurrentUser
 from app.models.care_plan import CarePlanVersionRead
+from app.models.chat import TranscriptTranslationResult
 from app.models.clinic_membership import (
     ClinicMembershipsResponse,
     ClinicRenameRequest,
@@ -50,6 +51,7 @@ from app.models.clinic_membership import (
     LeaveClinicResponse,
     SetDefaultClinicRequest,
 )
+from app.models.clinical_fact import EvidenceGlossRequest, EvidenceGlossResponse
 from app.models.clinician import ClinicianRead, ClinicianUpdate
 from app.models.clinician_message import (
     ClinicianMessageInboxItem,
@@ -899,6 +901,48 @@ async def annotate_document(
     return await service.save_document_annotation(
         user.id, patient_id, document_id, data.annotation_text
     )
+
+
+@router.post(
+    "/me/patients/{patient_id}/chat-messages/{message_id}/translation",
+    response_model=TranscriptTranslationResult,
+    summary="LOC-003: translate one Nora transcript turn into English",
+    description=(
+        "Translates a single Spanish turn of the patient-Nora transcript into the "
+        "clinician's English and stores it, so the same turn is translated once. Reading "
+        "the transcript never calls the model; the portal asks for the turns a read marked "
+        "pending. A turn already in English, or one whose translation changed a number, a "
+        "negation or a medication name, comes back without a translation, and the original "
+        "stays the record either way."
+    ),
+)
+async def translate_transcript_message(
+    patient_id: UUID,
+    message_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    return await service.translate_transcript_message(user.id, patient_id, message_id)
+
+
+@router.post(
+    "/me/patients/{patient_id}/evidence-glosses",
+    response_model=EvidenceGlossResponse,
+    summary="LOC-003: English glosses for Spanish source-evidence excerpts",
+    description=(
+        "Returns an English gloss beside each Spanish excerpt the clinician is already "
+        "reading. Source evidence is never replaced: the excerpt stays the exact printed "
+        "text, in storage and on screen. An excerpt that is not Spanish, or whose gloss "
+        "changed a number, a negation or a medication name, has no gloss in the answer."
+    ),
+)
+async def gloss_evidence_excerpts(
+    patient_id: UUID,
+    data: EvidenceGlossRequest,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    return await service.gloss_evidence_excerpts(user.id, patient_id, data.excerpts)
 
 
 @router.get(

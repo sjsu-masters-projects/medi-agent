@@ -82,15 +82,32 @@ class _Query:
         return _Result([dict(row) for row in matched[: self.count or None]])
 
 
+class _Rpc:
+    """What ``db.rpc(...)`` returns: a builder whose ``execute()`` yields the result."""
+
+    def __init__(self, data: Any) -> None:
+        self._data = data
+
+    def execute(self) -> _Result:
+        return _Result(self._data)
+
+
 class Store:
     def __init__(self) -> None:
         self.tables: dict[str, list[dict[str, Any]]] = {}
         self.now = DAY
         self._ids = count(1)
         self.batch_inserts = 0
+        # Canned RPC results by function name, and the arguments each call was made with.
+        self.rpc_results: dict[str, Any] = {}
+        self.rpc_calls: list[tuple[str, Any]] = []
 
     def table(self, name: str) -> _Query:
         return _Query(self, name)
+
+    def rpc(self, name: str, params: Any = None) -> _Rpc:
+        self.rpc_calls.append((name, params))
+        return _Rpc(self.rpc_results.get(name))
 
     def insert(self, table: str, payload: Any) -> list[dict[str, Any]]:
         batch = [dict(row) for row in (payload if isinstance(payload, list) else [payload])]

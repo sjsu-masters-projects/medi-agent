@@ -203,6 +203,12 @@ class Settings(BaseSettings):
     # Requires an actually approved paired-locale bundle and schema 050.
     symptom_intake_enabled: bool = False
 
+    # LOC-003: answer translation calls from a deterministic local glossary instead of the
+    # model, so the English-first review, guard and attestation paths can be exercised where
+    # Vertex AI is unreachable. Ignored in production (see translation_stub.stub_enabled);
+    # stubbed wording is marked in telemetry and must never be approved for a patient.
+    translation_stub_enabled: bool = False
+
     # A2A retry worker
     a2a_retry_worker_enabled: bool = True
     a2a_retry_poll_seconds: int = 15
