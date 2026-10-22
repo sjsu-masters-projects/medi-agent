@@ -422,8 +422,8 @@ jobs:
             minimums: test_care_team_plans_postgres=25 test_care_team_records_postgres=35 test_care_team_publication_postgres=38 test_care_team_notifications_postgres=24 test_care_team_record_owner_postgres=14
           - name: confirmed-symptoms
             image: postgres:16-alpine
-            files: tests/integration/test_symptom_intake_postgres.py tests/integration/test_symptom_handoff_postgres.py
-            minimums: test_symptom_intake_postgres=17 test_symptom_handoff_postgres=8
+            files: tests/integration/test_symptom_intake_postgres.py tests/integration/test_symptom_handoff_postgres.py tests/integration/test_symptom_report_history_postgres.py
+            minimums: test_symptom_intake_postgres=17 test_symptom_handoff_postgres=8 test_symptom_report_history_postgres=7
     defaults:
       run:
         working-directory: backend

@@ -1902,3 +1902,72 @@ export async function sendPatientMessage(
     );
     return normalizeClinicianMessage(msg);
 }
+
+// ── Patient-confirmed symptom report (PAT-002-C) ─────────────────────────────
+
+export interface SymptomReportAnswer {
+    question_id: string;
+    label: string;
+    state: "answered" | "unknown" | "declined";
+    display: string;
+    wording: string | null;
+    captured_at: string | null;
+}
+
+export interface ClinicianSymptomReport {
+    id: string;
+    patient_id: string;
+    symptom: string;
+    severity: number | null;
+    onset: string | null;
+    duration: string | null;
+    body_area: string | null;
+    confirmed_at: string;
+    locale: "en-US" | "es-MX";
+    timezone: string | null;
+    status: "reported" | "shared" | "reviewed";
+    events: Array<{ kind: string; at: string; actor_name: string | null }>;
+    answers: SymptomReportAnswer[];
+    summary: string | null;
+    flagged_for_adr: boolean;
+    related_medication_name: string | null;
+    provenance: {
+        report_id: string;
+        intake_id: string | null;
+        source_message_id: string | null;
+        session_id: string | null;
+        schema_version: string | null;
+        library_version: string | null;
+        submitted_status: string | null;
+        confirmed_at: string;
+        language: "en-US" | "es-MX";
+        timezone: string | null;
+        consent_recorded: boolean;
+    };
+    triage: {
+        safety_rule_version: string | null;
+        safety_result: string | null;
+        escalation_urgency: "urgent" | "emergency" | null;
+        escalation_delivery: string | null;
+        escalation_at: string | null;
+    };
+    review: {
+        state: "pending" | "reviewed";
+        reviewed_at: string | null;
+        reviewed_by_name: string | null;
+        care_team_id: string | null;
+    };
+    already_reviewed: boolean | null;
+}
+
+const symptomReportPath = (patientId: string, reportId: string) =>
+    `/api/v1/clinicians/me/patients/${encodeURIComponent(patientId)}/symptom-reports/${encodeURIComponent(reportId)}`;
+
+export function fetchSymptomReport(patientId: string, reportId: string): Promise<ClinicianSymptomReport> {
+    return apiFetch(symptomReportPath(patientId, reportId));
+}
+
+/** Idempotent: a repeat, or a colleague's earlier review, returns the existing review. */
+export function markSymptomReportReviewed(patientId: string, reportId: string): Promise<ClinicianSymptomReport> {
+    return apiFetch(`${symptomReportPath(patientId, reportId)}/review`, { method: "POST" });
+}

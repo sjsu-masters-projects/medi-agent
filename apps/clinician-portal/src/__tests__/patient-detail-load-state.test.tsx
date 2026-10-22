@@ -1,3 +1,4 @@
+import { fetchSymptomReport } from "@/services/clinicians";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PatientPage from "@/app/(dashboard)/patients/[id]/page";
@@ -18,7 +19,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("react-redux", () => ({
     useSelector: (selector: (state: unknown) => unknown) => selector({ auth: { user: mocks.userId ? { id: mocks.userId } : null } }),
 }));
-vi.mock("@/services/clinicians", () => ({ fetchPatientDeepDive: mocks.fetch, generateSoapNote: mocks.soap, sendPatientMessage: vi.fn() }));
+vi.mock("@/services/clinicians", () => ({ fetchPatientDeepDive: mocks.fetch, generateSoapNote: mocks.soap, sendPatientMessage: vi.fn(), fetchSymptomReport: vi.fn(() => new Promise(() => {})), markSymptomReportReviewed: vi.fn() }));
 
 const patient = (id = "synthetic-a"): PatientDeepDive => ({
     patient_id: id, first_name: "Synthetic", last_name: id,
@@ -78,7 +79,10 @@ describe("patient detail load states", () => {
         try {
             render(<PatientPage />);
             const selected = await screen.findByText("Synthetic symptom 11");
-            expect(selected.closest("#symptom-report-11")).toHaveFocus();
+            expect(selected.closest("#symptom-report-11")).toBeInTheDocument();
+            // The deep link also opens the structured report; focus moves into that panel.
+            expect(await screen.findByRole("dialog", { name: "Patient-confirmed symptom report" })).toBeInTheDocument();
+            expect(fetchSymptomReport).toHaveBeenCalledWith("synthetic-a", "report-11");
             expect(screen.queryByText("Synthetic symptom 10")).not.toBeInTheDocument();
         } finally {
             window.history.replaceState(null, "", previous);

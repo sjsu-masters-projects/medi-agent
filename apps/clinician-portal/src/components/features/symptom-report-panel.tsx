@@ -1,0 +1,166 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { Badge, Button, ErrorState, Modal } from "@/components/ui";
+import {
+    fetchSymptomReport,
+    markSymptomReportReviewed,
+    type ClinicianSymptomReport,
+} from "@/services/clinicians";
+
+function when(value: string | null, timezone?: string | null) {
+    if (!value) return "Not recorded";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Not recorded";
+    const format = (zone: string) =>
+        new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: zone, timeZoneName: "short" }).format(date);
+    try {
+        return format(timezone || "UTC");
+    } catch {
+        return format("UTC");
+    }
+}
+
+const EVENT_LABEL: Record<string, string> = {
+    reported: "Patient confirmed the report",
+    shared_with_care_team: "Review task and notices sent to the care team",
+    flagged_urgent: "Urgent-answer alert delivered",
+    reviewed: "Marked reviewed",
+};
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+    return (
+        <div className="py-2">
+            <dt className="text-xs font-medium text-muted">{label}</dt>
+            <dd className="mt-0.5 break-words text-sm text-ink [overflow-wrap:anywhere]">{children}</dd>
+        </div>
+    );
+}
+
+/** Structured detail of one patient-confirmed symptom report, with an audited "Mark reviewed". */
+export function SymptomReportPanel({ patientId, reportId, onClose, onReviewed }: {
+    patientId: string;
+    reportId: string;
+    onClose: () => void;
+    onReviewed?: () => void;
+}) {
+    const [report, setReport] = useState<ClinicianSymptomReport | null>(null);
+    const [failed, setFailed] = useState<"load" | "review" | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [attempt, setAttempt] = useState(0);
+
+    useEffect(() => {
+        let active = true;
+        fetchSymptomReport(patientId, reportId).then(
+            (result) => { if (active) { setReport(result); setFailed(null); } },
+            () => { if (active) setFailed("load"); },
+        );
+        return () => { active = false; };
+    }, [patientId, reportId, attempt]);
+
+    const review = useCallback(async () => {
+        if (saving) return;
+        setSaving(true);
+        setFailed(null);
+        try {
+            setReport(await markSymptomReportReviewed(patientId, reportId));
+            onReviewed?.();
+        } catch {
+            setFailed("review");
+        } finally {
+            setSaving(false);
+        }
+    }, [patientId, reportId, saving, onReviewed]);
+
+    const reviewed = report?.review.state === "reviewed";
+    return (
+        <Modal open onClose={onClose} placement="side" title="Patient-confirmed symptom report">
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+                {failed === "load" ? (
+                    <ErrorState title="Unable to load this report" description="No conclusion can be drawn from a failed load." onRetry={() => { setFailed(null); setAttempt((n) => n + 1); }} />
+                ) : !report ? (
+                    <p role="status" className="text-sm text-muted">Loading report…</p>
+                ) : (
+                    <>
+                        <header className="space-y-2">
+                            <h3 className="break-words text-base font-semibold text-ink" lang={report.locale}>{report.symptom}</h3>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant={report.severity === null ? "neutral" : report.severity >= 8 ? "danger" : report.severity >= 5 ? "warning" : "success"}>
+                                    {report.severity === null ? "Severity unknown / not provided" : `Severity ${report.severity}/10`}
+                                </Badge>
+                                <Badge variant={reviewed ? "success" : "warning"}>{reviewed ? "Reviewed" : "Awaiting review"}</Badge>
+                                {report.flagged_for_adr && <Badge variant="danger">ADR flagged</Badge>}
+                            </div>
+                            <p className="text-xs text-muted">Confirmed by the patient {when(report.confirmed_at, report.timezone)}. Patient testimony, not a diagnosis; a cause has not been established.</p>
+                        </header>
+
+                        <section aria-labelledby="report-answers">
+                            <h4 id="report-answers" className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Confirmed answers ({report.locale})</h4>
+                            {report.answers.length === 0 ? <p className="mt-2 text-sm text-muted">No answers were saved with this report.</p> : (
+                                <dl lang={report.locale} className="divide-y divide-line">
+                                    {report.answers.map((answer) => (
+                                        <Row key={answer.question_id} label={answer.label}>{answer.display}</Row>
+                                    ))}
+                                </dl>
+                            )}
+                            {report.related_medication_name && <p className="mt-2 text-xs text-muted">Patient-named product: {report.related_medication_name}. Unverified until a clinician links it.</p>}
+                        </section>
+
+                        <section aria-labelledby="report-triage">
+                            <h4 id="report-triage" className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Safety outcome</h4>
+                            <dl className="divide-y divide-line">
+                                <Row label="Emergency rule check at confirmation">
+                                    {report.triage.safety_result === "no_existing_rule_matched"
+                                        ? "No existing emergency rule matched. This is not a clinical triage."
+                                        : (report.triage.safety_result ?? "Not recorded")}
+                                    {report.triage.safety_rule_version ? ` (${report.triage.safety_rule_version})` : ""}
+                                </Row>
+                                <Row label="Urgent-answer alert">
+                                    {report.triage.escalation_urgency
+                                        ? `${report.triage.escalation_urgency}, delivery ${report.triage.escalation_delivery ?? "unknown"}, ${when(report.triage.escalation_at, report.timezone)}`
+                                        : "None recorded"}
+                                </Row>
+                            </dl>
+                        </section>
+
+                        <section aria-labelledby="report-provenance">
+                            <h4 id="report-provenance" className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Provenance</h4>
+                            <dl className="divide-y divide-line">
+                                <Row label="Report id">{report.provenance.report_id}</Row>
+                                <Row label="Source chat message">{report.provenance.source_message_id ?? "Not recorded"}</Row>
+                                <Row label="Confirmed">{when(report.provenance.confirmed_at, report.provenance.timezone)}</Row>
+                                <Row label="Patient language">{report.provenance.language}</Row>
+                                <Row label="Patient consent to share">{report.provenance.consent_recorded ? "Explicit consent recorded at confirmation" : "Not recorded"}</Row>
+                                <Row label="Schema / question library">{report.provenance.schema_version ?? "n/a"} / {report.provenance.library_version ?? "n/a"}</Row>
+                            </dl>
+                        </section>
+
+                        <section aria-labelledby="report-events">
+                            <h4 id="report-events" className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Recorded events</h4>
+                            <ol className="mt-2 space-y-2">
+                                {report.events.map((event) => (
+                                    <li key={`${event.kind}-${event.at}`} className="text-sm text-ink-2">
+                                        {EVENT_LABEL[event.kind] ?? event.kind}{event.actor_name ? ` by ${event.actor_name}` : ""}
+                                        <span className="block text-xs text-muted"><time dateTime={event.at}>{when(event.at, report.timezone)}</time></span>
+                                    </li>
+                                ))}
+                            </ol>
+                        </section>
+                    </>
+                )}
+            </div>
+            {report && (
+                <footer className="shrink-0 space-y-2 border-t border-line px-5 py-3">
+                    {failed === "review" && <p role="alert" className="text-sm text-risk-ink">Could not mark this report reviewed. Nothing was changed; try again.</p>}
+                    {reviewed ? (
+                        <p role="status" className="text-sm text-ok-ink">
+                            {report.already_reviewed ? "Already reviewed" : "Reviewed"}{report.review.reviewed_by_name ? ` by ${report.review.reviewed_by_name}` : ""} {when(report.review.reviewed_at, report.timezone)}. Review records follow-up only; it does not approve a diagnosis or medication change.
+                        </p>
+                    ) : (
+                        <Button fullWidth disabled={saving} onClick={() => void review()}>{saving ? "Saving…" : "Mark reviewed"}</Button>
+                    )}
+                </footer>
+            )}
+        </Modal>
+    );
+}

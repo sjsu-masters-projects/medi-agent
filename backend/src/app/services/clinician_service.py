@@ -820,6 +820,25 @@ class ClinicianService:
             clinician_id, patient_id
         )
 
+    def _symptom_reports(self) -> Any:
+        from app.services.symptom_report_history_service import SymptomReportHistoryService
+
+        return SymptomReportHistoryService(self.db, self._assert_patient_assignment)
+
+    async def get_symptom_report(
+        self, clinician_id: UUID, patient_id: UUID, report_id: UUID
+    ) -> Any:
+        """Structured confirmed-report detail for an assigned clinician."""
+        return await self._symptom_reports().detail_for_clinician(
+            clinician_id, patient_id, report_id
+        )
+
+    async def review_symptom_report(
+        self, clinician_id: UUID, patient_id: UUID, report_id: UUID
+    ) -> Any:
+        """Idempotent, audited review mark; the database re-checks the active link."""
+        return await self._symptom_reports().mark_reviewed(clinician_id, patient_id, report_id)
+
     async def get_patient_deep_dive(self, clinician_id: UUID, patient_id: UUID) -> Any:
         """Aggregate all patient data for the Patient Deep Dive view.
 

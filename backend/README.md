@@ -681,6 +681,13 @@ state for reconnect recovery. There is no staff draft endpoint. Writes require
 revision plus stable mutation identity; confirm requires preview hash and explicit
 consent. `GET /api/v1/patients/me/symptom-reports/{id}` reads an owned confirmed report.
 
+PAT-002-C history (migration 091, `public.symptom_report_history`, backend role only): patients read
+`GET /api/v1/patients/me/symptom-history[/{id}]` (own confirmed reports, newest first, events from
+recorded rows only); assigned clinicians read
+`GET /api/v1/clinicians/me/patients/{patient_id}/symptom-reports/{id}` and
+`POST .../review`, which is idempotent, audited and shared by the care team. Drafts are never
+reachable. No new configuration.
+
 `SYMPTOM_INTAKE_ENABLED=false` is the default. Migration 060 does not approve a library.
 The approved `candidate-1` is pinned in the manifest; revised `candidate-2` is pending
 genuine paired-locale review. Matching immutable database eligibility is required. Unavailability

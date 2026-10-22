@@ -17,7 +17,9 @@ from app.models.symptom_intake import (
     IntakeReply,
     IntakeStart,
 )
+from app.models.symptom_report_history import SymptomReportDetail, SymptomReportList
 from app.services.symptom_intake_service import SymptomIntakeService
+from app.services.symptom_report_history_service import SymptomReportHistoryService
 
 router = APIRouter()
 
@@ -87,3 +89,31 @@ async def confirm(
     intake_id: UUID, data: IntakeConfirm, service: SymptomIntakeService = Depends(intake_service)
 ) -> Any:
     return await service.confirm(intake_id, data)
+
+
+async def history_service(
+    response: Response,
+    user: CurrentUser = Depends(require_role("patient")),
+    db: Client = Depends(get_db),
+) -> tuple[SymptomReportHistoryService, CurrentUser]:
+    response.headers["Cache-Control"] = "private, no-store"
+    return SymptomReportHistoryService(db), user
+
+
+@router.get("/symptom-history", response_model=SymptomReportList)
+async def symptom_history(
+    limit: int = Query(default=50, ge=1, le=100),
+    context: tuple[SymptomReportHistoryService, CurrentUser] = Depends(history_service),
+) -> Any:
+    """The patient's own confirmed symptom reports, newest first."""
+    service, user = context
+    return await service.list_for_patient(user.id, limit)
+
+
+@router.get("/symptom-history/{report_id}", response_model=SymptomReportDetail)
+async def symptom_history_detail(
+    report_id: UUID,
+    context: tuple[SymptomReportHistoryService, CurrentUser] = Depends(history_service),
+) -> Any:
+    service, user = context
+    return await service.detail_for_patient(user.id, report_id)
