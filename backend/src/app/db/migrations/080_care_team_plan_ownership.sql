@@ -93,7 +93,7 @@ CREATE TABLE public.care_plan_review_items (
   care_plan_id uuid REFERENCES public.care_plans(id) ON DELETE CASCADE,
   kind text NOT NULL CHECK (kind IN (
     'unassigned_legacy_plan', 'unowned_plan', 'cross_plan_conflict', 'conflict_acknowledged',
-    'conflict_published_without'
+    'conflict_published_without', 'conflict_reply'
   )),
   target_care_team_id uuid REFERENCES public.care_teams(id) ON DELETE CASCADE,
   target_clinic_id uuid REFERENCES public.clinics(id) ON DELETE CASCADE,
