@@ -172,8 +172,9 @@ class FhirImportService:
                 raise ValidationError("FHIR Bundle entries must be an array")
             for entry in reversed(entries):
                 nested = entry.get("resource") if isinstance(entry, dict) else None
-                if isinstance(nested, dict):
-                    pending.append((nested, depth + 1))
+                if not isinstance(nested, dict):
+                    raise ValidationError("FHIR Bundle entries must contain resource objects")
+                pending.append((nested, depth + 1))
         return flattened
 
     @staticmethod
@@ -658,7 +659,7 @@ class FhirImportService:
         dosage = FhirImportService._first_dosage(value)
         if not dosage:
             return None
-        text = dosage.get("text")
+        text = dosage.get("patientInstruction") or dosage.get("text")
         return text.strip() if isinstance(text, str) and text.strip() else None
 
     @staticmethod

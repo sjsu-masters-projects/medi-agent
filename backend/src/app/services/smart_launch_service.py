@@ -460,6 +460,11 @@ class SmartLaunchService:
             entries = payload.get("entry", [])
             if not isinstance(entries, list):
                 raise ExternalServiceError("FHIR resource fetch", "Invalid Bundle entries")
+            if any(
+                not isinstance(entry, dict) or not isinstance(entry.get("resource"), dict)
+                for entry in entries
+            ):
+                raise ExternalServiceError("FHIR resource fetch", "Invalid Bundle resource entry")
             page = [
                 entry["resource"]
                 for entry in entries

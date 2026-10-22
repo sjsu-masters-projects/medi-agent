@@ -37,6 +37,10 @@ def _medication_fields(row: dict[str, Any]) -> dict[str, Any]:
     dosage: dict[str, Any] = {"text": text} if text else {}
     if row.get("route"):
         dosage["route"] = {"text": row["route"]}
+    if row.get("frequency"):
+        dosage["timing"] = {"code": {"text": row["frequency"]}}
+    if row.get("instructions"):
+        dosage["patientInstruction"] = row["instructions"]
     if dosage:
         fields["dosage"] = [dosage]
     return fields

@@ -230,7 +230,15 @@ def test_upstream_error_does_not_echo_body_or_credentials():
 
 
 @pytest.mark.parametrize(
-    "payload", [[], {"resourceType": "Bundle", "entry": {}}, {"resourceType": "Bundle", "link": {}}]
+    "payload",
+    [
+        [],
+        {"resourceType": "Bundle", "entry": {}},
+        {"resourceType": "Bundle", "link": {}},
+        {"resourceType": "Bundle", "entry": [None]},
+        {"resourceType": "Bundle", "entry": [{}]},
+        {"resourceType": "Bundle", "entry": [{"resource": []}]},
+    ],
 )
 def test_malformed_page_fails_without_database_writes(payload):
     client = service(lambda _: httpx.Response(200, json=payload))
@@ -252,6 +260,20 @@ def test_nested_bundle_depth_is_bounded_before_first_candidate_write(monkeypatch
             actor_id=uuid4(),
             issuer=ISSUER,
             resources=[value],
+        )
+    db.table.assert_not_called()
+
+
+@pytest.mark.parametrize("entry", [None, {"resource": "invalid"}])
+def test_malformed_nested_entries_fail_before_persistence(entry):
+    db = MagicMock()
+    with pytest.raises(ValidationError, match="resource objects"):
+        FhirImportService(db).import_resources(
+            import_id=uuid4(),
+            patient_id=uuid4(),
+            actor_id=uuid4(),
+            issuer=ISSUER,
+            resources=[{"resourceType": "Bundle", "type": "collection", "entry": [entry]}],
         )
     db.table.assert_not_called()
 

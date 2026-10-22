@@ -22,6 +22,7 @@ def core():
                 "dosage": "10 mg",
                 "frequency": "daily",
                 "route": "oral",
+                "instructions": "Synthetic instruction exactly as recorded",
             }
         ],
         "conditions": [
@@ -83,6 +84,8 @@ def test_canonical_subset_round_trips_to_pending_candidates_without_mutating_rec
     assert mapped["medication"]["name"] == source["medications"][0]["name"]
     assert "10 mg" in mapped["medication"]["dosage"][0]
     assert "daily" in mapped["medication"]["dosage"][0]
+    assert mapped["medication"]["frequency"] == "daily"
+    assert mapped["medication"]["instructions"] == "Synthetic instruction exactly as recorded"
     assert mapped["condition"]["icd10_code"] == "E11.9"
     assert mapped["allergy"]["reaction"] == "Rash"
     assert mapped["allergy"]["severity"] is None

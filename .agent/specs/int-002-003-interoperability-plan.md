@@ -58,7 +58,7 @@ this increment. Both the importer and exporter reuse existing schema and gates.
 
 ### Local implementation evidence
 
-- 111 focused backend tests pass across imports, SMART callbacks/routes, limits,
+- 116 focused backend tests pass across imports, SMART callbacks/routes, limits,
   identifiers, clinical-core export/re-import, source reads, reprojection and audit.
   All 12 supported import types have a synthetic retained-source fixture; the
   canonical export subset round-trips to pending candidates without writing
