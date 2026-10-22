@@ -145,6 +145,34 @@ class CarePlanReviewService:
             raise ValidationError(str(error.message)[:300]) from None
         return cast(dict[str, Any], result.data or {})
 
+    def resolve_conflict_reply(
+        self, clinician_id: UUID, item_id: UUID, action: str, reason: str | None
+    ) -> dict[str, Any]:
+        """Close a conflict reply addressed to my care team (idempotent, ownership-checked).
+
+        ``accept`` closes it and reports whether the conflict still blocks the draft;
+        ``keep_both`` records the keep-both reason first. Another team's item is a 404.
+        """
+        try:
+            result = self.db.rpc(
+                "resolve_conflict_reply",
+                {
+                    "p_item_id": str(item_id),
+                    "p_actor_id": str(clinician_id),
+                    "p_action": action,
+                    "p_reason": reason.strip() if reason and reason.strip() else None,
+                },
+            ).execute()
+        except APIError as error:
+            if str(error.code) == "42501":
+                raise NotFoundError("Review item", str(item_id)) from None
+            if str(error.code) == "40001":
+                raise ConflictError(
+                    "This conflict has changed; review it again", code="CONFLICT_CHANGED"
+                ) from None
+            raise ValidationError(str(error.message)[:300]) from None
+        return cast(dict[str, Any], result.data or {})
+
     def adopt(
         self,
         clinician_id: UUID,

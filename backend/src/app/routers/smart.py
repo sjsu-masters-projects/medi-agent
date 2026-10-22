@@ -94,6 +94,7 @@ async def start_launch(
         patient_id=request.patient_id,
         issuer=str(request.issuer) if request.issuer is not None else None,
         launch_context=request.launch_context,
+        care_team_id=request.care_team_id,
     )
 
 

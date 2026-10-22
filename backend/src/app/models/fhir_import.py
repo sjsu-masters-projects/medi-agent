@@ -33,6 +33,7 @@ class SmartLaunchRequest(BaseModel):
     patient_id: UUID
     issuer: HttpUrl | None = None
     launch_context: str | None = Field(default=None, min_length=1, max_length=2048)
+    care_team_id: UUID | None = None
 
     @field_validator("issuer")
     @classmethod

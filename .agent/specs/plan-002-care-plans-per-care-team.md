@@ -327,17 +327,39 @@ version routes is the VERSION id (unchanged for compatibility).
 
 ## Known limitations
 
-- **SMART launch with two links to one patient** (for example the same clinician at two
-  clinics) is refused, fail-closed, with `422 CARE_TEAM_REQUIRED` and
-  `details.limitation = "smart_launch_single_link_only"`; the message tells the clinician
-  nothing was started and to upload the records as documents instead. Follow-up: a team
-  column on `smart_launch_sessions` and an optional `care_team_id` on the launch request.
+- **SMART launch with two links to one patient** (migration 088, follow-up PR). The launch
+  request takes an optional `care_team_id`; with several links and none named it is
+  `422 CARE_TEAM_REQUIRED` before any OAuth step (the clinician portal shows the required
+  care-team select), and a team that is not the caller's is refused. The team is stored on
+  `smart_launch_sessions.care_team_id`, re-checked at the callback (a link ended meanwhile
+  fails closed) and stamps the import and its candidate provenance. The old
+  `smart_launch_single_link_only` limitation is gone. A session created before 088 has no
+  team and falls back to the only link.
 - **Combined Today entries and reminders.** The dispatcher sends one reminder per entry
   (keyed on the entry's id; deterministic, idempotent, safe under concurrent runs because the
-  existing unique notification key decides). If grouping cannot be read it logs and sends
-  ungrouped rather than lose a reminder.
-- **Clinic-admin work items** carry no patient, and a notification-centre item always names
-  its patient, so they stay on `GET /care-plans/clinician/review-items` (`clinic_items`).
+  existing unique notification key decides). The grouping read is retried (three attempts,
+  0.2 s and 0.5 s backoff, 3 s run budget). If it is still unreadable for a patient, that
+  patient's reminders are never sent ungrouped: an occurrence due at least five minutes
+  after the next run's start is deferred to that run (counted as `reminders_deferred`, the
+  next window resumes at `resume_from`), anything sooner is sent now once per (activity
+  identity, scheduled time) (`reminders_deduped_by_identity`), where identity is kind,
+  normalised name or description, dose, frequency and instructions, and the lowest target id
+  represents identical activities so the key is stable. Never zero for a due dose; the
+  fallback identity is narrower than the feed's grouping, so two activities the feed groups
+  by ingredient code but that differ in name could still each get one reminder.
+- **Clinic-admin work items** now reach the notification centre of each active admin of the
+  clinic (and only them) without patient detail: `metadata.scope = "clinic"`, no patient id
+  or name in the item, deep link `/care-plan-reviews?clinic=<id>&item=<id>`, actionable while
+  open. A clinician made admin later is caught up on their next centre read. Care-team items
+  (087) now also appear in the action-item list and count.
+- **Resolving conflict replies.** `POST /care-plans/clinician/review-items/{item_id}/resolve`
+  (`{action: "accept" | "keep_both", reason?}`) lets the asking clinician close a
+  `conflict_reply` item: `accept` closes it and reports `still_blocking` after re-running
+  the blocker check; `keep_both` records the existing keep-both resolution (reason required)
+  first. Idempotent (`replayed`), audited (`conflict_reply_resolved`), another team's item is
+  404, a conflict that changed is 409 `CONFLICT_CHANGED`.
+- **Plan version label.** `ClinicianPlanListEntry.approved_version_number` is the live
+  approved version's number; the card reads "Approved v3 · Oct 5".
 - **Storage policy evidence.** `ALTER POLICY ... ON storage.objects` runs as the migration
   role that already created that policy: `003_storage_and_auth.sql` creates
   `documents_read_clinician` on `storage.objects`, and `020_harden_database_security.sql`

@@ -225,6 +225,7 @@ class CarePlanService:
                 entry["active_version_id"] = approved["id"] if approved else None
                 entry["draft_version_id"] = draft["id"] if draft else None
                 entry["latest_version_number"] = versions[0]["version_number"] if versions else None
+                entry["approved_version_number"] = approved["version_number"] if approved else None
                 entry["generation"] = self._latest_generation(UUID(str(plan["id"])))
             elif plan.get("ownership_state") != "owned":
                 entry["adoptable_by_care_team_ids"] = sorted(mine)

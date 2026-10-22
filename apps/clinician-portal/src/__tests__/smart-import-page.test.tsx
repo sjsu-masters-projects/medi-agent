@@ -21,6 +21,10 @@ vi.mock("next/navigation", () => ({
     useSearchParams: () => getSearchParams(),
 }));
 
+vi.mock("@/services/auth-session", () => ({
+    readStoredSession: () => ({ accessToken: "local-clinician-token" }),
+}));
+
 vi.mock("react-redux", () => ({
     useSelector: () => "local-clinician-token",
 }));
@@ -167,5 +171,32 @@ describe("SMART import page", () => {
         expect(await screen.findByText(/no new smart records to review/i)).toBeInTheDocument();
         expect(screen.getByText(/repeat of a previously imported sandbox record/i)).toBeInTheDocument();
         expect(screen.getByText(/already imported/i)).toBeInTheDocument();
+    });
+
+    it("requires a care team when the patient has two links and sends the choice", async () => {
+        get.mockImplementation((url: string) => Promise.resolve(
+            url.includes("care-team-options")
+                ? [
+                    { care_team_id: "team-a", clinic_id: "c1", clinic_name: "Cedar Grove", specialty: "Cardiology" },
+                    { care_team_id: "team-b", clinic_id: "c2", clinic_name: "Bay Clinic", specialty: null },
+                ]
+                : [{ id: "patient-1", first_name: "Maria", last_name: "Garcia", email: "maria@accounts.mediagent.live" }],
+        ));
+        post.mockResolvedValue({ authorization_url: "https://sandbox.example/authorize" });
+
+        render(<SmartImportPage />);
+
+        const select = await screen.findByLabelText(/care team/i);
+        fireEvent.click(screen.getByRole("button", { name: /launch sandbox import/i }));
+        expect(post).not.toHaveBeenCalled();
+        expect(await screen.findByRole("alert")).toHaveTextContent(/choose which care team/i);
+
+        fireEvent.change(select, { target: { value: "team-b" } });
+        fireEvent.click(screen.getByRole("button", { name: /launch sandbox import/i }));
+        await waitFor(() => expect(post).toHaveBeenCalledWith(
+            "/api/v1/smart/launch",
+            { patient_id: "patient-1", care_team_id: "team-b" },
+            expect.anything(),
+        ));
     });
 });

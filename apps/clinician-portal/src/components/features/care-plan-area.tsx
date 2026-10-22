@@ -33,7 +33,7 @@ function PlanStatus({ plan }: { plan: ClinicianPlanListEntry }) {
         {plan.ownership_state === "unowned" ? <span className={`${chip} bg-warn-tint text-warn-ink`}>Unowned</span> : null}
         {plan.ownership_state === "unassigned_legacy" ? <span className={`${chip} bg-warn-tint text-warn-ink`}>Unassigned</span> : null}
         {approved ? <span className={`${chip} bg-ok-tint text-ok-ink`}>
-            {plan.draft_version_id || !plan.latest_version_number ? `Approved plan live · ${approved}` : `Approved v${plan.latest_version_number} · ${approved}`}
+            {plan.approved_version_number ? `Approved v${plan.approved_version_number} · ${approved}` : `Approved plan live · ${approved}`}
         </span> : null}
         {!approved && !plan.draft_version_id && plan.ownership_state === "owned" ? <span className={`${chip} bg-sunken text-muted`}>No approved plan yet</span> : null}
     </div>;

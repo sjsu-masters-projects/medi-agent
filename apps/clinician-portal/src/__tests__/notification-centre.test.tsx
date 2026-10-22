@@ -54,6 +54,20 @@ describe("clinician notification centre", () => {
     await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/messages?conversation=private-thread"));
   });
 
+  it("shows a clinic-level work item with no patient, no patient link and no placeholder text", async () => {
+    vi.mocked(notificationCentre.list).mockResolvedValue(page([item({
+      event_type: "care_plan_review", category: "care_plans", title: "A care plan at your clinic has no care team",
+      body: "Open the clinic review page.", patient_name: null, clinic_name: "Cedar Grove", clinic_id: "c1",
+      action_url: "/care-plan-reviews?clinic=c1&item=ci1", action_label: "Open clinic review", can_acknowledge: false,
+    })]));
+    const { container } = render(<NotificationProvider><NotificationList /></NotificationProvider>);
+    const link = await screen.findByRole("link", { name: "Open clinic review" });
+    expect(link).toHaveAttribute("href", "/care-plan-reviews?clinic=c1&item=ci1");
+    expect(container.textContent).toContain("Cedar Grove");
+    expect(container.textContent).not.toMatch(/undefined|null|\/patients\//);
+    expect(container.querySelector('a[href*="/patients/"]')).toBeNull();
+  });
+
   it("shares one cache between bell and Alerts, with no legacy archive on Alerts", async () => {
     render(<NotificationProvider><NotificationBell /><AlertsPage /></NotificationProvider>);
     await screen.findByText("Patient reported a barrier");

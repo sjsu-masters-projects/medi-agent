@@ -18,7 +18,7 @@ vi.mock("@/services/care-team-plans", async (original) => ({
 
 const plan = (extra: Partial<ClinicianPlanListEntry>): ClinicianPlanListEntry => ({
     care_plan_id: "plan-a", care_team_id: "team-a", ownership_state: "owned", origin: "native", is_mine: true, approved_at: "2026-10-12T17:00:00Z", unowned_since: null,
-    owner: { specialty: "Cardiology", clinician_name: "Dr. Park", clinic_id: "c1", clinic_name: "Cedar Grove" }, latest_version_number: 3, active_version_id: "v3", draft_version_id: null, ...extra,
+    owner: { specialty: "Cardiology", clinician_name: "Dr. Park", clinic_id: "c1", clinic_name: "Cedar Grove" }, latest_version_number: 4, approved_version_number: 3, active_version_id: "v3", draft_version_id: null, ...extra,
 });
 const other = plan({ care_plan_id: "plan-b", care_team_id: "team-b", is_mine: false, active_version_id: undefined, draft_version_id: undefined, owner: { specialty: "Orthopaedics", clinician_name: "Dr. Lee", clinic_id: "c2", clinic_name: "Willow Terrace" } });
 const summary = (extra: Partial<SharedClinicalSummary> = {}): SharedClinicalSummary => ({
@@ -54,7 +54,7 @@ describe("CarePlanArea", () => {
         const mine = await screen.findByRole("list", { name: "Your care plans" });
         expect(mine).toHaveTextContent("Cardiology · Dr. Park");
         expect(mine).toHaveTextContent("Draft");
-        expect(mine).toHaveTextContent("Approved plan live · Oct 12");
+        expect(mine).toHaveTextContent("Approved v3 · Oct 12");
         const rows = screen.getByRole("list", { name: "Other care teams' plans" });
         expect(rows).toHaveTextContent("Orthopaedics · Dr. Lee · Willow Terrace · approved Oct 12 · Medications shared below");
         expect(within(rows).queryByRole("button")).not.toBeInTheDocument();

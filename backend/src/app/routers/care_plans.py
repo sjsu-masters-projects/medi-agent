@@ -19,6 +19,7 @@ from app.models.care_plan import (
     CarePlanTranslationRequest,
     CareTeamPlanScopeRead,
     CrossPlanResolutionRequest,
+    ResolveConflictReplyRequest,
     RetireItemsRequest,
     ReviewItemReplyRequest,
     TakeRecordRequest,
@@ -355,3 +356,16 @@ async def retire_care_plan_items(
         item_ids=data.item_ids,
         reason=data.reason,
     )
+
+
+@router.post(
+    "/clinician/review-items/{item_id}/resolve",
+    summary="Resolve the other care team's reply to my conflict question",
+)
+async def resolve_conflict_reply(
+    item_id: UUID,
+    data: ResolveConflictReplyRequest,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: CarePlanReviewService = Depends(_review_service),
+) -> Any:
+    return service.resolve_conflict_reply(user.id, item_id, data.action, data.reason)

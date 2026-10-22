@@ -417,9 +417,9 @@ jobs:
             minimums: test_chat_turn_events_postgres=35
           - name: care-team-plans
             # Plan ownership, routed documents, shared core, cross-plan publication and
-            # notification scoping and record owners (083-087). Disposable containers, no remote database.
-            files: tests/integration/test_care_team_plans_postgres.py tests/integration/test_care_team_records_postgres.py tests/integration/test_care_team_publication_postgres.py tests/integration/test_care_team_notifications_postgres.py tests/integration/test_care_team_record_owner_postgres.py
-            minimums: test_care_team_plans_postgres=25 test_care_team_records_postgres=35 test_care_team_publication_postgres=38 test_care_team_notifications_postgres=24 test_care_team_record_owner_postgres=14
+            # notification scoping and record owners and follow-ups (083-088). Disposable containers, no remote database.
+            files: tests/integration/test_care_team_plans_postgres.py tests/integration/test_care_team_records_postgres.py tests/integration/test_care_team_publication_postgres.py tests/integration/test_care_team_notifications_postgres.py tests/integration/test_care_team_record_owner_postgres.py tests/integration/test_care_team_followups_postgres.py
+            minimums: test_care_team_plans_postgres=25 test_care_team_records_postgres=35 test_care_team_publication_postgres=38 test_care_team_notifications_postgres=24 test_care_team_record_owner_postgres=14 test_care_team_followups_postgres=9
           - name: confirmed-symptoms
             image: postgres:16-alpine
             files: tests/integration/test_symptom_intake_postgres.py tests/integration/test_symptom_handoff_postgres.py

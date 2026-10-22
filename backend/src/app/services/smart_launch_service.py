@@ -76,6 +76,7 @@ class SmartLaunchService:
         patient_id: UUID,
         issuer: str | None,
         launch_context: str | None = None,
+        care_team_id: UUID | None = None,
     ) -> dict[str, Any]:
         """Create a PKCE-bound session after confirming local care-team authority.
 
@@ -86,9 +87,10 @@ class SmartLaunchService:
         issuer, so the browser does not need to know the sandbox address.
         """
         self._require_config()
-        # No link is refused. With two links to the patient the import's owner would be a
-        # guess, so it is refused here (CARE_TEAM_REQUIRED) before any OAuth round trip.
-        self._import_care_team(clinician_id, patient_id)
+        # No link is refused. With two links to the patient the caller must name one of
+        # their own (CARE_TEAM_REQUIRED otherwise; a team that is not theirs is refused),
+        # before any OAuth round trip. The session records it; the import is stamped with it.
+        launch_team = self._import_care_team(clinician_id, patient_id, care_team_id)
         if issuer is None:
             if launch_context:
                 raise ValidationError("An EHR launch context requires the EHR issuer")
@@ -114,6 +116,7 @@ class SmartLaunchService:
             ),
             "clinician_id": str(clinician_id),
             "patient_id": str(patient_id),
+            "care_team_id": str(launch_team),
             "requested_scopes": requested_scopes,
             "nonce": nonce,
             "expires_at": expires_at.isoformat(),
@@ -174,7 +177,9 @@ class SmartLaunchService:
                 session=session,
                 context=context,
                 care_team_id=self._import_care_team(
-                    UUID(str(session["clinician_id"])), UUID(str(session["patient_id"]))
+                    UUID(str(session["clinician_id"])),
+                    UUID(str(session["patient_id"])),
+                    UUID(str(session["care_team_id"])) if session.get("care_team_id") else None,
                 ),
             )
             self._record_external_identity(
@@ -451,24 +456,20 @@ class SmartLaunchService:
                 return parsed.geturl()
         return None
 
-    def _import_care_team(self, clinician_id: UUID, patient_id: UUID) -> UUID:
-        """The clinician's own link an import belongs to (CARE_TEAM_REQUIRED when ambiguous)."""
-        try:
-            return UUID(
-                DocumentRoutingService(self.db).resolve_clinician_link(clinician_id, patient_id)
+    def _import_care_team(
+        self, clinician_id: UUID, patient_id: UUID, care_team_id: UUID | None = None
+    ) -> UUID:
+        """The clinician's own active link an import belongs to.
+
+        Re-checked at the callback: a link ended while the browser was at the EHR fails
+        closed. A session without a recorded team (created before 088) falls back to the
+        only link, and asks for a choice when there are several.
+        """
+        return UUID(
+            DocumentRoutingService(self.db).resolve_clinician_link(
+                clinician_id, patient_id, care_team_id
             )
-        except ValidationError as error:
-            if error.code != "CARE_TEAM_REQUIRED":
-                raise
-            # Known limitation: a launch session does not yet record which link it is for.
-            raise ValidationError(
-                "External record import is not available while you hold more than one "
-                "care-team link to this patient (for example at two clinics). Nothing was "
-                "started or imported. Upload the records as documents instead, or ask your "
-                "administrator.",
-                code="CARE_TEAM_REQUIRED",
-                details={"limitation": "smart_launch_single_link_only"},
-            ) from None
+        )
 
     def _create_import(
         self, *, session: dict[str, Any], context: dict[str, str | None], care_team_id: UUID
