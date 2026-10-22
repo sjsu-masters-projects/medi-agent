@@ -166,6 +166,9 @@ class CarePlanItemRead(BaseModel):
     wording: dict[str, CarePlanWording] = Field(default_factory=dict)
     wording_origin: dict[str, str] = Field(default_factory=dict)
     wording_verified: bool = False
+    # LOC-003 item 5: the model that drafted the second language, so the clinician can see
+    # that machine wording is machine wording and read its caveat.
+    translation_model_id: str | None = None
     is_removed: bool = False
     projection_type: str | None = None
     projection_id: UUID | None = None

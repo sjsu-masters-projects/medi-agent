@@ -107,6 +107,14 @@ def negation_present(text: str) -> bool:
     return bool(_NEGATION.search(text))
 
 
+def same_language_negation_changed(source: str, target: str) -> bool:
+    """Conservative check for an English original against its English back-translation.
+
+    Never apply counts across languages: Spanish can legitimately double a negation.
+    """
+    return len(_NEGATION.findall(source)) != len(_NEGATION.findall(target))
+
+
 def negation_flipped(source: str, target: str) -> bool:
     """True when a negation appears or disappears (counts are not compared across languages)."""
     return negation_present(source) != negation_present(target)

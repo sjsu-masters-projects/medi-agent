@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from supabase import Client
 
 from app.core.security import get_current_user, require_role
@@ -177,10 +177,14 @@ async def back_translate_care_plan_item(
     patient_id: UUID,
     plan_id: UUID,
     item_id: UUID,
+    refresh: bool = Query(
+        default=False,
+        description="Ignore the cached back-translation and call the model again.",
+    ),
     user: CurrentUser = Depends(_clinician_dep),
     service: CarePlanService = Depends(_service),
 ) -> Any:
-    return await service.back_translate_item(user.id, patient_id, plan_id, item_id)
+    return await service.back_translate_item(user.id, patient_id, plan_id, item_id, refresh=refresh)
 
 
 @router.post(

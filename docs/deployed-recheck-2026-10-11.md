@@ -366,6 +366,146 @@ and verify only that receipt/count clears; then query a bounded backend log wind
 confirm no new null-severity conversion traceback. Until those checks are recorded,
 DV-010, DV-012 and DV-013 remain deployed-recheck items rather than Done.
 
+### LOC-003 remaining scope — local verification and deployed acceptance plan (October 19)
+
+#### October 22 — integration review of #203
+
+**Main advanced after the first reviewed push:** #210 merged as `1e7dec24` and
+introduced five conflicts in the tracker, CI matrix, ADR card, migration validator and
+fact translation. Resolution retains both CI lanes, care-team choices/ownership and
+original-preserving translation UI; numeric/status fields remain outside translation.
+#210's committed 083–087 files remain unchanged. #203's previously unapplied confirmed
+message migration moves to **088**; 080–082 are unchanged. The prior #203 push's CI
+completed successfully, but that does not substitute for merged-head checks.
+
+After integration: **4,442 backend unit/router tests**, **771 clinician tests**, source
+mypy (299 files), Ruff and parsing **104 migrations** pass. Remaining combined-head
+test receipts are recorded in the PR; no hosted migration/application is inferred.
+
+The combined patient suite also passes **931 tests / 87 files**, with both app lint and
+typechecks passing; the combined clinician production webpack build passes. The 46 local
+translation PostgreSQL contracts pass after the 088 rename. The initial care-team run
+exposed verified-wording fixtures without the now-required record (26 failures), followed
+by 15 disposable-database setup errors; this is not a live failure. The synthetic publication
+fixture now supplies an explicit test verification record. The harness releases each
+UUID-named database it creates after the case, rather than retaining all cloned ledgers.
+No production guard or timeout was weakened. Targeted rerun results are recorded in the PR.
+
+#193 is merged as `37224b2f` (all 41 PR checks passed); its main CI, frontend CI and
+automatic backend deployment succeeded. #209 is merged as `36972470`. Neither adds a
+migration or requires a new manual activation. These are delivery receipts, not new
+live acceptance of the remaining private-intake or presentation journeys.
+
+#203 is reviewed against that main. Two bounded independent review lanes inspected
+backend/privacy/safety and UI/approval behaviour. Material fixes:
+
+- Validate clinician-only confirmed wording before sending. Migration 088 delegates the
+  existing clinic-authorized send and atomically commits exact translation or original-only
+  delivery. Failure rolls back the message/audit; retries cannot change wording or mode.
+- Rejected/unavailable-preview fallback remains original-only permanently. A later patient
+  read cannot regenerate it. Failed translation lookup is not treated as an absent row;
+  failed storage cannot return unpersisted wording. A database trigger protects confirmed
+  wording and original-only markers against automatic overwrite.
+- Reject offline stub wording at verification, publication and confirmed-send boundaries;
+  reject failed reverse guards and lost negations in English-to-English back-checks.
+  Cross-language heuristic guards are still not proof of clinical equivalence.
+- Recheck cached glosses against current protected names; oversized evidence remains
+  original-only, never a truncated translation labelled as a full excerpt.
+- Preserve exact confirmed wording across uncertain retries/thread switches, separate
+  disclosure buttons from evidence selection, recover canceled gloss requests, isolate
+  patient-specific display state and label English previews' Spanish source accurately.
+- 081 permits cache-only updates to unchanged legacy approvals but requires a verification
+  record for new/changed verified wording. No retrospective attestation is fabricated.
+
+Applied 067 and main's applied 079 remain byte-for-byte unchanged. Proposed 079/083 English
+copies were identical to 067 and removed. Pending **080–082 and 088** are genuine changes, not
+applied here; merged care-team #210 owns 083–087. Apply with separate
+authorization **before merging/deploying #203**, because backend rollout is automatic.
+Use the setup guide and checksum-aware read-only preflight, not ad hoc hosted SQL.
+
+Final local verification (synthetic settings; no hosted access):
+
+| Surface | Command | Result |
+| --- | --- | --- |
+| Backend units and router contracts | `PYTHONPATH=src .venv/bin/python -m pytest tests/unit tests/integration/routers --no-cov -q` | **4,168 passed** |
+| PostgreSQL permissions/transactions | `LOC003_TEST_POSTGRES=1 LOC003_TEST_POSTGRES_DOCKER=1 CARE_CONVERSATION_TEST_POSTGRES_DOCKER=1 PYTHONPATH=src .venv/bin/python -m pytest tests/integration/test_loc003_translation_postgres.py tests/integration/test_confirmed_translation_postgres.py --no-cov -q --junitxml=...` | **46 passed** (31/15, no skips); disposable local containers |
+| Clinician app | `NODE_OPTIONS=--no-experimental-webstorage npm test -- --reporter=dot --maxWorkers=1` | **724 passed / 77 files** |
+| Patient app | `NODE_OPTIONS=--no-experimental-webstorage npm test -- --reporter=dot --maxWorkers=2` | **845 passed / 76 files** |
+| Both app quality checks | `npm run lint`, `npm run typecheck`, `npm run build -- --webpack` | Pass with synthetic public configuration |
+| Python quality | changed-file `ruff check`, source `ruff format --check`, `mypy src/ --ignore-missing-imports` | Pass; 285 typed source files |
+| Migration parser | `.venv/bin/python scripts/validate_migrations.py` | **99 files validated**; applied 067/079 diff empty |
+| Offline translation contract | `PYTHONPATH=src .venv/bin/python scripts/preflight_loc003_translation.py --self-check` | **19/19 pass**; stub never approves patient wording |
+
+Earlier broad clinician runs exposed the now-fixed article-selection test helper and one
+unchanged 5-second test timeout under concurrent build/test load. Final single-worker suite
+passes without relaxing timeouts. Earlier normal local builds were blocked by font-network
+access, then isolated-checkout dependency symlinks and Turbopack helper-port permissions;
+local dependency copies plus the supported webpack compiler pass. CI's normal build is
+unchanged and must pass on the pushed head. Existing deprecation/React act notices remain
+non-failing. No new live, device, hosted-migration or deployment acceptance is claimed.
+
+This checkpoint validates implementation, not deployment. It applies no migration and
+changes no remote configuration, care plan, reminder or clinical record. Migrations
+Pending #203 migrations are now `080`–`083`; no hosted application is performed by this review.
+Applied `067_english_display_facts.sql` remains unchanged. Its proposed 079/083 copies
+were byte-identical and removed; actual 088 is the atomic confirmed-message transaction.
+
+| Surface | Command | Result |
+| --- | --- | --- |
+| Translation paths without a model | `PYTHONPATH=src python scripts/preflight_loc003_translation.py --self-check` | 19/19 PASS. Exercises care-plan drafting both directions, back-translation, fact display fields, message translation both directions, the reply round trip and evidence glosses, through the offline stub. Prints `KNOWN_GAP negation_count_not_compared` (see below). |
+| Migration naming and syntax | `PYTHONPATH=src python scripts/validate_migrations.py` | 97 files validated; the `067` collision is gone and the validator no longer grandfathers that sequence. |
+| 080/081/082 database behaviour | `LOC003_TEST_POSTGRES=1 PYTHONPATH=src pytest tests/integration/test_loc003_translation_postgres.py` | 30 passed against the real migration bytes on a disposable cluster: both cleanup triggers, the retention rule's four row classes, browser roles refused the purge, the verified-wording constraint, `NOT VALID` leaving approved rows alone, the widened `source_table` check, glosses surviving the sweep, and every migration applied twice. |
+| Backend behaviour | `PYTHONPATH=src pytest tests/unit --no-cov` | 3426 passed. `tests/unit/services/test_chat_turn_queue.py` is excluded locally: `google-cloud-tasks` is in `requirements.txt` from #195 but absent from this virtualenv, which is unrelated to this change. |
+| Backend quality | `ruff check src/`, `ruff format --check src/`, `mypy src/ --ignore-missing-imports` | Passed. |
+| Clinician portal | `npm run lint`, `npx tsc --noEmit`, `npm test`, `npm run build` | Passed; 654 tests including 37 new LOC-003 display cases. |
+| Patient portal | `npm run lint`, `npx tsc --noEmit`, `npm test`, `npm run build` | Passed; 817 tests including 6 new translation-note cases. One pre-existing unused-variable warning in `chat-page.test.tsx` remains. |
+
+**Known gap surfaced by the preflight, not introduced by it.** `negation_flipped` compares
+whether a negation is present, not how many there are, so dropping one of several negations
+survives the guard (`Do not take 1,000 mg or 2.5 mL without water` → `Take 1,000 mg or
+2.5 mL without water` passes, because `without` remains). Comparing counts across languages
+would reject correct translations, because the pair does not use negatives one-for-one. The
+narrow candidate fix — compare counts only when both texts are the same language, which is
+the back-translation comparison — is recorded as an open LOC-001 guard question in the
+[LOC-003 specification](../.agent/specs/loc-003-english-first-clinician-review.md). The
+preflight prints it every run so it is not rediscovered.
+
+#### Deployed acceptance, once 080–082 and 088 are authorized/applied
+
+Run in this order and record the outcome per step. Do not apply migrations as part of a
+verification pass; applying stays a separate authorized step.
+
+1. `PYTHONPATH=src python scripts/preflight_loc003_translation.py --check-target` — the four
+   migrations recorded with this tree's checksums, and the four new columns readable.
+2. **Spanish document → English review.** Upload a synthetic Spanish discharge summary for
+   the synthetic patient. In the review queue: condition, procedure and instruction fields
+   read English with "Translated from Spanish" and the model named behind the info control;
+   medication, allergen and vaccine names read exactly as printed; each translated field
+   reveals its printed original; a fact whose translation the guard rejected reads "Not
+   translated" with its reason. One translation call per batch, not per fact.
+3. **Care-plan review in both languages.** Open the resulting draft. Proposed items list in
+   English with the "Translated from Spanish" marker; the strip reads Source → You review →
+   Patient sees; the patient's language card shows the phone preview with the patient app's
+   own chrome; source excerpts carry an English gloss beneath the untouched Spanish, as does
+   the highlighted excerpt above the source preview. Reopen the plan and confirm the
+   back-translation is served from the cache (no new model call); use "Check again" and
+   confirm it does call the model. Tick the attestation and confirm the recorded guard
+   outcome lands in `wording_verification`.
+4. **Approve, then read the patient's Today** as the patient in es-MX and again in en-US.
+   The approved wording matches what the phone preview showed.
+5. **Messages both ways.** As the clinician, draft an English reply to an es-MX patient:
+   preview shows the Spanish and its English back-translation; the send is held until
+   confirmed; after sending, the patient sees exactly the confirmed Spanish with "Translated
+   from English · show original" and the new info sheet naming the model. As the patient,
+   send a Spanish message and confirm the clinician's thread shows the English translation
+   with its model. Confirm a reply to an en-US patient needs no confirmation.
+6. **Nora transcript.** With a Spanish Nora conversation on record, open the clinician's Chat
+   tab: Spanish turns carry an English translation beneath the original with the model named,
+   and the first read shows "Translating…" rather than blocking.
+7. **ADR evidence.** Open an ADR review whose evidence quotes Spanish patient answers; each
+   quote keeps the patient's words with an English gloss beneath.
+8. **Retention.** Call `POST /api/v1/cron/message-translations/purge` once and record the
+   returned counts; confirm a second call reports zeros.
 ### PR #196 deployed recheck — October 19 evening
 
 This follow-up supersedes the earlier pending-deployment statements for DV-010
@@ -1202,9 +1342,8 @@ Evidence screenshots: `/private/tmp/post208-migration079-verified.png`,
 ### Follow-up verification and continuation
 
 Delivery: [PR #209](https://github.com/sjsu-masters-projects/medi-agent/pull/209),
-initial implementation/evidence commit `b11ca2d6`; ready for review, not merged.
-Initial PR policy check passes; remaining CI/preview checks were still running
-when this checkpoint was written. No all-green CI claim.
+initial implementation/evidence commit `b11ca2d6`; subsequently merged as `36972470`.
+These local command results are retained as historical evidence, not a new deployed recheck.
 
 Commands run against this follow-up branch:
 
@@ -1222,8 +1361,8 @@ Commands run against this follow-up branch:
 - `git diff --check`: pass.
 
 Remaining: REC-001 correction/source lifecycle UI checks, live stale-cursor
-recovery and second-reviewer/access acceptance. DV-022–024 need follow-up PR
-review/merge/deployment and live correction checks. No further remote migration,
+recovery and second-reviewer/access acceptance. DV-022–024 implementation merged in #209;
+live correction checks remain. No further remote migration,
 configuration, deployment or merge performed.
 
 ### Unlisted-product live acceptance — October 21

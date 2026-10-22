@@ -216,6 +216,45 @@ class CronService:
             work=work,
         )
 
+    async def purge_message_translations(
+        self, *, failure_marker_max_age_days: int = 7
+    ) -> dict[str, Any]:
+        """LOC-003 item 9: apply the message-translation retention rule; record the run.
+
+        Removes translations whose source message is gone (messages deleted before the
+        cleanup triggers existed) and failure markers past their useful age. A translation
+        is never a record of truth, so nothing clinical is lost; the original message and
+        its audit trail are untouched.
+        """
+
+        async def work(summary: dict[str, Any]) -> str | None:
+            response = await execute_async(
+                self,
+                lambda db: db.rpc(
+                    "purge_message_translations",
+                    {"p_failure_marker_max_age": f"{failure_marker_max_age_days} days"},
+                ),
+                operation="purge_message_translations",
+            )
+            counts = cast(dict[str, Any], response.data or {})
+            summary.update(
+                {
+                    "orphans_removed": int(counts.get("orphans_removed") or 0),
+                    "expired_failure_markers_removed": int(
+                        counts.get("expired_failure_markers_removed") or 0
+                    ),
+                }
+            )
+            return None
+
+        return await self._run_job(
+            "message_translation_purge",
+            dry_run=False,
+            metadata={"failure_marker_max_age_days": failure_marker_max_age_days},
+            summary={},
+            work=work,
+        )
+
     async def dispatch_emails_isolated(self) -> None:
         """Run email dispatch after reminders without letting it fail the reminder run.
 

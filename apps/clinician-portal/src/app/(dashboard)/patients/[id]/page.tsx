@@ -596,7 +596,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                             Chat Transcript
                         </h2>
                         <p className="mb-4 text-sm text-muted">Patient conversations with Nora, the AI care assistant. Messages retain their original language. Care-team conversations are in Messages.</p>
-                        <ChatTranscript messages={patient.chat_messages} />
+                        <ChatTranscript messages={patient.chat_messages} patientId={patientId} />
 
                         <Link href="/messages" className="mt-6 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover">
                             Open Messages to contact this patient

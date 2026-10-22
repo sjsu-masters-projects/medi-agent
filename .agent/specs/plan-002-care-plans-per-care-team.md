@@ -1,6 +1,7 @@
 # PLAN-002 — Care plans per care team
 
-**Status:** In progress on PR #210 (October 22); backend and portals in review.
+**Status:** PR #210 merged as `1e7dec24` (October 22); backend and portals implemented,
+hosted migration/deployment and live acceptance not independently verified in #203's merge review.
 Direction and conflict handling decided October 13. Part of CLN-003
 (slice H). It changes the PAT-005 contract, so read the
 [PAT-005 specification](pat-005-clinician-approved-today-feed-plan.md) first.

@@ -462,7 +462,7 @@ class SmartLaunchService:
         """The clinician's own active link an import belongs to.
 
         Re-checked at the callback: a link ended while the browser was at the EHR fails
-        closed. A session without a recorded team (created before 088) falls back to the
+        closed. A session without a recorded team (created before 091) falls back to the
         only link, and asks for a choice when there are several.
         """
         return UUID(

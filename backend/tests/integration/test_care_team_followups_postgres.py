@@ -1,4 +1,4 @@
-"""Clinic-admin notification variant, conflict-reply resolution and SMART team column (088).
+"""Clinic-admin notification variant, conflict-reply resolution and SMART team column (091).
 
 Opt-in: ``CARE_TEAM_PLANS_TEST_POSTGRES_DOCKER=1``. Synthetic data only.
 """

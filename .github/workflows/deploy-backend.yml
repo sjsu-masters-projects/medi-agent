@@ -16,6 +16,10 @@ env:
   WORKER_SERVICE_NAME: mediagent-chat-worker
   INGESTION_JOB_NAME: mediagent-document-ingestion
   KNOWLEDGE_JOB_NAME: mediagent-health-knowledge-refresh
+  # Fallback runtime identity for the services and jobs. The API and chat worker services use
+  # the least-privilege accounts named by the repository variables CLOUD_RUN_API_RUNTIME_SA and
+  # CLOUD_RUN_WORKER_RUNTIME_SA once those are set (see docs/chat-worker-setup.md); until then
+  # they keep running as this account. The two jobs stay on this account.
   RUNTIME_SERVICE_ACCOUNT: github-actions-deployer@medi-agent-490106.iam.gserviceaccount.com
 
 permissions:
@@ -37,6 +41,42 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # Fail before building anything when a required runtime setting is missing, so a deploy
+      # can never silently drop the Nora worker wiring. Names only are printed, never values.
+      - name: Check required runtime settings
+        env:
+          CLOUD_TASKS_PROJECT: ${{ vars.CLOUD_TASKS_PROJECT }}
+          CLOUD_TASKS_LOCATION: ${{ vars.CLOUD_TASKS_LOCATION }}
+          CLOUD_TASKS_QUEUE: ${{ vars.CLOUD_TASKS_QUEUE }}
+          CHAT_WORKER_URL: ${{ vars.CHAT_WORKER_URL }}
+          CHAT_WORKER_INVOKER_SA: ${{ vars.CHAT_WORKER_INVOKER_SA }}
+          CHAT_TURNS_VIA_WORKER: ${{ vars.CHAT_TURNS_VIA_WORKER }}
+          CLOUD_RUN_API_RUNTIME_SA: ${{ vars.CLOUD_RUN_API_RUNTIME_SA }}
+          CLOUD_RUN_WORKER_RUNTIME_SA: ${{ vars.CLOUD_RUN_WORKER_RUNTIME_SA }}
+        run: |
+          missing=0
+          for name in CLOUD_TASKS_PROJECT CLOUD_TASKS_LOCATION CLOUD_TASKS_QUEUE CHAT_WORKER_URL CHAT_WORKER_INVOKER_SA CHAT_TURNS_VIA_WORKER; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Repository variable ${name} is not set. Set it with: gh variable set ${name} --body <value>. See docs/chat-worker-setup.md (Repository variables)."
+              missing=1
+            fi
+          done
+          if [ -n "${CHAT_TURNS_VIA_WORKER}" ] && [ "${CHAT_TURNS_VIA_WORKER}" != "true" ] && [ "${CHAT_TURNS_VIA_WORKER}" != "false" ]; then
+            echo "::error::CHAT_TURNS_VIA_WORKER must be exactly true or false."
+            missing=1
+          fi
+          if [ -n "${CHAT_WORKER_URL}" ] && ! [[ "${CHAT_WORKER_URL}" =~ ^https://[^/]+$ ]]; then
+            echo "::error::CHAT_WORKER_URL must be an https URL with no path or trailing slash."
+            missing=1
+          fi
+          for name in CLOUD_RUN_API_RUNTIME_SA CLOUD_RUN_WORKER_RUNTIME_SA; do
+            if [ -n "${!name}" ] && ! [[ "${!name}" =~ ^[a-z0-9-]+@${PROJECT_ID}\.iam\.gserviceaccount\.com$ ]]; then
+              echo "::error::${name} must be a service account email in project ${PROJECT_ID}."
+              missing=1
+            fi
+          done
+          exit "${missing}"
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -91,17 +131,38 @@ jobs:
           done
 
       - name: Deploy to Cloud Run
+        env:
+          CLOUD_TASKS_PROJECT: ${{ vars.CLOUD_TASKS_PROJECT }}
+          CLOUD_TASKS_LOCATION: ${{ vars.CLOUD_TASKS_LOCATION }}
+          CLOUD_TASKS_QUEUE: ${{ vars.CLOUD_TASKS_QUEUE }}
+          CHAT_WORKER_URL: ${{ vars.CHAT_WORKER_URL }}
+          CHAT_WORKER_INVOKER_SA: ${{ vars.CHAT_WORKER_INVOKER_SA }}
+          CHAT_TURNS_VIA_WORKER: ${{ vars.CHAT_TURNS_VIA_WORKER }}
+          CLOUD_RUN_API_RUNTIME_SA: ${{ vars.CLOUD_RUN_API_RUNTIME_SA }}
         run: |
           IMAGE_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${SERVICE_NAME}:latest"
-          
+
+          # Least-privilege identity: used only once the repository variable is set. Until
+          # then the service keeps its current account (the one on the live revision).
+          SA_FLAG=()
+          if [ -n "${CLOUD_RUN_API_RUNTIME_SA}" ]; then
+            SA_FLAG=(--service-account "${CLOUD_RUN_API_RUNTIME_SA}")
+          else
+            SA_FLAG=(--service-account "${RUNTIME_SERVICE_ACCOUNT}")
+          fi
+
           # Memory is pinned here on purpose. It was 512Mi, which silently reverted any
           # console change on the next deploy, and it is too small for the agent runtime.
           #
           # Environment and secrets use the --update-* forms, never --set-*. The service
-          # carries 12 environment variables and 10 secret references (Supabase, Sentry,
-          # SMART, Deepgram, Resend, cron) that are configured out of band; --set-env-vars
-          # and --set-secrets REPLACE the whole set and would wipe them on the next push.
-          # --update-* merges, so anything not named here is preserved.
+          # also carries settings configured out of band (portal and callback URLs, SMART
+          # client settings, Sentry and Resend options, SYMPTOM_INTAKE_ENABLED);
+          # --set-env-vars and --set-secrets REPLACE the whole set and would wipe them on
+          # the next push. --update-* merges, so anything not named here is preserved.
+          #
+          # The Nora worker wiring (CLOUD_TASKS_*, CHAT_WORKER_*, CHAT_TURNS_VIA_WORKER) comes
+          # from repository variables, checked by the first step. Secrets are Secret Manager
+          # references (ENV=SECRET:VERSION); no secret value appears in this file.
           #
           # --no-cpu-throttling keeps CPU allocated outside requests. A Nora reply is a
           # server-owned task that keeps running after its websocket closes, and a
@@ -115,8 +176,9 @@ jobs:
             --min-instances 0 \
             --max-instances 2 \
             --allow-unauthenticated \
-            --service-account ${RUNTIME_SERVICE_ACCOUNT} \
-            --update-env-vars VERTEX_AI_LOCATION=global,GEMINI_VERTEX_AI_LOCATION=global,GEMINI_TRIAGE_MODEL=gemini-3.5-flash-lite,GEMINI_FLASH_MODEL=gemini-3.8-flash,GEMINI_FALLBACK_MODEL=gemini-3.5-flash,GEMINI_PRO_MODEL=gemini-3.1-pro-preview,CHAT_TURN_TIMEOUT_SECONDS=30,MODEL_CIRCUIT_BREAKER_COOLDOWN_SECONDS=60 \
+            "${SA_FLAG[@]}" \
+            --update-env-vars VERTEX_AI_LOCATION=global,GEMINI_VERTEX_AI_LOCATION=global,GEMINI_TRIAGE_MODEL=gemini-3.5-flash-lite,GEMINI_FLASH_MODEL=gemini-3.8-flash,GEMINI_FALLBACK_MODEL=gemini-3.5-flash,GEMINI_PRO_MODEL=gemini-3.1-pro-preview,CHAT_TURN_TIMEOUT_SECONDS=30,MODEL_CIRCUIT_BREAKER_COOLDOWN_SECONDS=60,GOOGLE_PROJECT_ID=${PROJECT_ID},CLOUD_TASKS_PROJECT=${CLOUD_TASKS_PROJECT},CLOUD_TASKS_LOCATION=${CLOUD_TASKS_LOCATION},CLOUD_TASKS_QUEUE=${CLOUD_TASKS_QUEUE},CHAT_WORKER_URL=${CHAT_WORKER_URL},CHAT_WORKER_INVOKER_SA=${CHAT_WORKER_INVOKER_SA},CHAT_TURNS_VIA_WORKER=${CHAT_TURNS_VIA_WORKER} \
+            --update-secrets SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest,GOOGLE_API_KEY=GOOGLE_API_KEY:latest,DEEPGRAM_API_KEY=DEEPGRAM_API_KEY:latest,BACKEND_SENTRY_DSN=BACKEND_SENTRY_DSN:latest,CRON_AUTH_TOKEN=CRON_AUTH_TOKEN:latest,RESEND_API_KEY=RESEND_API_KEY:latest,SMART_STATE_ENCRYPTION_KEY=MEDIAGENT_SMART_STATE_KEY:latest,NOTIFICATION_TOKEN_SIGNING_SECRET=NOTIFICATION_TOKEN_SIGNING_SECRET:1 \
             --port 8080 \
             --timeout 3600
 
@@ -132,8 +194,12 @@ jobs:
         if: ${{ vars.DEPLOY_CHAT_WORKER == 'true' }}
         env:
           CHAT_WORKER_INVOKER_SA: ${{ vars.CHAT_WORKER_INVOKER_SA }}
+          CLOUD_RUN_WORKER_RUNTIME_SA: ${{ vars.CLOUD_RUN_WORKER_RUNTIME_SA }}
         run: |
           IMAGE_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${SERVICE_NAME}:latest"
+
+          # Least-privilege identity once the repository variable is set; otherwise current behaviour.
+          SA_FLAG=(--service-account "${CLOUD_RUN_WORKER_RUNTIME_SA:-${RUNTIME_SERVICE_ACCOUNT}}")
 
           if [ -z "${CHAT_WORKER_INVOKER_SA}" ]; then
             echo "::error::Set the repository variable CHAT_WORKER_INVOKER_SA before enabling DEPLOY_CHAT_WORKER."
@@ -155,7 +221,7 @@ jobs:
             --timeout 300 \
             --port 8080 \
             --no-allow-unauthenticated \
-            --service-account ${RUNTIME_SERVICE_ACCOUNT} \
+            "${SA_FLAG[@]}" \
             --update-env-vars WORKER_MODE=true,ENVIRONMENT=production,GOOGLE_PROJECT_ID=${PROJECT_ID},CHAT_WORKER_INVOKER_SA=${CHAT_WORKER_INVOKER_SA},VERTEX_AI_LOCATION=global,GEMINI_VERTEX_AI_LOCATION=global,GEMINI_TRIAGE_MODEL=gemini-3.5-flash-lite,GEMINI_FLASH_MODEL=gemini-3.8-flash,GEMINI_FALLBACK_MODEL=gemini-3.5-flash,GEMINI_PRO_MODEL=gemini-3.1-pro-preview,CHAT_TURN_TIMEOUT_SECONDS=30,MODEL_CIRCUIT_BREAKER_COOLDOWN_SECONDS=60,A2A_RETRY_WORKER_ENABLED=false \
             --update-secrets SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest
 

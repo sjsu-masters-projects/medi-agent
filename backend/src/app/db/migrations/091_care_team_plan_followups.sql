@@ -630,35 +630,35 @@ BEGIN
     IF has_function_privilege('anon', v_function, 'EXECUTE')
        OR has_function_privilege('authenticated', v_function, 'EXECUTE')
        OR NOT has_function_privilege('service_role', v_function, 'EXECUTE') THEN
-      RAISE EXCEPTION '088: wrong execute grants on %', v_function;
+      RAISE EXCEPTION '091: wrong execute grants on %', v_function;
     END IF;
   END LOOP;
   IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.smart_launch_sessions'::regclass)
      OR has_table_privilege('anon', 'public.smart_launch_sessions', 'SELECT,INSERT,UPDATE,DELETE')
      OR has_table_privilege('authenticated', 'public.smart_launch_sessions', 'SELECT,INSERT,UPDATE,DELETE') THEN
-    RAISE EXCEPTION '088: smart_launch_sessions must stay backend-only';
+    RAISE EXCEPTION '091: smart_launch_sessions must stay backend-only';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns
       WHERE table_schema = 'public' AND table_name = 'smart_launch_sessions'
         AND column_name = 'care_team_id') THEN
-    RAISE EXCEPTION '088: smart_launch_sessions.care_team_id is missing';
+    RAISE EXCEPTION '091: smart_launch_sessions.care_team_id is missing';
   END IF;
   IF (SELECT prosrc FROM pg_proc WHERE oid = 'private.notification_authorized(public.notification_events,uuid,text)'::regprocedure)
      NOT LIKE '%clinic_memberships%'
      OR (SELECT prosrc FROM pg_proc WHERE oid = 'private.notification_authorized(public.notification_events,uuid,text)'::regprocedure)
      NOT LIKE '%notification_owner_sees%' THEN
-    RAISE EXCEPTION '088: notification_authorized lost a check';
+    RAISE EXCEPTION '091: notification_authorized lost a check';
   END IF;
   IF EXISTS (SELECT 1 FROM pg_catalog.pg_proc
               WHERE proname IN ('notification_row', 'notification_centre_operation')
                 AND prosrc ~ 'cl\.id\s*=\s*c\.clinic_id') THEN
-    RAISE EXCEPTION '088: notification clinic labels must come from the care-team link''s clinic';
+    RAISE EXCEPTION '091: notification clinic labels must come from the care-team link''s clinic';
   END IF;
   -- No clinic-level event may exist for a recipient who is not an admin of its clinic.
   IF EXISTS (SELECT 1 FROM public.notification_events e
       WHERE e.event_type = 'care_plan_review' AND e.metadata->>'scope' = 'clinic'
         AND e.audience <> 'clinician') THEN
-    RAISE EXCEPTION '088: a clinic-level notification must address a single clinician';
+    RAISE EXCEPTION '091: a clinic-level notification must address a single clinician';
   END IF;
 END
 $verify$;

@@ -37,7 +37,7 @@ function fieldLabels(scope: ParentNode = document): string[] {
 }
 
 function candidate(name: string | RegExp): HTMLElement {
-    return screen.getByText(name).closest("button") as HTMLElement;
+    return screen.getByText(name).closest("article") as HTMLElement;
 }
 
 async function openFacts(facts: ExtractedDocumentFact[]) {
