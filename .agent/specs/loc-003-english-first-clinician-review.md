@@ -1,6 +1,6 @@
 # LOC-003 — English-first clinician review of Spanish content
 
-**Status:** Merged ([#181](https://github.com/sjsu-masters-projects/medi-agent/pull/181), Jeevan); migrations renumbered to 067/068 and applied October 17 (first applied under their earlier filenames; re-runnable, so they reapplied cleanly); deployed check pending (see the board). Design and decisions agreed October 13. Raised at the October 13
+**Status:** Base #181 and remainder [#203](https://github.com/sjsu-masters-projects/medi-agent/pull/203) merged (#203: `dace6a8d`, October 22, 43 successful PR checks). Applied 067/068 retained; requester supplied successful COMMIT/ledger output for 080–082 and 088. Deployment and live acceptance remain distinct checks. Design and decisions agreed October 13. Raised at the October 13
 checkpoint demo.
 
 ## Principle
@@ -154,9 +154,10 @@ Both uses are labelled as such.
 
 ## Remaining (owner: Jeevan)
 
-- **Apply migrations 080–082 and 088 with separate authorization before deploying #203**, then run the deployed acceptance journeys below. The apply
-  needs `MEDIAGENT_DB_URL` (the Session pooler URI from Dashboard → Connect), which is not
-  stored in this repository or in `.env`; see `docs/supabase_setup_guide.md`.
+- **Confirm deployment and run the deployed acceptance journeys below.** The requester
+  supplied successful COMMIT/ledger output for 080–082 and 088 before reporting #203 merged;
+  083–087 were already applied/skipped. Do not reapply or rename these files to update status.
+  This is operator evidence, not an independent remote checksum/security audit.
 - **LOC-001 review of the es-MX caveat drafts** for the patient-side translation note (listed
   under item 25 below). They are drafts, not approved wording.
 - **Open guard question for LOC-001 (found October 19).** `negation_flipped` compares whether

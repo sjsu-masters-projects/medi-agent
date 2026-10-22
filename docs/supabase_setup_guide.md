@@ -206,10 +206,14 @@ so run `backend/scripts/appointment-clinician-overlap-preflight.sql` (read-only)
 appointments in the hosted project. A read-only audit on October 17 found no public table with RLS
 off and no browser-role SELECT or INSERT on a public table.
 
-### Message-translation integrity, wording verification and display provenance (080–082 and 088) — not yet applied
+### Message-translation integrity, wording verification and display provenance (080–082 and 088)
 
-Pending the requester's authorization; nothing here has been applied to a hosted project.
-Apply in order, after main's `079_unlisted_product_review_alerts.sql`, before deploying #203's backend:
+October 22 operator receipt: the requester supplied successful `COMMIT` and ledger inserts
+for 080, 081, 082 and 088, followed by `Migration ledger is synchronized`. Care-team
+083–087 were already applied and skipped. This records the supplied output, not an
+independent hosted checksum/security audit. #203 merged as `dace6a8d` afterward.
+For a new environment, apply in ledger order after 079 (including care-team 083–087
+before 088), before deploying the backend that requires these contracts:
 
 1. `080_message_translation_integrity.sql` — `AFTER DELETE` triggers on
    `care_conversation_messages` and `chat_messages` that remove a deleted message's stored

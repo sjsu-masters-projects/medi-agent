@@ -368,6 +368,20 @@ DV-010, DV-012 and DV-013 remain deployed-recheck items rather than Done.
 
 ### LOC-003 remaining scope — local verification and deployed acceptance plan (October 19)
 
+#### October 22 — merged rollout receipt
+
+#203 merged as `dace6a8decb352a9f4068360b695d92927a402d8` at 09:50:22 UTC
+(02:50:22 Pacific); all **43 PR checks succeeded**. The requester supplied application
+output for 080/081/082/088: each transaction inserted its ledger receipt and committed;
+083–087 were already applied/skipped; the final message was `Migration ledger is synchronized`.
+Expected first-run DROP notices were not errors. No hosted SQL was run by this agent.
+This is operator-supplied evidence, not an independent hosted checksum/security audit.
+
+Main CI, frontend CI and automatic Cloud Run deployment were still running at inspection.
+Next: confirm deployment, then execute the existing bilingual/private-recipient/fallback,
+plan-attestation, evidence/transcript and retention acceptance journeys. LOC-003 moves to
+**Verify deployed**, not Done. Older pending-apply language below is historical review context.
+
 #### October 22 — integration review of #203
 
 **Main advanced after the first reviewed push:** #210 merged as `1e7dec24` and
