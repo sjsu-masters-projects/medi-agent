@@ -23,6 +23,12 @@ import pytest
 from tests.integration.supabase_roles import create_roles_sql
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "src/app/db/migrations"
+# Tests marked with one of these stop just before that migration and apply it themselves.
+BOUNDARIES = {
+    "before_care_team_plans": "080",
+    "before_owned_records": "081",
+    "before_cross_plan_publication": "082",
+}
 FIRST_PLAN_MIGRATION = "080_care_team_plan_ownership.sql"
 # Ledger files the stand-in platform cannot run: pgvector, and the seed-ledger reader.
 SKIPPED = frozenset({"015_drug_knowledge_rag.sql", "021_allow_seed_ledger_read.sql"})
@@ -49,10 +55,12 @@ CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$
   SELECT 'service_role' $$;
 CREATE SCHEMA IF NOT EXISTS extensions;
 CREATE SCHEMA IF NOT EXISTS storage;
+GRANT USAGE ON SCHEMA storage TO anon, authenticated, service_role;
 CREATE TABLE IF NOT EXISTS storage.buckets(id text PRIMARY KEY, name text, public boolean,
   file_size_limit bigint, allowed_mime_types text[]);
 CREATE TABLE IF NOT EXISTS storage.objects(id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   bucket_id text, name text, owner uuid);
+GRANT ALL ON storage.objects, storage.buckets TO anon, authenticated, service_role;
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 CREATE OR REPLACE FUNCTION storage.foldername(name text) RETURNS text[] LANGUAGE sql AS $$
   SELECT string_to_array(name, '/') $$;
@@ -67,20 +75,30 @@ CREATE TABLE IF NOT EXISTS public.schema_migrations(version text);
 
 
 def migration_sql(*, before: str | None = None, from_name: str | None = None) -> str:
+    """Concatenate ledger files in order. ``before``/``from_name`` are filename prefixes."""
+    return _migration_sql(before=before, from_name=from_name)
+
+
+def _migration_sql(*, before: str | None, from_name: str | None) -> str:
     """Concatenate ledger files in order; ``before``/``from_name`` select a slice."""
     parts: list[str] = []
     for path in sorted(MIGRATIONS.glob("*.sql")):
         name = path.name
         if name in SKIPPED:
             continue
-        if before is not None and name >= before:
+        if before is not None and name[: len(before)] >= before:
             continue
-        if from_name is not None and name < from_name:
+        if from_name is not None and name[: len(from_name)] < from_name:
             continue
         text = path.read_text()
         if name == "020_harden_database_security.sql":
-            # The rest of 020 needs the vector extension and hosted Auth objects.
-            text = text.split("-- Public helper functions remain")[0]
+            # Everything but the one statement that needs the vector extension: the helper
+            # revokes and the policy rewrites that move every policy to the private helpers.
+            text = text.replace(
+                "ALTER FUNCTION public.match_drug_knowledge_chunks(public.vector, integer, "
+                "text[], text[], double precision)\n  SET search_path = pg_catalog, public;",
+                "",
+            )
         parts.append(f"-- {name}\n{text}\n")
     return "\n".join(parts)
 
@@ -123,10 +141,18 @@ def postgres():
             )
             assert result.returncode == 0, result.stderr
 
-        run("postgres", "CREATE DATABASE tpl_pre;")
-        run("tpl_pre", STAND_INS + migration_sql(before=FIRST_PLAN_MIGRATION))
-        run("postgres", "CREATE DATABASE tpl_post TEMPLATE tpl_pre;")
-        run("tpl_post", migration_sql(from_name=FIRST_PLAN_MIGRATION))
+        previous = None
+        for boundary in BOUNDARIES.values():
+            name = f"tpl_{boundary}"
+            if previous is None:
+                run("postgres", f"CREATE DATABASE {name};")
+                run(name, STAND_INS + migration_sql(before=boundary))
+            else:
+                run("postgres", f"CREATE DATABASE {name} TEMPLATE tpl_{previous};")
+                run(name, migration_sql(from_name=previous, before=boundary))
+            previous = boundary
+        run("postgres", f"CREATE DATABASE tpl_post TEMPLATE tpl_{previous};")
+        run("tpl_post", migration_sql(from_name=previous))
         yield base
     finally:
         subprocess.run([docker, "rm", "--force", "--volumes", container], check=False,
@@ -136,11 +162,12 @@ def postgres():
 @pytest.fixture
 def sql(postgres, request):
     """Run SQL in a fresh database cloned from the right template; ``execute.start`` forks."""
-    pre = request.node.get_closest_marker("before_care_team_plans") is not None
+    boundary = next((value for marker, value in BOUNDARIES.items()
+                     if request.node.get_closest_marker(marker) is not None), None)
     database = "plan_" + uuid4().hex
     subprocess.run(
         [*postgres, "-d", "postgres"],
-        input=f"CREATE DATABASE {database} TEMPLATE {'tpl_pre' if pre else 'tpl_post'};",
+        input=f"CREATE DATABASE {database} TEMPLATE {'tpl_' + boundary if boundary else 'tpl_post'};",
         check=True, capture_output=True, text=True, timeout=60,
     )
     command = [*postgres, "-d", database]
@@ -170,7 +197,7 @@ def sql(postgres, request):
     execute.start = start  # type: ignore[attr-defined]
     execute.command = command  # type: ignore[attr-defined]
     execute.apply_plan_migrations = lambda: execute(  # type: ignore[attr-defined]
-        migration_sql(from_name=FIRST_PLAN_MIGRATION))
+        migration_sql(from_name=boundary or "999"))
     try:
         yield execute
     finally:
