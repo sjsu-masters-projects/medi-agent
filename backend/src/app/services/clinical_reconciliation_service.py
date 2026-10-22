@@ -15,6 +15,8 @@ from supabase import Client
 
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models.reconciliation import ReconciliationDecision, ReconciliationDecisionRequest
+from app.services.care_team_access import PatientAccess
+from app.services.clinician_record_gate import ClinicianRecordGate
 from app.services.external_patient_binding_service import ExternalPatientBindingService
 from app.services.smart_launch_service import SmartLaunchService
 
@@ -49,12 +51,14 @@ class ClinicalReconciliationService:
 
     def __init__(self, db: Client) -> None:
         self.db = db
+        self.gate = ClinicianRecordGate(db)
 
-    def preview(self, *, fact_id: UUID, patient_id: UUID) -> dict[str, Any]:
+    def preview(self, *, clinician_id: UUID, fact_id: UUID, patient_id: UUID) -> dict[str, Any]:
+        access = self.gate.fact(clinician_id, patient_id, fact_id)
         fact = self._fact(fact_id=fact_id, patient_id=patient_id)
         candidate = self._candidate_fields(fact)
         fact_type = str(fact["fact_type"])
-        matches = self._matches(fact=fact, candidate=candidate)
+        matches = self._matches(fact=fact, candidate=candidate, access=access)
         medication = fact_type == "medication"
         return {
             "fact_id": str(fact_id),
@@ -133,7 +137,9 @@ class ClinicalReconciliationService:
         actor_id: UUID,
         request: ReconciliationDecisionRequest,
     ) -> dict[str, Any]:
+        access = self.gate.fact(actor_id, patient_id, fact_id)
         fact = self._fact(fact_id=fact_id, patient_id=patient_id)
+        self._require_visible_target(fact=fact, request=request, access=access)
         replay = self._existing_decision(
             fact_id=fact_id, patient_id=patient_id, actor_id=actor_id, request=request
         )
@@ -321,7 +327,33 @@ class ClinicalReconciliationService:
             raise NotFoundError("Clinical fact", str(fact_id))
         return fact
 
-    def _matches(self, *, fact: dict[str, Any], candidate: dict[str, Any]) -> list[dict[str, Any]]:
+    def _require_visible_target(
+        self,
+        *,
+        fact: dict[str, Any],
+        request: ReconciliationDecisionRequest,
+        access: PatientAccess,
+    ) -> None:
+        """A decision may not point at a sensitive condition another team recorded."""
+        if request.target_id is None or fact.get("fact_type") != "condition":
+            return
+        rows = cast(
+            list[dict[str, Any]],
+            self.db.table("conditions")
+            .select("*")
+            .eq("id", str(request.target_id))
+            .eq("patient_id", str(fact["patient_id"]))
+            .limit(1)
+            .execute()
+            .data
+            or [],
+        )
+        if rows and not access.can_see_condition(rows[0]):
+            raise NotFoundError("Condition", str(request.target_id))
+
+    def _matches(
+        self, *, fact: dict[str, Any], candidate: dict[str, Any], access: PatientAccess
+    ) -> list[dict[str, Any]]:
         fact_type = str(fact["fact_type"])
         if not self._is_projectable(fact):
             return []
@@ -331,8 +363,13 @@ class ClinicalReconciliationService:
             list[dict[str, Any]],
             self.db.table(table_name).select("*").eq("patient_id", patient_id).execute().data or [],
         )
+        if fact_type == "condition":
+            # Shared conditions only; a sensitive one recorded by another team is not even a match.
+            rows = access.split_conditions(rows)[0]
 
         prior = self._prior_external_match(fact=fact, table_name=table_name)
+        if prior and fact_type == "condition" and not access.can_see_condition(prior):
+            prior = None
         if prior:
             return [
                 {

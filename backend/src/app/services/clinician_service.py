@@ -21,6 +21,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 from uuid import UUID
 
+from postgrest.exceptions import APIError
 from supabase import Client
 
 from app.core import authorization_reasons as reasons
@@ -38,6 +39,9 @@ from app.models.clinic_membership import ClinicMembership
 from app.models.dashboard import DashboardSortBy, DashboardSortOrder, RiskLevel
 from app.models.enums import ADRStatus, MessageChannel, NotificationType
 from app.pharmacovigilance import PATIENT_ANSWERABLE_NARANJO_QUESTIONS, NaranjoQuestion
+from app.services.acting_care_team import acting_care_team
+from app.services.care_plan_activity_scope import ActivityScope, plan_owner_by_target, visible_to
+from app.services.care_team_access import CareTeamAccessService, ClinicianAccess, PatientAccess
 from app.services.clinic_membership_service import ClinicMembershipService
 from app.services.clinician_document_workflow_service import ClinicianDocumentWorkflowService
 from app.services.notification_service import NotificationService
@@ -58,6 +62,7 @@ class ClinicianService:
         self.clinician_repo = ClinicianRepository(self)
         self.care_team_repo = CareTeamRepository(self)
         self.memberships = ClinicMembershipService(self)
+        self.care_access = CareTeamAccessService(db)
         self.document_workflows = ClinicianDocumentWorkflowService(
             db=db,
             care_team_repo=self.care_team_repo,
@@ -525,13 +530,19 @@ class ClinicianService:
         risk_service = RiskScoreService(self.db)
         scope = await self.memberships.link_scope(clinician_id, clinic_id)
         patient_ids = [UUID(pid) for pid in scope.patient_ids]
+        links = await asyncio.to_thread(self.care_access.for_clinician, clinician_id)
         pending_adr_reviews, medwatch_count = await asyncio.gather(
-            self._get_pending_adr_review_count(patient_ids),
-            self._get_pending_medwatch_count(patient_ids),
+            self._get_pending_adr_review_count(patient_ids, links),
+            self._get_pending_medwatch_count(patient_ids, links),
         )
 
+        # Each patient's score is computed for this clinician: another team's owned data
+        # (their plan activities) does not move it.
         risk_results = await asyncio.gather(
-            *(risk_service.get_patient_risk(pid) for pid in patient_ids),
+            *(
+                risk_service.get_patient_risk(pid, access=links.for_patient(pid))
+                for pid in patient_ids
+            ),
             return_exceptions=True,
         )
 
@@ -603,7 +614,7 @@ class ClinicianService:
         "id, patient_id, symptom_report_id, suspect_medication_id, "
         "suspect_medication_name, naranjo_score, causality, naranjo_answers, "
         "naranjo_assessment, evidence, status, last_review_action, review_note, "
-        "requested_information, reviewed_by, reviewed_at, created_at, "
+        "requested_information, reviewed_by, reviewed_by_care_team_id, reviewed_at, created_at, "
         "patients(first_name, last_name), "
         "symptom_reports(symptom, severity, onset, created_at)"
     )
@@ -640,7 +651,9 @@ class ClinicianService:
             query.order("created_at", desc=True).limit(max(1, min(limit, 200)))
         )
 
-        rows = cast(list[dict[str, Any]], result.data or [])
+        links = await asyncio.to_thread(self.care_access.for_clinician, clinician_id)
+        # A pending assessment is every team's safety item; a reviewed one is its team's.
+        rows = links.keep(cast(list[dict[str, Any]], result.data or []), "adr")
         latest_requests = await self._latest_information_requests(rows)
         items = [
             scope.annotate(
@@ -663,10 +676,13 @@ class ClinicianService:
         )
         rows = cast(list[dict[str, Any]], result.data or [])
         if rows:
-            assignment = await self.care_team_repo.find_active_assignment(
-                str(clinician_id), str(rows[0]["patient_id"])
+            access = await asyncio.to_thread(
+                self.care_access.for_patient,
+                clinician_id,
+                rows[0]["patient_id"],
+                require=False,
             )
-            if not assignment:
+            if not access.can_see_adr(rows[0]):
                 rows = []
         if not rows:
             raise NotFoundError("ADR assessment", str(assessment_id))
@@ -699,7 +715,9 @@ class ClinicianService:
         """Apply an atomic, assignment-scoped clinician action to an ADR draft."""
         assessment_result = await self._execute(
             self.db.table("adr_assessments")
-            .select("id, patient_id, status, naranjo_assessment")
+            .select(
+                "id, patient_id, status, naranjo_assessment, reviewed_by, reviewed_by_care_team_id"
+            )
             .eq("id", str(assessment_id))
             .single()
         )
@@ -709,6 +727,11 @@ class ClinicianService:
 
         patient_id = UUID(str(assessment["patient_id"]))
         await self._assert_patient_assignment(clinician_id, patient_id)
+        access = await self._patient_access(clinician_id, patient_id)
+        if not access.can_see_adr(assessment):
+            # Another team already acted on it: the same answer as an unknown id.
+            raise NotFoundError("ADR assessment", str(assessment_id))
+        team_id = acting_care_team(access, decision.care_team_id)
         if assessment.get("status") != ADRStatus.DRAFT.value:
             raise ValidationError("ADR assessment review has already been completed")
 
@@ -735,6 +758,8 @@ class ClinicianService:
                     "p_requested_information": [
                         item.value for item in decision.requested_information
                     ],
+                    # The database writes the owner in the same transaction as the review.
+                    "p_care_team_id": team_id,
                 },
             )
         )
@@ -783,7 +808,8 @@ class ClinicianService:
         from app.services.risk_score_service import RiskScoreService
 
         risk_service = RiskScoreService(self.db)
-        risk = await risk_service.get_patient_risk(patient_id)
+        access = await self._patient_access(clinician_id, patient_id)
+        risk = await risk_service.get_patient_risk(patient_id, access=access)
         return risk.model_dump()
 
     async def get_patient_timeline(self, clinician_id: UUID, patient_id: UUID) -> Any:
@@ -800,6 +826,8 @@ class ClinicianService:
         Security: verifies care_team assignment before fetching.
         """
         await self._assert_patient_assignment(clinician_id, patient_id)
+        access = await self._patient_access(clinician_id, patient_id)
+        activities = ActivityScope(self.db, patient_id, access)
 
         pid = str(patient_id)
 
@@ -815,21 +843,18 @@ class ClinicianService:
         )
         medications = cast(list[dict[str, Any]], meds.data or [])
 
-        care_team_rows = await self._execute(
-            self.db.table("care_teams")
-            .select("id, clinicians(first_name, last_name)")
-            .eq("patient_id", pid)
-            .eq("status", "active")
-        )
-        care_teams = cast(list[dict[str, Any]], care_team_rows.data or [])
+        # The shared clinical summary: every team's active medications and allergies, the
+        # patient's other care teams, and whether some conditions are withheld from this
+        # clinician. One database function answers it so no reader shows a partial list.
+        summary = await self._shared_summary(clinician_id, patient_id)
+
+        care_teams = cast(list[dict[str, Any]], summary.get("care_teams") or [])
         provider_by_team: dict[str, str] = {}
         for team in care_teams:
-            clinician = cast(dict[str, Any], team.get("clinicians") or {})
-            first = str(clinician.get("first_name", "")).strip()
-            last = str(clinician.get("last_name", "")).strip()
-            name = " ".join(part for part in [first, last] if part).strip()
-            if team.get("id") and name:
-                provider_by_team[str(team["id"])] = name
+            name = str(team.get("clinician_name") or "").strip()
+            team_key = team.get("care_team_id") or team.get("id")
+            if team_key and name:
+                provider_by_team[str(team_key)] = name
 
         for med in medications:
             # Clinician controls are English: show approved English wording, keeping the
@@ -845,16 +870,21 @@ class ClinicianService:
         for med in medications:
             med["reminder_schedule"] = reminder_map.get(("medication", str(med["id"])))
 
-        adherence_series = await self._build_adherence_series(patient_id)
+        adherence_series = await self._build_adherence_series(patient_id, activities)
         barriers_res = await self._execute(
             self.db.table("adherence_logs")
             .select("target_type, target_id, barrier_code, notes, logged_at")
             .eq("patient_id", pid)
             .not_.is_("barrier_code", "null")
             .order("logged_at", desc=True)
-            .limit(20)
+            .limit(100)
         )
-        adherence_barriers = cast(list[dict[str, Any]], barriers_res.data or [])
+        # Barriers about another team's plan activities are that team's to read.
+        adherence_barriers = (
+            await asyncio.to_thread(
+                activities.keep, cast(list[dict[str, Any]], barriers_res.data or [])
+            )
+        )[:20]
 
         symptoms = await self._execute(
             self.db.table("symptom_reports")
@@ -877,23 +907,34 @@ class ClinicianService:
         chat_messages = cast(list[dict[str, Any]], chats.data or [])
 
         conds = await self._execute(self.db.table("conditions").select("*").eq("patient_id", pid))
-        conditions = cast(list[dict[str, Any]], conds.data or [])
+        # A condition the patient marked sensitive reaches only the team that recorded it;
+        # everyone else gets the explicit marker, never a quietly shorter list.
+        conditions, some_conditions_private = access.split_conditions(
+            cast(list[dict[str, Any]], conds.data or [])
+        )
 
         allergies_res = await self._execute(
             self.db.table("allergies").select("*").eq("patient_id", pid)
         )
         allergies = cast(list[dict[str, Any]], allergies_res.data or [])
 
-        documents = await self.document_workflows.fetch_patient_documents(patient_id)
+        documents = await self.document_workflows.fetch_patient_documents(
+            patient_id, clinician_id=clinician_id
+        )
 
         soap_res = await self._execute(
             self.db.table("soap_notes")
             .select("*")
             .eq("patient_id", pid)
             .order("generated_at", desc=True)
-            .limit(1)
+            .limit(50)
         )
-        soap_rows = cast(list[dict[str, Any]], soap_res.data or [])
+        # A note is its team's; the latest one this clinician may read is shown.
+        soap_rows = [
+            row
+            for row in cast(list[dict[str, Any]], soap_res.data or [])
+            if access.can_see_soap_note(row)
+        ]
         latest_soap_note = soap_rows[0] if soap_rows else None
 
         obligations_res = await self._execute(
@@ -906,7 +947,17 @@ class ClinicianService:
             .eq("is_active", True)
             .order("created_at", desc=True)
         )
-        obligations = cast(list[dict[str, Any]], obligations_res.data or [])
+        # An activity a plan created is that plan's team's; unowned ones stay shared.
+        all_obligations = cast(list[dict[str, Any]], obligations_res.data or [])
+        owners = await asyncio.to_thread(
+            plan_owner_by_target,
+            self.db,
+            patient_id,
+            [("obligation", row["id"]) for row in all_obligations],
+        )
+        obligations = [
+            row for row in all_obligations if visible_to(access, owners.get(str(row["id"])))
+        ]
         for obligation in obligations:
             text = patient_text("obligation", obligation, CLINICIAN_LOCALE)
             obligation["description"] = text["name"]
@@ -916,13 +967,15 @@ class ClinicianService:
                 ("obligation", str(obligation["id"]))
             )
 
-        obligation_completion_rate = await self._compute_obligation_completion_rate(patient_id)
+        obligation_completion_rate = await self._compute_obligation_completion_rate(
+            patient_id, activities
+        )
 
         from app.services.risk_score_service import RiskScoreService
 
         risk_service = RiskScoreService(self.db)
         try:
-            risk_data = await risk_service.get_patient_risk(patient_id)
+            risk_data = await risk_service.get_patient_risk(patient_id, access=access)
             risk_level = risk_data.risk_level
             adherence_score = risk_data.adherence_score
         except Exception as exc:
@@ -951,6 +1004,8 @@ class ClinicianService:
             "symptom_reports": symptom_reports,
             "chat_messages": list(reversed(chat_messages)),
             "conditions": conditions,
+            "some_conditions_private": some_conditions_private,
+            "care_teams": care_teams,
             "allergies": allergies,
             "documents": documents,
             "latest_soap_note": latest_soap_note,
@@ -1101,41 +1156,77 @@ class ClinicianService:
         if not assignment_rows:
             await self._raise_unassigned(clinician_id, patient_id)
 
-    async def _get_pending_adr_review_count(self, patient_ids: list[UUID]) -> int:
-        """Count draft ADR assessments across all assigned patients."""
+    async def _patient_access(self, clinician_id: UUID, patient_id: UUID) -> PatientAccess:
+        """The clinician's active links to the patient; none is the care-team denial."""
+        access = await asyncio.to_thread(
+            self.care_access.for_patient, clinician_id, patient_id, require=False
+        )
+        if not access:
+            await self._raise_unassigned(clinician_id, patient_id)
+        return access
+
+    async def _shared_summary(self, clinician_id: UUID, patient_id: UUID) -> dict[str, Any]:
+        """The database's shared clinical summary for this clinician and patient."""
+        try:
+            result = await self._execute(
+                self.db.rpc(
+                    "shared_clinical_summary",
+                    {"p_clinician_id": str(clinician_id), "p_patient_id": str(patient_id)},
+                )
+            )
+        except APIError as exc:
+            if exc.code == "42501":
+                await self._raise_unassigned(clinician_id, patient_id)
+            raise
+        return cast(dict[str, Any], result.data if isinstance(result.data, dict) else {})
+
+    async def _get_pending_adr_review_count(
+        self, patient_ids: list[UUID], links: ClinicianAccess
+    ) -> int:
+        """Count draft ADR assessments this clinician may see across their patients.
+
+        A pending assessment is a safety item for every team. A draft one that a team already
+        acted on (an information request) belongs to that team only.
+        """
         if not patient_ids:
             return 0
         result = await self._execute(
             self.db.table("adr_assessments")
-            .select("id", count="exact")  # type: ignore[arg-type]
+            .select("id, patient_id, reviewed_by, reviewed_by_care_team_id")
             .in_("patient_id", [str(pid) for pid in patient_ids])
             .in_("status", [ADRStatus.DRAFT.value])
         )
-        return result.count or 0
+        return len(links.keep(cast(list[dict[str, Any]], result.data or []), "adr"))
 
-    async def _get_pending_medwatch_count(self, patient_ids: list[UUID]) -> int:
-        """Count unapproved, non-discarded MedWatch drafts across all assigned patients."""
+    async def _get_pending_medwatch_count(
+        self, patient_ids: list[UUID], links: ClinicianAccess
+    ) -> int:
+        """Count this clinician's unapproved, non-discarded MedWatch drafts."""
         if not patient_ids:
             return 0
         result = await self._execute(
             self.db.table("medwatch_drafts")
-            .select("id", count="exact")  # type: ignore[arg-type]
+            .select("id, patient_id, care_team_id")
             .in_("patient_id", [str(pid) for pid in patient_ids])
             .in_("status", ["draft"])
             .is_("discarded_at", "null")
         )
-        return result.count or 0
+        return len(links.keep(cast(list[dict[str, Any]], result.data or []), "medwatch_draft"))
 
-    async def _build_adherence_series(self, patient_id: UUID) -> list[dict[str, Any]]:
+    async def _build_adherence_series(
+        self, patient_id: UUID, activities: ActivityScope
+    ) -> list[dict[str, Any]]:
         """Build a 30-day daily adherence series for Recharts LineChart."""
         cutoff = (datetime.now(UTC) - timedelta(days=30)).isoformat()
         logs = await self._execute(
             self.db.table("adherence_logs")
-            .select("status, target_type, logged_at")
+            .select("status, target_type, target_id, logged_at")
             .eq("patient_id", str(patient_id))
             .gte("logged_at", cutoff)
         )
-        log_data = cast(list[dict[str, Any]], logs.data or [])
+        log_data = await asyncio.to_thread(
+            activities.keep, cast(list[dict[str, Any]], logs.data or [])
+        )
 
         by_date: dict[str, dict[str, int]] = {}
         for log in log_data:
@@ -1168,17 +1259,19 @@ class ClinicianService:
 
         return series
 
-    async def _compute_obligation_completion_rate(self, patient_id: UUID) -> float:
+    async def _compute_obligation_completion_rate(
+        self, patient_id: UUID, activities: ActivityScope
+    ) -> float:
         """Return 30-day completion rate for obligation adherence logs."""
         cutoff = (datetime.now(UTC) - timedelta(days=30)).isoformat()
         logs = await self._execute(
             self.db.table("adherence_logs")
-            .select("status")
+            .select("status, target_type, target_id")
             .eq("patient_id", str(patient_id))
             .eq("target_type", "obligation")
             .gte("logged_at", cutoff)
         )
-        rows = cast(list[dict[str, Any]], logs.data or [])
+        rows = await asyncio.to_thread(activities.keep, cast(list[dict[str, Any]], logs.data or []))
         if not rows:
             return 0.0
 

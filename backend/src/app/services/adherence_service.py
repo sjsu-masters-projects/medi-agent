@@ -73,10 +73,68 @@ class AdherenceService:
             "notes": data.get("notes"),
             "barrier_code": data.get("barrier_code"),
         }
+        member_ids = await self._combined_members(patient_id, str(target_type), str(target_id))
+        if len(member_ids) > 1:
+            return self._log_for_group(row, member_ids, str(target_id))
         result = self.db.table("adherence_logs").insert(row).execute()
         if not result.data:
             raise ExternalServiceError("Supabase", "Failed to log adherence")
         return result.data[0]
+
+    async def _combined_members(
+        self, patient_id: UUID, target_type: str, target_id: str
+    ) -> list[str]:
+        """Every activity sharing one Today entry with this one (PLAN-002); itself if none.
+
+        A failed lookup never blocks a check-off: it logs for the requested activity only.
+        """
+        from app.services.feed_service import FeedService
+
+        try:
+            timezone = await self._get_patient_timezone(patient_id)
+            today = datetime.now(ZoneInfo(timezone)).date()
+            return await FeedService(self.db).combined_member_ids(
+                patient_id, target_type, target_id, today
+            )
+        except Exception:
+            logger.warning("Combined-activity lookup failed; logging the single activity")
+            return [target_id]
+
+    def _log_for_group(
+        self, row: dict[str, Any], member_ids: list[str], requested_id: str
+    ) -> dict[str, Any]:
+        """One row per underlying activity, in one insert; a retry adds nothing twice.
+
+        Each owning team's report reads its own activity's row, so the same status, time,
+        barrier and note are written for every member. Members that already hold the same
+        occurrence (same status and scheduled time) are skipped, so a retry is harmless.
+        """
+        existing: dict[str, dict[str, Any]] = {}
+        scheduled = row.get("scheduled_time")
+        if scheduled is not None:
+            found = cast(
+                list[dict[str, Any]],
+                self.db.table("adherence_logs")
+                .select("*")
+                .eq("patient_id", row["patient_id"])
+                .eq("target_type", row["target_type"])
+                .in_("target_id", member_ids)
+                .eq("status", row["status"])
+                .eq("scheduled_time", scheduled)
+                .execute()
+                .data
+                or [],
+            )
+            existing = {str(log["target_id"]): log for log in found}
+        missing = [{**row, "target_id": member} for member in member_ids if member not in existing]
+        created: list[dict[str, Any]] = []
+        if missing:
+            result = self.db.table("adherence_logs").insert(missing).execute()
+            if not result.data:
+                raise ExternalServiceError("Supabase", "Failed to log adherence")
+            created = cast(list[dict[str, Any]], result.data)
+        by_target = {**existing, **{str(log["target_id"]): log for log in created}}
+        return by_target.get(requested_id) or created[0]
 
     async def get_stats(self, patient_id: UUID, period_days: int = 30) -> Any:
         """Calculate adherence statistics over a time window.

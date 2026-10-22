@@ -96,6 +96,34 @@ class Settings(BaseSettings):
     # Female Mexican-Spanish voice, matching the English one, so Nora keeps one persona.
     deepgram_tts_model_es: str = "aura-2-estrella-es"
     voice_max_audio_bytes: int = 5 * 1024 * 1024
+    # Live voice mode (VOICE-001): speech is streamed to Deepgram through our websocket, the
+    # key never reaches the browser, and the transcript is TEXT that takes the normal chat
+    # turn path. Every value is a bound, not a target.
+    voice_live_enabled: bool = True
+    # nova-3 "multi" transcribes English and Spanish (and mixes) without pinning a language.
+    deepgram_live_language: str = "multi"
+    # Silence after speech that ends an utterance (Deepgram `endpointing`), in ms.
+    deepgram_endpointing_ms: int = Field(default=500, ge=10, le=5000)
+    # Word-gap fallback end of speech (Deepgram `utterance_end_ms`); Deepgram's minimum is 1000.
+    deepgram_utterance_end_ms: int = Field(default=1200, ge=1000, le=5000)
+    voice_live_sample_rate: int = 16000
+    voice_live_max_utterance_seconds: float = Field(default=45.0, gt=0, le=300)
+    voice_live_max_utterance_chars: int = Field(default=2000, ge=50, le=8000)
+    voice_live_max_session_seconds: float = Field(default=900.0, gt=0, le=3600)
+    voice_live_idle_timeout_seconds: float = Field(default=60.0, gt=0, le=600)
+    # Streaming sessions at once in this process (a bulkhead on provider cost and sockets).
+    voice_live_max_sessions: int = Field(default=20, ge=1, le=500)
+    voice_live_audio_queue_frames: int = Field(default=64, ge=4, le=512)
+    voice_live_max_frame_bytes: int = Field(default=32 * 1024, ge=512, le=256 * 1024)
+    voice_live_connect_timeout_seconds: float = Field(default=8.0, gt=0, le=30)
+    voice_live_send_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+    # Streaming text to speech (Aura-2 over the Speak websocket, linear16 PCM).
+    voice_tts_stream_enabled: bool = True
+    voice_tts_sample_rate: int = 24000
+    voice_tts_max_chars_per_reply: int = Field(default=2500, ge=100, le=10000)
+    voice_tts_sentence_max_chars: int = Field(default=240, ge=40, le=1000)
+    voice_tts_connect_timeout_seconds: float = Field(default=6.0, gt=0, le=30)
+    voice_tts_idle_timeout_seconds: float = Field(default=20.0, gt=0, le=120)
 
     # Resend (email)
     resend_api_key: str = ""

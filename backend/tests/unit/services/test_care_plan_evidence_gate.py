@@ -8,6 +8,7 @@ import pytest
 from app.core.exceptions import ValidationError
 from app.services.care_plan_evidence_gate import eligible_fact_ids
 from app.services.care_plan_service import CarePlanService
+from tests.unit.services.care_plan_ownership_stub import stub_ownership
 from tests.unit.services.care_plan_wording import verified_wording
 
 
@@ -102,9 +103,9 @@ def test_stale_draft_preflight_blocks_publication_before_rpc(status):
     }
     db.table.side_effect = chains.__getitem__
     service = CarePlanService(db)
-    service._require_assignment = MagicMock()
+    stub_ownership(service)
     service._draft = MagicMock()
-    service.generation_for_clinician = MagicMock(return_value={"status": "completed"})
+    service._latest_generation = MagicMock(return_value={"status": "completed"})
     service._patient_locale = MagicMock(return_value="en-US")
     service._active_medications = MagicMock(return_value=[])
     service._items = MagicMock(

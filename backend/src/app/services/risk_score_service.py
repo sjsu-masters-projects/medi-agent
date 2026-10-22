@@ -25,6 +25,8 @@ from supabase import Client
 
 from app.models.dashboard import PatientRiskData, RiskExplanation, RiskLevel, RiskSourceFreshness
 from app.models.enums import AdherenceStatus, ADRStatus
+from app.services.care_plan_activity_scope import ActivityScope
+from app.services.care_team_access import PatientAccess
 
 logger = logging.getLogger(__name__)
 
@@ -133,8 +135,15 @@ class RiskScoreService:
             factors=factors,
         )
 
-    async def get_patient_risk(self, patient_id: UUID) -> PatientRiskData:
+    async def get_patient_risk(
+        self, patient_id: UUID, *, access: PatientAccess | None = None
+    ) -> PatientRiskData:
         """Fetch signals from DB and compute risk level for a single patient.
+
+        With ``access`` the score is computed for that clinician: adherence responses about an
+        activity of another care team's plan are left out. Medications, patient-confirmed
+        symptoms and pending ADR candidates are shared with every team and always count.
+        Without it (the patient-facing and system callers) nothing is filtered.
 
         Makes three focused DB queries:
         1. Patient name / basic profile
@@ -155,10 +164,11 @@ class RiskScoreService:
         last_name = patient.get("last_name", "")
 
         # ── 2. Adherence score ─────────────────────────
-        adherence_score = await self._fetch_adherence_score(patient_id)
+        scope = ActivityScope(self.db, patient_id, access) if access is not None else None
+        adherence_score = await self._fetch_adherence_score(patient_id, scope)
 
         # ── 3. Open ADR count ──────────────────────────
-        open_adr_count = await self._fetch_open_adr_count(patient_id)
+        open_adr_count = await self._fetch_open_adr_count(patient_id, access)
 
         # ── 4. Recent symptom severity ─────────────────
         recent_symptom_severity = await self._fetch_recent_symptom_severity(patient_id)
@@ -172,9 +182,9 @@ class RiskScoreService:
         )
 
         # ── 7. Build last activity string ──────────────
-        last_activity = await self._fetch_last_activity(patient_id)
+        last_activity = await self._fetch_last_activity(patient_id, scope)
         explanation = self.explain_risk(adherence_score, open_adr_count, recent_symptom_severity)
-        explanation.source_freshness = await self._fetch_source_freshness(patient_id)
+        explanation.source_freshness = await self._fetch_source_freshness(patient_id, scope)
 
         return PatientRiskData(
             patient_id=patient_id,
@@ -191,7 +201,9 @@ class RiskScoreService:
 
     # ── Private helpers ──────────────────────────────────────────────────────
 
-    async def _fetch_source_freshness(self, patient_id: UUID) -> list[RiskSourceFreshness]:
+    async def _fetch_source_freshness(
+        self, patient_id: UUID, scope: ActivityScope | None = None
+    ) -> list[RiskSourceFreshness]:
         """Probe actual source dates separately; these reads are not an atomic snapshot."""
         sources = (
             ("adherence_logs", "logged_at", 30),
@@ -201,17 +213,26 @@ class RiskScoreService:
         )
         return list(
             await asyncio.gather(
-                *(self._fetch_latest_source(patient_id, source) for source in sources)
+                *(self._fetch_latest_source(patient_id, source, scope) for source in sources)
             )
         )
 
     async def _fetch_latest_source(
-        self, patient_id: UUID, source: tuple[str, str, int | None]
+        self,
+        patient_id: UUID,
+        source: tuple[str, str, int | None],
+        scope: ActivityScope | None = None,
     ) -> RiskSourceFreshness:
         table, field, days = source
         freshness = RiskSourceFreshness(source=table, timestamp_field=field)
         try:
-            query = self.db.table(table).select(field).eq("patient_id", str(patient_id))
+            scoped = scope is not None and table in {"adherence_logs", "adr_assessments"}
+            columns = field
+            if scoped and table == "adherence_logs":
+                columns = f"{field}, target_type, target_id"
+            elif scoped:
+                columns = f"{field}, reviewed_by, reviewed_by_care_team_id"
+            query = self.db.table(table).select(columns).eq("patient_id", str(patient_id))
             if days:
                 query = query.gte(field, (datetime.now(UTC) - timedelta(days=days)).isoformat())
             if table == "symptom_reports":
@@ -223,10 +244,15 @@ class RiskScoreService:
             elif table == "medications":
                 query = query.eq("is_active", True)
             result = await self._execute(
-                query.not_.is_(field, "null").order(field, desc=True).limit(1)
+                query.not_.is_(field, "null").order(field, desc=True).limit(50 if scoped else 1)
             )
             if not isinstance(result.data, list):
                 raise ValueError("Expected source rows")
+            if scoped and scope is not None:
+                if table == "adherence_logs":
+                    result.data = (await asyncio.to_thread(scope.keep, result.data))[:1]
+                else:
+                    result.data = [r for r in result.data if scope.access.can_see_adr(r)][:1]
             if result.data:
                 value = result.data[0].get(field)
                 if value is None:
@@ -240,7 +266,9 @@ class RiskScoreService:
             freshness.status = "unavailable"
         return freshness
 
-    async def _fetch_adherence_score(self, patient_id: UUID) -> float | None:
+    async def _fetch_adherence_score(
+        self, patient_id: UUID, scope: ActivityScope | None = None
+    ) -> float | None:
         """Return 30-day recorded-response completion, or None if no logs.
 
         This is not completion against all expected doses. Medication `taken` and
@@ -249,11 +277,13 @@ class RiskScoreService:
         cutoff = (datetime.now(UTC) - timedelta(days=30)).isoformat()
         logs = await self._execute(
             self.db.table("adherence_logs")
-            .select("status")
+            .select("status, target_type, target_id" if scope else "status")
             .eq("patient_id", str(patient_id))
             .gte("logged_at", cutoff)
         )
         log_data = cast(list[dict[str, Any]], logs.data or [])
+        if scope is not None:
+            log_data = await asyncio.to_thread(scope.keep, log_data)
         if not log_data:
             return None
 
@@ -265,8 +295,26 @@ class RiskScoreService:
         total = len(log_data)
         return completed / total if total > 0 else None
 
-    async def _fetch_open_adr_count(self, patient_id: UUID) -> int:
-        """Count ADR assessments that need clinician review."""
+    async def _fetch_open_adr_count(
+        self, patient_id: UUID, access: PatientAccess | None = None
+    ) -> int:
+        """Count ADR assessments that need clinician review.
+
+        For a clinician, a pending assessment counts for every team; a draft that another team
+        already acted on (an information request) does not.
+        """
+        if access is not None:
+            scoped = await self._execute(
+                self.db.table("adr_assessments")
+                .select("id, reviewed_by, reviewed_by_care_team_id")
+                .eq("patient_id", str(patient_id))
+                .in_("status", [ADRStatus.DRAFT.value])
+            )
+            return sum(
+                1
+                for row in cast(list[dict[str, Any]], scoped.data or [])
+                if access.can_see_adr(row)
+            )
         result = await self._execute(
             self.db.table("adr_assessments")
             .select("id", count="exact")  # type: ignore[arg-type]
@@ -302,15 +350,17 @@ class RiskScoreService:
         )
         return result.count or 0
 
-    async def _fetch_last_activity(self, patient_id: UUID) -> str:
+    async def _fetch_last_activity(
+        self, patient_id: UUID, scope: ActivityScope | None = None
+    ) -> str:
         """Return a human-readable last activity string."""
         # Check most recent adherence log
         logs_task = self._execute(
             self.db.table("adherence_logs")
-            .select("logged_at, status, target_type")
+            .select("logged_at, status, target_type, target_id")
             .eq("patient_id", str(patient_id))
             .order("logged_at", desc=True)
-            .limit(1)
+            .limit(50 if scope else 1)
         )
         symptoms_task = self._execute(
             self.db.table("symptom_reports")
@@ -322,6 +372,8 @@ class RiskScoreService:
         )
         logs, symptoms = await asyncio.gather(logs_task, symptoms_task)
         log_rows = cast(list[dict[str, Any]], logs.data or [])
+        if scope is not None:
+            log_rows = (await asyncio.to_thread(scope.keep, log_rows))[:1]
         symptom_rows = cast(list[dict[str, Any]], symptoms.data or [])
 
         latest_log_time: datetime | None = None

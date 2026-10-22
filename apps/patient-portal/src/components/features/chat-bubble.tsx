@@ -16,11 +16,15 @@ interface ChatBubbleProps {
     locale?: Locale;
     isStreaming?: boolean;
     onPlayAudio?: () => void;
+    /** A user message not yet confirmed by the server, or rejected (text kept). */
+    delivery?: "pending" | "failed";
+    onRetrySend?: () => void;
+    onRemoveUnsent?: () => void;
 }
 
 export function ChatBubble({
     attachments, clinicianLabel = "Care team messages", content, isStreaming = false,
-    language, locale = DEFAULT_LOCALE, onPlayAudio, role, timestamp,
+    delivery, language, locale = DEFAULT_LOCALE, onPlayAudio, onRemoveUnsent, onRetrySend, role, timestamp,
 }: ChatBubbleProps) {
     const isUser = role === ChatRole.USER;
     const isClinician = role === ChatRole.CLINICIAN;
@@ -31,13 +35,19 @@ export function ChatBubble({
     const timeNode = validTime ? <time dateTime={time.toISOString()}>{chatDisplayTime(time, locale)}</time> : null;
 
     if (isUser) {
-        return <div className="ma-bubble flex flex-col items-end gap-1">
-            <div className="max-w-[82%] rounded-[20px_20px_6px_20px] bg-brand px-3.5 py-[11px] text-[15px] leading-[1.45] text-white">
+        return <div className="ma-bubble flex flex-col items-end gap-1" data-delivery={delivery}>
+            <div className={`max-w-[82%] rounded-[20px_20px_6px_20px] px-3.5 py-[11px] text-[15px] leading-[1.45] text-white ${delivery === "pending" ? "bg-brand/70" : delivery === "failed" ? "bg-brand/60 ring-2 ring-danger-ink" : "bg-brand"}`}>
                 <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]" lang={language}>{content}</p>
             </div>
-            <p className="max-w-[90%] px-1 text-right font-mono text-[11px] text-muted first-letter:uppercase">
+            {delivery === "pending" && <p role="status" className="px-1 text-right text-[11px] text-muted">{copy.sending}</p>}
+            {delivery === "failed" && <div role="alert" className="flex flex-wrap items-center justify-end gap-2 px-1 text-xs text-danger-ink">
+                <span className="font-semibold">{copy.notSent}</span>
+                <button type="button" className="ma-press min-h-11 rounded-xl bg-brand-tint px-3 font-semibold text-brand-ink" onClick={onRetrySend}>{copy.retrySend}</button>
+                <button type="button" className="ma-press min-h-11 rounded-xl px-3 font-medium text-ink-2" onClick={onRemoveUnsent}>{copy.removeUnsent}</button>
+            </div>}
+            {!delivery && <p className="max-w-[90%] px-1 text-right font-mono text-[11px] text-muted first-letter:uppercase">
                 {timeNode ? <>{timeNode} · </> : null}<span>{languageLabel}</span>
-            </p>
+            </p>}
         </div>;
     }
 

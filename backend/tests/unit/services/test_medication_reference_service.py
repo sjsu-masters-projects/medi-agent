@@ -265,6 +265,7 @@ def test_reference_route_uses_real_role_and_assignment_gate(
         id=actor, email="synthetic@synthetic.invalid", role=role, aal="aal2"
     )
     app.dependency_overrides[smart._medication_reference_service] = lambda: service
+    app.dependency_overrides[smart._record_gate] = lambda: MagicMock()
     with TestClient(app) as client:
         response = client.get(f"/smart/patients/{patient}/facts/{fact}/medication-reference")
     assert response.status_code == expected

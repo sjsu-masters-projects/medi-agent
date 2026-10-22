@@ -25,12 +25,16 @@ from app.models.generation import (
     GenerationResponse,
     GenerationTelemetry,
 )
+from app.services.care_team_access import PatientAccess
 from app.services.soap_note_prompts import build_soap_prompt
 from app.services.soap_note_service import (
     SoapNoteService,
     calculate_adherence_stats,
     calculate_current_streak_days,
 )
+
+TEAM = str(uuid4())
+ACCESS = PatientAccess(str(uuid4()), str(uuid4()), frozenset({TEAM}))
 
 NOTE = SoapNote(
     subjective="Patient reports headache",
@@ -110,6 +114,7 @@ def mock_db():
         "conditions": [{"name": "Type 2 Diabetes", "icd10_code": "E11"}],
         "allergies": [{"allergen": "Penicillin", "severity": "severe"}],
         "adr_assessments": [],
+        "care_teams": [{"id": TEAM}],
     }
 
     db.table.side_effect = lambda name: query_for(rows.get(name))
@@ -192,7 +197,7 @@ class TestAdherenceStats:
 class TestGather:
     @pytest.mark.asyncio
     async def test_the_record_is_read_into_prompt_context(self, mock_db, patient_id) -> None:
-        context = await SoapNoteService(mock_db).gather(str(patient_id), 30)
+        context = await SoapNoteService(mock_db).gather(str(patient_id), 30, access=ACCESS)
 
         assert context["patient_info"]["first_name"] == "Jane"
         assert context["medications"][0]["name"] == "Metformin"
@@ -203,7 +208,7 @@ class TestGather:
     async def test_adherence_is_summarised_rather_than_passed_through(
         self, mock_db, patient_id
     ) -> None:
-        context = await SoapNoteService(mock_db).gather(str(patient_id), 30)
+        context = await SoapNoteService(mock_db).gather(str(patient_id), 30, access=ACCESS)
 
         assert context["adherence_stats"]["overall_score"] == pytest.approx(2 / 3, rel=0.01)
 
@@ -217,7 +222,7 @@ class TestGather:
         query.execute.return_value = MagicMock(data=None)
         db.table.return_value = query
 
-        context = await SoapNoteService(db).gather(str(patient_id), 30)
+        context = await SoapNoteService(db).gather(str(patient_id), 30, access=ACCESS)
 
         assert context["medications"] == []
         assert context["conditions"] == []
@@ -402,7 +407,10 @@ class TestStore:
         db.table.return_value = query
 
         stored = await SoapNoteService(db).store(
-            patient_id=str(patient_id), clinician_id=str(clinician_id), note=NOTE
+            patient_id=str(patient_id),
+            clinician_id=str(clinician_id),
+            note=NOTE,
+            care_team_id=TEAM,
         )
 
         assert stored is not None
@@ -423,7 +431,10 @@ class TestStore:
         db.table.return_value = query
 
         stored = await SoapNoteService(db).store(
-            patient_id=str(patient_id), clinician_id=str(clinician_id), note=NOTE
+            patient_id=str(patient_id),
+            clinician_id=str(clinician_id),
+            note=NOTE,
+            care_team_id=TEAM,
         )
 
         assert stored is None

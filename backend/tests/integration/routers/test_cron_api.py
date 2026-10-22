@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -35,7 +35,7 @@ def override_cron_service(mock_cron_service):
 
 
 def _sample_response(job_name: str) -> dict[str, object]:
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
     return {
         "run_id": str(uuid4()),
         "job_name": job_name,

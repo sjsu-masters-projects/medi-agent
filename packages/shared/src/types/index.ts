@@ -5,6 +5,8 @@
  * sides aligned when changing models or API contracts.
  */
 
+import type { CareTeamFilterOption, PlanOwner } from "./care-team-plans";
+
 // ── Enums (match backend StrEnum values) ──────────
 
 export const Locale = { EN_US: "en-US", ES_MX: "es-MX" } as const;
@@ -462,6 +464,9 @@ export interface ClinicianPatientDocument {
     reviewedAt?: string;
     reviewNote?: string;
     reviewer?: DocumentReviewer | null;
+    /** PLAN-002: "unrouted" means the patient chose "Not sure"; a care team must claim it. */
+    routingState?: "routed" | "unrouted";
+    careTeamId?: string | null;
 }
 
 export interface DocumentReviewQueueItem {
@@ -485,6 +490,10 @@ export interface DocumentReviewQueueItem {
     createdAt: string;
     uploadedByRole: UploaderRole;
     reviewStatus: DocumentReviewStatus;
+    /** PLAN-002: an unrouted ("Not sure") upload cannot be approved or rejected until claimed. */
+    needsClaim?: boolean;
+    claimableCareTeamIds?: string[];
+    careTeamId?: string | null;
 }
 
 export interface AdherenceLog {
@@ -541,6 +550,12 @@ export interface FeedTask {
     /** Language of the name and description, when known. Approved plans match the
      * patient's language; an older single-language record may not. */
     contentLocale?: Locale;
+    /** PLAN-002: the care team that owns the activity. Absent on a single-owner feed from an older server. */
+    planOwner?: PlanOwner | null;
+    /** Every owner when identical activities of several plans are one combined entry. */
+    planOwners?: PlanOwner[];
+    /** The underlying activity ids of a combined entry (its own id first). */
+    combinedItemIds?: string[];
 }
 
 export interface FeedSummary {
@@ -556,6 +571,10 @@ export interface TodayFeedResponse {
     timezone: string;
     tasks: FeedTask[];
     summary: FeedSummary;
+    /** PLAN-002: one option per owning care team (and the shared "unowned" bucket). */
+    careTeamFilters?: CareTeamFilterOption[];
+    /** True when no care team is active and an activity has lost its owner. */
+    contactClinic?: boolean;
 }
 
 export interface SymptomReport {
@@ -751,3 +770,4 @@ export interface SymptomIntake {
     safety?: { response_text: string; safety_rule: string; rule_version: string };
     persistence_status?: "saved" | "uncertain";
 }
+export * from "./care-team-plans";

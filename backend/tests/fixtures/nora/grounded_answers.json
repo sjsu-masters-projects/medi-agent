@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "NORA-002 end-to-end checks for Nora on a synthetic patient whose active list includes metformin and whose records include a hydration instruction document. Synthetic only.",
+  "description": "NORA-002 end-to-end checks for Nora on a synthetic patient whose active list includes metformin and whose records include a hydration instruction document. Synthetic only. Cases nora-023 and nora-024 expect the demo patient's confirmed Oct 22 visit with Elena Park at Cedar Grove; they are scored by scripts/check_nora_answers.py against that record.",
   "cases": [
     {"id": "nora-001", "pair_id": "purpose", "locale": "en-US", "message": "What is metformin for?",
      "expect_sources": ["medlineplus"], "must_include_any": ["diabetes", "blood sugar", "glucose"]},
@@ -49,6 +49,12 @@
      "must_not_include": ["nothing to worry", "it's normal, don't worry"]},
     {"id": "nora-022", "pair_id": "mild-side-effect", "locale": "es-MX", "message": "La metformina me da malestar de estómago después del desayuno",
      "expect_urgency": ["urgent"], "must_include_any": ["equipo", "médic", "farmac"],
-     "must_not_include": ["no te preocupes, es normal"]}
+     "must_not_include": ["no te preocupes, es normal"]},
+    {"id": "nora-023", "pair_id": "appointments", "locale": "en-US", "message": "Do I have an appointment coming up?",
+     "must_include_any": ["Elena Park", "Cedar Grove", "October 22", "Oct 22"],
+     "must_not_include": ["no scheduled appointments", "don't have any appointments"]},
+    {"id": "nora-024", "pair_id": "appointments", "locale": "es-MX", "message": "¿Tengo alguna cita próxima?",
+     "must_include_any": ["Elena Park", "Cedar Grove", "22 de octubre"],
+     "must_not_include": ["no tienes citas", "no hay citas programadas"]}
   ]
 }

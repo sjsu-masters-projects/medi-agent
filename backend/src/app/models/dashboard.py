@@ -142,6 +142,7 @@ class SoapNoteRead(BaseModel):
     plan: str
     generated_at: str
     model_used: str
+    care_team_id: UUID | None = None
 
 
 class SoapNoteRequest(BaseModel):
@@ -149,6 +150,8 @@ class SoapNoteRequest(BaseModel):
 
     # Optional: fetch and use only the last N days of data
     lookback_days: int = Field(default=30, ge=7, le=365)
+    # Required only when the clinician holds several care-team links to the patient.
+    care_team_id: UUID | None = None
 
 
 class SoapNoteGenerationResponse(BaseModel):
@@ -279,6 +282,11 @@ class PatientDeepDive(ClinicTag):
     symptom_reports: list[dict[str, Any]] = Field(default_factory=list)
     chat_messages: list[dict[str, Any]] = Field(default_factory=list)
     conditions: list[dict[str, Any]] = Field(default_factory=list)
+    # True when the patient marked a condition sensitive and this clinician's team did not
+    # record it: the list above is then deliberately incomplete and the portal must say so.
+    some_conditions_private: bool = False
+    # Every active care team of the patient (specialty, clinician, clinic, plan metadata).
+    care_teams: list[dict[str, Any]] = Field(default_factory=list)
     allergies: list[dict[str, Any]] = Field(default_factory=list)
     documents: list[PatientDocumentRead] = Field(default_factory=list)
     latest_soap_note: SoapNoteRead | None = None

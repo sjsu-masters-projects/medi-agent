@@ -158,6 +158,8 @@ export function getChatControlsCopy(locale: Locale) {
     chatError: "No se pudo cargar o completar la conversación. Revisa la conexión y vuelve a intentarlo.", voiceError: "No se pudo completar la función de voz. Puedes escribir tu mensaje.",
     original: "Idioma original", originalUnknown: "Mensaje original · idioma no registrado", live: "Respuesta en curso", listen: "Escuchar",
     humanOriginal: "Los mensajes se muestran tal como se escribieron, sin traducción automática.",
+    // DRAFT es-MX, pending bilingual review (LOC-001).
+    sending: "Enviando…", notSent: "No se envió", retrySend: "Reintentar", removeUnsent: "Quitar",
     profileRequired: "Necesitamos cargar tu idioma preferido antes de enviar. Si tarda demasiado, vuelve a abrir Chat.",
   } : {
     connection: { idle: "Offline", connected: "Connected", connecting: "Connecting…", disconnected: "Offline", error: "Connection issue", reconnecting: "Reconnecting…" },
@@ -169,6 +171,7 @@ export function getChatControlsCopy(locale: Locale) {
     chatError: "Could not load or complete the conversation. Check your connection and try again.", voiceError: "Could not complete the voice action. You can type your message.",
     original: "Original language", originalUnknown: "Original message · language not recorded", live: "Live response", listen: "Listen",
     humanOriginal: "Messages appear as written, without automatic translation.",
+    sending: "Sending…", notSent: "Not sent", retrySend: "Retry", removeUnsent: "Remove",
     profileRequired: "Your preferred language needs to load before sending. If this takes too long, reopen Chat.",
   };
 }
@@ -207,5 +210,81 @@ export function getChatResultsCopy(locale: Locale) {
     notReviewed: "Read automatically · not yet reviewed by your care team",
     reviewed: "Reviewed by your care team",
     seeInRecords: "See in Records",
+  };
+}
+
+/**
+ * VOICE-001 live voice mode wording. The es-MX strings are DRAFTS pending bilingual review
+ * (LOC-001): they are listed in the VOICE-001 specification and must not be marked approved
+ * until both languages are approved together.
+ */
+export function getVoiceModeCopy(locale: Locale) {
+  return locale === "es-MX" ? {
+    // DRAFT es-MX, pending bilingual review (LOC-001).
+    start: "Conversación por voz",
+    panel: "Conversación por voz con Nora",
+    status: {
+      connecting: "Conectando la voz…",
+      listening: "Te escucho. Habla cuando quieras.",
+      hearing: "Te estoy escuchando…",
+      thinking: "Nora está pensando",
+      speaking: "Nora está hablando. Habla para interrumpir.",
+      paused: "Micrófono en pausa",
+    },
+    pause: "Pausar",
+    resume: "Reanudar",
+    end: "Terminar modo de voz",
+    remaining: (minutes: number, seconds: number) => `Quedan ${minutes}:${String(seconds).padStart(2, "0")} en esta sesión de voz`,
+    heard: "Lo que dices",
+    errors: {
+      permission_denied: "El acceso al micrófono está bloqueado. Permítelo en la configuración del navegador o usa texto.",
+      no_microphone: "No encontramos un micrófono. Conecta uno o usa texto.",
+      unsupported: "Este navegador no permite la conversación por voz. Puedes usar texto.",
+      provider_unavailable: "La voz no está disponible en este momento. Puedes seguir por texto.",
+      network: "Se perdió la conexión de voz. Revisa tu conexión o usa texto.",
+      session_limit: "La sesión de voz llegó a su límite de tiempo. Puedes iniciar otra o usar texto.",
+      idle_timeout: "Cerramos la voz porque no se oyó nada por un rato. Puedes iniciarla de nuevo o usar texto.",
+      failed: "No se pudo iniciar la voz. Inténtalo de nuevo o usa texto.",
+    },
+    notices: {
+      speech_unavailable: "La respuesta de Nora está en el chat. El audio no está disponible ahora.",
+      not_sent: "No se pudo enviar ese mensaje. Quedó en el cuadro de mensaje para que lo envíes.",
+      reply_failed: "Nora no pudo responder a eso. Tu mensaje quedó guardado en el chat.",
+    },
+    tryAgain: "Intentar de nuevo",
+    useText: "Usar texto",
+  } : {
+    start: "Voice conversation",
+    panel: "Voice conversation with Nora",
+    status: {
+      connecting: "Connecting voice…",
+      listening: "Listening. Speak whenever you are ready.",
+      hearing: "Hearing you…",
+      thinking: "Nora is thinking",
+      speaking: "Nora is speaking. Talk to interrupt.",
+      paused: "Microphone paused",
+    },
+    pause: "Pause",
+    resume: "Resume",
+    end: "End voice mode",
+    remaining: (minutes: number, seconds: number) => `${minutes}:${String(seconds).padStart(2, "0")} left in this voice session`,
+    heard: "What you are saying",
+    errors: {
+      permission_denied: "Microphone access is blocked. Allow it in your browser settings, or use text instead.",
+      no_microphone: "No microphone was found. Connect one, or use text instead.",
+      unsupported: "This browser cannot do voice conversations. You can use text instead.",
+      provider_unavailable: "Voice is not available right now. You can keep going by text.",
+      network: "The voice connection was lost. Check your connection, or use text instead.",
+      session_limit: "This voice session reached its time limit. You can start another or use text.",
+      idle_timeout: "Voice mode closed because nothing was heard for a while. Start it again or use text.",
+      failed: "Voice could not start. Try again, or use text instead.",
+    },
+    notices: {
+      speech_unavailable: "Nora's reply is in the chat. Audio is not available right now.",
+      not_sent: "That message could not be sent. It is in the message box so you can send it.",
+      reply_failed: "Nora could not answer that. Your message is saved in the chat.",
+    },
+    tryAgain: "Try again",
+    useText: "Use text instead",
   };
 }

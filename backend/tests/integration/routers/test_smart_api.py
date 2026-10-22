@@ -210,7 +210,7 @@ def test_fact_fhir_audit_requires_assignment_and_returns_generated_resources(
         clinician_id=clinician.id, patient_id=patient_id
     )
     fhir_audit_export_service.export_for_fact.assert_called_once_with(
-        fact_id=fact_id, patient_id=patient_id
+        clinician_id=clinician.id, fact_id=fact_id, patient_id=patient_id
     )
 
 
@@ -269,5 +269,5 @@ def test_fact_review_and_source_routes_require_assignment_and_keep_raw_source_ex
     assert source_response.status_code == 200
     assert source_response.json()["raw_resource"]["id"] == "med-1"
     fhir_import_review_service.get_source.assert_called_once_with(
-        fact_id=fact_id, patient_id=patient_id
+        clinician_id=clinician.id, fact_id=fact_id, patient_id=patient_id
     )

@@ -16,6 +16,7 @@ from app.config import settings
 from app.core.exceptions import ValidationError
 from app.models.enums import Language
 from app.routers.chat import _authenticate_ws_patient, negotiated_subprotocol
+from app.services.voice_connection import VoiceConnection, voice_limits
 from app.services.voice_service import VoiceService, VoiceStreamTranscript
 from app.utils.localization import written_language
 
@@ -44,8 +45,10 @@ async def voice_websocket_endpoint(
             "stt_supported": bool(settings.deepgram_api_key),
             "tts_supported": bool(settings.deepgram_api_key),
             "max_audio_bytes": settings.voice_max_audio_bytes,
+            **voice_limits(),
         }
     )
+    connection = VoiceConnection(websocket.send_json, owner=str(patient_id))
 
     stream_active = False
     stream_private = False
@@ -55,13 +58,21 @@ async def voice_websocket_endpoint(
 
     try:
         while True:
-            payload = await _receive_voice_payload(websocket)
-            if payload is None:
+            received = await _receive_voice_message(websocket)
+            if received is None:
                 continue
+            if isinstance(received, bytes):
+                # A microphone frame (16-bit PCM) for the live session.
+                await connection.frame(received)
+                continue
+            payload = received
 
             event_type = str(payload.get("type", "")).strip()
             if event_type == "ping":
                 await websocket.send_json({"type": "pong"})
+                continue
+
+            if await connection.handle_event(event_type, payload):
                 continue
 
             if event_type == "audio_final":
@@ -191,11 +202,20 @@ async def voice_websocket_endpoint(
             )
     except WebSocketDisconnect:
         logger.info("Voice websocket disconnected")
+    finally:
+        # Every exit path closes the provider connections the session opened.
+        await connection.close()
 
 
-async def _receive_voice_payload(websocket: WebSocket) -> dict[str, Any] | None:
+async def _receive_voice_message(websocket: WebSocket) -> dict[str, Any] | bytes | None:
+    """A binary frame is microphone audio; a text frame is a JSON event."""
+    message = await websocket.receive()
+    if message.get("type") == "websocket.disconnect":
+        raise WebSocketDisconnect(code=int(message.get("code") or 1000))
+    if message.get("bytes") is not None:
+        return bytes(message["bytes"])
     try:
-        payload = await websocket.receive_json()
+        payload = json.loads(message.get("text") or "")
     except json.JSONDecodeError:
         await _send_voice_error(
             websocket,

@@ -213,16 +213,15 @@ async def watch_turn(
     last_seq, idle, deadline = 0, 0, time.monotonic() + max_seconds
     started = time.monotonic()
     while time.monotonic() < deadline:
+        terminal_row = None
         try:
             events = await reader.events_after(turn_id, last_seq)
-            terminal_row = None
             if not events and idle and idle % STATUS_CHECK_EVERY == 0:
                 row = await reader.turn(patient_id, turn_id)
                 if row and row.get("status") in TERMINAL:
                     terminal_row = row
         except (ExternalServiceError, ServiceUnavailableError):
             # A busy pool or a slow read: skip this tick; the log is the truth, not the poll.
-            events, terminal_row = [], None
             idle += 1
             await asyncio.sleep(min(POLL_MAX_IDLE_SECONDS, 0.5 * (idle + 1)))
             continue

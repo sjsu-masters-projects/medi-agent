@@ -366,6 +366,20 @@ task keeps CPU after its socket closes. Cloud Run bills an instance for the whol
 while CPU is always allocated, not only during requests. `--min-instances 0` is unchanged, so
 an idle service still scales to zero, and the jobs are unchanged.
 
+## Live voice mode (VOICE-001)
+
+`/ws/voice/{patient_id}` carries binary 16-bit mono PCM microphone frames (default
+16 kHz) to a Deepgram live session (`services/voice_live.py`, `voice_connection.py`) and
+streams sentence-by-sentence Aura-2 speech back. The socket authenticates the same patient
+the path names and never creates chat messages: the portal sends each `utterance_final`
+through the normal chat turn. Bounds (all optional, defaults in `app/config.py`):
+`VOICE_LIVE_ENABLED`, `VOICE_TTS_STREAM_ENABLED`, `VOICE_LIVE_MAX_SESSION_SECONDS` (900),
+`VOICE_LIVE_IDLE_TIMEOUT_SECONDS` (60), `VOICE_LIVE_MAX_SESSIONS` (20 per process, one
+per patient), plus frame, queue, utterance and speech-length limits. Only
+`DEEPGRAM_API_KEY` is required, on the API service; the chat worker does not use it.
+Voice logs carry lengths and ids, never transcript or reply text. Protocol, failure modes
+and the acceptance path: [VOICE-001](../.agent/specs/voice-001-voice-mode.md).
+
 ## Package Layout
 
 PAT-002-B B2 checks the shared deterministic safety floor before turn-specific
@@ -732,3 +746,28 @@ extension on FHIR audit events record the clinic when an event concerns a link. 
 `069_clinic_scheduling_and_tags.sql` carries the SQL (applied October 17; the read-only
 `scripts/appointment-clinician-overlap-preflight.sql` returned 0 rows first). In a fresh or other
 environment run the preflight before applying if the migration reports overlaps.
+
+## Care plans per care team and the shared clinical core (PLAN-002, CLN-003 G/H)
+
+A care plan belongs to one care-team link (patient, clinician, clinic). Specification,
+decisions, lock order, read-path audit and the API contract:
+[PLAN-002](../.agent/specs/plan-002-care-plans-per-care-team.md).
+
+- **Migrations 083-087** (unapplied; never apply remote SQL without explicit authorization):
+  plan ownership and per-plan versions (083), owned records, routed documents and the shared
+  core (084), cross-plan publication (085), notification scoping (086), record owners and care-team work items in the notification centre (087). Each ends with a
+  verification block that fails if a grant or RLS setting is wrong.
+- **Ownership is enforced in Python** because the backend uses the service role. The rules are
+  in `services/care_team_access.py`; every clinician read of documents, facts, plans, SOAP
+  notes, reviewed ADR work, MedWatch drafts and FHIR imports goes through them (and
+  `clinician_record_gate.py`). A row that does not carry its owner columns is hidden. The same
+  rules are in the database for direct sessions (RLS and the storage policy).
+- **Publication** is `publish_care_plan_version`: one transaction under the patient-wide lock,
+  the only cross-plan comparison in SQL, idempotent per key. Interaction severity is never
+  asserted (`interaction_coverage: "not_checked"`, MED-001).
+- **Postgres contract tests** (`tests/integration/test_care_team_*_postgres.py`, harness
+  `care_team_plan_harness.py`, env `CARE_TEAM_PLANS_TEST_POSTGRES_DOCKER=1`, CI shard
+  `care-team-plans`) build template databases from the real ledger; run them with
+  `-o timeout=1200` locally if Docker is busy.
+- **Unit helpers**: `tests/unit/services/care_team_fake_db.py` is an in-memory client that
+  applies filters as sent, so a forgotten owner filter fails a test.

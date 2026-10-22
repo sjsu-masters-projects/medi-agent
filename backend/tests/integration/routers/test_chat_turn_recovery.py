@@ -14,6 +14,7 @@ from app.routers import chat
 from app.safety import TRIAGE_COPY
 from app.services.chat_service import ChatService
 from app.services.chat_turn_execution import TurnChatService
+from app.services.chat_turn_pipeline import refresh_conversation_state
 from app.services.chat_turn_service import (
     ChatTurnService,
     TurnExecution,
@@ -277,7 +278,7 @@ async def test_state_refresh_retries_after_a_concurrent_write_without_lowering_t
     service.get_or_create_conversation_state = AsyncMock(
         return_value={"updated_at": "v2", "turn_count": 4}
     )
-    assert await chat._refresh_conversation_state(service, "p", {"turn_count": 2}, "v1")
+    assert await refresh_conversation_state(service, "p", {"turn_count": 2}, "v1")
     assert calls == [(2, "v1"), (5, "v2")]
 
 
@@ -286,7 +287,7 @@ async def test_state_refresh_failure_is_logged_with_its_category(caplog):
     service = MagicMock()
     service.update_conversation_state = AsyncMock(side_effect=RuntimeError("secret text"))
     with caplog.at_level("WARNING"):
-        assert not await chat._refresh_conversation_state(service, "p", {"turn_count": 1}, None)
+        assert not await refresh_conversation_state(service, "p", {"turn_count": 1}, None)
     assert "RuntimeError" in caplog.text
     assert "secret text" not in caplog.text
 

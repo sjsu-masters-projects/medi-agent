@@ -6,6 +6,7 @@ from the broader ClinicianService orchestration layer.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -14,11 +15,12 @@ from uuid import UUID
 from postgrest.exceptions import APIError
 from supabase import Client
 
-from app.core import authorization_reasons as reasons
-from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
+from app.core.exceptions import ValidationError
 from app.db.repositories import CareTeamRepository
 from app.models.enums import DocumentReviewStatus, UploaderRole
+from app.services.care_team_access import PatientAccess
 from app.services.clinical_fact_service import ClinicalFactService
+from app.services.clinician_record_gate import ClinicianRecordGate
 from app.services.document_processing_status import attach_duplicate_status
 from app.services.document_summary_service import (
     is_missing_summary_column_error,
@@ -47,33 +49,47 @@ class ClinicianDocumentWorkflowService:
         db: Client,
         care_team_repo: CareTeamRepository,
         execute: Callable[..., Awaitable[Any]],
+        gate: ClinicianRecordGate | None = None,
     ) -> None:
         self.db = db
         self.care_team_repo = care_team_repo
         self._execute = execute
+        self.gate = gate or ClinicianRecordGate(db)
 
-    async def fetch_patient_documents(self, patient_id: UUID) -> list[dict[str, Any]]:
-        """Return patient documents enriched with reviewer metadata."""
+    async def fetch_patient_documents(
+        self, patient_id: UUID, *, clinician_id: UUID
+    ) -> list[dict[str, Any]]:
+        """Return the patient's documents this clinician may see, with reviewer metadata.
+
+        A document routed to another care team is never listed; one the patient left
+        unrouted is listed for every team that treats them.
+        """
+        access = await self._access(clinician_id, patient_id)
         docs = await self._select_documents(
             lambda columns: self.db.table("documents")
             .select(
                 "id, file_name, document_type, parse_status, parse_failure_code, parse_attempts, ai_summary, "
                 f"{columns}"
                 "created_at, uploaded_by_role, clinician_annotation, "
-                "review_status, reviewed_by, reviewed_at, review_note"
+                "review_status, reviewed_by, reviewed_at, review_note, "
+                "routing_state, care_team_id"
             )
             .eq("patient_id", str(patient_id))
             .order("created_at", desc=True)
         )
+        docs = access.filter_documents(docs)
         await attach_duplicate_status(self.db, docs, self._execute)
         return await self._attach_document_reviewers(docs)
 
     async def list_document_review_queue(self, clinician_id: UUID) -> list[dict[str, Any]]:
-        """List pending patient-uploaded documents for assigned patients."""
-        patient_rows = await self.care_team_repo.list_assigned_patient_ids(str(clinician_id))
-        patient_id_values = [
-            str(row["patient_id"]) for row in patient_rows if row.get("patient_id")
-        ]
+        """Pending patient uploads this clinician may review.
+
+        Routed documents appear only for the owning team's clinicians. Unrouted ones appear
+        for every team of the patient, marked ``needs_claim``: they cannot be approved or
+        rejected until one clinician claims them.
+        """
+        links = await asyncio.to_thread(self.gate.access_service.for_clinician, clinician_id)
+        patient_id_values = links.patient_ids
         if not patient_id_values:
             return []
 
@@ -93,13 +109,15 @@ class ClinicianDocumentWorkflowService:
             .select(
                 "id, patient_id, file_name, document_type, parse_status, parse_failure_code, parse_attempts, ai_summary, "
                 f"{columns}"
-                "source_clinic, created_at, uploaded_by_role, review_status"
+                "source_clinic, created_at, uploaded_by_role, review_status, "
+                "routing_state, care_team_id"
             )
             .in_("patient_id", patient_id_values)
             .eq("uploaded_by_role", UploaderRole.PATIENT.value)
             .eq("review_status", DocumentReviewStatus.PENDING.value)
             .order("created_at", desc=True)
         )
+        docs = links.keep(docs, "document")
 
         await attach_duplicate_status(self.db, docs, self._execute)
         queue_items: list[dict[str, Any]] = []
@@ -112,6 +130,10 @@ class ClinicianDocumentWorkflowService:
                     **row,
                     "patient_first_name": patient.get("first_name", ""),
                     "patient_last_name": patient.get("last_name", ""),
+                    "needs_claim": row.get("routing_state") == "unrouted",
+                    "claimable_care_team_ids": sorted(
+                        links.for_patient(row.get("patient_id")).team_ids
+                    ),
                 }
             )
 
@@ -156,10 +178,9 @@ class ClinicianDocumentWorkflowService:
         annotation_text: str,
     ) -> dict[str, Any]:
         """Save clinician annotation on a patient document."""
-        await self._assert_patient_assignment(clinician_id, patient_id)
-        await self._get_document_row(patient_id, document_id)
+        await self._gated_document(clinician_id, patient_id, document_id)
 
-        await self._execute(
+        update = (
             self.db.table("documents")
             .update(
                 {
@@ -168,7 +189,9 @@ class ClinicianDocumentWorkflowService:
                 }
             )
             .eq("id", str(document_id))
+            .eq("patient_id", str(patient_id))
         )
+        await self._execute(update)
 
         return {"status": "saved", "document_id": str(document_id)}
 
@@ -176,9 +199,15 @@ class ClinicianDocumentWorkflowService:
         self, clinician_id: UUID, patient_id: UUID, document_id: UUID
     ) -> list[dict[str, Any]]:
         """Return evidence-backed candidates for one authorized source document."""
-        await self._assert_patient_assignment(clinician_id, patient_id)
-        await self._get_document_row(patient_id, document_id)
-        facts = ClinicalFactService(self.db).list_facts_for_document(document_id, patient_id)
+        await self._gated_document(clinician_id, patient_id, document_id)
+        access = await self._access(clinician_id, patient_id)
+        # A fact may also cite a document routed to another team; it is hidden then.
+        facts = await asyncio.to_thread(
+            lambda: self.gate.visible_facts(
+                access,
+                ClinicalFactService(self.db).list_facts_for_document(document_id, patient_id),
+            )
+        )
         payload: list[dict[str, Any]] = []
         for fact in facts:
             lineage = ClinicalFactService(self.db).get_lineage(UUID(str(fact["id"])), patient_id)
@@ -211,24 +240,13 @@ class ClinicianDocumentWorkflowService:
             result = await self._execute(build(""))
         return cast(list[dict[str, Any]], result.data or [])
 
-    async def _assert_patient_assignment(self, clinician_id: UUID, patient_id: UUID) -> None:
-        """Require an active care-team assignment before clinician document access."""
-        assignment_rows = await self.care_team_repo.find_active_assignment(
-            str(clinician_id),
-            str(patient_id),
-        )
-        if not assignment_rows:
-            raise AuthorizationError(
-                "You are not assigned to this patient",
-                reason_code=reasons.NO_CARE_TEAM_ASSIGNMENT,
-                actor_id=str(clinician_id),
-                actor_role="clinician",
-                target_type="patient",
-                target_id=str(patient_id),
-            )
+    async def _access(self, clinician_id: UUID, patient_id: UUID) -> PatientAccess:
+        """The clinician's active links to this patient; none means not assigned."""
+        return await asyncio.to_thread(self.gate.access, clinician_id, patient_id)
 
-    async def _get_document_row(
+    async def _gated_document(
         self,
+        clinician_id: UUID,
         patient_id: UUID,
         document_id: UUID,
         *,
@@ -236,17 +254,10 @@ class ClinicianDocumentWorkflowService:
             "id, patient_id, uploaded_by_role, review_status, reviewed_by, reviewed_at, review_note"
         ),
     ) -> dict[str, Any]:
-        """Fetch a patient-owned document row or raise NotFound."""
-        doc_result = await self._execute(
-            self.db.table("documents")
-            .select(fields)
-            .eq("id", str(document_id))
-            .eq("patient_id", str(patient_id))
-            .single()
+        """The document row if this clinician may see it, else NotFound (no existence leak)."""
+        return await asyncio.to_thread(
+            self.gate.document, clinician_id, patient_id, document_id, columns=fields
         )
-        if not doc_result.data:
-            raise NotFoundError("Document", str(document_id))
-        return cast(dict[str, Any], doc_result.data)
 
     async def _set_document_review(
         self,
@@ -258,9 +269,14 @@ class ClinicianDocumentWorkflowService:
         review_note: str | None,
     ) -> dict[str, Any]:
         """Persist a shared review decision for a patient-uploaded document."""
-        await self._assert_patient_assignment(clinician_id, patient_id)
-        document = await self._get_document_row(patient_id, document_id)
+        document = await self._gated_document(clinician_id, patient_id, document_id)
 
+        if document.get("routing_state") == "unrouted":
+            # Several teams can see this document; none owns it until one claims it.
+            raise ValidationError(
+                "Claim this document for your care team before reviewing it",
+                code="DOCUMENT_CLAIM_REQUIRED",
+            )
         if document.get("uploaded_by_role") != UploaderRole.PATIENT.value:
             raise ValidationError("Only patient-uploaded documents can be reviewed")
 
@@ -281,6 +297,7 @@ class ClinicianDocumentWorkflowService:
             .update(update_payload)
             .eq("id", str(document_id))
             .eq("patient_id", str(patient_id))
+            .eq("routing_state", "routed")
             .eq("review_status", DocumentReviewStatus.PENDING.value)
         )
         updated_rows = cast(list[dict[str, Any]], result.data or [])

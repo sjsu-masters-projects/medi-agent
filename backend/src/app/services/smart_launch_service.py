@@ -19,6 +19,8 @@ from supabase import Client
 from app.config import settings
 from app.core import authorization_reasons as reasons
 from app.core.exceptions import AuthorizationError, ExternalServiceError, ValidationError
+from app.services.clinician_record_gate import ClinicianRecordGate
+from app.services.document_routing_service import DocumentRoutingService
 from app.services.fhir_import_service import FhirImportService
 
 logger = logging.getLogger(__name__)
@@ -84,7 +86,9 @@ class SmartLaunchService:
         issuer, so the browser does not need to know the sandbox address.
         """
         self._require_config()
-        self._require_assignment(clinician_id, patient_id)
+        # No link is refused. With two links to the patient the import's owner would be a
+        # guess, so it is refused here (CARE_TEAM_REQUIRED) before any OAuth round trip.
+        self._import_care_team(clinician_id, patient_id)
         if issuer is None:
             if launch_context:
                 raise ValidationError("An EHR launch context requires the EHR issuer")
@@ -166,7 +170,13 @@ class SmartLaunchService:
             verifier = self._decrypt_verifier(str(session["pkce_verifier_ciphertext"]))
             token = self._exchange_code(session=session, code=code, verifier=verifier)
             resources, context = self._fetch_contextual_resources(session=session, token=token)
-            import_record = self._create_import(session=session, context=context)
+            import_record = self._create_import(
+                session=session,
+                context=context,
+                care_team_id=self._import_care_team(
+                    UUID(str(session["clinician_id"])), UUID(str(session["patient_id"]))
+                ),
+            )
             self._record_external_identity(
                 import_record=import_record,
                 patient_id=UUID(str(session["patient_id"])),
@@ -178,6 +188,7 @@ class SmartLaunchService:
                 actor_id=UUID(str(session["clinician_id"])),
                 issuer=str(session["issuer"]),
                 resources=resources,
+                care_team_id=UUID(str(import_record["care_team_id"])),
             )
             status = "completed_with_warnings" if result["warnings"] else "completed"
             self.db.table("fhir_imports").update(
@@ -253,7 +264,13 @@ class SmartLaunchService:
         import_record = cast(dict[str, Any] | None, import_result.data)
         if not import_record:
             raise ValidationError("SMART import no longer exists")
-        self._require_assignment(clinician_id, UUID(str(import_record["patient_id"])))
+        patient_id = UUID(str(import_record["patient_id"]))
+        if (
+            not ClinicianRecordGate(self.db)
+            .access(clinician_id, patient_id)
+            .can_see_import(import_record)
+        ):
+            raise ValidationError("SMART import no longer exists")
         self.db.table("smart_portal_handoffs").update(
             {"consumed_at": datetime.now(UTC).isoformat()}
         ).eq("id", str(handoff["id"])).is_("consumed_at", "null").execute()
@@ -268,16 +285,20 @@ class SmartLaunchService:
         return {"import_record": import_record, "resources": resources.data or []}
 
     def list_imports(self, *, clinician_id: UUID, patient_id: UUID) -> list[dict[str, Any]]:
-        self._require_assignment(clinician_id, patient_id)
+        """The patient's imports this clinician may see: their teams', never another team's."""
+        access = ClinicianRecordGate(self.db).access(clinician_id, patient_id)
         result = (
             self.db.table("fhir_imports")
             .select("*")
-            .eq("clinician_id", str(clinician_id))
             .eq("patient_id", str(patient_id))
             .order("created_at", desc=True)
             .execute()
         )
-        return cast(list[dict[str, Any]], result.data or [])
+        return [
+            row
+            for row in cast(list[dict[str, Any]], result.data or [])
+            if access.can_see_import(row)
+        ]
 
     def remove_import(
         self,
@@ -287,7 +308,7 @@ class SmartLaunchService:
         import_id: UUID,
     ) -> dict[str, Any]:
         """Withdraw an import only if it has not affected canonical local truth."""
-        self._require_assignment(clinician_id, patient_id)
+        ClinicianRecordGate(self.db).fhir_import(clinician_id, patient_id, import_id)
         result = self.db.rpc(
             "withdraw_unapplied_fhir_import",
             {
@@ -430,8 +451,27 @@ class SmartLaunchService:
                 return parsed.geturl()
         return None
 
+    def _import_care_team(self, clinician_id: UUID, patient_id: UUID) -> UUID:
+        """The clinician's own link an import belongs to (CARE_TEAM_REQUIRED when ambiguous)."""
+        try:
+            return UUID(
+                DocumentRoutingService(self.db).resolve_clinician_link(clinician_id, patient_id)
+            )
+        except ValidationError as error:
+            if error.code != "CARE_TEAM_REQUIRED":
+                raise
+            # Known limitation: a launch session does not yet record which link it is for.
+            raise ValidationError(
+                "External record import is not available while you hold more than one "
+                "care-team link to this patient (for example at two clinics). Nothing was "
+                "started or imported. Upload the records as documents instead, or ask your "
+                "administrator.",
+                code="CARE_TEAM_REQUIRED",
+                details={"limitation": "smart_launch_single_link_only"},
+            ) from None
+
     def _create_import(
-        self, *, session: dict[str, Any], context: dict[str, str | None]
+        self, *, session: dict[str, Any], context: dict[str, str | None], care_team_id: UUID
     ) -> dict[str, Any]:
         response = (
             self.db.table("fhir_imports")
@@ -440,6 +480,7 @@ class SmartLaunchService:
                     "launch_session_id": str(session["id"]),
                     "clinician_id": str(session["clinician_id"]),
                     "patient_id": str(session["patient_id"]),
+                    "care_team_id": str(care_team_id),
                     "issuer": str(session["issuer"]),
                     "external_patient_id": context["patient"],
                     "external_encounter_id": context["encounter"],

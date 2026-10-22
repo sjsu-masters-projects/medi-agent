@@ -193,13 +193,19 @@ describe("missing expiry", () => {
     });
 });
 
+function storageEvent(key: string | null, newValue: string | null): StorageEvent {
+    const event = new StorageEvent("storage");
+    Object.defineProperties(event, { key: { value: key }, newValue: { value: newValue } });
+    return event;
+}
+
 describe("cross-tab sync", () => {
     it("hydrates from a storage event carrying a new session", () => {
         const tab = makeTab();
         const onSession = vi.fn();
         const stop = tab.subscribe({ onLogout: vi.fn(), onSession });
         const next = makeSession({ accessToken: "access-9" });
-        window.dispatchEvent(new StorageEvent("storage", { key: KEY, newValue: JSON.stringify(next) }));
+        window.dispatchEvent(storageEvent(KEY, JSON.stringify(next)));
         expect(onSession).toHaveBeenCalledWith(expect.objectContaining({ accessToken: "access-9" }));
         stop();
     });
@@ -208,7 +214,7 @@ describe("cross-tab sync", () => {
         const tab = makeTab();
         const onLogout = vi.fn();
         const stop = tab.subscribe({ onLogout, onSession: vi.fn() });
-        window.dispatchEvent(new StorageEvent("storage", { key: KEY, newValue: null }));
+        window.dispatchEvent(storageEvent(KEY, null));
         expect(onLogout).toHaveBeenCalledTimes(1);
         stop();
     });
@@ -217,7 +223,7 @@ describe("cross-tab sync", () => {
         const tab = makeTab();
         const onLogout = vi.fn();
         const stop = tab.subscribe({ onLogout, onSession: vi.fn() });
-        window.dispatchEvent(new StorageEvent("storage", { key: "other", newValue: null }));
+        window.dispatchEvent(storageEvent("other", null));
         expect(onLogout).not.toHaveBeenCalled();
         stop();
     });

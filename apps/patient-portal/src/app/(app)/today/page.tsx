@@ -20,6 +20,8 @@ import { FeedTaskStatus, normalizeLocale, type Locale, type FeedTask } from "@/t
 import { ApprovedPlanDetails } from "@/components/features/approved-plan-details";
 import { NotificationBell } from "@/components/features/notification-centre";
 import { ADRFollowUpEntryRow } from "@/components/features/adr-follow-up-entry-row";
+import { CareTeamFilterChips, ContactClinicCard, hasMultipleOwners, taskMatchesFilter } from "@/components/features/care-team-owner";
+import { getCareTeamCopy } from "@/content/care-team-copy";
 
 function mapTaskStatus(task: FeedTask, now: number): TaskCardStatus {
     const status = task.status;
@@ -86,8 +88,11 @@ export default function TodayPage() {
     }, []);
     const {
         adherenceStats, actionError, submitting, error, loading,
-        markComplete, reportBarrier, refreshFeed, summary, tasks,
+        markComplete, reportBarrier, refreshFeed, summary, tasks, careTeamFilters = [], contactClinic = false,
     } = useFeedData(locale);
+    const careCopy = getCareTeamCopy(locale);
+    const showOwner = hasMultipleOwners(tasks, careTeamFilters);
+    const [careTeamFilter, setCareTeamFilter] = useState("all");
     const [barrierTask, setBarrierTask] = useState<FeedTask | null>(null);
     const [barrierNote, setBarrierNote] = useState("");
     const [detailsId, setDetailsId] = useState<string | null>(null);
@@ -122,13 +127,15 @@ export default function TodayPage() {
     const avatarInitial = displayName.charAt(0).toUpperCase() || "?";
     const completedLabel = copy.completed(summary.completed, summary.total || tasks.length);
     // Keep feed order and the existing eligibility rules; the hero is only a presentation choice.
-    const nextTask = completion?.task ?? tasks.find((task) => {
+    const filterAvailable = showOwner && careTeamFilter !== "all" && careTeamFilters.some((option) => (option.care_team_id ?? "unowned") === careTeamFilter);
+    const visibleTasks = filterAvailable ? tasks.filter((task) => taskMatchesFilter(task, careTeamFilter)) : tasks;
+    const nextTask = completion?.task ?? visibleTasks.find((task) => {
         const status = mapTaskStatus(task, now);
         return status === "active" || status === "missed";
     });
-    const remainingTasks = tasks.filter((task) => task.id !== nextTask?.id);
+    const remainingTasks = visibleTasks.filter((task) => task.id !== nextTask?.id);
     const detailTask = tasks.find((task) => task.id === detailsId);
-    const nextReminder = tasks.find((task) => mapTaskStatus(task, now) === "upcoming" && task.scheduledTime);
+    const nextReminder = visibleTasks.find((task) => mapTaskStatus(task, now) === "upcoming" && task.scheduledTime);
     const disabled = submitting || Boolean(completion);
 
     async function complete(task: FeedTask) {
@@ -215,19 +222,22 @@ export default function TodayPage() {
 
             <div className="space-y-5 pt-[18px]">
                 <div className="px-4 empty:hidden"><ADRFollowUpEntryRow locale={locale} /></div>
+                {showOwner && careTeamFilters.length > 0 ? <CareTeamFilterChips filters={careTeamFilters} value={filterAvailable ? careTeamFilter : "all"} onChange={setCareTeamFilter} locale={locale} /> : null}
+                {contactClinic ? <ContactClinicCard locale={locale} /> : null}
+                {tasks.length > 0 && visibleTasks.length === 0 ? <div className="mx-4 flex flex-wrap items-center gap-3 rounded-[22px] bg-surface p-4 text-[15px] text-ink-2"><p role="status" className="min-w-0 flex-1">{careCopy.filterEmpty}</p><button type="button" onClick={() => setCareTeamFilter("all")} className="ma-press min-h-11 rounded-[14px] bg-surface-2 px-4 text-sm font-semibold text-ink-2 hover:bg-line-strong">{careCopy.filterEmptyAction}</button></div> : null}
                 {activityId && !loading && !error && !exactActivity && matchingActivities.length === 0 && <p role="alert" className="mx-4 rounded-2xl bg-danger-tint p-3 text-sm text-danger-ink">{spanish ? "Esta actividad no está disponible hoy. Actualiza tus actividades." : "This activity is unavailable today. Refresh your activities."}</p>}
                 {remainingTasks.length === 0 ? <h2 className="sr-only">{copy.schedule}</h2> : null}
                 {actionError && !barrierTask ? <p role="alert" className="mx-4 flex items-start gap-2.5 rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink"><Icon name="alert" className="h-5 w-5 shrink-0" />{actionError}</p> : null}
                 {error ? <div className="mx-4"><ErrorState description={getTodayErrorMessage(error, locale)} action={<button className="ma-press min-h-11 rounded-[14px] bg-surface-2 px-4 py-2 text-sm font-semibold text-ink-2 hover:bg-line-strong" onClick={refreshFeed} type="button">{copy.retry}</button>} title={tasks.length > 0 ? copy.stale : copy.loadError} /></div> : null}
                 {!error && tasks.length === 0 ? <div className="mx-4 rounded-[22px] bg-surface"><EmptyState description={copy.emptyDetail} icon={<Icon name="cal" />} title={copy.empty} /></div> : null}
                 {nextTask ? <article aria-label={nextUpLabel} data-completion-phase={completion?.phase ?? "idle"} className={`mx-4 rounded-[28px] bg-surface p-5 shadow-[var(--shadow-raised)] ${completion?.phase === "leaving" ? "ma-leave" : "ma-enter-spring"}`} key={nextTask.id}>
-                    <TodayTaskContent task={nextTask} copy={copy} eyebrow={nextUpLabel} status={mapTaskStatus(nextTask, now)} timeLabel={formatTimeLabel(locale, copy, nextTask.scheduledTime, nextTask.requiresScheduleConfiguration)} disabled={disabled} onComplete={() => void complete(nextTask)} onBarrier={() => openBarrier(nextTask)} hero phase={completion?.phase} />
+                    <TodayTaskContent task={nextTask} copy={copy} eyebrow={nextUpLabel} status={mapTaskStatus(nextTask, now)} timeLabel={formatTimeLabel(locale, copy, nextTask.scheduledTime, nextTask.requiresScheduleConfiguration)} disabled={disabled} onComplete={() => void complete(nextTask)} onBarrier={() => openBarrier(nextTask)} hero phase={completion?.phase} showOwner={showOwner} />
                     <button type="button" onClick={() => setDetailsId(nextTask.id)} className="mt-3 -mb-1 flex min-h-11 w-full items-center justify-center gap-1 rounded-xl text-sm font-medium text-brand hover:bg-brand-tint/50">{copy.details}<Icon name="chevron" className="h-4 w-4" /></button>
                 </article> : null}
                 {remainingTasks.length > 0 ? <section aria-label={copy.schedule}>
                     <h2 className="px-[22px] pb-2 text-[15px] font-semibold text-ink">{copy.schedule}</h2>
                     <ul className="mx-4 overflow-hidden rounded-[22px] bg-surface [&>li+li]:border-t [&>li+li]:border-line">
-                        {remainingTasks.map((task) => <TodayTaskRow key={task.id} task={task} copy={copy} status={mapTaskStatus(task, now)} timeLabel={formatTimeLabel(locale, copy, task.scheduledTime, task.requiresScheduleConfiguration)} disabled={disabled} onDetails={() => setDetailsId(task.id)} onComplete={() => void complete(task)} />)}
+                        {remainingTasks.map((task) => <TodayTaskRow key={task.id} task={task} copy={copy} status={mapTaskStatus(task, now)} timeLabel={formatTimeLabel(locale, copy, task.scheduledTime, task.requiresScheduleConfiguration)} disabled={disabled} onDetails={() => setDetailsId(task.id)} onComplete={() => void complete(task)} showOwner={showOwner} />)}
                     </ul>
                 </section> : null}
                 <div className="px-4">
@@ -242,10 +252,10 @@ export default function TodayPage() {
             <Modal closeLabel={copy.close} onClose={() => setProgressOpen(false)} open={progressOpen} title={copy.progressHelp}><p className="text-[15px] leading-relaxed text-ink-2">{copy.progressDetail}</p></Modal>
             <Modal closeLabel={copy.close} onClose={() => setPlanOpen(false)} open={planOpen} title={copy.details}>{planOpen && <ApprovedPlanDetails locale={locale} />}</Modal>
             <Modal closeLabel={copy.close} onClose={() => setActivityGroupId(null)} open={Boolean(activityGroupId && tasks.some((task) => task.targetId === activityGroupId))} title={copy.details}>
-                <div className="space-y-6">{tasks.filter((task) => task.targetId === activityGroupId).map((task) => <TodayTaskContent key={task.id} task={task} copy={copy} status={mapTaskStatus(task, now)} timeLabel={formatTimeLabel(locale, copy, task.scheduledTime, task.requiresScheduleConfiguration)} disabled={disabled} onComplete={() => { setActivityGroupId(null); void complete(task); }} onBarrier={() => { setActivityGroupId(null); openBarrier(task); }} />)}</div>
+                <div className="space-y-6">{tasks.filter((task) => task.targetId === activityGroupId).map((task) => <TodayTaskContent key={task.id} task={task} copy={copy} status={mapTaskStatus(task, now)} timeLabel={formatTimeLabel(locale, copy, task.scheduledTime, task.requiresScheduleConfiguration)} disabled={disabled} onComplete={() => { setActivityGroupId(null); void complete(task); }} onBarrier={() => { setActivityGroupId(null); openBarrier(task); }} showOwner={showOwner} />)}</div>
             </Modal>
             <Modal closeLabel={copy.close} onClose={() => setDetailsId(null)} open={Boolean(detailTask)} title={copy.details}>
-                {detailTask ? <TodayTaskContent task={detailTask} copy={copy} status={mapTaskStatus(detailTask, now)} timeLabel={formatTimeLabel(locale, copy, detailTask.scheduledTime, detailTask.requiresScheduleConfiguration)} disabled={disabled} onComplete={() => { setDetailsId(null); void complete(detailTask); }} onBarrier={() => openBarrier(detailTask)} /> : null}
+                {detailTask ? <TodayTaskContent task={detailTask} copy={copy} status={mapTaskStatus(detailTask, now)} timeLabel={formatTimeLabel(locale, copy, detailTask.scheduledTime, detailTask.requiresScheduleConfiguration)} disabled={disabled} onComplete={() => { setDetailsId(null); void complete(detailTask); }} onBarrier={() => openBarrier(detailTask)} showOwner={showOwner} /> : null}
             </Modal>
             <Modal
                 closeLabel={copy.close}

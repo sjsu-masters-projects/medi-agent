@@ -48,9 +48,6 @@ from app.services.chat_turn_pipeline import (
 )
 from app.services.chat_turn_pipeline import execute_turn
 from app.services.chat_turn_pipeline import failure_label as _failure_label
-from app.services.chat_turn_pipeline import (
-    refresh_conversation_state as _refresh_conversation_state,  # noqa: F401  (kept importable here)
-)
 from app.services.chat_turn_pipeline import report_turn_failure as _report_turn_failure
 from app.services.chat_turn_pipeline import serialize_chat_message as _serialize_chat_message
 from app.services.chat_turn_queue import TurnDispatcher, submit_turn
@@ -65,7 +62,6 @@ from app.utils.localization import resolve_locale_resource, written_language
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-_STATE_REFRESH_ATTEMPTS = 3
 
 # The outermost fallback: triage itself could not be reached. Every other tier is
 # localized through TRIAGE_COPY, so this one is too — a patient who wrote in Spanish
@@ -671,6 +667,8 @@ async def _send_replay(
         {
             "type": "user_message_saved",
             "message": _serialize_chat_message(result["user_message"]),
+            # Lets the portal swap its pending copy of this message for the saved one.
+            "client_message_id": record.get("client_message_id"),
         }
     )
     if result.get("assistant_message"):
@@ -807,16 +805,27 @@ async def _queue_durable_message(
                 outcome="not_configured",
             )
             raise ExternalServiceError("Chat", "Chat is temporarily unavailable.")
+        replayed = False
+
+        async def announce_saved(saved: dict[str, Any]) -> None:
+            # Right after the begin commit and before the enqueue: the saved message and the
+            # turn snapshot reach the patient without waiting for Cloud Tasks.
+            nonlocal replayed
+            await _send_replay(direct, saved["turn"], saved)
+            replayed = True
+
         result = await submit_turn(
             service.db,
             patient_id=str(context["patient_id"]),
             session_id=context["session_id"],
             request=request,
             language=incoming.language.value,
+            on_saved=announce_saved,
         )
         record = result["turn"]
-        # Both a new and a repeated send start from the saved state (and reply, if finished).
-        await _send_replay(direct, record, result)
+        if not replayed:
+            # Both a new and a repeated send start from the saved state (and reply, if finished).
+            await _send_replay(direct, record, result)
         if record.get("status") in {"queued", "processing"} and record.get("via_worker"):
             _watch_worker_turn(
                 watchers,

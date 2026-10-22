@@ -25,6 +25,7 @@ from app.routers import (
     auth,
     care_conversations,
     care_plans,
+    care_team_records,
     chat,
     chat_turns,
     clinicians,
@@ -237,6 +238,9 @@ def create_app() -> FastAPI:
         care_conversations.router, prefix=f"{api}/care-conversations", tags=["Care conversations"]
     )
     application.include_router(care_plans.router, prefix=f"{api}/care-plans", tags=["Care plans"])
+    application.include_router(
+        care_team_records.router, prefix=f"{api}/care-team", tags=["Care team records"]
+    )
     application.include_router(feed.router, prefix=f"{api}/feed", tags=["Feed"])
     application.include_router(cron.router, prefix=f"{api}/cron", tags=["Cron"])
     application.include_router(

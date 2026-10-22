@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -13,6 +13,7 @@ from app.models.clinic_membership import ClinicMembership
 from app.models.dashboard import PatientRiskData
 from app.models.enums import ClinicianRole, ClinicMembershipStatus, DocumentReviewStatus
 from app.pharmacovigilance import NaranjoQuestion
+from app.services.care_team_access import ClinicianAccess, PatientAccess
 from app.services.clinic_link_scope import ClinicLinkScope
 from app.services.clinician_service import ClinicianService
 
@@ -52,9 +53,36 @@ def mock_db():
     return MagicMock()
 
 
+TEAM_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1"
+
+
+class _OpenLinks(ClinicianAccess):
+    """A clinician linked to every patient through one care team (ownership tests elsewhere)."""
+
+    def for_patient(self, patient_id):
+        return PatientAccess(self.clinician_id, str(patient_id), frozenset({TEAM_ID}))
+
+
+class _OpenAccess:
+    def for_patient(self, clinician_id, patient_id, *, require=True):
+        return PatientAccess(str(clinician_id), str(patient_id), frozenset({TEAM_ID}))
+
+    def for_clinician(self, clinician_id):
+        return _OpenLinks(str(clinician_id))
+
+
+def _open_scope():
+    """An activity scope over activities that no plan owns (everything stays shared)."""
+    scope = MagicMock()
+    scope.keep = lambda rows: list(rows)
+    return scope
+
+
 @pytest.fixture
 def service(mock_db):
-    return ClinicianService(db=mock_db)
+    built = ClinicianService(db=mock_db)
+    built.care_access = _OpenAccess()  # type: ignore[assignment]
+    return built
 
 
 @pytest.mark.asyncio
@@ -143,7 +171,9 @@ async def test_get_patient_risk_snapshot_returns_latest_patient_card(service):
     assert result["patient_id"] == patient_id
     assert result["first_name"] == "Mina"
     assert result["risk_level"] == "medium"
-    get_patient_risk.assert_awaited_once_with(patient_id)
+    get_patient_risk.assert_awaited_once()
+    assert get_patient_risk.await_args.args == (patient_id,)
+    assert get_patient_risk.await_args.kwargs["access"].owns(TEAM_ID)
 
 
 @pytest.mark.asyncio
@@ -184,9 +214,16 @@ async def test_pending_adr_review_count_queries_only_valid_draft_status(service,
     for method in ("select", "in_"):
         getattr(chain, method).return_value = chain
     mock_db.table.return_value = chain
-    service._execute = AsyncMock(return_value=_response(count=2))  # type: ignore[method-assign]
+    patient = uuid4()
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        return_value=_response(
+            data=[{"id": "a", "patient_id": str(patient)}, {"id": "b", "patient_id": str(patient)}]
+        )
+    )
 
-    count = await service._get_pending_adr_review_count([uuid4()])
+    count = await service._get_pending_adr_review_count(
+        [patient], service.care_access.for_clinician(uuid4())
+    )
 
     assert count == 2
     mock_db.table.assert_called_once_with("adr_assessments")
@@ -199,9 +236,16 @@ async def test_pending_medwatch_count_queries_medwatch_drafts(service, mock_db):
     for method in ("select", "in_", "is_"):
         getattr(chain, method).return_value = chain
     mock_db.table.return_value = chain
-    service._execute = AsyncMock(return_value=_response(count=1))  # type: ignore[method-assign]
+    patient = uuid4()
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        return_value=_response(
+            data=[{"id": "a", "patient_id": str(patient), "care_team_id": "team-1"}]
+        )
+    )
 
-    count = await service._get_pending_medwatch_count([uuid4()])
+    count = await service._get_pending_medwatch_count(
+        [patient], ClinicianAccess(str(uuid4()), {str(patient): frozenset({"team-1"})})
+    )
 
     assert count == 1
     mock_db.table.assert_called_once_with("medwatch_drafts")
@@ -331,6 +375,7 @@ async def test_review_adr_assessment_calls_atomic_assignment_scoped_rpc(service,
                     }
                 ]
             ),
+            _response(data=[]),
         ]
     )
 
@@ -350,6 +395,7 @@ async def test_review_adr_assessment_calls_atomic_assignment_scoped_rpc(service,
             "p_action": "mark_reviewed",
             "p_note": "Reviewed evidence",
             "p_requested_information": [],
+            "p_care_team_id": ANY,
         },
     )
 
@@ -440,6 +486,7 @@ async def test_request_information_accepts_only_missing_patient_question(service
                     }
                 ]
             ),
+            _response(data=[]),
         ]
     )
 
@@ -461,6 +508,7 @@ async def test_request_information_accepts_only_missing_patient_question(service
             "p_action": "request_information",
             "p_note": "Describe what happened after the prior dose change.",
             "p_requested_information": ["dose_response"],
+            "p_care_team_id": ANY,
         },
     )
 
@@ -1137,19 +1185,15 @@ async def test_reject_document_review_rejects_already_reviewed_document(service)
 
 @pytest.mark.asyncio
 async def test_reject_document_review_rejects_clinician_uploaded_document(service):
-    service.care_team_repo.find_active_assignment = AsyncMock(  # type: ignore[method-assign]
-        return_value=[{"id": str(uuid4())}]
-    )
-    service._execute = AsyncMock(  # type: ignore[method-assign]
-        return_value=_response(
-            data={
-                "id": str(uuid4()),
-                "patient_id": str(uuid4()),
-                "uploaded_by_role": "clinician",
-                "review_status": "pending",
-            }
-        )
-    )
+    # Ownership of the document is proven in test_clinician_record_ownership.
+    service.document_workflows.gate = MagicMock()
+    service.document_workflows.gate.document.return_value = {
+        "id": str(uuid4()),
+        "patient_id": str(uuid4()),
+        "uploaded_by_role": "clinician",
+        "review_status": "pending",
+        "routing_state": "routed",
+    }
 
     with pytest.raises(ValidationError, match="patient-uploaded"):
         await service.reject_document_review(uuid4(), uuid4(), uuid4(), "Bad upload")
@@ -1228,7 +1272,7 @@ async def test_build_adherence_series_aggregates_recent_days(service):
         )
     )
 
-    series = await service._build_adherence_series(patient_id)
+    series = await service._build_adherence_series(patient_id, _open_scope())
 
     assert len(series) == 30
     by_day = {row["date"]: row for row in series}
@@ -1258,7 +1302,7 @@ async def test_compute_obligation_completion_rate_counts_completed_rows(service)
         )
     )
 
-    rate = await service._compute_obligation_completion_rate(uuid4())
+    rate = await service._compute_obligation_completion_rate(uuid4(), _open_scope())
 
     assert rate == pytest.approx(2 / 3)
 
@@ -1302,8 +1346,9 @@ async def test_list_adr_review_queue_unassigned_patient_filter_is_empty(service,
 async def test_get_adr_review_item_unknown_and_unassigned_raise_the_same_404(service, mock_db):
     assessment_id, patient_id = uuid4(), uuid4()
     row = {"id": str(assessment_id), "patient_id": str(patient_id), "status": "reviewed"}
-    service.care_team_repo = MagicMock()
-    service.care_team_repo.find_active_assignment = AsyncMock(return_value=[])
+    service.care_access.for_patient = lambda clinician, patient, *, require=True: PatientAccess(  # type: ignore[method-assign]
+        str(clinician), str(patient)
+    )
     service._execute = AsyncMock(  # type: ignore[method-assign]
         side_effect=[_response(data=[]), _response(data=[row])]
     )

@@ -116,7 +116,7 @@ class Env:
             }
         )
         monkeypatch.setattr(worker, "_build_context", self.context)
-        monkeypatch.setattr(worker, "_inflight", 0)
+        monkeypatch.setattr(worker._inflight, "count", 0)
 
     async def _finish_reply(self, emitter, staged, ctx):
         await emitter.send_json(
@@ -212,7 +212,7 @@ async def test_an_unreachable_database_at_claim_is_transient(make):
 @pytest.mark.asyncio
 async def test_a_saturated_instance_sheds_before_claiming(make, monkeypatch):
     env = make()
-    monkeypatch.setattr(worker, "_inflight", worker.settings.chat_worker_max_concurrency)
+    monkeypatch.setattr(worker._inflight, "count", worker.settings.chat_worker_max_concurrency)
     with pytest.raises(TransientTaskError) as caught:
         await env.run()
     assert caught.value.reason == "saturated" and not env.ops_calls
@@ -294,7 +294,7 @@ async def test_shutdown_returns_the_turn_to_the_queue_instead_of_failing_it(make
     await started.wait()
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await task
+        await asyncio.wait_for(task, timeout=5)
     assert env.actions("requeue") == ["requeue"]
     assert not env.actions("interrupted", env.turn_calls)
 
@@ -314,7 +314,7 @@ async def test_shutdown_after_actions_started_marks_interrupted(make):
     await started.wait()
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await task
+        await asyncio.wait_for(task, timeout=5)
     assert env.actions("interrupted", env.turn_calls) == ["interrupted"]
 
 

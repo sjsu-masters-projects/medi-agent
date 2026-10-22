@@ -17,6 +17,7 @@ from supabase import Client
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models.enums import DocumentReviewStatus, UploaderRole
 from app.services.clinical_fact_service import ClinicalFactService
+from app.services.clinician_record_gate import ClinicianRecordGate
 from app.services.document_processing_status import attach_duplicate_status
 from app.services.document_summary_service import is_missing_summary_column_error
 
@@ -84,11 +85,19 @@ class DocumentService:
         sign_file_url: bool = True,
         content_hash: str | None = None,
         queue_ingestion: bool = True,
+        care_team_id: UUID | str | None = None,
+        routing_state: str = "routed",
     ) -> Any:
         """Store document metadata after the frontend has uploaded the file.
 
-        Validates file type and size before inserting.
+        Validates file type and size before inserting. ``care_team_id`` and ``routing_state``
+        come from ``DocumentRoutingService.upload_target``: a document belongs to one care
+        team, or is unrouted (the patient chose "Not sure") until a clinician claims it.
         """
+        if routing_state not in ("routed", "unrouted"):
+            raise ValidationError("Unknown document routing state")
+        if routing_state == "unrouted" and care_team_id:
+            raise ValidationError("An unrouted document cannot have an owning care team")
         self._validate_file(mime_type, file_size_bytes)
         self._validate_file_path(patient_id, file_path)
 
@@ -123,6 +132,8 @@ class DocumentService:
             "reviewed_by": None,
             "reviewed_at": None,
             "review_note": None,
+            "care_team_id": str(care_team_id) if care_team_id else None,
+            "routing_state": routing_state,
         }
 
         result = self.db.table("documents").insert(row).execute()
@@ -158,6 +169,27 @@ class DocumentService:
         # Refresh the signed URL
         self._attach_view_urls(data)
         return data
+
+    # ── Clinician reads ─────────────────────────────────
+
+    def authorize_clinician_document(
+        self, clinician_id: UUID, patient_id: UUID, document_id: UUID
+    ) -> dict[str, Any]:
+        """The document row if the clinician holds a link that owns it (or it is unrouted).
+
+        Raises AuthorizationError with no link to the patient, and NotFoundError for a
+        document another team owns, exactly as for one that does not exist.
+        """
+        return ClinicianRecordGate(self.db).document(
+            clinician_id, patient_id, document_id, columns="id, patient_id"
+        )
+
+    async def get_clinician_document(
+        self, clinician_id: UUID, patient_id: UUID, document_id: UUID
+    ) -> Any:
+        """A patient's document with fresh signed URLs, for a clinician who may see it."""
+        self.authorize_clinician_document(clinician_id, patient_id, document_id)
+        return await self.get_document(document_id, patient_id)
 
     def list_document_results(self, document_id: UUID, patient_id: UUID) -> list[dict[str, Any]]:
         """The patient's own test results and measurements from one document, as printed.

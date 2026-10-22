@@ -5,15 +5,15 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
+from postgrest.exceptions import APIError
 from supabase import Client
 
-from app.core import authorization_reasons as reasons
-from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
+from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.care_plan import (
     PATIENT_LOCALES,
     CarePlanCategory,
@@ -34,6 +34,7 @@ from app.services.care_plan_classification import (
     classify_facts,
 )
 from app.services.care_plan_evidence_gate import eligible_fact_ids
+from app.services.care_plan_lineage import CarePlanLineageService
 from app.services.care_plan_reconciliation import overlaps
 from app.services.care_plan_translation import draft_translations, validate_draft
 from app.services.clinical_fact_service import ClinicalFactService
@@ -83,11 +84,16 @@ class CarePlanService:
 
     def __init__(self, db: Client) -> None:
         self.db = db
+        self.lineage = CarePlanLineageService(db)
 
-    def request_generation(self, patient_id: UUID, source_watermark: datetime) -> None:
+    def request_generation_for_plan(self, care_plan_id: UUID, source_watermark: datetime) -> None:
+        """Ask for a fresh draft of ONE plan; only that plan's own sources are used."""
         self.db.rpc(
-            "request_care_plan_generation",
-            {"p_patient_id": str(patient_id), "p_source_watermark": source_watermark.isoformat()},
+            "request_care_plan_generation_for_plan",
+            {
+                "p_care_plan_id": str(care_plan_id),
+                "p_source_watermark": source_watermark.isoformat(),
+            },
         ).execute()
 
     async def process_pending(self, *, limit: int) -> dict[str, int]:
@@ -118,20 +124,40 @@ class CarePlanService:
                 )
         return counts
 
-    def get_for_clinician(self, clinician_id: UUID, patient_id: UUID) -> dict[str, Any] | None:
-        self._require_assignment(clinician_id, patient_id)
-        plans = self._plans(patient_id)
-        return self._hydrate_plan(plans[0]) if plans else None
+    def get_for_clinician(
+        self,
+        clinician_id: UUID,
+        patient_id: UUID,
+        *,
+        care_team_id: UUID | None = None,
+        care_plan_id: UUID | None = None,
+    ) -> dict[str, Any] | None:
+        """The latest version of the clinician's own plan; never another team's."""
+        plan = self.lineage.select_owned_plan(
+            clinician_id, patient_id, care_team_id=care_team_id, care_plan_id=care_plan_id
+        )
+        if plan is None:
+            return None
+        versions = self._versions(UUID(str(plan["id"])))
+        return self._hydrate_plan(versions[0]) if versions else None
 
     def get_review_context_for_clinician(
-        self, clinician_id: UUID, patient_id: UUID
+        self,
+        clinician_id: UUID,
+        patient_id: UUID,
+        *,
+        care_team_id: UUID | None = None,
+        care_plan_id: UUID | None = None,
     ) -> dict[str, Any]:
-        """Return both review states without exposing another patient's plan."""
-        self._require_assignment(clinician_id, patient_id)
-        plans = self._plans(patient_id)
-        active = next((plan for plan in plans if plan["status"] == "approved"), None)
-        latest = plans[0] if plans else None
+        """Both review states of the clinician's own plan, without another team's plan."""
+        plan = self.lineage.select_owned_plan(
+            clinician_id, patient_id, care_team_id=care_team_id, care_plan_id=care_plan_id
+        )
+        versions = self._versions(UUID(str(plan["id"]))) if plan else []
+        active = next((version for version in versions if version["status"] == "approved"), None)
+        latest = versions[0] if versions else None
         return {
+            "care_plan_id": plan["id"] if plan else None,
             "latest": self._hydrate_plan(latest) if latest else None,
             "active": self._hydrate_plan(active) if active and active != latest else None,
             "patient_locale": self._patient_locale(patient_id),
@@ -139,14 +165,26 @@ class CarePlanService:
         }
 
     def generation_for_clinician(
-        self, clinician_id: UUID, patient_id: UUID
+        self,
+        clinician_id: UUID,
+        patient_id: UUID,
+        *,
+        care_team_id: UUID | None = None,
+        care_plan_id: UUID | None = None,
     ) -> dict[str, Any] | None:
-        """Return durable draft state without exposing unassigned patient work."""
-        self._require_assignment(clinician_id, patient_id)
+        """Durable draft state of the clinician's own plan."""
+        plan = self.lineage.select_owned_plan(
+            clinician_id, patient_id, care_team_id=care_team_id, care_plan_id=care_plan_id
+        )
+        if plan is None:
+            return None
+        return self._latest_generation(UUID(str(plan["id"])))
+
+    def _latest_generation(self, care_plan_id: UUID) -> dict[str, Any] | None:
         result = (
             self.db.table("care_plan_generation_requests")
             .select("*")
-            .eq("patient_id", str(patient_id))
+            .eq("care_plan_id", str(care_plan_id))
             .order("created_at", desc=True)
             .limit(1)
             .execute()
@@ -154,28 +192,181 @@ class CarePlanService:
         rows = cast(list[dict[str, Any]], result.data or [])
         return rows[0] if rows else None
 
-    def get_for_patient(self, patient_id: UUID) -> dict[str, Any] | None:
-        result = (
-            self.db.table("care_plan_versions")
-            .select("*")
-            .eq("patient_id", str(patient_id))
-            .eq("status", "approved")
-            .order("version_number", desc=True)
-            .limit(1)
-            .execute()
+    def plans_for_clinician(self, clinician_id: UUID, patient_id: UUID) -> list[dict[str, Any]]:
+        """Every plan of the patient, as much of each as this clinician may know.
+
+        Their own plans come with version ids and generation state. Another team's plan is
+        only that it exists: specialty, clinician, clinic and approval date (its medications
+        are on the shared summary). An unowned plan lists who may adopt it.
+        """
+        scopes = self.lineage.clinician_scopes(clinician_id, patient_id)
+        mine = {str(scope.care_team_id) for scope in scopes}
+        plans = self.lineage.plans_for_patient(patient_id)
+        displays = self.lineage.team_displays(
+            [str(plan["care_team_id"]) for plan in plans if plan.get("care_team_id")]
         )
-        rows = cast(list[dict[str, Any]], result.data or [])
-        return self._hydrate_plan(rows[0]) if rows else None
+        result: list[dict[str, Any]] = []
+        for plan in plans:
+            versions = self._versions(UUID(str(plan["id"])))
+            approved = next((v for v in versions if v["status"] == "approved"), None)
+            draft = next((v for v in versions if v["status"] == "draft"), None)
+            entry: dict[str, Any] = {
+                "care_plan_id": plan["id"],
+                "care_team_id": plan.get("care_team_id"),
+                "ownership_state": plan["ownership_state"],
+                "origin": plan["origin"],
+                "owner": self.lineage.owner_view(plan, displays),
+                "approved_at": approved["approved_at"] if approved else None,
+                "unowned_since": plan.get("unowned_since"),
+                "is_mine": plan.get("ownership_state") == "owned"
+                and str(plan.get("care_team_id")) in mine,
+            }
+            if entry["is_mine"]:
+                entry["active_version_id"] = approved["id"] if approved else None
+                entry["draft_version_id"] = draft["id"] if draft else None
+                entry["latest_version_number"] = versions[0]["version_number"] if versions else None
+                entry["generation"] = self._latest_generation(UUID(str(plan["id"])))
+            elif plan.get("ownership_state") != "owned":
+                entry["adoptable_by_care_team_ids"] = sorted(mine)
+            result.append(entry)
+        return result
+
+    def unowned_activities(
+        self, clinician_id: UUID, patient_id: UUID, care_plan_id: UUID
+    ) -> dict[str, Any]:
+        """The approved activities of an unowned plan, so a clinician can adopt or retire.
+
+        Only plans nobody owns open here, and only to a clinician linked to the patient:
+        those activities are already in the patient's Today and no team's detail is exposed.
+        """
+        self.lineage.clinician_scopes(clinician_id, patient_id)
+        plan = self.lineage.plan(care_plan_id)
+        if (
+            plan is None
+            or str(plan["patient_id"]) != str(patient_id)
+            or plan.get("ownership_state") == "owned"
+        ):
+            raise NotFoundError("Care plan", str(care_plan_id))
+        versions = self._versions(care_plan_id)
+        approved = next((v for v in versions if v["status"] == "approved"), None)
+        retired = {
+            str(row["item_id"])
+            for row in cast(
+                list[dict[str, Any]],
+                self.db.table("care_plan_item_retirements")
+                .select("item_id")
+                .eq("care_plan_id", str(care_plan_id))
+                .execute()
+                .data
+                or [],
+            )
+        }
+        items = (
+            [
+                {
+                    key: item.get(key)
+                    for key in (
+                        "id",
+                        "category",
+                        "title",
+                        "instructions",
+                        "frequency",
+                        "medication",
+                        "wording",
+                    )
+                }
+                for item in self._items(UUID(str(approved["id"])))
+                if not item.get("is_removed") and str(item["id"]) not in retired
+            ]
+            if approved
+            else []
+        )
+        displays = self.lineage.team_displays([])
+        return {
+            "care_plan_id": plan["id"],
+            "ownership_state": plan["ownership_state"],
+            "previous_owner": self.lineage.owner_view(plan, displays),
+            "unowned_since": plan.get("unowned_since"),
+            "approved_at": approved["approved_at"] if approved else None,
+            "activities": items,
+        }
+
+    def get_for_patient(self, patient_id: UUID) -> dict[str, Any] | None:
+        """Every approved plan of the patient, merged; each item names its plan's owner.
+
+        ``id``/``version_number``/``approved_at`` describe the newest approved plan so the
+        single-plan consumers keep working; ``plans`` lists each plan with its owner.
+        """
+        plans = self.lineage.plans_for_patient(patient_id)
+        approved: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        for plan in plans:
+            version = next(
+                (v for v in self._versions(UUID(str(plan["id"]))) if v["status"] == "approved"),
+                None,
+            )
+            if version:
+                approved.append((plan, version))
+        if not approved:
+            return None
+        displays = self.lineage.team_displays(
+            [str(plan["care_team_id"]) for plan, _ in approved if plan.get("care_team_id")]
+        )
+        retired = {
+            str(row["item_id"])
+            for row in cast(
+                list[dict[str, Any]],
+                self.db.table("care_plan_item_retirements")
+                .select("item_id")
+                .in_("care_plan_id", [str(plan["id"]) for plan, _ in approved])
+                .execute()
+                .data
+                or [],
+            )
+        }
+        items: list[dict[str, Any]] = []
+        summaries: list[dict[str, Any]] = []
+        for plan, version in approved:
+            owner = {
+                "care_plan_id": plan["id"],
+                "care_team_id": plan.get("care_team_id"),
+                "ownership_state": plan["ownership_state"],
+                "unowned_notice": plan["ownership_state"] != "owned",
+                **self.lineage.owner_view(plan, displays),
+            }
+            hydrated = self._hydrate_plan(version)
+            for item in hydrated["items"]:
+                if item.get("is_removed") or str(item["id"]) in retired:
+                    continue
+                items.append({**item, "plan_owner": owner})
+            summaries.append(
+                {
+                    **owner,
+                    "plan_version_id": version["id"],
+                    "version_number": version["version_number"],
+                    "approved_at": version["approved_at"],
+                }
+            )
+        newest = max(approved, key=lambda pair: str(pair[1]["approved_at"]))[1]
+        return {
+            "id": newest["id"],
+            "patient_id": str(patient_id),
+            "version_number": newest["version_number"],
+            "approved_at": newest["approved_at"],
+            "status": "approved",
+            "items": items,
+            "plans": summaries,
+        }
 
     def update_draft(
         self, clinician_id: UUID, patient_id: UUID, plan_id: UUID, update: CarePlanDraftUpdate
     ) -> dict[str, Any]:
-        self._require_assignment(clinician_id, patient_id)
+        _, care_plan = self.lineage.require_owned_version(clinician_id, patient_id, plan_id)
         plan = self._draft(plan_id, patient_id)
         known = {str(row["id"]): row for row in self._items(UUID(str(plan["id"])))}
         if set(str(item.id) for item in update.items) != set(known):
             raise ValidationError("The draft changed; reload before saving your review")
         medications = self._active_medications(patient_id)
+        own_items = self._own_plan_item_ids(UUID(str(care_plan["id"])))
         validated: list[tuple[UUID, dict[str, Any]]] = []
         for item in update.items:
             original = known[str(item.id)]
@@ -190,7 +381,9 @@ class CarePlanService:
                     )
             if original["category"] == "medication" and not item.is_removed:
                 try:
-                    self._validate_medication_decision(item.medication, medications)
+                    self._validate_medication_decision(
+                        item.medication, medications, own_items=own_items
+                    )
                     if (
                         item.frequency.strip()
                         != str(item.medication.get("frequency") or "").strip()
@@ -349,7 +542,7 @@ class CarePlanService:
         from_locale: PatientLocale,
     ) -> dict[str, Any]:
         """Redraft the other language from the reviewed source wording of one item."""
-        self._require_assignment(clinician_id, patient_id)
+        self.lineage.require_owned_version(clinician_id, patient_id, plan_id)
         self._draft(plan_id, patient_id)
         item = next((row for row in self._items(plan_id) if str(row["id"]) == str(item_id)), None)
         if item is None or item.get("is_removed"):
@@ -393,7 +586,7 @@ class CarePlanService:
         """LOC-003: Back-translate the Spanish wording of one item to English for verification."""
         from app.services.care_plan_translation import back_translate_spanish
 
-        self._require_assignment(clinician_id, patient_id)
+        self.lineage.require_owned_version(clinician_id, patient_id, plan_id)
         self._plan(plan_id, patient_id)  # same 404 for an unknown or another patient's plan
         item = next((row for row in self._items(plan_id) if str(row["id"]) == str(item_id)), None)
         if item is None or item.get("is_removed"):
@@ -493,28 +686,127 @@ class CarePlanService:
         )
 
     def approve(
-        self, clinician_id: UUID, patient_id: UUID, plan_id: UUID, note: str
+        self,
+        clinician_id: UUID,
+        patient_id: UUID,
+        plan_id: UUID,
+        note: str,
+        *,
+        idempotency_key: UUID | None = None,
+        excluded_item_ids: Sequence[UUID] = (),
     ) -> dict[str, Any]:
-        self.publication_snapshot(clinician_id, patient_id, plan_id)
-        result = self.db.rpc(
-            "approve_care_plan_version",
-            {
-                "p_plan_version_id": str(plan_id),
-                "p_reviewer_id": str(clinician_id),
-                "p_note": note.strip(),
-            },
-        ).execute()
+        """Publish the draft in one database transaction under the patient-wide lock.
+
+        Cross-plan checks run in the database against current state. A blocker raises a
+        ConflictError whose details list the conflicts to resolve; nothing is published.
+        """
+        self.publication_snapshot(clinician_id, patient_id, plan_id, excluded=excluded_item_ids)
+        try:
+            result = self.db.rpc(
+                "publish_care_plan_version",
+                {
+                    "p_plan_version_id": str(plan_id),
+                    "p_reviewer_id": str(clinician_id),
+                    "p_note": note.strip(),
+                    "p_idempotency_key": str(idempotency_key or uuid4()),
+                    "p_excluded_item_ids": [str(item_id) for item_id in excluded_item_ids],
+                },
+            ).execute()
+        except APIError as error:
+            raise self._publication_error(error, clinician_id, patient_id, plan_id) from None
+        return cast(dict[str, Any], result.data or {})
+
+    def _publication_error(
+        self, error: APIError, clinician_id: UUID, patient_id: UUID, plan_id: UUID
+    ) -> Exception:
+        code = str(error.code or "")
+        message = str(error.message or "")
+        if code == "CP001":
+            # Re-read the comparison for the response: both instructions and plan metadata.
+            review = self.cross_plan_review(clinician_id, patient_id, plan_id)
+            return ConflictError(
+                "Resolve each conflict with the patient's other plans before publishing",
+                code="CROSS_PLAN_CONFLICT",
+                details={
+                    "conflicts": [c for c in review["conflicts"] if c["severity"] == "blocker"],
+                    "interaction_coverage": review["interaction_coverage"],
+                },
+            )
+        if code == "42501" and "care plan unavailable" in message:
+            return NotFoundError("Care plan", str(plan_id))
+        if code == "22023" and "different request" in message:
+            return ConflictError(
+                "This request key was already used for a different request",
+                code="IDEMPOTENCY_KEY_REUSED",
+            )
+        if "not eligible for approval" in message:
+            return ConflictError("This draft was already published or replaced; reload")
+        return ValidationError(message[:300] or "The care plan could not be published")
+
+    def cross_plan_review(
+        self, clinician_id: UUID, patient_id: UUID, plan_id: UUID
+    ) -> dict[str, Any]:
+        """Conflicts with other plans and the shared list, from the database's own check."""
+        self.lineage.require_owned_version(clinician_id, patient_id, plan_id)
+        try:
+            result = self.db.rpc(
+                "care_plan_cross_plan_review",
+                {"p_plan_version_id": str(plan_id), "p_reviewer_id": str(clinician_id)},
+            ).execute()
+        except APIError as error:
+            raise self._publication_error(error, clinician_id, patient_id, plan_id) from None
+        return cast(dict[str, Any], result.data or {"conflicts": []})
+
+    def record_conflict_resolution(
+        self,
+        clinician_id: UUID,
+        patient_id: UUID,
+        plan_id: UUID,
+        *,
+        fingerprint: str,
+        resolution: str,
+        reason: str,
+    ) -> dict[str, Any]:
+        """Keep both (with a written reason) or ask the other care team. Both tell them."""
+        self.lineage.require_owned_version(clinician_id, patient_id, plan_id)
+        try:
+            result = self.db.rpc(
+                "record_cross_plan_resolution",
+                {
+                    "p_plan_version_id": str(plan_id),
+                    "p_actor_id": str(clinician_id),
+                    "p_fingerprint": fingerprint,
+                    "p_resolution": resolution,
+                    "p_reason": reason.strip(),
+                },
+            ).execute()
+        except APIError as error:
+            if str(error.code) == "40001":
+                raise ConflictError(
+                    "This conflict has changed; review it again", code="CONFLICT_CHANGED"
+                ) from None
+            raise self._publication_error(error, clinician_id, patient_id, plan_id) from None
         return cast(dict[str, Any], result.data or {})
 
     def publication_snapshot(
-        self, clinician_id: UUID, patient_id: UUID, plan_id: UUID
+        self,
+        clinician_id: UUID,
+        patient_id: UUID,
+        plan_id: UUID,
+        *,
+        excluded: Sequence[UUID] = (),
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-        """Read-only publication preflight. The transaction rechecks these guards."""
-        self._require_assignment(clinician_id, patient_id)
+        """Read-only publication preflight. The transaction rechecks these guards.
+
+        Items published without are left out of the checks: they stay pending in the draft.
+        """
+        _, care_plan = self.lineage.require_owned_version(clinician_id, patient_id, plan_id)
         plan = self._draft(plan_id, patient_id)
-        self._require_generation_complete(clinician_id, patient_id)
+        self._require_generation_complete(UUID(str(care_plan["id"])))
         medications = self._active_medications(patient_id)
-        items = self._items(plan_id)
+        own_items = self._own_plan_item_ids(UUID(str(care_plan["id"])))
+        skipped = {str(item_id) for item_id in excluded}
+        items = [item for item in self._items(plan_id) if str(item.get("id")) not in skipped]
         for item in items:
             if item.get("is_removed"):
                 continue
@@ -528,7 +820,9 @@ class CarePlanService:
                 )
             self._require_wording_guards(item)
             if item["category"] == "medication":
-                self._validate_medication_decision(item.get("medication") or {}, medications)
+                self._validate_medication_decision(
+                    item.get("medication") or {}, medications, own_items=own_items
+                )
                 if (
                     str(item.get("frequency") or "").strip()
                     != str((item.get("medication") or {}).get("frequency") or "").strip()
@@ -567,8 +861,8 @@ class CarePlanService:
             raise ValidationError("Resolve overlapping plan items before publication")
         return plan, items
 
-    def _require_generation_complete(self, clinician_id: UUID, patient_id: UUID) -> None:
-        generation = self.generation_for_clinician(clinician_id, patient_id)
+    def _require_generation_complete(self, care_plan_id: UUID) -> None:
+        generation = self._latest_generation(care_plan_id)
         if generation and generation["status"] != "completed":
             raise ValidationError(
                 "Automatic generation must complete before this draft can be published"
@@ -597,27 +891,76 @@ class CarePlanService:
 
     @staticmethod
     def _validate_medication_decision(
-        medication: dict[str, Any], active: list[dict[str, Any]]
+        medication: dict[str, Any],
+        active: list[dict[str, Any]],
+        *,
+        own_items: set[str] | None = None,
     ) -> None:
+        """Per-plan shape of the decision. Duplicates of ANOTHER plan's or the shared list's
+        medication are not rejected here: the database compares them at publication and the
+        clinician resolves each one (change, keep both with a reason, ask, publish without).
+
+        ``own_items`` are the care-plan item ids of this plan's lineage. A medication that
+        this plan already projects cannot be created a second time, and a medication owned
+        by another plan's activity cannot be updated from here.
+        """
         decision = medication.get("decision")
         name = str(medication.get("name") or "").strip().casefold()
         target_id = str(medication.get("target_id") or "")
+        own = own_items or set()
         if decision == "create" and name and not target_id:
-            if any(str(row.get("name") or "").strip().casefold() == name for row in active):
+            if any(
+                str(row.get("name") or "").strip().casefold() == name
+                and str(row.get("care_plan_item_id")) in own
+                for row in active
+            ):
                 raise ValidationError("An active medication with this name already exists")
             return
         if decision == "update" and target_id:
             target = next((row for row in active if str(row.get("id")) == target_id), None)
             if target and str(target.get("name") or "").strip().casefold() == name:
+                owner_item = target.get("care_plan_item_id")
+                if owner_item and own_items is not None and str(owner_item) not in own:
+                    raise ValidationError(
+                        "This medication belongs to another care plan; "
+                        "create your own entry or ask that care team"
+                    )
                 return
         raise ValidationError("Choose an active matching medication to update or create a new one")
 
-    def retry_failed_generation(self, clinician_id: UUID, patient_id: UUID) -> None:
-        self._require_assignment(clinician_id, patient_id)
+    def _own_plan_item_ids(self, care_plan_id: UUID) -> set[str]:
+        """Every care-plan item id in this plan's lineage (all versions)."""
+        versions = [str(version["id"]) for version in self._versions(care_plan_id)]
+        if not versions:
+            return set()
+        rows = cast(
+            list[dict[str, Any]],
+            self.db.table("care_plan_items")
+            .select("id")
+            .in_("plan_version_id", versions)
+            .execute()
+            .data
+            or [],
+        )
+        return {str(row["id"]) for row in rows}
+
+    def retry_failed_generation(
+        self,
+        clinician_id: UUID,
+        patient_id: UUID,
+        *,
+        care_team_id: UUID | None = None,
+        care_plan_id: UUID | None = None,
+    ) -> None:
+        plan = self.lineage.select_owned_plan(
+            clinician_id, patient_id, care_team_id=care_team_id, care_plan_id=care_plan_id
+        )
+        if plan is None:
+            raise ValidationError("There is no failed care-plan generation to retry")
         latest = (
             self.db.table("care_plan_generation_requests")
             .select("*")
-            .eq("patient_id", str(patient_id))
+            .eq("care_plan_id", str(plan["id"]))
             .eq("status", "failed")
             .order("created_at", desc=True)
             .limit(1)
@@ -641,6 +984,8 @@ class CarePlanService:
         clinician_id: UUID,
         patient_id: UUID,
         obligation_data: dict[str, Any],
+        *,
+        care_team_id: UUID | None = None,
     ) -> dict[str, Any]:
         """Stage a clinician-authored activity in a draft; never publish it directly.
 
@@ -649,7 +994,8 @@ class CarePlanService:
         registered as explicit provenance, then it becomes a source-linked plan item
         that still requires whole-plan approval before any runtime projection exists.
         """
-        self._require_assignment(clinician_id, patient_id)
+        scope = self.lineage.scope_for_team(clinician_id, patient_id, care_team_id)
+        care_plan_id = self.lineage.ensure_plan_id(clinician_id, scope)
         description = str(obligation_data["description"]).strip()
         frequency = str(obligation_data["frequency"]).strip()
         notes = str(obligation_data.get("notes") or "").strip()
@@ -677,6 +1023,7 @@ class CarePlanService:
                     source_system="clinician_portal",
                     source_reference=f"clinician:{clinician_id}:care-plan-entry",
                     document_location={"kind": "clinician_authored_care_plan_entry"},
+                    care_team_id=scope.care_team_id,
                 ),
                 citations=[
                     EvidenceCitationCreate(
@@ -687,7 +1034,7 @@ class CarePlanService:
             ),
             actor_id=clinician_id,
         )
-        draft = self._open_draft(patient_id, datetime.now(UTC).isoformat())
+        draft = self._open_draft(patient_id, care_plan_id, datetime.now(UTC).isoformat())
         category = {
             "diet": CarePlanCategory.NUTRITION.value,
             "exercise": CarePlanCategory.MOVEMENT.value,
@@ -717,7 +1064,8 @@ class CarePlanService:
 
     async def _generate(self, claim: dict[str, Any]) -> None:
         patient_id = UUID(str(claim["patient_id"]))
-        facts = self._plan_facts(patient_id)
+        care_plan_id = UUID(str(claim["care_plan_id"]))
+        facts = self._plan_facts(patient_id, care_plan_id)
         if not facts:
             self._finish_request(claim, status="completed", plan_id=None)
             return
@@ -731,7 +1079,7 @@ class CarePlanService:
             )
             for fact in facts
         ]
-        draft = self._open_draft(patient_id, str(claim["source_watermark"]))
+        draft = self._open_draft(patient_id, care_plan_id, str(claim["source_watermark"]))
         plan_id = UUID(str(draft["id"]))
         # All new evidence and the completion marker commit together. A retry
         # retains already-reviewed items and cannot acknowledge a partial write.
@@ -758,22 +1106,37 @@ class CarePlanService:
         if diagnostics:
             self._log_translation_outcome(plan_id, diagnostics)
 
-    def _plan_facts(self, patient_id: UUID) -> list[dict[str, Any]]:
+    def _plan_facts(self, patient_id: UUID, care_plan_id: UUID) -> list[dict[str, Any]]:
+        """Only the evidence routed to THIS plan's care team, never another team's.
+
+        The database selects the eligible fact ids: sources routed to the plan's team, plus
+        its clinician entries. SMART/FHIR candidates stay in External records; importing a
+        resource is not an instruction to propose that historical therapy in today's plan.
+        """
+        ids = [
+            str(value)
+            for value in cast(
+                list[Any],
+                self.db.rpc("care_plan_source_fact_ids", {"p_care_plan_id": str(care_plan_id)})
+                .execute()
+                .data
+                or [],
+            )
+        ]
+        if not ids:
+            return []
         result = (
             self.db.table("clinical_facts")
             .select("*")
             .eq("patient_id", str(patient_id))
+            .in_("id", ids)
             .in_("fact_type", ["medication", "obligation"])
             .in_("review_state", ["pending_review", "approved"])
             .order("created_at", desc=True)
             .execute()
         )
         facts = cast(list[dict[str, Any]], result.data or [])
-        if not facts:
-            return []
         eligible = eligible_fact_ids(self.db, patient_id, [str(fact["id"]) for fact in facts])
-        # SMART/FHIR candidates stay in External records. Importing a resource is
-        # not an instruction to propose that historical therapy in today's plan.
         return [fact for fact in facts if str(fact["id"]) in eligible]
 
     async def _select_categories(self, facts: list[dict[str, Any]]) -> dict[str, str]:
@@ -914,11 +1277,13 @@ class CarePlanService:
             ),
         }
 
-    def _open_draft(self, patient_id: UUID, source_watermark: str) -> dict[str, Any]:
+    def _open_draft(
+        self, patient_id: UUID, care_plan_id: UUID, source_watermark: str
+    ) -> dict[str, Any]:
         existing = (
             self.db.table("care_plan_versions")
             .select("*")
-            .eq("patient_id", str(patient_id))
+            .eq("care_plan_id", str(care_plan_id))
             .eq("status", "draft")
             .limit(1)
             .execute()
@@ -926,13 +1291,14 @@ class CarePlanService:
         rows = cast(list[dict[str, Any]], existing.data or [])
         if rows:
             return rows[0]
-        latest = self._plans(patient_id)
+        latest = self._versions(care_plan_id)
         version = int(latest[0]["version_number"]) + 1 if latest else 1
         created = (
             self.db.table("care_plan_versions")
             .insert(
                 {
                     "patient_id": str(patient_id),
+                    "care_plan_id": str(care_plan_id),
                     "version_number": version,
                     "status": "draft",
                     "source_watermark": source_watermark,
@@ -1129,11 +1495,12 @@ class CarePlanService:
             return "Confirm this low-confidence source extraction before approval."
         return None
 
-    def _plans(self, patient_id: UUID) -> list[dict[str, Any]]:
+    def _versions(self, care_plan_id: UUID) -> list[dict[str, Any]]:
+        """Every version of ONE plan, newest first."""
         result = (
             self.db.table("care_plan_versions")
             .select("*")
-            .eq("patient_id", str(patient_id))
+            .eq("care_plan_id", str(care_plan_id))
             .order("version_number", desc=True)
             .execute()
         )
@@ -1320,26 +1687,3 @@ class CarePlanService:
                 "event_data": data,
             }
         ).execute()
-
-    def _require_assignment(self, clinician_id: UUID, patient_id: UUID) -> None:
-        rows = cast(
-            list[dict[str, Any]],
-            self.db.table("care_teams")
-            .select("id")
-            .eq("clinician_id", str(clinician_id))
-            .eq("patient_id", str(patient_id))
-            .eq("status", "active")
-            .limit(1)
-            .execute()
-            .data
-            or [],
-        )
-        if not rows:
-            raise AuthorizationError(
-                "You are not assigned to this patient",
-                reason_code=reasons.NO_CARE_TEAM_ASSIGNMENT,
-                actor_id=str(clinician_id),
-                actor_role="clinician",
-                target_type="patient",
-                target_id=str(patient_id),
-            )

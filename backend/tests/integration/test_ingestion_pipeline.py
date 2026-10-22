@@ -267,7 +267,7 @@ async def _ingest_with(
     service._extract_structured = AsyncMock(return_value=(result, "gemini-test", 0))
     with (
         patch("app.services.ingestion_service.DocumentEvidenceCandidateService") as registry,
-        patch("app.services.care_plan_service.CarePlanService") as care_plan,
+        patch("app.services.ingestion_service.DocumentDraftingRequest") as care_plan,
     ):
         registry.return_value.register.return_value = CandidateRegistrationSummary(
             created=len(fact_types), fact_types=fact_types
@@ -284,7 +284,7 @@ async def test_results_only_document_does_not_open_a_care_plan_draft() -> None:
     _, care_plan = await _ingest_with(
         {"lab_result", "condition"}, document_type="lab_report", proposed_type="lab_report"
     )
-    care_plan.return_value.request_generation.assert_not_called()
+    care_plan.return_value.request.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -292,7 +292,9 @@ async def test_medication_document_still_requests_a_draft() -> None:
     _, care_plan = await _ingest_with(
         {"medication", "lab_result"}, document_type="lab_report", proposed_type=None
     )
-    care_plan.return_value.request_generation.assert_called_once()
+    # Drafting follows the document (its own team's plan), not the patient.
+    care_plan.return_value.request.assert_called_once()
+    assert care_plan.return_value.request.call_args.args[0] == DOCUMENT_ID
 
 
 @pytest.mark.asyncio

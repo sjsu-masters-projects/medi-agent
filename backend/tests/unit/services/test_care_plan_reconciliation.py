@@ -9,6 +9,7 @@ import pytest
 from app.core.exceptions import ValidationError
 from app.services.care_plan_reconciliation import overlaps, publication_key
 from app.services.care_plan_service import CarePlanService
+from tests.unit.services.care_plan_ownership_stub import stub_ownership
 from tests.unit.services.care_plan_wording import verified_wording
 
 
@@ -64,11 +65,13 @@ def test_generation_requires_live_document_or_clinician_entry_provenance():
         "documents": query([{"id": "doc", "uploaded_by_role": "clinician"}]),
     }
     db.table.side_effect = chains.__getitem__
-    assert CarePlanService(db)._plan_facts(UUID(int=1)) == facts[:2]
+    # The database names the facts routed to this plan's own team; nothing else is read.
+    db.rpc.return_value.execute.return_value.data = [fact["id"] for fact in facts]
+    assert CarePlanService(db)._plan_facts(UUID(int=1), UUID(int=9)) == facts[:2]
     chains["clinical_facts"].eq.assert_called_with("patient_id", str(UUID(int=1)))
     # No source/fact mutation and no publication during evidence selection.
     chains["clinical_facts"].update.assert_not_called()
-    db.rpc.assert_not_called()
+    assert [call.args[0] for call in db.rpc.call_args_list] == ["care_plan_source_fact_ids"]
 
 
 def test_exact_source_overlap_preserves_translated_carried_wording_and_all_rows():
@@ -122,11 +125,11 @@ def test_approval_denies_identical_activity_without_writing_projection(monkeypat
         {"id": "fact", "fact_type": "obligation", "value": {}}
     ]
     service = CarePlanService(db)
-    service._require_assignment = MagicMock()
+    stub_ownership(service)
     service._draft = MagicMock()
     service._patient_locale = MagicMock(return_value="en-US")
     service._active_medications = MagicMock(return_value=[])
-    service.generation_for_clinician = MagicMock(return_value={"status": "completed"})
+    service._latest_generation = MagicMock(return_value={"status": "completed"})
     service._items = MagicMock(
         return_value=[activity(source_fact_id="fact"), activity("two", source_fact_id="fact")]
     )
@@ -151,7 +154,7 @@ def test_revision_links_carried_medication_to_approved_projection():
         else inserted
     )
     service = CarePlanService(db)
-    service._plans = MagicMock(
+    service._versions = MagicMock(
         return_value=[{"id": str(UUID(int=2)), "status": "approved", "version_number": 1}]
     )
     service._items = MagicMock(
@@ -164,7 +167,7 @@ def test_revision_links_carried_medication_to_approved_projection():
             )
         ]
     )
-    service._open_draft(UUID(int=1), "2026-10-01T00:00:00Z")
+    service._open_draft(UUID(int=1), UUID(int=9), "2026-10-01T00:00:00Z")
     medication = inserted.insert.call_args.args[0]["medication"]
     assert medication["decision"] == "update"
     assert medication["target_id"] == str(UUID(int=4))
@@ -181,7 +184,7 @@ def test_revision_retains_exact_source_exclusions_without_projection_or_attestat
         else created
     )
     service = CarePlanService(db)
-    service._plans = MagicMock(
+    service._versions = MagicMock(
         return_value=[{"id": str(UUID(int=2)), "status": "approved", "version_number": 2}]
     )
     original = activity(
@@ -191,7 +194,7 @@ def test_revision_retains_exact_source_exclusions_without_projection_or_attestat
         projection_id=str(UUID(int=5)),
     )
     service._items = MagicMock(return_value=[original])
-    service._open_draft(UUID(int=1), "2026-10-09T00:00:00Z")
+    service._open_draft(UUID(int=1), UUID(int=9), "2026-10-09T00:00:00Z")
     payload = created.insert.call_args_list[-1].args[0]
     assert payload["source_fact_id"] == original["source_fact_id"]
     assert payload["is_removed"] is True

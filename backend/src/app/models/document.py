@@ -53,7 +53,27 @@ class DocumentRead(BaseModel):
     reviewed_by: UUID | None = None
     reviewed_at: str | None = None
     review_note: str | None = None
+    # PLAN-002: the care team that owns the document; none while it is unrouted.
+    care_team_id: UUID | None = None
+    routing_state: Literal["routed", "unrouted"] = "routed"
     created_at: str
+
+
+class DocumentCareTeamOption(BaseModel):
+    """One of the patient's active care teams, as offered when uploading. Names only."""
+
+    care_team_id: UUID
+    specialty: str | None = None
+    clinician_name: str | None = None
+    clinic_name: str | None = None
+    clinic_id: UUID | None = None
+
+
+class DocumentClaimRead(BaseModel):
+    document_id: UUID
+    care_team_id: UUID
+    status: str
+    replayed: bool = False
 
 
 class DocumentResultRead(BaseModel):

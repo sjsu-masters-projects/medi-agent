@@ -10,6 +10,7 @@ import pytest
 from app.core.exceptions import AuthorizationError, ValidationError
 from app.models.care_plan import CarePlanDraftUpdate
 from app.services.care_plan_service import CarePlanService
+from tests.unit.services.care_plan_ownership_stub import stub_ownership
 from tests.unit.services.care_plan_wording import verified_wording
 
 PATIENT_ID = UUID("00000000-0000-0000-0000-000000000201")
@@ -18,11 +19,14 @@ CLINICIAN_ID = UUID("00000000-0000-0000-0000-000000000202")
 
 def review_service(original: dict) -> CarePlanService:
     service = CarePlanService(MagicMock())
-    service._require_assignment = MagicMock()
+    stub_ownership(service)
     service._draft = MagicMock(return_value={"id": str(PATIENT_ID)})
     service._items = MagicMock(return_value=[original])
     service._patient_locale = MagicMock(return_value="en-US")
-    service._active_medications = MagicMock(return_value=[{"id": "med-1", "name": "Metformin"}])
+    service._active_medications = MagicMock(
+        return_value=[{"id": "med-1", "name": "Metformin", "care_plan_item_id": "own-item"}]
+    )
+    service._own_plan_item_ids = MagicMock(return_value={"own-item"})
     service._audit = MagicMock()
     service._plan = MagicMock(return_value={})
     service._hydrate_plan = MagicMock(return_value={})
@@ -123,9 +127,9 @@ def test_saved_resolution_cannot_bypass_missing_instruction() -> None:
 @pytest.mark.parametrize("status", ["pending", "processing", "retry", "failed"])
 def test_partial_generation_cannot_be_approved_even_when_items_are_reviewed(status: str) -> None:
     service = CarePlanService(MagicMock())
-    service._require_assignment = MagicMock()
+    stub_ownership(service)
     service._draft = MagicMock(return_value={"id": str(PATIENT_ID)})
-    service.generation_for_clinician = MagicMock(return_value={"status": status})
+    service._latest_generation = MagicMock(return_value={"status": status})
     with pytest.raises(ValidationError, match="generation must complete"):
         service.approve(CLINICIAN_ID, PATIENT_ID, PATIENT_ID, "Reviewed all visible items")
     service.db.rpc.assert_not_called()
@@ -134,8 +138,8 @@ def test_partial_generation_cannot_be_approved_even_when_items_are_reviewed(stat
 def test_review_context_returns_active_and_proposed_versions() -> None:
     db = MagicMock()
     service = CarePlanService(db)
-    service._require_assignment = MagicMock()  # type: ignore[method-assign]
-    service._plans = MagicMock(  # type: ignore[method-assign]
+    stub_ownership(service)
+    service._versions = MagicMock(  # type: ignore[method-assign]
         return_value=[
             {"id": "draft", "status": "draft", "version_number": 2},
             {"id": "approved", "status": "approved", "version_number": 1},
@@ -153,14 +157,15 @@ def test_review_context_returns_active_and_proposed_versions() -> None:
     assert result["active"]["version_number"] == 1
     assert result["patient_locale"] == "en-US"
     assert result["active_medications"] == []
-    service._require_assignment.assert_called_once_with(CLINICIAN_ID, PATIENT_ID)
+    service.lineage.select_owned_plan.assert_called_once()
 
 
 def test_review_context_denies_unassigned_clinician_before_reading_plans() -> None:
     db = MagicMock()
     service = CarePlanService(db)
-    service._require_assignment = MagicMock(  # type: ignore[method-assign]
-        side_effect=AuthorizationError("You are not assigned to this patient")
+    service.lineage = MagicMock()
+    service.lineage.select_owned_plan.side_effect = AuthorizationError(
+        "You are not assigned to this patient"
     )
 
     with pytest.raises(AuthorizationError):
@@ -236,16 +241,27 @@ def test_hydrated_item_retains_every_supporting_document() -> None:
 
 
 def test_medication_decision_requires_explicit_match_or_new_name() -> None:
-    active = [{"id": "med-1", "name": "Metformin", "dosage": "500 mg"}]
+    active = [{"id": "med-1", "name": "Metformin", "dosage": "500 mg", "care_plan_item_id": "own"}]
     validate = CarePlanService._validate_medication_decision
 
     with pytest.raises(ValidationError, match="already exists"):
-        validate({"decision": "create", "name": "metformin"}, active)
+        validate({"decision": "create", "name": "metformin"}, active, own_items={"own"})
+    # Another plan's (or the shared list's) medication is a cross-plan conflict for the
+    # database to resolve at publication, not an inline rejection.
+    validate({"decision": "create", "name": "metformin"}, active, own_items=set())
+    with pytest.raises(ValidationError, match="belongs to another care plan"):
+        validate(
+            {"decision": "update", "target_id": "med-1", "name": "Metformin"},
+            active,
+            own_items={"other-item"},
+        )
     with pytest.raises(ValidationError, match="Choose an active matching"):
         validate({"decision": "update", "target_id": "someone-else", "name": "Metformin"}, active)
     with pytest.raises(ValidationError, match="Choose an active matching"):
         validate({"decision": "update", "target_id": "med-1", "name": "Different"}, active)
-    validate({"decision": "update", "target_id": "med-1", "name": "metformin"}, active)
+    validate(
+        {"decision": "update", "target_id": "med-1", "name": "metformin"}, active, own_items={"own"}
+    )
     validate({"decision": "create", "name": "Loratadine"}, active)
 
 
@@ -261,8 +277,8 @@ def test_medication_decision_requires_explicit_match_or_new_name() -> None:
 def test_approval_denies_unverified_bilingual_wording_before_rpc(change, message) -> None:
     db = MagicMock()
     service = CarePlanService(db)
-    service.generation_for_clinician = MagicMock(return_value={"status": "completed"})
-    service._require_assignment = MagicMock()  # type: ignore[method-assign]
+    service._latest_generation = MagicMock(return_value={"status": "completed"})
+    stub_ownership(service)
     service._draft = MagicMock(return_value={"id": str(PATIENT_ID)})  # type: ignore[method-assign]
     service._patient_locale = MagicMock(return_value="en-US")  # type: ignore[method-assign]
     service._active_medications = MagicMock(return_value=[])  # type: ignore[method-assign]
@@ -279,13 +295,14 @@ def test_approval_denies_unverified_bilingual_wording_before_rpc(change, message
 def test_approval_denies_unmatched_medication_before_rpc() -> None:
     db = MagicMock()
     service = CarePlanService(db)
-    service.generation_for_clinician = MagicMock(return_value={"status": "completed"})
-    service._require_assignment = MagicMock()  # type: ignore[method-assign]
+    service._latest_generation = MagicMock(return_value={"status": "completed"})
+    stub_ownership(service)
     service._draft = MagicMock(return_value={"id": str(PATIENT_ID)})  # type: ignore[method-assign]
     service._patient_locale = MagicMock(return_value="en-US")  # type: ignore[method-assign]
     service._active_medications = MagicMock(  # type: ignore[method-assign]
-        return_value=[{"id": "med-1", "name": "Metformin"}]
+        return_value=[{"id": "med-1", "name": "Metformin", "care_plan_item_id": "own"}]
     )
+    service._own_plan_item_ids = MagicMock(return_value={"own"})  # type: ignore[method-assign]
     service._items = MagicMock(  # type: ignore[method-assign]
         return_value=[
             {
@@ -309,8 +326,8 @@ def test_approval_calls_transaction_for_reviewed_matching_medication(monkeypatch
     )
     db = MagicMock()
     service = CarePlanService(db)
-    service.generation_for_clinician = MagicMock(return_value={"status": "completed"})
-    service._require_assignment = MagicMock()  # type: ignore[method-assign]
+    service._latest_generation = MagicMock(return_value={"status": "completed"})
+    stub_ownership(service)
     service._draft = MagicMock(return_value={"id": str(PATIENT_ID)})  # type: ignore[method-assign]
     service._patient_locale = MagicMock(return_value="en-US")  # type: ignore[method-assign]
     service._active_medications = MagicMock(  # type: ignore[method-assign]
@@ -341,14 +358,12 @@ def test_approval_calls_transaction_for_reviewed_matching_medication(monkeypatch
     result = service.approve(CLINICIAN_ID, PATIENT_ID, PATIENT_ID, "Reviewed source")
 
     assert result["status"] == "approved"
-    db.rpc.assert_called_once_with(
-        "approve_care_plan_version",
-        {
-            "p_plan_version_id": str(PATIENT_ID),
-            "p_reviewer_id": str(CLINICIAN_ID),
-            "p_note": "Reviewed source",
-        },
-    )
+    name, params = db.rpc.call_args.args
+    assert name == "publish_care_plan_version"
+    assert params["p_plan_version_id"] == str(PATIENT_ID)
+    assert params["p_reviewer_id"] == str(CLINICIAN_ID)
+    assert params["p_note"] == "Reviewed source"
+    assert params["p_excluded_item_ids"] == [] and params["p_idempotency_key"]
 
     db.rpc.reset_mock()
     service._items.return_value[0]["frequency"] = "twice daily"
@@ -365,9 +380,9 @@ def test_publication_preflight_denies_ineligible_fact_before_rpc(monkeypatch, ca
     chain = db.table.return_value.select.return_value.eq.return_value.in_.return_value.in_
     chain.execute.return_value.data = []
     service = CarePlanService(db)
-    service._require_assignment = MagicMock()
+    stub_ownership(service)
     service._draft = MagicMock(return_value={"id": str(PATIENT_ID)})
-    service.generation_for_clinician = MagicMock(return_value={"status": "completed"})
+    service._latest_generation = MagicMock(return_value={"status": "completed"})
     service._patient_locale = MagicMock(return_value="en-US")
     service._active_medications = MagicMock(return_value=[])
     service._items = MagicMock(
@@ -392,7 +407,7 @@ def test_publication_preflight_denies_ineligible_fact_before_rpc(monkeypatch, ca
 def _draft_save_service(original: dict) -> tuple[MagicMock, CarePlanService]:
     db = MagicMock()
     service = CarePlanService(db)
-    service._require_assignment = MagicMock()  # type: ignore[method-assign]
+    stub_ownership(service)
     service._draft = MagicMock(return_value={"id": str(PATIENT_ID)})  # type: ignore[method-assign]
     service._items = MagicMock(return_value=[original])  # type: ignore[method-assign]
     service._active_medications = MagicMock(return_value=[])  # type: ignore[method-assign]
@@ -513,7 +528,7 @@ def test_abbreviated_source_title_requires_edit_or_removal(edited: bool, removed
 
     db = MagicMock()
     service = CarePlanService(db)
-    service._require_assignment = MagicMock()
+    stub_ownership(service)
     service._draft = MagicMock(return_value={"id": str(PATIENT_ID)})
     service._items = MagicMock(
         return_value=[
@@ -603,7 +618,7 @@ def test_approval_preflight_rejects_stored_verified_wording_that_fails_the_check
         **verified_wording(),
     }
     item["wording"]["es-MX"]["instructions"] = "Camina 30 minutos (es)"
-    service._require_assignment = MagicMock()  # type: ignore[method-assign]
+    stub_ownership(service)
     service._draft = MagicMock(return_value={"id": str(PATIENT_ID)})  # type: ignore[method-assign]
     service._require_generation_complete = MagicMock()  # type: ignore[method-assign]
     service._active_medications = MagicMock(return_value=[])  # type: ignore[method-assign]

@@ -40,6 +40,8 @@ class ClinicalFactService:
         fact = self._insert_one("clinical_facts", fact_payload, "clinical fact")
         fact_id = UUID(str(fact["id"]))
 
+        # care_team_id (non-document sources only) is persisted with the rest of the provenance;
+        # visibility of the fact later follows it (CareTeamAccessService.visible_fact_ids).
         provenance_payload = candidate.provenance.model_dump(mode="json", exclude_none=True)
         provenance_payload["captured_at"] = (
             candidate.provenance.captured_at or datetime.now(UTC)

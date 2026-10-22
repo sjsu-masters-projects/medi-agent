@@ -22,6 +22,8 @@ import {
     type UploaderRole,
 } from "@/types";
 import { readStoredSession } from "@/services/auth-session";
+import type { CarePlanScope, PublishCarePlanResult } from "@/types";
+import { scopeQuery } from "@/utils/care-plan-scope";
 import { ApiClientError } from "@/services/api";
 import { reportedProduct } from "@/utils/reported-product";
 import type {
@@ -234,6 +236,8 @@ export interface ADRReviewDecisionInput {
     action: ADRReviewAction;
     note?: string;
     requestedInformation?: string[];
+    /** PLAN-002: required when the clinician holds several links to the patient. */
+    careTeamId?: string;
 }
 
 export interface ADRReviewDecisionResult {
@@ -917,6 +921,8 @@ interface PatientDeepDiveResponse
             first_name?: string;
             last_name?: string;
         } | null;
+        routing_state?: "routed" | "unrouted";
+        care_team_id?: string | null;
     }>;
 }
 
@@ -942,6 +948,9 @@ interface DocumentReviewQueueItemResponse {
     created_at: string;
     uploaded_by_role: UploaderRole;
     review_status: DocumentReviewStatus;
+    needs_claim?: boolean;
+    claimable_care_team_ids?: string[];
+    care_team_id?: string | null;
 }
 
 export interface ObligationSetPayload {
@@ -1108,6 +1117,7 @@ function normalizePatientDocument(
         reviewedAt: document.reviewed_at,
         reviewNote: document.review_note,
         reviewer: normalizeReviewer(document.reviewer),
+        ...(document.routing_state ? { routingState: document.routing_state } : {}),
     };
 }
 
@@ -1136,6 +1146,7 @@ function normalizeDocumentReviewQueueItem(
         createdAt: item.created_at,
         uploadedByRole: item.uploaded_by_role,
         reviewStatus: item.review_status,
+        ...(item.needs_claim ? { needsClaim: true, claimableCareTeamIds: item.claimable_care_team_ids ?? [] } : {}),
     };
 }
 
@@ -1246,6 +1257,7 @@ export async function reviewADRAssessment(
             action: input.action,
             note: input.note,
             requested_information: input.requestedInformation ?? [],
+            ...(input.careTeamId ? { care_team_id: input.careTeamId } : {}),
         }),
     });
     return {
@@ -1266,6 +1278,7 @@ export async function reviewADRAssessment(
 export async function createMedWatchDraft(
     assessmentId: string,
     reportabilityRationale: string,
+    careTeamId?: string,
 ): Promise<MedWatchDraft> {
     const result = await apiFetch<MedWatchDraftResponse>(
         `/api/v1/clinicians/me/adr-assessments/${assessmentId}/medwatch-draft`,
@@ -1274,6 +1287,7 @@ export async function createMedWatchDraft(
             body: JSON.stringify({
                 decision: "prepare_draft",
                 reportability_rationale: reportabilityRationale,
+                ...(careTeamId ? { care_team_id: careTeamId } : {}),
             }),
         },
     );
@@ -1639,17 +1653,19 @@ export async function fetchClinicianCarePlan(patientId: string): Promise<CarePla
 
 export async function fetchClinicianCarePlanReviewContext(
     patientId: string,
+    scope?: CarePlanScope,
 ): Promise<CarePlanReviewContext> {
     return apiFetch<CarePlanReviewContext>(
-        `/api/v1/care-plans/clinician/patients/${patientId}/review-context`,
+        `/api/v1/care-plans/clinician/patients/${patientId}/review-context${scopeQuery(scope)}`,
     );
 }
 
 export async function fetchClinicianCarePlanGeneration(
     patientId: string,
+    scope?: CarePlanScope,
 ): Promise<CarePlanGeneration | null> {
     return apiFetch<CarePlanGeneration | null>(
-        `/api/v1/care-plans/clinician/patients/${patientId}/generation`,
+        `/api/v1/care-plans/clinician/patients/${patientId}/generation${scopeQuery(scope)}`,
     );
 }
 
@@ -1720,10 +1736,15 @@ export async function approveClinicianCarePlan(
     patientId: string,
     planId: string,
     note: string,
-): Promise<{ status: string }> {
+    options?: { idempotencyKey?: string; excludedItemIds?: string[] },
+): Promise<{ status: string } & Partial<PublishCarePlanResult>> {
     return apiFetch(`/api/v1/care-plans/clinician/patients/${patientId}/${planId}/approve`, {
         method: "POST",
-        body: JSON.stringify({ note }),
+        body: JSON.stringify({
+            note,
+            ...(options?.idempotencyKey ? { idempotency_key: options.idempotencyKey } : {}),
+            ...(options?.excludedItemIds?.length ? { excluded_item_ids: options.excludedItemIds } : {}),
+        }),
     });
 }
 
@@ -1745,8 +1766,11 @@ export async function fetchBackTranslation(
     );
 }
 
-export async function retryClinicianCarePlanGeneration(patientId: string): Promise<{ status: string }> {
-    return apiFetch(`/api/v1/care-plans/clinician/patients/${patientId}/retry-generation`, {
+export async function retryClinicianCarePlanGeneration(
+    patientId: string,
+    scope?: CarePlanScope,
+): Promise<{ status: string }> {
+    return apiFetch(`/api/v1/care-plans/clinician/patients/${patientId}/retry-generation${scopeQuery(scope)}`, {
         method: "POST",
     });
 }
@@ -1755,10 +1779,11 @@ export async function retryClinicianCarePlanGeneration(patientId: string): Promi
 export async function generateSoapNote(
     patientId: string,
     lookbackDays = 30,
+    careTeamId?: string,
 ): Promise<{ status: string; soap_note_id?: string; soap_note: SoapNoteResponse }> {
     return apiFetch(`/api/v1/clinicians/me/patients/${patientId}/soap-note`, {
         method: "POST",
-        body: JSON.stringify({ lookback_days: lookbackDays }),
+        body: JSON.stringify({ lookback_days: lookbackDays, ...(careTeamId ? { care_team_id: careTeamId } : {}) }),
     });
 }
 

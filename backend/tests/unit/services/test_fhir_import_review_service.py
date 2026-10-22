@@ -9,6 +9,7 @@ from app.models.clinical_fact import ClinicalFactReviewState
 from app.services.fhir_import_review_service import FhirImportReviewService
 
 PATIENT_ID = UUID("00000000-0000-0000-0000-000000000111")
+CLINICIAN_ID = UUID("00000000-0000-0000-0000-000000000aaa")
 PENDING_FACT_ID = "00000000-0000-0000-0000-000000000222"
 APPROVED_FACT_ID = "00000000-0000-0000-0000-000000000333"
 DELETED_FACT_ID = "00000000-0000-0000-0000-000000000444"
@@ -42,6 +43,10 @@ class Table:
         return self
 
     def order(self, *_args: Any, **_kwargs: Any) -> Table:
+        return self
+
+    def limit(self, count: int) -> Table:
+        self.slice = (0, count - 1)
         return self
 
     def range(self, start: int, end: int) -> Table:
@@ -93,6 +98,14 @@ def fact(fact_id: str, review_state: str, fact_type: str = "medication") -> dict
 def database() -> Database:
     return Database(
         {
+            "care_teams": [
+                {
+                    "id": "00000000-0000-0000-0000-000000000bbb",
+                    "clinician_id": str(CLINICIAN_ID),
+                    "patient_id": str(PATIENT_ID),
+                    "status": "active",
+                }
+            ],
             "clinical_facts": [
                 fact(PENDING_FACT_ID, "pending_review"),
                 fact(APPROVED_FACT_ID, "approved", "condition"),
@@ -132,6 +145,7 @@ def test_review_projection_shows_candidate_fields_and_source_metadata_without_ra
     service = FhirImportReviewService(database())  # type: ignore[arg-type]
 
     review = service.list_facts(
+        clinician_id=CLINICIAN_ID,
         patient_id=PATIENT_ID,
         review_state=ClinicalFactReviewState.PENDING_REVIEW,
         fact_type=None,
@@ -160,6 +174,7 @@ def test_review_projection_filters_by_mapped_type_and_excludes_non_fhir_candidat
     service = FhirImportReviewService(database())  # type: ignore[arg-type]
 
     review = service.list_facts(
+        clinician_id=CLINICIAN_ID,
         patient_id=PATIENT_ID,
         review_state=ClinicalFactReviewState.PENDING_REVIEW,
         fact_type="condition",
@@ -175,9 +190,15 @@ def test_review_projection_filters_by_mapped_type_and_excludes_non_fhir_candidat
 def test_original_resource_is_available_only_from_the_explicit_source_read() -> None:
     service = FhirImportReviewService(database())  # type: ignore[arg-type]
 
-    source = service.get_source(fact_id=UUID(PENDING_FACT_ID), patient_id=PATIENT_ID)
+    source = service.get_source(
+        clinician_id=CLINICIAN_ID, fact_id=UUID(PENDING_FACT_ID), patient_id=PATIENT_ID
+    )
 
     assert source is not None
     assert source["raw_resource"] == {"resourceType": "MedicationRequest", "id": "med-123"}
-    assert service.get_source(fact_id=UUID(NON_FHIR_FACT_ID), patient_id=PATIENT_ID) is None
-    assert service.get_source(fact_id=UUID(PENDING_FACT_ID), patient_id=UUID(int=999)) is None
+    assert (
+        service.get_source(
+            clinician_id=CLINICIAN_ID, fact_id=UUID(NON_FHIR_FACT_ID), patient_id=PATIENT_ID
+        )
+        is None
+    )

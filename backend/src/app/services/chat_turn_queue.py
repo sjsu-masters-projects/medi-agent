@@ -16,6 +16,7 @@ import json
 import logging
 import threading
 import time
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from typing import Any, cast
 from uuid import UUID
@@ -285,6 +286,7 @@ async def submit_turn(
     session_id: str,
     request: dict[str, Any],
     language: str,
+    on_saved: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
     """Begin a worker turn and hand it to the queue. The send path of the socket and of
     ``POST /chat/turns``.
@@ -294,6 +296,11 @@ async def submit_turn(
     2. Only after that commit is the task created, named from the turn id and attempt, so
        a repeated enqueue is a no-op. If creation fails the turn stays queued and undispatched
        and the sweep creates the task; the send itself still succeeds.
+
+    ``on_saved`` runs right after the begin commit and BEFORE the enqueue, so the patient sees
+    their saved message without waiting for Cloud Tasks (measured 1.6 s on October 19). It
+    also runs for a repeated send. A failure in it is logged and never blocks the enqueue:
+    the outbox row already guarantees dispatch (rule 6).
 
     Returns the ``begin`` result plus ``dispatched`` (the queue holds the task). Raises what
     ``begin`` raises (busy, conflict, invalid) so callers report it exactly as before.
@@ -307,6 +314,11 @@ async def submit_turn(
     )
     result["dispatched"] = False
     record = result.get("turn") or {}
+    if on_saved is not None:
+        try:
+            await on_saved(result)
+        except Exception as exc:  # showing the message must never stop the turn
+            logger.warning("Chat turn saved-state notice failed: %s", type(exc).__name__)
     if result.get("execute") and result.get("user_message"):
         try:  # label the conversation now so an unfinished first turn is findable
             await ChatService(db).set_conversation_title(

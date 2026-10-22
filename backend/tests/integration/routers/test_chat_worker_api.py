@@ -41,6 +41,10 @@ TURN = "11111111-1111-4111-8111-111111111111"
 MESSAGE = str(uuid4())
 
 
+def _fake_db() -> MagicMock:
+    return MagicMock()
+
+
 @pytest.fixture
 def worker_flag(monkeypatch):
     monkeypatch.setattr(settings, "chat_turns_via_worker", True)
@@ -56,7 +60,7 @@ def patient():
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
         id=PATIENT, email="p@test.test", role="patient"
     )
-    app.dependency_overrides[get_db] = lambda: MagicMock()
+    app.dependency_overrides[get_db] = _fake_db
     yield
     app.dependency_overrides.clear()
 
@@ -164,7 +168,7 @@ def test_only_a_patient_may_send(worker_flag, monkeypatch):
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
         id=PATIENT, email="c@test.test", role="clinician"
     )
-    app.dependency_overrides[get_db] = lambda: MagicMock()
+    app.dependency_overrides[get_db] = _fake_db
     try:
         assert TestClient(app).post("/api/v1/chat/turns", json=body()).status_code == 403
     finally:
@@ -208,7 +212,7 @@ def test_events_are_read_for_the_owner_only(patient, worker_flag, monkeypatch):
 
 def test_the_sweep_endpoint_needs_the_cron_token_and_reports_counts(monkeypatch):
     monkeypatch.setattr(settings, "cron_auth_token", "cron-token")
-    app.dependency_overrides[get_db] = lambda: MagicMock()
+    app.dependency_overrides[get_db] = _fake_db
     sweep = AsyncMock(return_value={"examined": 2, "dispatched": 2, "failed": 0})
     monkeypatch.setattr(TurnDispatcher, "sweep", sweep)
     try:
@@ -227,7 +231,7 @@ def test_the_sweep_endpoint_needs_the_cron_token_and_reports_counts(monkeypatch)
 def worker_app(monkeypatch):
     monkeypatch.setattr(settings, "worker_mode", True)
     application = create_app()
-    application.dependency_overrides[get_db] = lambda: MagicMock()
+    application.dependency_overrides[get_db] = _fake_db
     return application
 
 
@@ -361,6 +365,28 @@ async def test_with_the_flag_on_a_socket_send_queues_and_the_api_never_calls_the
     sent = [call.args[0]["type"] for call in websocket.send_json.call_args_list]
     assert sent == ["chat_turn", "user_message_saved"]
     watchers.start.assert_called_once()  # a viewer of the event log, not an owner
+
+
+@pytest.mark.asyncio
+async def test_the_user_message_reaches_the_socket_before_the_task_is_enqueued(
+    worker_flag, monkeypatch
+):
+    websocket, service, context = socket_and_context()
+    order: list[str] = []
+    websocket.send_json = AsyncMock(side_effect=lambda p: order.append(p["type"]))
+
+    async def submit(*args, on_saved=None, **kwargs):
+        result = queued()
+        await on_saved(result)
+        order.append("enqueue")
+        return result
+
+    monkeypatch.setattr(chat, "submit_turn", submit)
+    await chat._queue_durable_message(
+        websocket, service, context, {"client_message_id": "c"}, MagicMock()
+    )
+    # Saved state once, ahead of the slow enqueue, never duplicated afterwards.
+    assert order == ["chat_turn", "user_message_saved", "enqueue"]
 
 
 @pytest.mark.asyncio

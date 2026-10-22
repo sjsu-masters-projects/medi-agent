@@ -8,7 +8,16 @@ import pytest
 
 from app.core.exceptions import ValidationError
 from app.models.reconciliation import ReconciliationDecisionRequest
+from app.services.care_team_access import PatientAccess
 from app.services.clinical_reconciliation_service import ClinicalReconciliationService
+
+
+def _build(db):
+    """A service whose ownership gate admits the caller (ownership has its own tests)."""
+    service = ClinicalReconciliationService(db)
+    service.gate = MagicMock()
+    service.gate.fact.return_value = PatientAccess("clinician", "patient", frozenset({"team"}))
+    return service
 
 
 @pytest.mark.parametrize(
@@ -26,7 +35,7 @@ from app.services.clinical_reconciliation_service import ClinicalReconciliationS
 def test_exact_absence_statement_is_evidence_only_and_is_never_rewritten(allergen):
     db = MagicMock()
     db.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value.data = []
-    service = ClinicalReconciliationService(db)
+    service = _build(db)
     fact = {
         "id": str(uuid4()),
         "patient_id": str(uuid4()),
@@ -37,7 +46,9 @@ def test_exact_absence_statement_is_evidence_only_and_is_never_rewritten(allerge
     }
     saved = deepcopy(fact)
     service._fact = MagicMock(return_value=fact)
-    preview = service.preview(fact_id=UUID(fact["id"]), patient_id=UUID(fact["patient_id"]))
+    preview = service.preview(
+        clinician_id=uuid4(), fact_id=UUID(fact["id"]), patient_id=UUID(fact["patient_id"])
+    )
     assert preview["projectable"] is False
     assert preview["candidate_fields"] == {}
     assert preview["available_fields"] == []
@@ -75,7 +86,7 @@ def test_exact_absence_statement_is_evidence_only_and_is_never_rewritten(allerge
     ],
 )
 def test_mixed_unknown_or_positive_text_is_not_classified_by_substring(allergen):
-    service = ClinicalReconciliationService(MagicMock())
+    service = _build(MagicMock())
     fact = {"fact_type": "allergy", "value": {"allergen": allergen}}
     assert service._is_projectable(fact) is True
     assert service._candidate_fields(fact) == {"allergen": allergen}
@@ -93,7 +104,7 @@ def test_mixed_unknown_or_positive_text_is_not_classified_by_substring(allergen)
 )
 def test_saved_decision_replay_precedes_terminal_state_without_repeating_rpc(state, review):
     db = MagicMock()
-    service = ClinicalReconciliationService(db)
+    service = _build(db)
     fact_id, patient_id, actor_id, token = (uuid4() for _ in range(4))
     event = {
         "id": str(uuid4()),
@@ -147,7 +158,7 @@ def test_update_replay_is_bound_to_the_saved_target_fields_and_note(change):
         "note": "Reviewed dose",
     }
     query.execute.return_value.data = [event]
-    service = ClinicalReconciliationService(db)
+    service = _build(db)
     service._fact = MagicMock(return_value={"review_state": "approved"})
     request = ReconciliationDecisionRequest(
         decision="update",

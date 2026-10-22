@@ -44,12 +44,12 @@ export function usePatientDetail(patientId: string, enabled: boolean) {
         return () => { generation.current += 1; };
     }, [reload]);
 
-    async function generateSoap() {
+    async function generateSoap(careTeamId?: string) {
         const request = generation.current;
         setGeneratingSoap(true);
         setError(null);
         try {
-            const result = await generateSoapNote(patientId, 30);
+            const result = await (careTeamId ? generateSoapNote(patientId, 30, careTeamId) : generateSoapNote(patientId, 30));
             if (request === generation.current) {
                 setPatient((current) => current ? { ...current, latest_soap_note: result.soap_note } : null);
             }

@@ -29,6 +29,9 @@ from app.core.llm_failures import categorize_llm_failure
 from app.intake.preview import testimony_only
 from app.models.dashboard import SoapNote
 from app.models.generation import GenerationErrorCode, GenerationProviderError, GenerationResponse
+from app.services.acting_care_team import acting_care_team
+from app.services.care_plan_activity_scope import ActivityScope
+from app.services.care_team_access import CareTeamAccessService, PatientAccess
 from app.services.soap_note_prompts import SOAP_SYSTEM_INSTRUCTION, build_soap_prompt
 
 logger = logging.getLogger(__name__)
@@ -132,8 +135,17 @@ class SoapNoteService:
     def __init__(self, db: Any) -> None:
         self.db = db
 
-    async def gather(self, patient_id: str, lookback_days: int) -> dict[str, Any]:
-        """Read everything the note is written from. No model is involved here."""
+    async def gather(
+        self, patient_id: str, lookback_days: int, *, access: PatientAccess
+    ) -> dict[str, Any]:
+        """Read everything the note is written from. No model is involved here.
+
+        ``access`` is the writing clinician's links to the patient. The model sees only what
+        that clinician may read: conditions the patient marked sensitive for another team are
+        left out (the prompt says only that some are private), reviewed ADR assessments of
+        another team are left out, and adherence to another team's plan activities is not
+        counted. Medications and allergies are shared and always included.
+        """
         cutoff = (datetime.now(UTC) - timedelta(days=lookback_days)).isoformat()
 
         patient_row = await _execute(
@@ -152,7 +164,7 @@ class SoapNoteService:
 
         logs = await _execute(
             self.db.table("adherence_logs")
-            .select("status, target_type, logged_at")
+            .select("status, target_type, target_id, logged_at")
             .eq("patient_id", patient_id)
             .gte("logged_at", cutoff)
         )
@@ -185,23 +197,32 @@ class SoapNoteService:
             .select("*")
             .eq("patient_id", patient_id)
             .order("created_at", desc=True)
-            .limit(MAX_ADR_ASSESSMENTS)
+            .limit(MAX_ADR_ASSESSMENTS * 4)
         )
+        visible_conditions, some_private = access.split_conditions(
+            cast(list[dict[str, Any]], conditions.data or [])
+        )
+        visible_logs = await asyncio.to_thread(
+            ActivityScope(self.db, patient_id, access).keep,
+            cast(list[dict[str, Any]], logs.data or []),
+        )
+        visible_adrs = [
+            row for row in cast(list[dict[str, Any]], adrs.data or []) if access.can_see_adr(row)
+        ][:MAX_ADR_ASSESSMENTS]
 
         return {
             "patient_info": cast(dict[str, Any], patient_row.data or {}),
             "medications": cast(list[dict[str, Any]], meds.data or []),
-            "adherence_stats": calculate_adherence_stats(
-                cast(list[dict[str, Any]], logs.data or [])
-            ),
+            "adherence_stats": calculate_adherence_stats(visible_logs),
             "symptom_reports": [
                 testimony_only(row) for row in cast(list[dict[str, Any]], symptoms.data or [])
             ],
             # Reversed so the prompt reads the conversation in the order it happened.
             "chat_messages": list(reversed(cast(list[dict[str, Any]], chats.data or []))),
-            "conditions": cast(list[dict[str, Any]], conditions.data or []),
+            "conditions": visible_conditions,
+            "some_conditions_private": some_private,
             "allergies": cast(list[dict[str, Any]], allergies.data or []),
-            "adr_assessments": cast(list[dict[str, Any]], adrs.data or []),
+            "adr_assessments": visible_adrs,
             "lookback_days": lookback_days,
         }
 
@@ -249,12 +270,13 @@ class SoapNoteService:
         raise AssertionError("SOAP retry loop exhausted without returning or raising")
 
     async def store(
-        self, *, patient_id: str, clinician_id: str, note: SoapNote
+        self, *, patient_id: str, clinician_id: str, note: SoapNote, care_team_id: str
     ) -> dict[str, Any] | None:
-        """Write the note and return the stored row, or None if nothing came back."""
+        """Write the note, owned by the writing clinician's care team, and return the row."""
         row = {
             "patient_id": patient_id,
             "clinician_id": clinician_id,
+            "care_team_id": care_team_id,
             "subjective": note.subjective,
             "objective": note.objective,
             "assessment": note.assessment,
@@ -273,18 +295,29 @@ class SoapNoteService:
         patient_id: UUID | str,
         clinician_id: UUID | str,
         lookback_days: int = DEFAULT_LOOKBACK_DAYS,
+        care_team_id: UUID | str | None = None,
     ) -> SoapNoteResult:
-        """Gather, document, store. A failure at the model step writes nothing."""
+        """Gather, document, store. A failure at the model step writes nothing.
+
+        The note belongs to the clinician's exact link to the patient. A clinician with two
+        links must name one (``CARE_TEAM_REQUIRED``); one without a link is denied.
+        """
         patient = str(patient_id)
         clinician = str(clinician_id)
 
-        patient_context = await self.gather(patient, lookback_days)
+        access = await asyncio.to_thread(
+            CareTeamAccessService(self.db).for_patient, clinician, patient
+        )
+        team = acting_care_team(access, care_team_id)
+        patient_context = await self.gather(patient, lookback_days, access=access)
         note = await self.compose(patient_context)
 
         if note is None:
             return SoapNoteResult(status="error", error="SOAP note generation failed")
 
-        stored = await self.store(patient_id=patient, clinician_id=clinician, note=note)
+        stored = await self.store(
+            patient_id=patient, clinician_id=clinician, note=note, care_team_id=team
+        )
         if stored is None:
             # The note exists but nothing was persisted. Reported rather than returned as
             # a success, because a clinician who is shown a note assumes it was filed.
