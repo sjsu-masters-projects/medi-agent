@@ -452,11 +452,11 @@ jobs:
             minimums: test_chat_safety_postgres=27
           - name: care-handoff
             # Reviewed care-handoff summaries (089): ownership, append-only versions, approval
-            # and export gating, concurrency, and sharing an approved version with a colleague
+            # and export gating, concurrency, action-table permissions/idempotency, and sharing an approved version with a colleague
             # (096: recipients, revoke, version pinning, unlinked recipient, notification).
             # Opt-in env is set by the job.
-            files: tests/integration/test_care_handoff_summaries_postgres.py tests/integration/test_care_handoff_shares_postgres.py
-            minimums: test_care_handoff_summaries_postgres=21 test_care_handoff_shares_postgres=28
+            files: tests/integration/test_care_handoff_summaries_postgres.py tests/integration/test_care_handoff_shares_postgres.py tests/integration/test_clinical_action_postgres.py
+            minimums: test_care_handoff_summaries_postgres=21 test_care_handoff_shares_postgres=28 test_clinical_action_postgres=14
     defaults:
       run:
         working-directory: backend
@@ -622,6 +622,11 @@ jobs:
           cache-dependency-path: apps/clinician-portal/package-lock.json
       - name: Install dependencies
         run: npm ci
+      - name: Check bilingual review inventory
+        working-directory: .
+        run: |
+          node --test scripts/extract-spanish-review.test.mjs
+          python3 backend/scripts/build_spanish_review_pack.py --check
       - name: Lint (ESLint)
         run: npm run lint
       - name: Type check (TypeScript)

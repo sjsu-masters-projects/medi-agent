@@ -25,6 +25,9 @@ requirements and verification evidence have separate homes.
 | [Symptom-intake rollout](pat-002-b-rollout.md) | Candidate eligibility, activation and safe rollout checks |
 | [Synthetic environment](demo-environment.md) | Fictional accounts, auth QA, fixtures and reset boundaries |
 | [Synthetic data catalog](synthetic-data-catalog.md) | Dataset scope, provenance and supported scenarios |
+| [Expo presentation script](expo-demo-script.md) | Prepared history, live segment and rehearsal record |
+| [Project limitations](project-limitations.md) | Architecture, supported scope and evidence boundaries |
+| [Expo recovery](expo-recovery.md) | Safe fallback actions without unapproved resets or configuration changes |
 | [Email templates](email-templates/README.md) | Template sources and Auth email constraints |
 
 Operating guides contain commands that may change external systems. Reading or
@@ -39,7 +42,7 @@ remain contracts after their implementation is merged.
 | --- | --- |
 | Approved plans and Today | [PAT-005](../.agent/specs/pat-005-clinician-approved-today-feed-plan.md), [upload evidence gate](patient-upload-care-plan-review-gate.md) |
 | Clinics and care-team plan ownership | [CLN-003](../.agent/specs/clin-003-multi-clinic-clinicians.md), [PLAN-002](../.agent/specs/plan-002-care-plans-per-care-team.md) |
-| Bilingual review | [LOC-001](../.agent/specs/loc-001-bilingual-approved-wording.md), [LOC-003](../.agent/specs/loc-003-english-first-clinician-review.md) |
+| Bilingual review | [LOC-001](../.agent/specs/loc-001-bilingual-approved-wording.md), [LOC-003](../.agent/specs/loc-003-english-first-clinician-review.md), [source-linked draft review pack](spanish-draft-review-pack.md) |
 | Confirmed symptoms and follow-up | [PAT-002-B](../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md), [ADR loop](../.agent/specs/pv-001-c-adr-loop-gap-fixes/requirements.md) |
 | Nora and durable conversations | [Grounded answers](../.agent/specs/nora-002-grounded-answers.md), [recovery and document focus](../.agent/specs/pat-001-a-nora-turn-recovery.md), [voice](../.agent/specs/voice-001-voice-mode.md) |
 | Private human messages and visits | [Conversations](../.agent/specs/com-001-two-way-conversations.md), [scheduling](../.agent/specs/sch-001-appointment-scheduling.md) |

@@ -6,6 +6,11 @@ locale per approved plan" rule in `pat-005-clinician-approved-today-feed-plan.md
 
 ## Pending interface wording review
 
+The [source-linked English/es-MX review pack](../../docs/spanish-draft-review-pack.md)
+collects the interface drafts and conservative whole-dictionary context. It
+includes source keys, line locations and checksums and can be regenerated without
+executing application copy. It is an inventory, not wording approval.
+
 [PAT-001-A recovery-copy drafts](pat-001-a-nora-turn-recovery.md#pending-es-mx-interface-wording-drafts--not-approved)
 list the new recovery, busy/unavailable, retry-help and revised document-unavailable
 wording. They are not yet reviewed/approved Spanish copy; existing clinical safety

@@ -58,7 +58,10 @@ to disable current enforcement.
 - Add replay and duplicate-action tests.
 - Record every authorization denial with a classified reason code, audited from the
       403 handler so every raise site is covered.
-- Verify the fixture's declared denial expectations against a live environment. Resolve fixture actions/proxy actors that have no supported route; do not invent test endpoints.
+- Keep automated authorization/denial coverage. The requester excluded the live
+      staging denial-script run from completion requirements on October 22.
+      Retain the script as an optional diagnostic; unsupported fixture actions or
+      proxy actors are not reasons to invent test endpoints.
 
 ## REC-002 — Safe external-record reconciliation
 
@@ -313,7 +316,8 @@ approved medication merely to attach an ADR. Show coverage limitations explicitl
 ## COM-001 — Care-team communication and notifications
 
 - Complete patient-to-care-team and clinician-to-patient message paths. Clinician-to-patient
-      send (in-app and email) existed as backend-only endpoints with no frontend. Added: backend
+      direct send is in-app only; the backend rejects the email channel. Opted-in
+      generic email notices are a separate EMAIL-001 workflow. Added: backend
       list endpoints (`GET /me/patients/{patient_id}/messages` and `GET /me/messages`), clinician
       inbox page replacing the static placeholder, compose form on the patient deep-dive Chat tab,
       and integration + component tests. Patient-to-clinician origination is addressed by the
