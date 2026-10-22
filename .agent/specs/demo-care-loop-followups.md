@@ -6,6 +6,13 @@ the hosted ledger. Deployed behavior still requires the acceptance checks below.
 
 ## Acceptance plan
 
+DV-011 follow-up in PR #200: Today must not render a previous-locale feed while
+current saved-locale wording loads. Only the latest request may replace the feed
+or its error state. Regression coverage delays an older English response behind
+a Spanish response and verifies task identity, scheduled time and completion are
+retained. A failed locale change displays retry feedback without stale wording.
+This implementation still requires a deployed language-switch recheck.
+
 1. **LOC-002:** carry en-US/es-MX from guest entry through onboarding and saved
    Profile preference; render the document language consistently on first load;
    localize Today/notification errors from stable codes, not backend prose. Reuse
@@ -118,15 +125,20 @@ No new cross-clinic sharing or implicit broadcast recipient behavior is introduc
   The October 19 live message-to-draft check did not publish a plan. Its
   exact-item focus defect and remaining acceptance are in the deployed recheck.
 
-## Pending es-MX interface drafts
+## es-MX interface review
 
-New nonclinical activity-message copy remains **draft, awaiting bilingual review**:
+The following nonclinical activity-message copy passed an LLM English/es-MX
+meaning-and-safety review on October 20 (Pacific), using the requester's accepted
+expo review standard, not professional translation validation. Optional attachment,
+stale/current status, retry locking, preserved text, and the explicit requirement
+for team review/approval retain their English meaning; sending never changes a
+plan or reminders. Clinical activity text still requires existing approval.
 `Preguntar sobre una actividad del plan`, `Actividad sobre la que preguntas (opcional)`,
 `Cargando actividades…`, `Sin actividad adjunta`, `Actividad adjunta anteriormente`,
 `No se pudieron cargar las actividades.`, `Reintentar actividades`,
 `Actividad del plan adjunta`, `Esta actividad ya no pertenece al plan actual.`, and
 `Tu mensaje no cambia el plan ni los recordatorios. Tu equipo debe revisar y aprobar cualquier cambio.`
-Also draft: `Actividad adjunta: {título}` and `La actividad no se puede cambiar mientras se confirma o reintenta este mensaje.`
+Also reviewed: `Actividad adjunta: {título}` and `La actividad no se puede cambiar mientras se confirma o reintenta este mensaje.`
 Stale attachment recovery: `La actividad adjunta ya no está disponible. Conservamos tu texto. Quita la actividad o vuelve a cargar las actividades antes de enviar.`
 Document-import errors remain draft: `Vuelve a iniciar sesión antes de importar un documento clínico.`,
 `Tu sesión expiró. Vuelve a iniciar sesión antes de importar un documento clínico.` and
@@ -168,5 +180,7 @@ exercised and restored, with a transient mixed-language render after navigation.
 See the [deployed recheck](../../docs/deployed-recheck-2026-10-11.md#task-verdicts).
 Mobile 360/390/430 and clinician desktop screenshots, keyboard/reduced-motion
 journeys, approved-plan publication after handoff, actual provider responses and
-human bilingual review remain unrecorded; no task is marked Done from these
-partial checks.
+professional bilingual review remain unrecorded. COM-002's later audit, retry,
+authorization and unchanged-state acceptance and its accepted LLM demo wording
+review are recorded in the grouped closure evidence; these do not assert the
+other slices or an unperformed clinical publication complete.

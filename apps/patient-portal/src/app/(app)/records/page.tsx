@@ -733,11 +733,11 @@ export default function RecordsPage() {
               </button>
             </div>
           </div>
-          <p className="mt-1 text-sm text-muted" role="status">
+          {!loading && !pageError && <p className="mt-1 text-sm text-muted" role="status">
             {spanish
               ? `${documents.length} documentos · ${processingCount} en proceso`
               : `${documents.length} records · ${processingCount} processing`}
-          </p>
+          </p>}
         </header>
         <input
           accept={UPLOAD_ACCEPT_ATTRIBUTE}

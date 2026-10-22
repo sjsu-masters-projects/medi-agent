@@ -115,6 +115,9 @@ class CarePlanItemRead(BaseModel):
     blocker_reason: str | None = None
     reviewed_locale: str | None = None
     source_locale: PatientLocale | None = None
+    # DV-004: language of the source evidence (the fact/document), not the authored wording.
+    # Drives the "Source" label and the "Translated from Spanish" marker in the clinician UI.
+    source_evidence_locale: PatientLocale | None = None
     wording: dict[str, CarePlanWording] = Field(default_factory=dict)
     wording_origin: dict[str, str] = Field(default_factory=dict)
     wording_verified: bool = False

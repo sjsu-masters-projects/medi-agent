@@ -9,6 +9,7 @@ import { useFlip } from "@/components/ui/motion";
 import { CompactField, SegmentedControl, compactSelectClass } from "@/components/ui/toolbar";
 import { ClinicChip, ClinicFilterEmpty, ClinicFilterField } from "@/components/features/clinic-chip";
 import { RiskBadge } from "@/components/features/risk-badge";
+import { RiskExplanationDialog } from "@/components/features/risk-explanation";
 import { clinicScopeLabel } from "@/hooks/clinic-scope";
 import { useClinicFilter } from "@/hooks/use-clinic-filter";
 import { fetchPatientRiskSnapshot } from "@/services/clinicians";
@@ -121,6 +122,7 @@ export default function DashboardPage() {
     const loading = useSelector((state: RootState) => state.dashboard.loading);
     const error = useSelector((state: RootState) => state.dashboard.error);
     const [query, setQuery] = useState("");
+    const [explainedPatientId, setExplainedPatientId] = useState<string | null>(null);
     const [riskFilter, setRiskFilter] = useState<"all" | PatientRiskData["risk_level"]>("all");
     const [sortBy, setSortBy] = useState<DashboardSortBy>("risk");
     const [sortOrder, setSortOrder] = useState<DashboardSortOrder>("desc");
@@ -412,10 +414,10 @@ export default function DashboardPage() {
                                 </div>
 
                                 {/* Risk badge */}
-                                <div><RiskBadge level={patient.risk_level} /></div>
+                                <div className="flex flex-col items-start gap-1"><RiskBadge level={patient.risk_level} /><button type="button" onClick={() => setExplainedPatientId(patient.patient_id)} className="min-h-9 rounded-lg px-2 text-xs font-medium text-primary hover:bg-primary-tint" aria-label={`Explain review priority for ${patient.first_name} ${patient.last_name}`}>Why this level?</button></div>
 
                                 {/* Adherence bar */}
-                                {patient.risk_level === "unknown" ? <span className="text-[13px] text-muted">Not enough data</span> : <div className="flex items-center gap-2.5">
+                                {patient.risk_level === "unknown" || patient.risk_explanation?.adherence_available === false ? <span className="text-[13px] text-muted">Not enough data</span> : <div className="flex items-center gap-2.5">
                                     <div className="h-1.5 w-full max-w-[120px] overflow-hidden rounded-[3px] bg-track">
                                         <div
                                             className={`h-full rounded-[3px] ${adherencePct < 60 ? "bg-risk" : config.progressBar}`}
@@ -430,11 +432,11 @@ export default function DashboardPage() {
                                 {/* Recent flag */}
                                 <div className="flex min-w-0 flex-col items-start gap-1">
                                     <span
-                                        className={`inline-flex max-w-full items-center rounded-md px-2 py-[3px] text-xs font-medium ${patient.recent_symptom_severity > 0 ? config.accent : "bg-[rgba(100,116,139,.1)] text-ink-2"}`}
+                                        className={`inline-flex max-w-full items-center rounded-md px-2 py-[3px] text-xs font-medium ${patient.recent_symptom_severity !== null && patient.recent_symptom_severity > 0 ? config.accent : "bg-[rgba(100,116,139,.1)] text-ink-2"}`}
                                     >
-                                        {patient.recent_symptom_severity > 0
+                                        {patient.recent_symptom_severity !== null && patient.recent_symptom_severity > 0
                                             ? `Symptom severity ${patient.recent_symptom_severity}/10`
-                                            : "No recent symptom report"}
+                                            : "No recent severity rating"}
                                     </span>
                                     <p className="max-w-full truncate text-xs text-muted">
                                         {patient.last_activity}
@@ -479,6 +481,7 @@ export default function DashboardPage() {
                     <p className="max-w-[80ch] pb-4 pl-[22px] leading-relaxed text-ink-2">Adherence is the share of recorded responses marked taken or completed in the last 30 days. It does not measure all expected doses. Unknown risk means there is not enough information to classify risk; an absent response does not establish a missed dose. ADR flags need clinician review.</p>
                 </details>
             </section>
+            <RiskExplanationDialog patient={patients.find((patient) => patient.patient_id === explainedPatientId) ?? null} onClose={() => setExplainedPatientId(null)} />
         </div>
     );
 }

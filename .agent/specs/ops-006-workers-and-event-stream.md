@@ -1,8 +1,17 @@
 # OPS-006 — Worker service, turn events and one live stream
 
 Status: accepted October 19, 2026 ([decision record](../../docs/decisions/realtime-and-workers-2026-10.md)).
-Owner: Rajeev. Supersedes the connection-bound parts of PAT-001-A and the read-time notification
-computation in NOT-001. Each phase is one PR with a live production check before the next starts.
+Owner: Rajeev. Supersedes the connection-bound parts of PAT-001-A.
+
+**Expo scope amendment — requester approved October 21:** finish the existing
+worker's bounded configuration/security/recovery acceptance. Do not replace the
+working websocket transport with SSE, run the proposed large load/cost exercise,
+or change CPU allocation merely to finish this issue. A new write-time counter
+architecture and stream delivery are not required closure gates. Existing
+notification correctness, authorization, bounded work, and audit remain required;
+actual failures belong to OPS-005 and must not be hidden by this scope change.
+Phases 3–5 below retain historical design context, not executable expo backlog.
+No remote configuration change is authorized by the amendment.
 
 ## Concurrency and distributed-systems rules (all phases)
 
@@ -52,8 +61,9 @@ These rules are acceptance criteria. Reviews check them.
 
 ## Phase 1 — Traceability and the current expiry (small)
 
-**Status (branch `feature/ops-006-phase-1`, not merged or deployed):** implemented and locally
-verified; the production check below is still required.
+**Status:** merged in #194. October 20 bounded logs show actual worker turn
+completion and patient recovery; the full production-check list below remains
+the contract, not an implication that every trace/pool/poller scenario passed.
 
 - Done: migration `077` (rejection `reason`, per-function `lock_timeout` 5 s and
   `statement_timeout` 8 s); structured JSON logging, request and websocket middleware; turn
@@ -96,10 +106,12 @@ verified; the production check below is still required.
 
 ## Phase 2 — Worker service and turn events (large)
 
-**Status (branch `feature/ops-006-phase-2`, based on the phase 1 branch; not merged, not
-deployed, nothing external created):** implemented and locally verified behind
-`CHAT_TURNS_VIA_WORKER` (default false) and `WORKER_MODE`. Rollout needs the requester's
-authorization step by step: [docs/chat-worker-setup.md](../../docs/chat-worker-setup.md).
+**Status:** merged in #195. Deployed worker execution is observed: October 20's
+quiet-session and real in-flight outage checks completed on worker attempt 1
+and reached the patient. Hosted migration identities, queue/OIDC configuration,
+retry/load matrix and every rule are not independently certified by those two
+turns. Flags remain default-off in source; changing any deployed setting still
+requires exact authorisation under [the setup guide](../../docs/chat-worker-setup.md).
 
 As built:
 
@@ -174,7 +186,7 @@ Original scope, for reference:
 - **Flag:** `CHAT_TURNS_VIA_WORKER`. The existing in-process path is the fallback until
   verified.
 
-## Phase 3 — One live stream (medium)
+## Historical phase 3 — One live stream (removed from expo scope)
 
 - **`GET /api/v1/events`** (SSE, authenticated):
   - multiplexes the user's turn events and, later, notification events;
@@ -186,7 +198,7 @@ Original scope, for reference:
 - **The patient portal** uses one stream per tab for chat (sending stays an HTTP POST). The
   websocket is retired once verified.
 
-## Phase 4 — Notifications computed at write time (medium)
+## Historical phase 4 — Notification architecture (not a worker-closure gate)
 
 - **At write time:** triggers or an outbox create receipts and maintain per-user unread
   counters when events occur.
@@ -194,7 +206,7 @@ Original scope, for reference:
 - **Delivery:** new items and counts are pushed on the stream. Both portals drop their polls;
   a 5-minute fallback poll remains only when the stream is unavailable.
 
-## Phase 5 — Load test and cost reset (small)
+## Historical phase 5 — Load test and cost reset (removed from expo scope)
 
 - A k6 or Locust scenario in staging: N patients × 2 tabs chatting while clinicians use
   dashboards. Thresholds: p95 API < 500 ms, zero expired turns, and stable queue age.
@@ -207,7 +219,12 @@ Original scope, for reference:
 - These are created through the deploy workflow or documented `gcloud` commands, never
   ad hoc. No `.env` secrets are added. Queue and worker names are config.
 
-## Known rule violations
+## Original architecture gaps (historical phase mapping)
+
+The phase references in this table explain the original design; they do not
+reintroduce removed phases. Required worker security/reliability checks remain
+in the amended scope above. Existing notification correctness and observed
+failures are still tracked, not declared fixed by dropping transport work.
 
 Phase 1 satisfies the rules for the chat turn path (see the rule-by-rule status in the pull
 request). Phase 2 satisfies them for the worker turn path, with the exceptions below (status after

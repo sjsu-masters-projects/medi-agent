@@ -40,7 +40,7 @@ function shortTime(iso: string): { short: string; full: string } | null {
   return { short, full };
 }
 
-function NotificationRows({ items, onNavigate, allowAcknowledge, allowRead, onAcknowledged }: { items: CentreItem[]; onNavigate?: () => void; allowAcknowledge: boolean; allowRead: boolean; onAcknowledged: () => void }) {
+function NotificationRows({ items, onNavigate, allowAcknowledge, allowRead, onAcknowledged, showSourceDetails }: { items: CentreItem[]; onNavigate?: () => void; allowAcknowledge: boolean; allowRead: boolean; onAcknowledged: () => void; showSourceDetails: boolean }) {
   const centre = useNotificationCentre();
   const router = useRouter();
   const [acknowledging, setAcknowledging] = useState<CentreItem | null>(null);
@@ -63,6 +63,14 @@ function NotificationRows({ items, onNavigate, allowAcknowledge, allowRead, onAc
             </div>
             {context && <p className="mt-0.5 truncate text-xs text-muted">{context}</p>}
             {item.body && <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-[13px] leading-snug text-ink-2">{item.body}</p>}
+            {showSourceDetails && item.source_label && <details className="mt-1 text-xs text-muted">
+              <summary className="min-h-9 cursor-pointer py-2 font-medium">Source and freshness</summary>
+              <p>Source: {item.source_label}</p>
+              <p>Source state retrieved: {item.state_checked_at && shortTime(item.state_checked_at)
+                ? <time dateTime={item.state_checked_at}>{shortTime(item.state_checked_at)!.full}</time>
+                : "Check time unavailable"}</p>
+              <p className="mt-1">This is a source-state snapshot, not the last clinical review. Opening or reading it does not complete the work.</p>
+            </details>}
             {(target || (allowRead && !item.is_read) || (allowAcknowledge && item.can_acknowledge)) && <div className="-ml-2 mt-1.5 flex flex-wrap items-center gap-1">
               {target && <Link href={target} onClick={async (event) => {
                 if (item.is_read) { onNavigate?.(); return; }
@@ -133,7 +141,7 @@ export function NotificationList({ actions = false, clinicFilter, compact = fals
     {!resource.data && !resource.error && <p role="status" className="p-5 text-sm text-muted">Loading alerts…</p>}
     {resource.data && !items.length && <p className="p-5 text-sm text-muted">{clinicId && clinicFilter ? <ClinicFilterEmpty filter={clinicFilter} noun="alerts" /> : actions ? "No items need attention in this view." : "No notifications in this view."}</p>}
     {!actions && (category || unread) && <p className="px-4 py-2 text-xs text-muted">Mark all loaded read includes all categories in the loaded pages.{resource.data?.next_cursor ? " Load more to include earlier history." : ""}</p>}
-    <NotificationRows items={items} onNavigate={onNavigate} allowAcknowledge={actions} allowRead={!actions} onAcknowledged={() => { setAcknowledged(true); listRef.current?.querySelector<HTMLButtonElement>("button")?.focus(); }} />
+    <NotificationRows items={items} onNavigate={onNavigate} allowAcknowledge={actions} allowRead={!actions} showSourceDetails={actions && !compact} onAcknowledged={() => { setAcknowledged(true); listRef.current?.querySelector<HTMLButtonElement>("button")?.focus(); }} />
     {resource.data?.next_cursor && <div className="border-t border-line p-3"><Button variant="secondary" disabled={centre.busy} onClick={() => void centre.more(feed)}>Load more</Button></div>}
   </section>;
 }

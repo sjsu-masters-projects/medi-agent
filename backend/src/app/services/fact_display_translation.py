@@ -127,20 +127,37 @@ def translatable_fields(fact_type: str, value: dict[str, Any]) -> dict[str, str]
     return result
 
 
-def is_spanish_fact(value: dict[str, Any], fact_type: str) -> bool:
-    """Check if a fact's translatable fields are written in Spanish."""
-    # Names are not translated, but they still help recognise the language of the fact.
+def _fact_text(value: dict[str, Any], fact_type: str) -> str:
+    """Join a fact's translatable text for language detection (names included as a signal)."""
     keys = _TRANSLATABLE_KEYS.get(fact_type, set())
     texts = [
         text.strip()
         for key in sorted(keys)
         if isinstance(text := value.get(key), str) and text.strip()
     ]
-    if not texts:
-        return False
-    text = " ".join(texts)
-    detected = detect_locale(text)
-    return detected == "es-MX"
+    return " ".join(texts)
+
+
+def is_spanish_fact(value: dict[str, Any], fact_type: str) -> bool:
+    """Check if a fact's translatable fields are written in Spanish."""
+    # Names are not translated, but they still help recognise the language of the fact.
+    text = _fact_text(value, fact_type)
+    return bool(text) and detect_locale(text) == "es-MX"
+
+
+def detected_fact_locale(
+    value: dict[str, Any], fact_type: str, display_locale: str | None = None
+) -> str | None:
+    """Best estimate of the language the source evidence is written in (LOC-003 / DV-004).
+
+    This is the SOURCE EVIDENCE language, not the care-plan item's authored wording. The
+    ingestion-time ``display_locale`` wins when present; otherwise the fact's own text is
+    detected. Returns ``en-US`` / ``es-MX``, or ``None`` when the text is too short to tell.
+    """
+    if display_locale in ("en-US", "es-MX"):
+        return display_locale
+    text = _fact_text(value, fact_type)
+    return detect_locale(text) if text else None
 
 
 async def translate_fact_to_english(

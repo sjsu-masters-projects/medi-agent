@@ -11,6 +11,14 @@ with.
 
 ## 1. Goal
 
+### Schedule presentation follow-up (DV-014, PR #202)
+
+Range, clinic and cancelled-filter changes must not relabel the previous result
+as current. Show loading until a matching response arrives, or retry on failure;
+do not show an old empty day as an empty week. Retain data during a same-scope
+refresh failure. Superseded responses must not replace the current selection.
+This changes no scheduling permissions, writes or appointment state.
+
 Let an outpatient clinic and its chronic-care patients agree on a visit time inside
 the product, with a full audit trail, in both English (`en-US`) and Mexican Spanish
 (`es-MX`), using synthetic data only. MediAgent is supervised decision support: a

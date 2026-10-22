@@ -57,6 +57,8 @@ describe("clinician notification centre", () => {
   it("shares one cache between bell and Alerts, with no legacy archive on Alerts", async () => {
     render(<NotificationProvider><NotificationBell /><AlertsPage /></NotificationProvider>);
     await screen.findByText("Patient reported a barrier");
+    expect(screen.getByText(/Your clinical action inbox/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Patient upload reviews" })).toHaveAttribute("href", "/review-queue");
     expect(notificationCentre.summary).toHaveBeenCalledTimes(1);
     expect(notificationCentre.list).toHaveBeenCalledTimes(2);
     expect(screen.getByRole("link", { name: "Review barrier" })).toHaveAttribute("href", "/patients/p1?tab=adherence&activity=med-1");
@@ -77,6 +79,17 @@ describe("clinician notification centre", () => {
     expect(screen.queryByText("Read notification")).not.toBeInTheDocument();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(); expect(bell).toHaveFocus();
+  });
+
+  it("explains the authoritative source and distinguishes a state snapshot from clinical review", async () => {
+    vi.mocked(notificationCentre.list).mockResolvedValue(page([item({
+      source_label: "Confirmed patient symptom report", state_checked_at: "2026-10-21T10:00:00Z",
+    })]));
+    render(<NotificationProvider><NotificationList actions /></NotificationProvider>);
+    fireEvent.click(await screen.findByText("Source and freshness"));
+    expect(screen.getByText("Source: Confirmed patient symptom report")).toBeVisible();
+    expect(screen.getByText(/not the last clinical review/)).toBeVisible();
+    expect(document.querySelector('time[datetime="2026-10-21T10:00:00Z"]')).toBeInTheDocument();
   });
 
   it("records a note only after explicit acknowledgement and never treats read as acknowledgement", async () => {

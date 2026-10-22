@@ -32,6 +32,7 @@ from app.core.exceptions import (
 )
 from app.db.repositories import CareTeamRepository, ClinicianRepository, ClinicRepository
 from app.db.supabase_execute import execute_async
+from app.intake.preview import testimony_only
 from app.models.adr import ADRReviewDecisionRequest
 from app.models.clinic_membership import ClinicMembership
 from app.models.dashboard import DashboardSortBy, DashboardSortOrder, RiskLevel
@@ -785,6 +786,14 @@ class ClinicianService:
         risk = await risk_service.get_patient_risk(patient_id)
         return risk.model_dump()
 
+    async def get_patient_timeline(self, clinician_id: UUID, patient_id: UUID) -> Any:
+        """Read bounded source events after checking current patient assignment."""
+        from app.services.patient_timeline_service import PatientTimelineService
+
+        return await PatientTimelineService(self.db, self._assert_patient_assignment).get_timeline(
+            clinician_id, patient_id
+        )
+
     async def get_patient_deep_dive(self, clinician_id: UUID, patient_id: UUID) -> Any:
         """Aggregate all patient data for the Patient Deep Dive view.
 
@@ -854,7 +863,9 @@ class ClinicianService:
             .order("created_at", desc=True)
             .limit(50)
         )
-        symptom_reports = cast(list[dict[str, Any]], symptoms.data or [])
+        symptom_reports = [
+            testimony_only(row) for row in cast(list[dict[str, Any]], symptoms.data or [])
+        ]
 
         chats = await self._execute(
             self.db.table("chat_messages")

@@ -36,7 +36,7 @@ const STRINGS = {
         closedTitle: "This request is closed",
         answeredTitle: "Answers sent",
         openNewer: "Open the newer request",
-        heading: (symptom: string) => `A few questions about ${symptom}`,
+        heading: (symptom: string) => `Reported symptom (original wording): “${symptom}”`,
         review: "Review answers",
         send: "Send to care team",
         notSure: "I’m not sure",
@@ -59,7 +59,7 @@ const STRINGS = {
         closedTitle: "Esta solicitud está cerrada",
         answeredTitle: "Respuestas enviadas",
         openNewer: "Abrir la solicitud más reciente",
-        heading: (symptom: string) => `Unas preguntas sobre ${symptom}`,
+        heading: (symptom: string) => `Síntoma reportado (texto original): «${symptom}»`,
         review: "Revisar respuestas",
         send: "Enviar al equipo de atención",
         notSure: "No sé",
@@ -273,14 +273,14 @@ describe("ADR follow-up view", () => {
             expect(onBack).toHaveBeenCalledTimes(1);
         });
 
-        it.each(LOCALES)("links back to /chat when there is no onBack in %s", async (locale) => {
+        it.each(LOCALES)("links back to Care team messages when there is no onBack in %s", async (locale) => {
             const text = STRINGS[locale];
             fetchOverview.mockRejectedValue(notFoundError());
 
             renderView({ locale });
 
             expect(await screen.findByText(text.notFoundTitle)).toBeInTheDocument();
-            expect(screen.getByRole("link", { name: text.back })).toHaveAttribute("href", "/chat");
+            expect(screen.getByRole("link", { name: text.back })).toHaveAttribute("href", "/chat?view=care-team");
             expect(screen.queryByRole("button")).not.toBeInTheDocument();
         });
     });

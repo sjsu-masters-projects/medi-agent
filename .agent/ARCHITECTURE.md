@@ -59,6 +59,15 @@ Deployed October 12 (migrations 057/058); production status and open items are i
 
 ## Worker and service boundaries
 
+PAT-002-B's source audit and confirmation contract are recorded in the
+[confirmed symptom intake plan](specs/pat-002-b-confirmed-symptom-intake-plan.md).
+Current implementation and activation prerequisites are described below. Migrations
+059/060 and the checksum-pinned `071_confirmed_symptom_handoff.sql` are recorded as
+applied; the 071 handoff adds durable confirmed-report ADR work. These migrations reuse
+the chat-session column owned by 051. The ordinary initial Nora utterance retains
+existing clinician transcript visibility; subsequent intake form answers are
+patient-private.
+
 Only these four work boundaries are supported by the product direction:
 
 | Boundary | Current implementation anchor | Authority |
@@ -139,6 +148,15 @@ assignment and source state. Signed bulk-read snapshots exclude later arrivals.
 Merged in #148 and #149 and deployed; `051_notification_centre.sql` and 052–056 were
 applied October 11. See `.agent/specs/not-001-notification-centre.md` for the contract.
 
+The workflow completion increment separates notification signing from login JWT
+signing and supports an independent server-only root. Migration 079 captures new
+confirmed unlisted-product concerns atomically as shared review work; it never
+creates medication/ADR truth. Alerts also reads current external-candidate work
+directly, separately from unread counts. Its clinic-scoped pages retain failed
+same-scope snapshots but never reuse old-clinic rows. Patient Timeline is a bounded,
+read-only source projection; private messages still use exact-conversation RPC
+authorization. See `.agent/specs/expo-workflow-completion.md` for rollout and tests.
+
 ## Evidence, FHIR, and safety
 
 The codebase validates a supported import subset with maintained FHIR R4B models and
@@ -199,3 +217,46 @@ For a clean local setup and full validation use:
 The command creates the backend virtual environment, installs locked dependencies,
 installs both portal dependencies, and runs the local quality gates. It does not create
 credentials or contact a clinical system.
+
+## Confirmed symptom intake (PAT-002-B)
+
+Nora's routine symptom route opens an owned private draft; it does not extract and
+save a clinical report or start ordinary ADR work. Manual entry from a saved Nora
+turn remains available without model generation. The deterministic safety floor
+runs before ordinary work and on typed, voice or form answers, corrections, preview and confirmation.
+Safety alerts use independent durable outboxes and the existing retry worker.
+
+The paired `en-US`/`es-MX` question bundle is immutable and pinned by version/hash.
+Activation requires genuine review evidence in the packaged manifest and matching
+approved database eligibility, plus the disabled-by-default runtime flag. Drafts,
+answer mutations and audit are patient-private; private answer values never become chat rows.
+The original Nora message remains under existing transcript visibility rules.
+
+The server constructs a versioned preview separating patient answers, record context
+and a deterministic summary. Exact patient-named products permit bounded canonical
+medication and approved medication-fact retrieval. Only eligible cited clinician
+entries or completed, shareable, approved/trusted documents participate. Read checks
+mask stale context; confirmation rechecks it under database row locks. Browser
+column privileges exclude stored retrieval context; clinician/SOAP responses
+retain testimony without that cached context.
+
+A stable confirmation UUID, expected revision, exact preview hash and explicit consent
+commit one immutable patient-confirmed report with append-only audit. Unknown severity
+is null. New direct inserts fail closed; historical rows stay `legacy_unconfirmed`.
+Clinical consumers select confirmed reports; the existing clinician detail view labels
+legacy history and confirmed testimony separately. Delegated symptom tasks canonicalize
+report input at submission/working transitions. The applied, checksum-pinned
+`071_confirmed_symptom_handoff.sql` atomically enqueues the existing ADR screen and
+assigned-clinic notices at confirmation. An exact,
+unique active-list product match supplies the medication foreign key and permits the worker
+to create one report-keyed clinician ADR draft; unlisted products remain unverified testimony
+without medication writes or a fabricated ADR link. Retry cannot overwrite clinician review.
+Independent urgent and emergency outbox identities prevent suppression. Chat/voice questions
+reuse the existing voice transport without storing private recording audio or TTS against a
+chat row. Explicit confirmation remains a button; spoken assent cannot submit. This is
+decision support, not a causality verdict or automatic MedWatch submission. Existing
+clinician-authored ADR requests are presented to the patient under Care Team, not Nora.
+PAT-002-C's timeline remains separate.
+
+See [the contract and acceptance evidence](../docs/pat-002-b-acceptance-2026-10-12.md)
+for exact endpoints, recovery behavior and rollout prerequisites.

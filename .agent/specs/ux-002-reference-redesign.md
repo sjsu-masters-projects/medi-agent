@@ -118,12 +118,13 @@ Dark sidebar, **light workspace**.
   --color-line-strong: rgba(100,116,139,.20);
   --color-ink: #0F172A;
   --color-ink-2: #334155;
-  --color-muted: #64748B;
+  --color-muted: #596980;  /* accessibility override: ≥4.5:1 through track surfaces */
 
   /* sidebar (dark) */
   --color-rail: #0A1222;
   --color-rail-ink: #E6ECF5;
   --color-rail-muted: #A9B6CA;
+  --color-rail-faint: #8797B2; /* readable small sidebar counts, accessibility override */
   --color-rail-active: rgba(96,165,250,.12);
   --color-rail-accent: #60A5FA;
 

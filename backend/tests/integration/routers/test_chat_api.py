@@ -13,7 +13,6 @@ from app.adk.chat_runtime import CareCoordinatorRuntime
 from app.core.exceptions import ValidationError
 from app.core.security import get_current_user
 from app.db.connection import get_db
-from app.followup import SymptomAnalysis
 from app.main import app
 from app.models.auth import CurrentUser
 
@@ -737,7 +736,7 @@ class TestChatWebSocket:
             assert context_event["type"] == "chat_context_loaded"
             assert context_event["document"]["id"] == document_id
 
-    def test_websocket_emits_a2a_lifecycle_events_for_adr_flagged_symptom(
+    def test_websocket_symptom_never_starts_adr_before_confirmation(
         self,
         client,
         override_db,
@@ -745,145 +744,55 @@ class TestChatWebSocket:
         patient_id,
         monkeypatch,
     ):
+        from unittest.mock import AsyncMock
+
+        from app.services.a2a_task_service import A2ATaskService
+        from app.services.symptom_intake_service import SymptomIntakeService
+
         token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
-
         triage_output = TriageOutput(
-            agent_id="triage-test",
+            agent_id="synthetic",
             status="success",
             intent="symptom",
-            urgency="urgent",
-            response_text="Please share when this started.",
+            urgency="routine",
+            response_text="Draft",
             escalation_required=False,
             route="symptom",
         )
-
-        async def _mock_symptom_process(**_kwargs):
-            return SymptomAnalysis(
-                status="success",
-                response_text="I logged this urgently for your care team.",
-                symptom_report={
-                    "symptom": "dizziness",
-                    "severity": 8,
-                    "flagged_for_adr": True,
-                    "ai_assessment": "Potential medication-related symptom.",
-                },
-                follow_up_question="When did this start?",
-                flagged_for_adr=True,
-                naranjo_answers={"event_after_drug": "yes"},
-                adr_evidence=[
-                    {
-                        "question": "event_after_drug",
-                        "answer": "yes",
-                        "evidence": "after taking medication",
-                    }
-                ],
-            )
-
-        # The stream is aborted once the route is known to be `symptom`, and the second,
-        # buffered call to the same model that used to follow it is gone — so only the
-        # stream and the symptom worker need stubbing now.
         monkeypatch.setattr(
-            CareCoordinatorRuntime,
-            "process_stream",
-            _make_stream_mock(triage_output),
+            CareCoordinatorRuntime, "process_stream", _make_stream_mock(triage_output)
         )
-        monkeypatch.setattr("app.routers.chat.analyse_symptom", _mock_symptom_process)
-        symptom_event_id = str(uuid4())
-
-        async def _mock_a2a(_self, patient_id, payload):
-            assert payload["symptom_event_id"] == symptom_event_id
-            assert payload["idempotency_key"] == f"symptom_event:{symptom_event_id}"
-            assert payload["naranjo_answers"] == {"event_after_drug": "yes"}
-            assert payload["adr_evidence"][0]["question"] == "event_after_drug"
-            return {
-                "task_id": str(uuid4()),
-                "status": "completed",
-                "events": [
-                    {"task_id": "t1", "target_agent": "pharmacovigilance", "status": "submitted"},
-                    {"task_id": "t1", "target_agent": "pharmacovigilance", "status": "working"},
-                    {"task_id": "t1", "target_agent": "pharmacovigilance", "status": "completed"},
-                ],
-            }
-
-        monkeypatch.setattr(
-            "app.routers.chat.A2ATaskService.run_symptom_to_pharmacovigilance",
-            _mock_a2a,
-        )
-
+        start = AsyncMock(return_value={"intake_id": str(uuid4()), "revision": 0})
+        monkeypatch.setattr(SymptomIntakeService, "start", start)
+        adr = AsyncMock()
+        monkeypatch.setattr(A2ATaskService, "run_symptom_to_pharmacovigilance", adr)
         user_row = {
             "id": str(uuid4()),
             "patient_id": str(patient_id),
-            "content": "I feel dizzy after taking medication",
+            "content": "Synthetic dizziness",
             "role": "user",
-            "intent": None,
-            "language": "en",
-            "audio_url": None,
-            "created_at": "2026-04-16T12:00:00Z",
+            "language": "en-US",
+            "created_at": "2026-10-12T12:00:00Z",
         }
-        assistant_row = {
-            "id": str(uuid4()),
-            "patient_id": str(patient_id),
-            "content": "I logged this urgently for your care team.",
-            "role": "assistant",
-            "intent": "symptom",
-            "language": "en",
-            "audio_url": None,
-            "created_at": "2026-04-16T12:00:01Z",
-        }
-
+        assistant_row = {**user_row, "id": str(uuid4()), "role": "assistant", "intent": "symptom"}
         mock_supabase_db.table().execute.side_effect = _response_rows(
-            [],
-            [],
-            [],
-            [],
-            [user_row],
-            [
-                {
-                    "id": symptom_event_id,
-                    "patient_id": str(patient_id),
-                    "symptom": "dizziness",
-                    "severity": 8,
-                    "flagged_for_adr": True,
-                }
-            ],
-            [assistant_row],
-            [{"clinician_id": str(uuid4())}],
-            [{"id": str(uuid4())}],
+            [], [], [], [], [user_row], [assistant_row]
         )
-
         with client.websocket_connect(
             f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
-        ) as websocket:
-            assert websocket.receive_json()["type"] == "chat_history"
-
-            websocket.send_json(
-                {
-                    "type": "user_message",
-                    "content": "I feel dizzy after taking medication",
-                    "language": "en",
-                }
+        ) as ws:
+            assert ws.receive_json()["type"] == "chat_history"
+            ws.send_json(
+                {"type": "user_message", "content": "Synthetic dizziness", "language": "en-US"}
             )
-
-            assert websocket.receive_json()["type"] == "user_message_saved"
-            assert websocket.receive_json()["type"] == "assistant_start"
-
+            events = []
             while True:
-                event = websocket.receive_json()
+                event = ws.receive_json()
+                events.append(event)
                 if event["type"] == "assistant_complete":
                     break
-                assert event["type"] == "assistant_chunk"
-
-            status_events: list[dict[str, Any]] = []
-            for _ in range(6):
-                event = websocket.receive_json()
-                if event["type"] == "a2a_task_status":
-                    status_events.append(event)
-                if len(status_events) == 3:
-                    break
-
-            assert [item["status"] for item in status_events] == [
-                "submitted",
-                "working",
-                "completed",
-            ]
+            assert any(event["type"] == "symptom_intake_updated" for event in events)
+            assert not any(event["type"] == "a2a_task_status" for event in events)
+        start.assert_awaited_once()
+        adr.assert_not_awaited()

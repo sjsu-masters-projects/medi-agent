@@ -1,23 +1,25 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { HiStop } from "react-icons/hi2";
 import { CARE_ASSISTANT_NAME, getPatientChatCopy, getChatControlsCopy, getChatRecoveryCopy } from "@/content/chat-copy";
 import { CareConversations } from "@/components/features/care-conversations";
 import { NoraConversations } from "@/components/features/nora-conversations";
 import { NotificationBell } from "@/components/features/notification-centre";
+import { SymptomIntakePanel, type IntakeComposerState } from "@/components/features/symptom-intake-panel";
 import { ADRFollowUpEntryRow } from "@/components/features/adr-follow-up-entry-row";
 import { ADRFollowUpView } from "@/components/features/adr-follow-up-view";
 import { getADRFollowUpCopy } from "@/content/adr-follow-up-copy";
 import { todayConversationId } from "@/services/chat-api";
+import { getConversationCopy } from "@/services/care-conversations";
 import { ChatBubble } from "@/components/features";
 import { Icon } from "@/components/ui/icons";
 import { ChatTextarea } from "@/components/features/chat-presentation";
 import { ChatTurnRecovery } from "@/components/features/chat-turn-recovery";
 import { ProcessingDots } from "@/components/ui/motion";
 import { isTurnInProgress } from "@/hooks/use-chat-turn-recovery";
-import { usePatientChatSession } from "@/hooks/use-patient-chat-session";
+import { usePatientChatSession, type PrivateReplyHandler } from "@/hooks/use-patient-chat-session";
 import { usePatientProfile } from "@/hooks/use-patient-profile";
 import { usePatientShell } from "@/contexts/patient-shell-context";
 import { ChatRole, DEFAULT_LOCALE } from "@/types";
@@ -59,16 +61,33 @@ export default function ChatPage() {
     }
     const [showHistory, setShowHistory] = useState(false);
     const [humanThreadId, setHumanThreadId] = useState<string | null>(null);
-    const bottomRef = useRef<HTMLDivElement | null>(null);
+    const conversationRef = useRef<HTMLDivElement | null>(null);
+    const followLatestRef = useRef(true);
+    const scrollSessionRef = useRef<string | null>(null);
     const headingRef = useRef<HTMLHeadingElement | null>(null);
     const noraOpenRef = useRef<HTMLButtonElement | null>(null);
+    const careTeamRegionRef = useRef<HTMLDivElement | null>(null);
     const previousInbox = useRef(inbox);
     const wasFollowUp = useRef(false);
+    const privateReply = useRef<PrivateReplyHandler | null>(null);
+    const registerPrivateReply = useCallback((handler: PrivateReplyHandler | null) => { privateReply.current = handler; }, []);
+    const routePrivateReply = useCallback<PrivateReplyHandler>((text, mode) => privateReply.current?.(text, mode) ?? "unhandled", []);
+    const [intakeComposer, setIntakeComposer] = useState<IntakeComposerState>({ active: false, busy: false, revision: "" });
+    const updateIntakeComposer = useCallback((next: IntakeComposerState) => {
+        setIntakeComposer((previous) => previous.active === next.active && previous.busy === next.busy && previous.revision === next.revision && previous.locale === next.locale && previous.accepting === next.accepting ? previous : next);
+    }, []);
     const { assistantDraft, assistantDraftStartedAt, canPlayAssistantAudio, connectionStatus,
         dismissDocumentContext, dismissSafetyNotice, documentContext, documentUnavailable, error, handleHandsFreeToggle,
         handleMicClick, handlePlayAssistantMessage, handleSend, handsFreeMode, input,
         isTyping, loading, messages, openConversation, safetyNotice, sessionId, setInput,
-        startNewConversation, retryUnsentMessage, removeUnsentMessage, recoveryTurns, retryTurn, dismissTurn, reconnectChat, reconnecting, turnBusy, voiceError, voiceStatus } = usePatientChatSession(locale);
+        startNewConversation, retryUnsentMessage, removeUnsentMessage, recoveryTurns, retryTurn, dismissTurn, reconnectChat, reconnecting, turnBusy,
+        voiceError, voiceStatus } = usePatientChatSession(
+            intakeComposer.active ? intakeComposer.locale ?? locale : locale,
+            routePrivateReply,
+            intakeComposer.active,
+            Boolean(intakeComposer.accepting && !intakeComposer.busy),
+            intakeComposer.revision,
+        );
     // A drop shorter than RECONNECT_QUIET_MS is invisible: the header keeps saying Connected.
     const [reconnectSlow, setReconnectSlow] = useState(false);
     useEffect(() => {
@@ -116,9 +135,12 @@ export default function ChatPage() {
 
     useEffect(() => {
         if (followUpMode) headingRef.current?.focus();
-        else if (wasFollowUp.current) noraOpenRef.current?.focus();
+        else if (wasFollowUp.current) {
+            if (careTeamDestination) careTeamRegionRef.current?.focus();
+            else noraOpenRef.current?.focus();
+        }
         wasFollowUp.current = followUpMode;
-    }, [followUpMode]);
+    }, [careTeamDestination, followUpMode]);
 
     useEffect(() => {
         if (previousInbox.current !== inbox) {
@@ -128,29 +150,44 @@ export default function ChatPage() {
         previousInbox.current = inbox;
     }, [inbox]);
 
-    useEffect(() => {
-        if (!inbox) bottomRef.current?.scrollIntoView({ behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest" });
-    }, [assistantDraft, isTyping, messages, conversation, inbox]);
-
     const assistantThread = !inbox && conversation === "assistant";
-    const iconButton = "ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-ink-2 hover:bg-surface-2 disabled:opacity-50";
+    useLayoutEffect(() => {
+        const container = conversationRef.current;
+        if (!assistantThread || !container) {
+            scrollSessionRef.current = null;
+            followLatestRef.current = true;
+            return;
+        }
+        if (scrollSessionRef.current !== sessionId) {
+            scrollSessionRef.current = sessionId;
+            followLatestRef.current = true;
+        }
+        // Streaming must not restart an animation or pull a reader away from
+        // earlier messages (including an intake answer they are editing).
+        if (!loading && followLatestRef.current && !container.contains(document.activeElement)) {
+            container.scrollTo({ top: container.scrollHeight, behavior: "instant" });
+        }
+    }, [assistantDraft, isTyping, messages, assistantThread, sessionId, loading, intakeComposer, pendingId, showTyping, showSlowNote]);
+
+    const iconButton = "ma-press flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface text-ink-2 hover:bg-surface-2 disabled:opacity-50";
     if (followUpMode) {
         const followUpCopy = getADRFollowUpCopy(locale);
-        const leaveFollowUp = () => { setInbox(true); setCareTeamOpened(true); router.replace("/chat"); };
+        const careTeamCopy = getConversationCopy(locale);
+        const leaveFollowUp = () => { setInbox(true); setCareTeamOpened(true); router.replace("/chat?view=care-team"); };
         return <div className="flex min-h-dvh w-full flex-col gap-3 px-4 pb-[calc(env(safe-area-inset-bottom)+24px)] text-ink" lang={locale}>
             <header className="sticky top-0 z-20 -mx-4 flex items-center gap-2.5 bg-background/90 px-3 pt-3 pb-2.5 backdrop-blur-md">
-                <button type="button" className="ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-ink hover:bg-surface" aria-label={back} onClick={leaveFollowUp}><Icon name="back" className="h-[22px] w-[22px]" /></button>
+                <button type="button" className="ma-press flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-ink hover:bg-surface" aria-label={back} onClick={leaveFollowUp}><Icon name="back" className="h-[22px] w-[22px]" /></button>
                 <div className="min-w-0 flex-1">
                     <h1 ref={headingRef} tabIndex={-1} className="break-words text-base font-semibold leading-tight outline-none">{followUpCopy.entry.title}</h1>
                 </div>
             </header>
-            <p className="flex items-start gap-2 rounded-2xl bg-danger-tint px-3.5 py-2.5 text-[13px] leading-snug text-danger-ink"><Icon name="alert" className="mt-px h-4 w-4 shrink-0" />{controls.caution}</p>
+            <p className="flex items-start gap-2 rounded-2xl bg-danger-tint px-3.5 py-2.5 text-[13px] leading-snug text-danger-ink"><Icon name="alert" className="mt-px h-4 w-4 shrink-0" />{careTeamCopy.notice}</p>
             <ADRFollowUpView locale={profile ? locale : undefined} timeZone={profile?.timezone} requestId={followUpRequestId} assessmentId={followUpAssessmentId} onBack={leaveFollowUp} />
         </div>;
     }
-    return <div className={`flex w-full flex-col text-ink ${threadOpen ? "min-h-dvh" : "min-h-[calc(100dvh-110px)]"} ${assistantThread ? "gap-3 px-4 pb-0" : humanThreadId ? "gap-4 px-4 pt-4 pb-0" : "gap-4 px-4 pt-4 pb-6"}`} lang={locale}>
-        <header hidden={Boolean(humanThreadId)} className={inbox ? "flex items-center justify-between gap-3 px-1.5" : "sticky top-0 z-20 -mx-4 flex items-center gap-2.5 bg-background/90 px-3 pt-3 pb-2.5 backdrop-blur-md"}>
-            {!inbox && <button type="button" className="ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-ink hover:bg-surface disabled:opacity-50" aria-label={back} disabled={voiceBusy} onClick={() => { setInbox(true); setCareTeamOpened(true); }}><Icon name="back" className="h-[22px] w-[22px]" /></button>}
+    return <div className={`flex w-full flex-col text-ink ${assistantThread ? "h-dvh min-h-0 overflow-hidden" : threadOpen ? "min-h-dvh" : "min-h-[calc(100dvh-110px)]"} ${assistantThread ? "gap-3 px-4 pb-0" : humanThreadId ? "gap-4 px-4 pt-4 pb-0" : "gap-4 px-4 pt-4 pb-6"}`} lang={locale}>
+        <header hidden={Boolean(humanThreadId)} className={inbox ? "flex items-center justify-between gap-3 px-1.5" : "shrink-0 sticky top-0 z-20 -mx-4 flex items-center gap-2.5 bg-background/90 px-3 pt-3 pb-2.5 backdrop-blur-md"}>
+            {!inbox && <button type="button" className="ma-press flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-ink hover:bg-surface disabled:opacity-50" aria-label={back} disabled={voiceBusy} onClick={() => { setInbox(true); setCareTeamOpened(true); }}><Icon name="back" className="h-[22px] w-[22px]" /></button>}
             {!inbox && conversation === "assistant" && <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-deep text-gold"><Icon name="spark" className="h-[18px] w-[18px]" /></span>}
             <div className="min-w-0 flex-1">
             <h1 ref={headingRef} tabIndex={-1} className={inbox ? "break-words pt-0 text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] outline-none" : "break-words text-base font-semibold leading-tight outline-none"}>{inbox ? "Chat" : conversation === "assistant" ? CARE_ASSISTANT_NAME : copy.careTeamLabel}</h1>
@@ -179,10 +216,9 @@ export default function ChatPage() {
             <button ref={noraOpenRef} type="button" aria-label={`${CARE_ASSISTANT_NAME} · ${copy.assistantDescription}`} aria-pressed={false} className="ma-press inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/15" onClick={() => openNora()}>{locale === "es-MX" ? "Abrir chat" : "Open chat"}<Icon name="arrow" className="h-4 w-4" /></button>
             </div>
         </section> : null}
-        {inbox && <div hidden={Boolean(humanThreadId)} className="empty:hidden"><ADRFollowUpEntryRow locale={locale} /></div>}
         {inbox && !humanThreadId && <NoraConversations locale={locale} activeSessionId={sessionId} onOpen={openNora} />}
-        {(inbox || careTeamOpened) && <div hidden={!inbox && conversation !== "care-team"} className="space-y-3">
-            <CareConversations compact locale={locale} conversationId={conversationId} recipientId={recipientId} visible={inbox || conversation === "care-team"} onThreadPresentationChange={setHumanThreadId} />
+        {(inbox || careTeamOpened) && <div ref={careTeamRegionRef} role="region" aria-label={copy.careTeamLabel} tabIndex={-1} hidden={!inbox && conversation !== "care-team"} className="space-y-3 outline-none">
+            <CareConversations compact locale={locale} conversationId={conversationId} recipientId={recipientId} inboxLead={<ADRFollowUpEntryRow locale={locale} />} visible={inbox || conversation === "care-team"} onThreadPresentationChange={setHumanThreadId} />
             {historicalMessages.length > 0 && <section hidden={Boolean(humanThreadId)} className="overflow-hidden rounded-[22px] bg-surface">
                 <button className="flex min-h-14 w-full items-center gap-3 px-[14px] py-3 text-left hover:bg-[#FBF7F0]" type="button" aria-expanded={showHistory}
                     onClick={() => setShowHistory((current) => !current)}>
@@ -199,9 +235,13 @@ export default function ChatPage() {
             </section>}
         </div>}
         {assistantThread && <>
+            <div ref={conversationRef} role="region" aria-label={locale === "es-MX" ? "Conversación con Nora" : "Nora conversation"}
+                onScroll={(event) => {
+                    const container = event.currentTarget;
+                    followLatestRef.current = container.scrollHeight - container.clientHeight - container.scrollTop <= 80;
+                }} className="min-h-0 flex-1 space-y-3 overflow-y-auto">
             <p className="flex items-start gap-2 rounded-2xl bg-danger-tint px-3.5 py-2.5 text-[13px] leading-snug text-danger-ink"><Icon name="alert" className="mt-px h-4 w-4 shrink-0" />{controls.caution}</p>
-            <div className="empty:hidden"><ADRFollowUpEntryRow locale={locale} /></div>
-            {documentContext && <section className="flex items-start gap-3 rounded-[22px] bg-brand-tint p-3.5">
+            {documentContext && !documentUnavailable && <section className="flex items-start gap-3 rounded-[22px] bg-brand-tint p-3.5">
                 <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-brand"><Icon name="note" className="h-5 w-5" /></span>
                 <div className="min-w-0 flex-1">
                     <p className="text-xs font-semibold text-brand-ink">{controls.recordContext}</p>
@@ -210,14 +250,14 @@ export default function ChatPage() {
                 </div>
                 <button className="ma-press min-h-11 shrink-0 rounded-xl px-3 text-sm font-semibold text-brand-ink hover:bg-surface/70" onClick={dismissDocumentContext} type="button">{controls.dismiss}</button>
             </section>}
-            {!documentContext && documentUnavailable && <div className="rounded-2xl bg-surface px-3.5 py-2.5 text-[13px] text-ink-2" role="status"><p>{controls.documentUnavailable}</p><button type="button" className="min-h-11 px-3 font-semibold text-brand-ink" onClick={dismissDocumentContext}>{controls.dismiss}</button></div>}
-            {error && <div className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">
+            {documentUnavailable && <div className="rounded-2xl bg-surface px-3.5 py-2.5 text-[13px] text-ink-2" role="status"><p>{controls.documentUnavailable}</p><button type="button" className="min-h-11 px-3 font-semibold text-brand-ink" onClick={dismissDocumentContext}>{controls.dismiss}</button></div>}
+            {error && !documentUnavailable && <div className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">
                 <p>{error === "CHAT_TURN_BUSY" ? recoveryCopy.busy : error === "CHAT_TURN_EXPIRED" ? recoveryCopy.expired : error === "CHAT_STARTUP_UNAVAILABLE" ? recoveryCopy.unavailable : controls.chatError}</p>
                 {error === "CHAT_STARTUP_UNAVAILABLE" && <button type="button" className="mt-2 min-h-11 rounded-xl bg-surface px-3 font-semibold" onClick={reconnectChat}>{recoveryCopy.reconnect}</button>}
             </div>}
             {safetyNotice && <div className="flex items-start gap-3 rounded-2xl border border-danger-ink/20 bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">
                 <Icon name="alert" className="mt-px h-5 w-5 shrink-0" />
-                <p className="flex-1 font-medium">{copy.escalationNotice}</p>
+                <p className="flex-1 font-medium">{safetyNotice}</p>
                 <button className="ma-press min-h-11 shrink-0 rounded-xl bg-surface px-3 text-sm font-semibold text-danger-ink" onClick={dismissSafetyNotice} type="button">{controls.dismiss}</button>
             </div>}
             {voiceError && <p className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">{controls.voiceError}</p>}
@@ -237,27 +277,30 @@ export default function ChatPage() {
                 {showTyping && <div className="ma-bubble flex items-center gap-2 self-start rounded-[20px_20px_20px_6px] bg-surface px-4 py-3" role="status"><ProcessingDots /><span className="text-[13px] text-muted">{copy.typingMessage}</span></div>}
                 {showSlowNote && <p className="-mt-1 self-start px-1 text-xs text-muted">{recoveryCopy.leaveAndReturn}</p>}
                 <ChatTurnRecovery turns={recoveryTurns} locale={locale} connected={connectionStatus === "connected"} onRetry={retryTurn} onDismiss={dismissTurn} />
-                <div ref={bottomRef} />
+                <SymptomIntakePanel locale={locale} sessionId={sessionId} sourceMessageId={visibleMessages.findLast((message) => message.role === ChatRole.USER)?.id}
+                    registerReply={registerPrivateReply} onComposerState={updateIntakeComposer} onRestoreInput={setInput} handsFree={handsFreeMode}
+                    onReadAloud={(text, language) => handlePlayAssistantMessage({ content: text, language })} />
             </div>
-            <form className="sticky bottom-0 z-10 -mx-4 mt-auto space-y-1.5 bg-background/95 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+12px)] backdrop-blur-md" onSubmit={handleSend}>
+            </div>
+            <form className="shrink-0 -mx-4 mt-auto space-y-1.5 bg-background/95 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+12px)] backdrop-blur-md" onSubmit={(event) => { followLatestRef.current = true; handleSend(event); }}>
                 <div className="flex items-end gap-2">
                     <div className="flex min-h-[52px] min-w-0 flex-1 items-end rounded-[26px] border border-line-strong bg-surface pr-1.5 pb-1.5 transition focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/12">
                         <ChatTextarea aria-label={controls.message} className="pl-[18px]" onChange={(event) => setInput(event.target.value)}
                         onKeyDown={(event) => {
                             if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                                 event.preventDefault();
-                                if (input.trim() && connectionStatus === "connected" && profile)
+                                if (input.trim() && (intakeComposer.active || connectionStatus === "connected") && !intakeComposer.busy && profile)
                                     event.currentTarget.form?.requestSubmit();
                             }
                         }}
                         placeholder={voiceStatus === "listening" ? controls.listening : voiceStatus === "processing" ? controls.transcribing : copy.inputPlaceholder} value={input} />
-                    <button className={`ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-full disabled:opacity-40 ${voiceStatus === "listening" ? "bg-danger-ink text-white" : "bg-surface-2 text-ink-2 hover:bg-line-strong"}`} aria-label={voiceStatus === "listening" ? controls.stopVoice : voiceStatus === "playing" ? controls.interrupt : controls.speak} aria-pressed={voiceStatus === "listening"}
-                        disabled={turnBusy || documentUnavailable || voiceStatus === "unsupported" || voiceStatus === "processing" || !profile} onClick={handleMicClick} type="button">
+                    <button className={`ma-press flex h-11 w-11 shrink-0 items-center justify-center rounded-full disabled:opacity-40 ${voiceStatus === "listening" ? "bg-danger-ink text-white" : "bg-surface-2 text-ink-2 hover:bg-line-strong"}`} aria-label={voiceStatus === "listening" ? controls.stopVoice : voiceStatus === "playing" ? controls.interrupt : controls.speak} aria-pressed={voiceStatus === "listening"}
+                        disabled={turnBusy || (!intakeComposer.active && documentUnavailable) || voiceStatus === "unsupported" || voiceStatus === "processing" || intakeComposer.busy || !profile} onClick={handleMicClick} type="button">
                         {voiceStatus === "listening" ? <HiStop aria-hidden className="h-5 w-5" /> : voiceStatus === "processing" ? <ProcessingDots /> : <Icon name="mic" className="h-5 w-5" />}
                     </button>
                     </div>
                     <button className="ma-press flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-brand text-white shadow-[var(--shadow-fab)] hover:bg-brand-hover disabled:opacity-40 disabled:shadow-none"
-                        aria-label={controls.send} disabled={turnBusy || documentUnavailable || !input.trim() || connectionStatus !== "connected" || !profile} type="submit"><Icon name="send" /></button>
+                        aria-label={controls.send} disabled={turnBusy || (!intakeComposer.active && documentUnavailable) || !input.trim() || (!intakeComposer.active && connectionStatus !== "connected") || intakeComposer.busy || !profile} type="submit"><Icon name="send" /></button>
                 </div>
                 {handsFreeMode && <p className="px-2 text-xs text-brand-ink">{controls.autoPlay}</p>}
                 {!profile && <p className="px-2 text-sm text-muted" role="status">{controls.profileRequired}</p>}

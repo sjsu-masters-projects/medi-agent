@@ -8,6 +8,7 @@ import logging
 from supabase import Client
 
 from app.services.a2a_task_service import A2ATaskService
+from app.services.chat_safety_service import ChatSafetyService
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ class A2ARetryWorker:
         self, db: Client, *, poll_interval_seconds: int = 15, batch_size: int = 25
     ) -> None:
         self._service = A2ATaskService(db)
+        self._safety_service = ChatSafetyService(db)
         self._poll_interval_seconds = max(1, poll_interval_seconds)
         self._batch_size = max(1, min(batch_size, 200))
         self._stop_event = asyncio.Event()
@@ -58,6 +60,8 @@ class A2ARetryWorker:
         )
         consecutive_failures = 0
         while not self._stop_event.is_set():
+            await self._deliver_safety_alerts()
+            await self._deliver_intake_safety_alerts()
             try:
                 summary = await self._service.process_due_retries(self._batch_size)
                 consecutive_failures = 0
@@ -104,3 +108,25 @@ class A2ARetryWorker:
                 continue
 
         logger.info("A2A retry worker stopped")
+
+    async def _deliver_safety_alerts(self) -> None:
+        try:
+            await asyncio.wait_for(
+                self._safety_service.deliver_pending({"limit": self._batch_size}), timeout=10
+            )
+        except Exception:
+            # Retain pending SQL rows; never log exception text or source content.
+            logger.warning("Safety alert retry unavailable; pending records retained")
+
+    async def _deliver_intake_safety_alerts(self) -> None:
+        try:
+            await asyncio.wait_for(
+                asyncio.to_thread(
+                    self._safety_service.db.rpc(
+                        "deliver_symptom_intake_safety_alerts", {"p_limit": self._batch_size}
+                    ).execute
+                ),
+                timeout=10,
+            )
+        except Exception:
+            logger.warning("Intake safety delivery unavailable; pending records retained")

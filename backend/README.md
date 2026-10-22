@@ -30,6 +30,12 @@ The universal lock omits the legacy `google-generativeai` SDK on Python 3.14: it
 `protobuf<6` pin cannot coexist with a patched Vertex AI SDK there, and Docker and CI
 run 3.12.
 
+Pillow is floored at `>=13.0.0,<14.0.0` for the image-decoder/encoder security
+fixes in [Pillow 13.0.0](https://pillow.readthedocs.io/en/stable/releasenotes/13.0.0.html).
+Both generated locks retain the same patched version. Document preview, raster
+preprocessing and OCR regression tests cover this upgrade; never bypass the
+dependency audit to retain an affected image-processing library.
+
 ## Run
 
 ```bash
@@ -73,6 +79,50 @@ See [tests/TESTING_GUIDE.md](tests/TESTING_GUIDE.md) for comprehensive testing d
 
 ## Runtime configuration ownership
 
+### Notification snapshot signing (NOT-003)
+
+`NOTIFICATION_TOKEN_SIGNING_SECRET` is an optional independent server-only root
+of at least 32 random characters, consistent across API replicas. Set it through
+the approved secret/configuration process, never a frontend variable or committed
+file. Notification tokens always use an HMAC-SHA256 purpose-derived key, not the
+raw root or Supabase authentication signing key. If the independent root is absent,
+the purpose-derived rollout fallback uses the auth root; it separates token
+protocols, but does not provide independent root-compromise protection.
+
+Deploying this change or rotating the notification root invalidates earlier
+15-minute notification snapshots/cursors: refresh the view and retry the read
+action. Authentication sessions and stored read state are unchanged. There is no
+legacy raw-auth-key verification fallback. During mixed-version rollout, an older
+replica can reject a new snapshot or vice versa; refresh after rollout convergence.
+Do not regenerate a clinical event. No remote secret/key/configuration change is
+performed by this code.
+
+October 21 authorized configuration: the backend references Secret Manager
+`NOTIFICATION_TOKEN_SIGNING_SECRET:1`; the existing deployment workflow preserves
+this reference with `--update-*`. This configuration-only revision keeps the
+previous image and does not itself activate new code. Verify notification reads
+after the signing implementation is merged/deployed. Do not rotate Supabase login
+keys or add this server-only secret to either portal.
+
+Clinician accounts referenced by clinical audit/provenance are retained. Permanent
+clinician deletion is not an expo requirement; preserve attribution and existing
+database restrictions instead of nulling or deleting clinical history.
+
+### Source review and timeline (#208)
+
+The clinician timeline endpoint is assignment-scoped, read-only and bounded to
+40 dated rows per source bucket and ten own conversations. Message reads reuse
+the exact-thread authorization RPC. Source failures and missing dates are explicit;
+calculation/retrieval times are not clinical review dates or a full audit trail.
+
+Migration `079_unlisted_product_review_alerts.sql` adds atomic forward-only review
+capture for newly confirmed unlinked product concerns. It does not approve/add a
+medicine, infer a medication FK from cached context, or create an ADR/Naranjo score.
+Existing authorized notification acknowledgement records seen-for-follow-up only.
+Review the checksum and apply through the ledger only with separate authorization;
+no historical notification backfill is performed. Deploy reviewed code before
+testing a new confirmation, then verify the exact report destination and read audit.
+
 ### Demo follow-ups: activity review and evaluation
 
 COM-002 adds optional `care_plan_item_id` to private conversation sends. Only a
@@ -104,6 +154,14 @@ Synthetic evaluation commands, paired cases and raw-final-response reporting are
 documented in [the demo evaluation guide](../docs/demo-ai-evaluation.md).
 
 ### Environment ownership
+
+Nora connection initialization tolerates only the specifically missing
+`symptom_reports.confirmation_state` column during confirmed-intake rollout: it omits
+symptom reports and exposes `recent_symptoms_available=false` to the patient-context
+tool. It never reads legacy reports as a substitute. Other initialization errors
+produce a generic `chat_initialization_failed` event and close with 1011; internal
+error details are not sent to the patient. This compatibility path does not replace
+authorized migration 060 rollout or enable intake.
 
 `app/config.py` supplies defaults; real process environment variables override
 those defaults. Local startup may also load the repository-root `.env` (or CWD
@@ -188,7 +246,7 @@ runtime, and checked against its SHA-256, page and field inventory and every map
 on every export. Re-pin steps (download into an empty directory outside the repository,
 compare size and SHA-256 and stop on a difference, repeat the copyright check, regenerate the
 record with `scripts/generate_form_3500_template_record.py`) are in
-[`src/app/assets/fda/README.md`](src/app/assets/fda/README.md). The fill uses `pypdf==6.20.1`
+[`src/app/assets/fda/README.md`](src/app/assets/fda/README.md). The fill uses `pypdf==6.21.1`
 (pinned in `requirements.in`; BSD), not PyMuPDF, writes the AcroForm fields and the XFA
 `datasets` packet, keeps the form fillable and re-encrypts it with the template's
 permissions.
@@ -309,6 +367,17 @@ while CPU is always allocated, not only during requests. `--min-instances 0` is 
 an idle service still scales to zero, and the jobs are unchanged.
 
 ## Package Layout
+
+PAT-002-B B2 checks the shared deterministic safety floor before turn-specific
+retrieval/model/symptom work. Emergency turns stream reviewed direction and retain
+an independent pending care-team alert through migration 059's service-only RPCs.
+The existing retry worker re-drives pending delivery; it must remain enabled
+(`A2A_RETRY_WORKER_ENABLED=true`). No symptom report or ADR task is created for
+these turns. Non-emergency reports still use the old flow; private intake APIs
+and confirmation are not implemented. See the
+[B2 walkthrough and exact local test steps](../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md#18-b2--safety-takes-priority-october-10-2026)
+and [checkpoint evidence and limitations](../docs/pat-002-b-acceptance-2026-10-10.md).
+Migration 059 requires separate authorization before any remote application.
 
 ```
 src/app/
@@ -545,6 +614,15 @@ PYTHONPATH=src .venv/bin/python -m app.workers.health_knowledge_refresh
 
 Design, checks and failure behaviour: `.agent/specs/nora-002-grounded-answers.md`.
 
+Assigned clinicians may explicitly request
+`GET /smart/patients/{patient_id}/facts/{fact_id}/medication-reference` under
+`/api/v1`. It reuses this cache for the candidate's recorded drug name only, bounds
+official links/excerpts, and returns source check/version/update/stale metadata.
+The ingredient concept is informational and does not update candidate or canonical
+RxNorm values. `GET /api/v1/clinicians/me/external-record-reviews` is a separate
+current-assignment/clinic-scoped, paginated source-work summary, not a notification
+count. Both endpoints preserve existing clinical decision APIs and permission gates.
+
 ## Scheduled jobs
 
 Document ingestion (every 5 minutes), the reference refresh (Sundays 03:00
@@ -578,6 +656,47 @@ Triggers, auth, healthy-run signals and Cloud Logging queries:
 | [CODING_STANDARDS.md](../.agent/CODING_STANDARDS.md) | Code style rules |
 | [Supabase Setup Guide](../docs/supabase_setup_guide.md) | DB schema, migrations, RLS, auth hooks |
 | [workflows/new-agent.md](../.agent/workflows/new-agent.md) | How to add a new agent |
+
+### Patient-confirmed symptom intake
+
+PAT-002-B replaces automatic symptom-report insertion in Nora with a private draft,
+explicit preview and confirmation. Endpoints are under
+`/api/v1/patients/me/symptom-intakes`; the actor comes from authentication, not the body.
+`GET /active?session_id=default` returns the latest owned draft, including terminal
+state for reconnect recovery. There is no staff draft endpoint. Writes require
+revision plus stable mutation identity; confirm requires preview hash and explicit
+consent. `GET /api/v1/patients/me/symptom-reports/{id}` reads an owned confirmed report.
+
+`SYMPTOM_INTAKE_ENABLED=false` is the default. Migration 060 does not approve a library.
+The approved `candidate-1` is pinned in the manifest; revised `candidate-2` is pending
+genuine paired-locale review. Matching immutable database eligibility is required. Unavailability
+never restores automatic report insertion. Source binding requires a new backend-saved
+Nora user turn with a session ID; old unbound transcript rows remain readable.
+
+Run the [acceptance commands and synthetic journey](../docs/pat-002-b-acceptance-2026-10-12.md).
+No model is needed for question selection or preview. Exact patient-named product
+context is limited to 4 medications, 5 approved facts and 2 cited 500-character excerpts.
+`POST /{intake_id}/reply` accepts a current question, revision, mutation identity,
+locale and typed/voice text. It conservatively parses explicit values after the
+safety gate; it cannot consent or confirm. Answers are not ordinary chat messages.
+Source suggestions are quotes that require separate patient acceptance.
+
+The exact checksum-pinned `071_confirmed_symptom_handoff.sql` migration keeps
+confirmation, audit, the existing `symptom_adr_screen` queue and
+active assigned-clinician notices in one transaction. Only an exact unique active
+medication name supplies its FK; unlisted products stay unverified testimony. The
+existing worker creates an ADR draft for eligible products; retries preserve
+clinician review. High severity (the existing >=8 threshold) queues a separate
+minimal urgent notice even for cancelled drafts. Emergency alerts remain separate.
+Both require `A2A_RETRY_WORKER_ENABLED=true`. Clinician-authored ADR information
+requests and patient replies stay in Care Team messages while Nora remains the AI chat.
+The applied 071 filename and bytes are immutable and must not be renamed or replayed.
+The post-confirmation service reuses the transaction's `confirmed_symptom:{report_id}`
+task key, including queued tasks, rather than creating a second screening task.
+An existing legacy `symptom_event:{report_id}` task is reused when no canonical
+task exists. This compatibility fix changes no migration or clinical review decision.
+See [October 17 acceptance](../docs/pat-002-b-acceptance-2026-10-17.md) and the
+[read-only preflight/release procedure](../docs/pat-002-b-rollout.md).
 
 ## Cross-clinic scheduling and clinic tags (CLN-003 slices E and F)
 

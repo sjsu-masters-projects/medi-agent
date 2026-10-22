@@ -21,14 +21,16 @@ import Link from "next/link";
 import { usePatientDetail } from "@/hooks/use-patient-detail";
 import type { RootState } from "@/store/store";
 import { PatientADRPanel } from "@/components/features/patient-adr-panel";
+import { PatientTimeline } from "@/components/features/patient-timeline";
 import { formatClinicianDateTime } from "@/utils/dates";
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
 
-type TabId = "profile" | "imports" | "adherence" | "symptoms" | "chat" | "soap" | "documents" | "care-plan" | "adr" | "appointments";
+type TabId = "profile" | "imports" | "adherence" | "symptoms" | "chat" | "soap" | "documents" | "care-plan" | "adr" | "appointments" | "timeline";
 
 const TABS: Array<{ id: TabId; label: string; icon: IconName }> = [
     { id: "profile", label: "Profile", icon: "user" },
+    { id: "timeline", label: "Timeline", icon: "clock" },
     { id: "imports", label: "External Records", icon: "link" },
     { id: "adherence", label: "Adherence", icon: "gauge" },
     { id: "symptoms", label: "Symptoms", icon: "alert" },
@@ -154,6 +156,16 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
     }
 
     const { patient, loadingProfile, generatingSoap, error, loadFailure, reload, generateSoap } = usePatientDetail(patientId, enabled);
+
+    useLayoutEffect(() => {
+        if (!hasMounted || activeTab !== "symptoms" || !patient) return;
+        const hash = window.location.hash;
+        const report = patient.symptom_reports.find((entry) => hash === `#symptom-${entry.id}`);
+        if (!report) return;
+        const element = document.getElementById(`symptom-${report.id}`);
+        element?.focus({ preventScroll: true });
+        element?.scrollIntoView?.({ block: "nearest" });
+    }, [hasMounted, activeTab, patient]);
 
     function handleGenerateSoap() {
         void generateSoap();
@@ -491,8 +503,10 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                     Recent Symptoms
                                 </h3>
                                 <div className="overflow-hidden rounded-[14px] border border-line">
-                                    {patient.symptom_reports.slice(0, 10).map((s) => (
+                                    {patient.symptom_reports.filter((s, index) => index < 10 || window.location.hash === `#symptom-${s.id}`).map((s) => (
                                         <div
+                                            id={`symptom-${s.id}`}
+                                            tabIndex={-1}
                                             className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-[22px] py-4 last:border-b-0 hover:bg-[rgba(100,116,139,.05)]"
                                             key={s.id}
                                         >
@@ -500,13 +514,23 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                                 <span
                                                     aria-hidden="true"
                                                     className={`h-2 w-2 shrink-0 rounded-full ${
-                                                        s.severity >= 8 ? "bg-risk" : s.severity >= 5 ? "bg-warn" : "bg-ok"
+                                                        s.severity === null ? "bg-line-strong" : s.severity >= 8 ? "bg-risk" : s.severity !== null && s.severity >= 5 ? "bg-warn" : "bg-ok"
                                                     }`}
                                                 />
                                                 <div className="min-w-0">
                                                     <p className="text-sm font-medium capitalize text-ink">
                                                         {s.symptom}
                                                     </p>
+                                                    <p className="mt-0.5 text-xs text-muted">{s.confirmationState === "patient_confirmed"
+                                                        ? `Patient-confirmed${s.confirmedAt ? ` · ${s.confirmedAt}` : ""}`
+                                                        : "Historical report — patient confirmation not recorded"}</p>
+                                                    {s.confirmedSummary && <details className="mt-2 text-sm"><summary className="min-h-11 cursor-pointer py-2">Confirmed patient summary</summary><p className="whitespace-pre-wrap">{s.confirmedSummary}</p></details>}
+                                                    {s.reportedProduct && <div className="mt-2 max-w-prose break-words rounded-lg bg-surface-2 p-2 text-xs text-ink-2">
+                                                        <p className="font-medium">Patient-reported product: {s.reportedProduct.name}</p>
+                                                        {!s.relatedMedicationId && <p>Not linked to a recorded medication. Review before linking or adding; this does not approve a medication.</p>}
+                                                        {!s.relatedMedicationId && <Link className="mt-2 inline-flex min-h-9 items-center font-medium text-primary underline" href={`/patients/${patientId}?tab=profile`}>Compare recorded medication list</Link>}
+                                                        {s.reportedProduct.concern === true && <p>A reported concern is not a confirmed adverse reaction.</p>}
+                                                    </div>}
                                                     {s.onset && (
                                                         <p className="mt-0.5 text-xs text-muted">
                                                             Onset: {s.onset}
@@ -523,14 +547,14 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                                 )}
                                                 <span
                                                     className={`min-w-[3.25rem] text-right font-mono text-sm font-medium ${
-                                                        s.severity >= 8
+                                                        s.severity === null ? "text-muted" : s.severity >= 8
                                                             ? "text-risk-ink"
-                                                            : s.severity >= 5
+                                                            : s.severity !== null && s.severity >= 5
                                                               ? "text-warn-ink"
                                                               : "text-ok-ink"
                                                     }`}
                                                 >
-                                                    {s.severity}/10
+                                                    {s.severity === null ? "Unknown / not provided" : `${s.severity}/10`}
                                                 </span>
                                             </div>
                                         </div>
@@ -665,6 +689,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                     />
                 )}
                 {activeTab === "appointments" && <PatientAppointmentsPanel patientId={patientId} />}
+                {activeTab === "timeline" && <PatientTimeline key={patientId} patientId={patientId} />}
                 {activeTab === "care-plan" && <CarePlanPanel patientId={patientId} onPublished={() => void reload()} />}
             </div>
         </div>

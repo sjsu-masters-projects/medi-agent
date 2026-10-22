@@ -69,11 +69,13 @@ from app.models.dashboard import (
     ObligationSetRequest,
     PatientDeepDive,
     PatientRiskData,
+    PatientTimelineResponse,
     RiskLevel,
     SoapNoteGenerationResponse,
     SoapNoteRequest,
 )
 from app.models.enums import ADRStatus
+from app.models.external_record_review import ExternalRecordReviewsResponse
 from app.models.invite import (
     CurrentInviteCodeResponse,
     InviteCodeGenerateResponse,
@@ -87,6 +89,7 @@ from app.models.medwatch_form_3500 import (
 )
 from app.models.patient import PatientDetailRead
 from app.services.clinician_service import ClinicianService
+from app.services.external_record_review_service import ExternalRecordReviewService
 from app.services.medwatch_service import MedWatchService
 
 router = APIRouter()
@@ -100,6 +103,18 @@ def _get_service(db: Client = Depends(get_db)) -> ClinicianService:
 
 def _get_medwatch_service(db: Client = Depends(get_db)) -> MedWatchService:
     return MedWatchService(db)
+
+
+@router.get("/me/external-record-reviews", response_model=ExternalRecordReviewsResponse)
+async def get_external_record_reviews(
+    clinic_id: UUID | None = Query(None),
+    page: int = Query(1, ge=1, le=10000),
+    user: CurrentUser = Depends(_clinician_dep),
+    db: Client = Depends(get_db),
+) -> ExternalRecordReviewsResponse:
+    return await ExternalRecordReviewService(db).list_reviews(
+        user.id, clinic_id=clinic_id, page=page
+    )
 
 
 # ── Existing endpoints ───────────────────────────────────────────────────────
@@ -730,6 +745,20 @@ async def get_patient_risk_snapshot(
 ) -> Any:
     """GET /api/v1/clinicians/me/patients/{patient_id}/risk"""
     return await service.get_patient_risk_snapshot(user.id, patient_id)
+
+
+@router.get(
+    "/me/patients/{patient_id}/timeline",
+    response_model=PatientTimelineResponse,
+    summary="Bounded source-linked patient timeline",
+)
+async def get_patient_timeline(
+    patient_id: UUID,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    """Recent records per source; private conversations belong only to this clinician."""
+    return await service.get_patient_timeline(user.id, patient_id)
 
 
 @router.get(

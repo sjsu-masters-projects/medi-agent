@@ -31,15 +31,22 @@ function OriginBadge({ origin }: { origin?: CarePlanWordingOrigin }) {
 
 /* ── LOC-003: Language flow strip ─────────────────────────────────────────── */
 
-/** Compact strip showing: Source language → You review → Patient sees. */
-function LanguageFlowStrip({ sourceLocale, patientLocale }: { sourceLocale: CarePlanLocale; patientLocale: string }) {
-    const sourceLabel = sourceLocale === "es-MX" ? "Spanish document" : "English document";
+/**
+ * Compact strip: Source evidence language → You review → Patient sees.
+ * DV-004: the "Source" segment reflects the SOURCE EVIDENCE language (the fact/document),
+ * not the item's authored wording. It is omitted when the evidence language is unknown,
+ * so we never claim a document is Spanish when its evidence is English.
+ */
+function LanguageFlowStrip({ evidenceLocale, patientLocale }: { evidenceLocale?: CarePlanLocale | null; patientLocale: string }) {
+    const sourceLabel = evidenceLocale === "es-MX" ? "Spanish source" : evidenceLocale === "en-US" ? "English source" : null;
     const patientLabel = patientLocale === "es-MX" ? "Español (México)" : "English (US)";
     return (
         <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-sunken px-3 py-2 text-xs text-ink-2">
-            <span className="font-medium">Source:</span>
-            <span>{sourceLabel}</span>
-            <Icon name="arrow" className="h-3 w-3 text-muted" />
+            {sourceLabel ? <>
+                <span className="font-medium">Source:</span>
+                <span>{sourceLabel}</span>
+                <Icon name="arrow" className="h-3 w-3 text-muted" />
+            </> : null}
             <span className="font-medium">You review:</span>
             <span>English</span>
             <Icon name="arrow" className="h-3 w-3 text-muted" />
@@ -213,8 +220,8 @@ export function BilingualWording({ item, patientLocale, fieldClass, busy, unsave
     /* LOC-003: always show English first so the clinician reads their language first. */
     const columns: CarePlanLocale[] = ["en-US", "es-MX"];
     return <div className="space-y-3">
-        {/* LOC-003: Language flow strip */}
-        <LanguageFlowStrip sourceLocale={source} patientLocale={patientLocale} />
+        {/* LOC-003: Language flow strip (DV-004: source segment from evidence language) */}
+        <LanguageFlowStrip evidenceLocale={item.source_evidence_locale} patientLocale={patientLocale} />
         <div className="@container"><div className="grid gap-3 @xl:grid-cols-2">
             {columns.map((locale) => {
                 const text = item.wording?.[locale] ?? { title: "", instructions: "", frequency: "" };
@@ -249,8 +256,8 @@ export function ApprovedWording({ item, patientLocale }: { item: CarePlanItem; p
     const locales = CARE_PLAN_LOCALES.filter((locale) => item.wording?.[locale]?.title);
     if (!locales.length) return <p className="rounded-xl border border-line bg-surface-2 p-3.5 text-[15px] leading-relaxed text-ink">{item.instructions} · {item.frequency}<span className="mt-1 block text-xs text-muted">Approved in one language before bilingual review.</span></p>;
     return <div className="space-y-3">
-        {/* LOC-003: Show the language flow strip on approved items too */}
-        {item.source_locale && patientLocale ? <LanguageFlowStrip sourceLocale={item.source_locale} patientLocale={patientLocale} /> : null}
+        {/* LOC-003: Show the language flow strip on approved items too (DV-004: evidence language) */}
+        {patientLocale ? <LanguageFlowStrip evidenceLocale={item.source_evidence_locale} patientLocale={patientLocale} /> : null}
         <div className="@container"><div className="grid gap-3 @xl:grid-cols-2">{locales.map((locale) => <div key={locale} className="rounded-xl border border-line bg-surface-2 p-3.5" lang={locale}>
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-[11px] font-mono uppercase tracking-[.06em] text-muted">{LOCALE_LABEL[locale]}</p>

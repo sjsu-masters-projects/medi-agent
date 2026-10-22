@@ -3,6 +3,8 @@
 > Base: `origin/main` `87a466d`. Requirements: [requirements.md](requirements.md) (approved 2026-10-12; D12 to D17
 > decided 2026-10-12). Everything below was read in source at `87a466d`. For PR 3, the official Form 3500 PDF was
 > inspected and a throwaway synthetic pypdf fill was run outside the repository; no repository code was executed.
+> Routing amendment: on 2026-10-18 the requester placed clinician-authored ADR follow-up under Care Team and out
+> of Nora. The design below incorporates that override.
 
 ## Overview
 
@@ -39,9 +41,8 @@ By PR.
 flowchart LR
   subgraph PR1["PR 1 - no migration"]
     N[Notification link<br/>/chat?view=follow-up&assessment=id] --> V[ADRFollowUpView]
-    I[Chat inbox row] --> V
+    I[Care team inbox row] --> V
     T[Today row] --> V
-    A[Nora thread row] --> V
     V -->|GET overview| O[PatientService.get_adr_follow_up_overview]
     V --> F[ADRFollowUpForm] -->|POST respond| R[PatientService.respond...<br/>error codes]
     P[Presentation: fixed wording, link, label]
@@ -167,8 +168,8 @@ loads the overview.
 | `recent` | A collapsed disclosure button (`aria-expanded`, the chat page's history-row pattern), at most 5 rows with a status `Badge` |
 
 In `chat/page.tsx`, `searchParams.get("view") === "follow-up"` selects a follow-up mode. It renders the thread-style
-header with a back button (`router.replace("/chat")`), the existing `controls.caution` strip (`bg-danger-tint
-text-danger-ink`, R4.5) and `ADRFollowUpView`, and hides the Nora card, the inbox lists and the composer. The mode
+header with a back button (`router.replace("/chat?view=care-team")`), the human care-conversation notice strip
+(`bg-danger-tint text-danger-ink`, R4.5) and `ADRFollowUpView`, and hides the Nora card, the inbox lists and the composer. The mode
 sets `setConversationOpen(true)` as threads do, so the bottom navigation cannot overlap the actions. The page bottom
 padding is `pb-[calc(env(safe-area-inset-bottom)+24px)]` (R1.11). A mounted view keeps the form's component state
 when query parameters change (D2).
@@ -177,9 +178,9 @@ when query parameters change (D2).
 (`ma-press flex min-h-11 items-center gap-3 rounded-[22px] bg-surface px-[14px] py-[13px]`, `IconTile icon="note"
 tone="note"`, chevron, count in `font-mono`). It is placed:
 
-- in the chat inbox, after the Nora card;
+- under Care team messages in the chat inbox;
 - on Today, at the top of the content stack;
-- in the open Nora thread, replacing `<ADRFollowUpPanel />` (R4.3).
+- never in the open Nora thread (R4.3).
 
 The rows render only while `usePendingADRFollowUps()` (the existing pending list endpoint) reports one or more
 requests (R4.4, R13.5). A load failure hides the row, because the destination view shows the error.
@@ -435,7 +436,7 @@ instead of 100 random runs, because every case costs a database round trip.
   - copy parity (P3), classifier (P4), form (P5);
   - migrated `adr-follow-up-panel` tests, now on the form and view;
   - view states;
-  - chat page `view=follow-up`, the Nora-thread row, and inbox and Today rows (0, 1 or 2 pending);
+  - chat page `view=follow-up`, absence from Nora, and Care Team inbox and Today rows (0, 1 or 2 pending);
   - storage spies (R6.8), the `redirectToLogin` return path, and `notificationDestination` for the new links.
 - Clinician portal:
   - a new `adr-review-card.test.tsx` (P6; all-AI, all-patient and mixed);

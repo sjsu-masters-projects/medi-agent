@@ -51,6 +51,7 @@ async def voice_websocket_endpoint(
     connection = VoiceConnection(websocket.send_json)
 
     stream_active = False
+    stream_private = False
     stream_audio_chunks: list[bytes] = []
     stream_language: object = Language.EN
     stream_mime_type = "audio/webm"
@@ -87,6 +88,7 @@ async def voice_websocket_endpoint(
                     )
                     continue
                 stream_language = payload.get("language", Language.EN)
+                stream_private = payload.get("private_intake") is True
                 stream_mime_type = str(payload.get("mime_type") or "audio/webm")
                 stream_audio_chunks = []
                 stream_active = True
@@ -160,6 +162,11 @@ async def voice_websocket_endpoint(
                                 "Voice batch transcription failed: %s", exc, exc_info=True
                             )
 
+                        if stream_private:
+                            # Intake transcripts travel through the private answer API.
+                            # Do not create an orphaned chat-audio object for a draft.
+                            await websocket.send_json({"type": "audio_stream_complete"})
+                            continue
                         try:
                             stored = await service.persist_audio(
                                 patient_id=patient_id,

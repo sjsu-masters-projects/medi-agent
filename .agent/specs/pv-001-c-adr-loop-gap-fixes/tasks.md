@@ -140,10 +140,10 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
     - _Requirements: 4.4, 4.7, 13.5_
   - [x] 6.2 Integrate the follow-up mode and rows in `apps/patient-portal/src/app/(app)/chat/page.tsx`
     - Add `view=follow-up` mode, which reads `request` / `assessment` and renders the thread-style header with a back
-      button (`router.replace("/chat")`), the `controls.caution` strip and `ADRFollowUpView`. Hide the inbox, the
-      Nora card and the composer, set `setConversationOpen(true)` and use safe-area bottom padding.
-    - Add the entry row in the inbox after the Nora card, and replace `<ADRFollowUpPanel />` in the Nora thread with
-      the entry row.
+      button (`router.replace("/chat?view=care-team")`), the human care-conversation notice and `ADRFollowUpView`.
+      Hide the inbox, the Nora card and the composer, set `setConversationOpen(true)` and use safe-area bottom padding.
+    - Add the entry row under Care team messages in the inbox and remove `<ADRFollowUpPanel />` without placing a
+      replacement inside Nora (routing amendment, 2026-10-18).
     - Delete `components/features/adr-follow-up-panel.tsx`.
     - _Requirements: 1.11, 4.1, 4.3, 4.4, 4.5_
   - [x] 6.3 Add the Today entry row in `apps/patient-portal/src/app/(app)/today/page.tsx`
@@ -151,7 +151,7 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
     - _Requirements: 4.4, 4.7_
   - [x] 6.4 Write routing and entry-row tests
     - `chat-page.test.tsx`: `view=follow-up` with request, assessment or neither shows the view without a thread;
-      the caution is shown; the Nora thread shows the row; the inbox row appears with 0, 1 and 2 pending.
+      the care-team notice is shown; Nora does not show the row; the Care Team inbox row appears with 0, 1 and 2 pending.
     - `today-page.test.tsx`: the row appears only while pending.
     - `notifications-service.test.ts`: `notificationDestination` accepts the new links.
     - A `redirectToLogin` test shows the `?view=follow-up&request=` return path is kept.
@@ -644,7 +644,7 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
 - **Requester verification (not executable tasks):**
   - V12: authenticated manual checks with synthetic accounts and screenshots per R1.19 (patient en-US / es-MX at 320,
     360 and 430 px; clinician at 1024, 1280 and 1536 px; keyboard, 200% zoom, reduced motion, safe areas).
-  - V13 / D9: Spanish-fluent sign-off of the es-MX question, caution, confirmation and notification wording.
+  - V13 / D9: completed October 19 under the requester's revised criterion: LLM-assisted meaning-and-safety review of en-US/es-MX question, caution, confirmation and notification wording for the synthetic demo; no professional translation validation claimed.
   - V14: applying 063 to any remote environment, which needs explicit authorization naming that action.
   - D1, the clinician-deletion policy, stays open.
 - No new dependencies. The properties run as exhaustive or table-driven tests, because neither Hypothesis nor

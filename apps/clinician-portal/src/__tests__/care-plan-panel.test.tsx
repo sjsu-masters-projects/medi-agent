@@ -39,6 +39,28 @@ vi.mock("@/components/features/document-source-viewer", () => ({
 }));
 
 describe("CarePlanPanel", () => {
+    it("shows grounded source titles while preserving document identity and page navigation", async () => {
+        const source = { document_id: "document-title", file_name: "scan-01.pdf",
+            display_title: { "en-US": "Walking instructions", "es-MX": "Indicaciones para caminar" },
+            excerpt: "Walk for 20 minutes.", location: { page: 2 } };
+        vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({ latest: {
+            id: "plan-title", patient_id: "patient-1", version_number: 1, status: "approved", items: [{
+                id: "item-title", category: "movement", ...verified("Walk", "Walk for 20 minutes.", "daily"),
+                schedule: {}, medication: {}, uncertainty: [], conflict: {}, is_removed: false, source,
+            }],
+        }, active: null, patient_locale: "en-US", active_medications: [] });
+        vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
+        vi.mocked(fetchClinicianDocumentSource).mockResolvedValue({ file_name: "scan-01.pdf",
+            file_url: "https://signed.test/source", mime_type: "application/pdf" });
+        render(<CarePlanPanel patientId="patient-1" />);
+        const review = await screen.findByRole("button", { name: "Review source: Walking instructions (scan-01.pdf)" });
+        fireEvent.click(screen.getByText("Source excerpts and confidence (1)"));
+        expect(screen.getByText("Walking instructions (scan-01.pdf) · page 2")).toBeVisible();
+        fireEvent.click(review);
+        await waitFor(() => expect(fetchClinicianDocumentSource).toHaveBeenCalledWith("patient-1", "document-title"));
+        expect(await screen.findByText("Preview: scan-01.pdf (page 2)")).toBeInTheDocument();
+    });
+
     it("focuses a message-linked activity once without stealing focus during edits", async () => {
         const previous = window.location.href;
         window.history.replaceState(null, "", "/patients/patient-1?tab=care-plan#care-plan-item-item-1");
@@ -156,6 +178,7 @@ describe("CarePlanPanel", () => {
         vi.mocked(fetchClinicianDocumentSource).mockReset();
         vi.mocked(retryClinicianCarePlanGeneration).mockReset();
         vi.mocked(updateClinicianCarePlan).mockReset();
+        vi.mocked(fetchBackTranslation).mockReset();
     });
 
     it("keeps missing evidence blocked after confirmation and allows removal without invented wording", async () => {
@@ -383,6 +406,52 @@ describe("CarePlanPanel", () => {
         expect(screen.getByRole("checkbox", { name: /I verified the English wording/ })).toBeDisabled();
         expect(approve).toBeDisabled();
         expect(screen.getByText(/Save your edits before approving/)).toBeInTheDocument();
+    });
+
+    it("labels the source by the evidence language, not the authored wording (DV-004)", async () => {
+        // An English order that produced Spanish-authored wording (Morgan's Metformin case):
+        // source_locale is es-MX but the evidence is English, so no "Translated from Spanish".
+        const englishSource = {
+            id: "item-en", source_fact_id: "fact-en", category: "hydration",
+            title: "Tome un vaso de agua", instructions: "Tome un vaso con cada comida", frequency: "tres veces al día",
+            schedule: {}, medication: {}, uncertainty: [], conflict: {}, is_removed: false,
+            source_locale: "es-MX" as const, source_evidence_locale: "en-US" as const,
+            wording: {
+                "en-US": { title: "Drink a glass of water", instructions: "Drink a glass with each meal", frequency: "three times a day" },
+                "es-MX": { title: "Tome un vaso de agua", instructions: "Tome un vaso con cada comida", frequency: "tres veces al día" },
+            },
+            wording_origin: { "es-MX": "source" as const, "en-US": "ai_draft" as const }, wording_verified: true,
+        };
+        const spanishSource = {
+            id: "item-es", source_fact_id: "fact-es", category: "movement",
+            title: "Camine 20 minutos", instructions: "Camine después de cenar", frequency: "diario",
+            schedule: {}, medication: {}, uncertainty: [], conflict: {}, is_removed: false,
+            source_locale: "es-MX" as const, source_evidence_locale: "es-MX" as const,
+            wording: {
+                "en-US": { title: "Walk 20 minutes", instructions: "Walk after dinner", frequency: "daily" },
+                "es-MX": { title: "Camine 20 minutos", instructions: "Camine después de cenar", frequency: "diario" },
+            },
+            wording_origin: { "es-MX": "source" as const, "en-US": "ai_draft" as const }, wording_verified: true,
+        };
+        vi.mocked(fetchClinicianCarePlanReviewContext).mockResolvedValue({ latest: {
+            id: "plan-1", patient_id: "patient-1", version_number: 1, status: "draft", items: [englishSource, spanishSource],
+        }, active: null, patient_locale: "es-MX", active_medications: [] });
+        vi.mocked(fetchClinicianCarePlanGeneration).mockResolvedValue(null);
+        vi.mocked(fetchBackTranslation).mockResolvedValue({ back_translation: { title: "x", instructions: "x", frequency: "x" }, guards: { numbers_match: true, medication_names_match: true } });
+        render(<CarePlanPanel patientId="patient-1" />);
+
+        // English-first titles in the sidebar, and the "Translated from Spanish" badge only on
+        // the genuinely Spanish-sourced item.
+        expect(await screen.findByRole("heading", { name: "Drink a glass of water" })).toBeInTheDocument();
+        expect(screen.getAllByText("Translated from Spanish")).toHaveLength(1);
+
+        // The English-sourced item (selected first) names an English source, never Spanish.
+        expect(screen.getByText("English source")).toBeInTheDocument();
+        expect(screen.queryByText("Spanish source")).not.toBeInTheDocument();
+
+        // Selecting the Spanish-sourced item shows a Spanish source label.
+        fireEvent.click(screen.getByText("Walk 20 minutes"));
+        expect(await screen.findByText("Spanish source")).toBeInTheDocument();
     });
 
     it("reviews English and Spanish side by side and re-checks both after an edit", async () => {

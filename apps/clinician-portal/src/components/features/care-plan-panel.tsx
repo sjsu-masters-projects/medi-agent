@@ -8,7 +8,7 @@ import { AiChip } from "@/components/ui/ai-chip";
 import { ApprovalSeal } from "@/components/ui/approval-seal";
 import { Icon } from "@/components/ui/icons";
 import { Popover } from "@/components/ui/popover";
-import { SourceFileIcon } from "@/components/features/source-file";
+import { SourceFileIcon, sourceDocumentLabel } from "@/components/features/source-file";
 import { formatClinicianDateTime } from "@/utils/dates";
 import { ApprovedWording, BilingualWording, LOCALE_LABEL, otherLocale, verificationBlocker, wordingComplete, type BackCheck } from "@/components/features/care-plan-wording";
 import {
@@ -42,9 +42,13 @@ function englishTitle(item: CarePlanItem | EditableItem): string {
     return item.wording?.["en-US"]?.title?.trim() || item.title;
 }
 
-/** True when the English title shown to the clinician is a translation of a Spanish source. */
+/**
+ * True when the English title shown to the clinician is a translation of a Spanish source.
+ * DV-004: keyed on the SOURCE EVIDENCE language (the fact/document), not the item's authored
+ * wording — an English order that produced Spanish-authored wording is not "translated from Spanish".
+ */
 function isTranslatedFromSpanish(item: CarePlanItem | EditableItem): boolean {
-    return item.source_locale === "es-MX" && Boolean(item.wording?.["en-US"]?.title?.trim());
+    return item.source_evidence_locale === "es-MX" && Boolean(item.wording?.["en-US"]?.title?.trim());
 }
 const MEDICATION_ROUTES = ["oral", "topical", "inhaled", "iv", "im", "subcutaneous"];
 
@@ -231,10 +235,10 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
     const removedCount = items.filter((item) => item.is_removed).length;
     const languageLabel = patientLocale === "es-MX" || patientLocale === "en-US" ? LOCALE_LABEL[patientLocale] : "Language not available";
     const sourceDocuments = useMemo(() => {
-        const byId = new Map<string, string>();
+        const byId = new Map<string, ReturnType<typeof distinctSources>[number]>();
         for (const item of items) {
             for (const source of distinctSources(item)) {
-                if (source.document_id) byId.set(source.document_id, source.file_name || "Uploaded document");
+                if (source.document_id) byId.set(source.document_id, source);
             }
         }
         return [...byId.entries()];
@@ -401,7 +405,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
                             <p className={`font-mono text-[11px] uppercase tracking-[0.06em] ${sourceOpen ? "text-primary" : "text-muted"}`}>Item {positionOf(candidate.id) || "—"} · {changes.get(candidate.id) ?? candidate.category}</p>
                             <p className="text-[15px] leading-snug text-ink">{candidate.instructions || candidate.title}</p>
                             <p className="text-xs text-muted">{candidate.frequency}</p>
-                            {candidate.source?.file_name ? <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted"><SourceFileIcon className="mt-px" name={candidate.source.file_name} /><span className="min-w-0 break-all">{candidate.source.file_name}{candidate.source.location?.page ? ` · p.${candidate.source.location.page}` : ""}</span></p> : null}
+                            {candidate.source?.file_name ? <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted"><SourceFileIcon className="mt-px" name={candidate.source.file_name} /><span className="min-w-0 break-all">{sourceDocumentLabel(candidate.source)}{candidate.source.location?.page ? ` · p.${candidate.source.location.page}` : ""}</span></p> : null}
                             {isDraft && overlapping.has(candidate.id) ? <button className="ma-press mt-1 self-start rounded-[9px] border border-line-strong bg-surface px-3 py-1.5 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink disabled:opacity-50" disabled={saving} onClick={() => removeItems(overlapping.get(candidate.id) ?? [])} type="button">Keep this proposal; remove its overlaps</button> : null}
                         </div>;
                     })}
@@ -448,13 +452,13 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
             <details className="ma-disclosure rounded-xl border border-line bg-surface"><summary className="min-h-10 px-3.5 py-2 text-[13px] font-medium text-ink-2">Source excerpts and confidence ({citations.length})</summary>
                 <div className="space-y-2 border-t border-line px-3.5 pb-3.5 pt-2.5">
                     <p className="text-xs text-muted">Extraction confidence is an automated estimate of the extracted information. It is not medical certainty or approval of the instruction.</p>
-                    {citations.filter((citation) => Boolean(citation.excerpt)).map((citation, index) => <p className="break-words border-l-2 border-primary-line pl-3 text-xs text-ink-2" key={`${citation.document_id}-${index}`}><span className="flex items-start gap-1.5 font-semibold text-ink">{citation.document_id ? <SourceFileIcon className="mt-px" name={citation.file_name} /> : null}<span className="min-w-0 break-all">{citation.file_name || (citation.document_id ? "Uploaded document" : "Clinician-entered evidence")}{citation.location?.page ? ` · page ${citation.location.page}` : ""}</span></span><span className="mt-1 block">“{citation.excerpt}”</span></p>)}
+                    {citations.filter((citation) => Boolean(citation.excerpt)).map((citation, index) => <p className="break-words border-l-2 border-primary-line pl-3 text-xs text-ink-2" key={`${citation.document_id}-${index}`}><span className="flex items-start gap-1.5 font-semibold text-ink">{citation.document_id ? <SourceFileIcon className="mt-px" name={citation.file_name} /> : null}<span className="min-w-0 break-all">{citation.document_id ? sourceDocumentLabel(citation) : citation.file_name || "Clinician-entered evidence"}{citation.location?.page ? ` · page ${citation.location.page}` : ""}</span></span><span className="mt-1 block">“{citation.excerpt}”</span></p>)}
                     {!item.source?.excerpt ? <p className="border-l-2 border-primary-line pl-3 text-xs text-ink-2">{displaySource(item)}</p> : null}
                 </div>
             </details>
 
             <div className="flex flex-wrap items-center gap-2">
-                {distinctDocuments(item).map((source, index) => <button aria-label={`Review source: ${source.file_name || "Uploaded document"}`} aria-pressed={selectedSourceItemId === item.id && selectedSourceDocumentId === source.document_id} className={`ma-press inline-flex h-[34px] items-center gap-2 rounded-[9px] border px-3 text-[13px] font-semibold transition-colors ${selectedSourceItemId === item.id && selectedSourceDocumentId === source.document_id ? "border-primary bg-primary-tint text-primary" : "border-primary-line bg-surface text-primary hover:bg-primary-tint"}`} key={source.document_id} onClick={() => { setSelectedSourceItemId(item.id); setSelectedSourceDocumentId(source.document_id ?? null); }} type="button"><Icon name="file" className="h-4 w-4" />Review source{distinctDocuments(item).length > 1 ? ` ${index + 1}` : ""}</button>)}
+                {distinctDocuments(item).map((source, index) => <button aria-label={`Review source: ${sourceDocumentLabel(source)}`} aria-pressed={selectedSourceItemId === item.id && selectedSourceDocumentId === source.document_id} className={`ma-press inline-flex h-[34px] items-center gap-2 rounded-[9px] border px-3 text-[13px] font-semibold transition-colors ${selectedSourceItemId === item.id && selectedSourceDocumentId === source.document_id ? "border-primary bg-primary-tint text-primary" : "border-primary-line bg-surface text-primary hover:bg-primary-tint"}`} key={source.document_id} onClick={() => { setSelectedSourceItemId(item.id); setSelectedSourceDocumentId(source.document_id ?? null); }} type="button"><Icon name="file" className="h-4 w-4" />Review source{distinctDocuments(item).length > 1 ? ` ${index + 1}` : ""}</button>)}
                 {isDraft ? <label className="ml-auto flex items-center gap-2 text-[13px] text-muted"><input checked={item.is_removed} className="h-4 w-4 accent-[var(--color-risk)]" type="checkbox" onChange={(event) => patchItem(item.id, { is_removed: event.target.checked })} /> Remove from this version</label> : null}
             </div>
         </article>;
@@ -485,7 +489,7 @@ export function CarePlanPanel({ patientId, onPublished }: CarePlanPanelProps) {
                     <p className="min-w-0 max-w-[90ch] flex-1 basis-[420px] leading-relaxed">{activePlan ? `Approved version ${activePlan.version_number} remains active in Today until this version is approved.` : "No approved care plan is active yet."} Check every patient-facing instruction in English and Spanish against its source before publication.</p>
                     <div className="flex flex-wrap gap-x-5 gap-y-1">
                         <details className="ma-disclosure"><summary className="min-h-8 py-1 font-medium text-primary">Documents linked to proposed items ({sourceDocuments.length})</summary>
-                            {sourceDocuments.length ? <ul className="mt-1.5 space-y-1 pl-6 text-ink-2">{sourceDocuments.map(([id, name]) => <li className="flex min-w-0 items-start gap-1.5" key={id}><SourceFileIcon className="mt-px" name={name} /><span className="min-w-0 break-all">{name}</span></li>)}</ul> : <p className="mt-1 pl-6">No source document is linked to these items.</p>}</details>
+                            {sourceDocuments.length ? <ul className="mt-1.5 space-y-1 pl-6 text-ink-2">{sourceDocuments.map(([id, source]) => <li className="flex min-w-0 items-start gap-1.5" key={id}><SourceFileIcon className="mt-px" name={source.file_name} /><span className="min-w-0 break-all">{sourceDocumentLabel(source)}</span></li>)}</ul> : <p className="mt-1 pl-6">No source document is linked to these items.</p>}</details>
                         {activePlan ? <details className="ma-disclosure"><summary className="min-h-8 py-1 font-medium text-primary">View currently approved version {activePlan.version_number}</summary><ul className="mt-1 list-disc space-y-0.5 pl-9 text-ink-2">{activePlan.items.filter((item) => !item.is_removed).map((item) => <li key={item.id}>{englishTitle(item)} · {item.frequency}</li>)}</ul></details> : null}
                     </div>
                 </div> : null}

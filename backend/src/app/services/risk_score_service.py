@@ -23,7 +23,7 @@ from uuid import UUID
 
 from supabase import Client
 
-from app.models.dashboard import PatientRiskData, RiskLevel
+from app.models.dashboard import PatientRiskData, RiskExplanation, RiskLevel, RiskSourceFreshness
 from app.models.enums import AdherenceStatus, ADRStatus
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,7 @@ _MEDIUM_ADHERENCE_THRESHOLD = 0.80
 _HIGH_SEVERITY_THRESHOLD = 8
 _MEDIUM_SEVERITY_THRESHOLD = 5
 _RECENT_SYMPTOM_DAYS = 7
+_RULE_VERSION = "outpatient-review-priority-v1"
 
 
 class RiskScoreService:
@@ -50,7 +51,7 @@ class RiskScoreService:
         self,
         adherence_score: float | None,
         open_adr_count: int,
-        recent_symptom_severity: int,
+        recent_symptom_severity: int | None,
     ) -> RiskLevel:
         """Pure function — derive risk level from three signals.
 
@@ -63,12 +64,18 @@ class RiskScoreService:
             "high", "medium", "low", or "unknown"
         """
         # HIGH: any single critical signal triggers high risk
-        if open_adr_count >= 1 or recent_symptom_severity >= _HIGH_SEVERITY_THRESHOLD:
+        if open_adr_count >= 1 or (
+            recent_symptom_severity is not None
+            and recent_symptom_severity >= _HIGH_SEVERITY_THRESHOLD
+        ):
             return "high"
 
         # No adherence data should not auto-mark new patients as high risk.
         if adherence_score is None:
-            if recent_symptom_severity >= _MEDIUM_SEVERITY_THRESHOLD:
+            if (
+                recent_symptom_severity is not None
+                and recent_symptom_severity >= _MEDIUM_SEVERITY_THRESHOLD
+            ):
                 return "medium"
             return "unknown"
 
@@ -76,13 +83,55 @@ class RiskScoreService:
             return "high"
 
         # MEDIUM: borderline adherence or significant symptom severity
-        if (
-            adherence_score < _MEDIUM_ADHERENCE_THRESHOLD
-            or recent_symptom_severity >= _MEDIUM_SEVERITY_THRESHOLD
+        if adherence_score < _MEDIUM_ADHERENCE_THRESHOLD or (
+            recent_symptom_severity is not None
+            and recent_symptom_severity >= _MEDIUM_SEVERITY_THRESHOLD
         ):
             return "medium"
 
         return "low"
+
+    def explain_risk(
+        self,
+        adherence_score: float | None,
+        open_adr_count: int,
+        recent_symptom_severity: int | None,
+    ) -> RiskExplanation:
+        """Describe the existing thresholds without adding a clinical decision."""
+        factors = []
+        if adherence_score is None:
+            factors.append(
+                "No recorded adherence responses in the last 30 days; completion is unknown."
+            )
+        elif adherence_score < _HIGH_ADHERENCE_THRESHOLD:
+            factors.append(
+                "Fewer than 60% of recorded responses were taken/completed in the last 30 days."
+            )
+        elif adherence_score < _MEDIUM_ADHERENCE_THRESHOLD:
+            factors.append(
+                "60% to below 80% of recorded responses were taken/completed in the last 30 days."
+            )
+        else:
+            factors.append(
+                "At least 80% of recorded responses were taken/completed in the last 30 days."
+            )
+        factors.append(
+            f"{open_adr_count} ADR candidate(s) awaiting review; not confirmed adverse reactions."
+            if open_adr_count
+            else "No ADR candidates awaiting review in the available records."
+        )
+        factors.append(
+            "No patient-confirmed severity rating in the last 7 days; symptom severity is unknown."
+            if recent_symptom_severity is None
+            else f"Highest patient-confirmed severity in the last 7 days: {recent_symptom_severity}/10 "
+            "(8–10 raises high priority; 5–7 raises at least medium priority)."
+        )
+        return RiskExplanation(
+            rule_version=_RULE_VERSION,
+            calculated_at=datetime.now(UTC),
+            adherence_available=adherence_score is not None,
+            factors=factors,
+        )
 
     async def get_patient_risk(self, patient_id: UUID) -> PatientRiskData:
         """Fetch signals from DB and compute risk level for a single patient.
@@ -124,6 +173,8 @@ class RiskScoreService:
 
         # ── 7. Build last activity string ──────────────
         last_activity = await self._fetch_last_activity(patient_id)
+        explanation = self.explain_risk(adherence_score, open_adr_count, recent_symptom_severity)
+        explanation.source_freshness = await self._fetch_source_freshness(patient_id)
 
         return PatientRiskData(
             patient_id=patient_id,
@@ -135,9 +186,59 @@ class RiskScoreService:
             active_med_count=active_med_count,
             recent_symptom_severity=recent_symptom_severity,
             last_activity=last_activity,
+            risk_explanation=explanation,
         )
 
     # ── Private helpers ──────────────────────────────────────────────────────
+
+    async def _fetch_source_freshness(self, patient_id: UUID) -> list[RiskSourceFreshness]:
+        """Probe actual source dates separately; these reads are not an atomic snapshot."""
+        sources = (
+            ("adherence_logs", "logged_at", 30),
+            ("symptom_reports", "created_at", _RECENT_SYMPTOM_DAYS),
+            ("adr_assessments", "updated_at", None),
+            ("medications", "created_at", None),
+        )
+        return list(
+            await asyncio.gather(
+                *(self._fetch_latest_source(patient_id, source) for source in sources)
+            )
+        )
+
+    async def _fetch_latest_source(
+        self, patient_id: UUID, source: tuple[str, str, int | None]
+    ) -> RiskSourceFreshness:
+        table, field, days = source
+        freshness = RiskSourceFreshness(source=table, timestamp_field=field)
+        try:
+            query = self.db.table(table).select(field).eq("patient_id", str(patient_id))
+            if days:
+                query = query.gte(field, (datetime.now(UTC) - timedelta(days=days)).isoformat())
+            if table == "symptom_reports":
+                query = query.eq("confirmation_state", "patient_confirmed").not_.is_(
+                    "severity", "null"
+                )
+            elif table == "adr_assessments":
+                query = query.eq("status", ADRStatus.DRAFT.value)
+            elif table == "medications":
+                query = query.eq("is_active", True)
+            result = await self._execute(
+                query.not_.is_(field, "null").order(field, desc=True).limit(1)
+            )
+            if not isinstance(result.data, list):
+                raise ValueError("Expected source rows")
+            if result.data:
+                value = result.data[0].get(field)
+                if value is None:
+                    return freshness
+                stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                if stamp.tzinfo is None:
+                    raise ValueError("Missing source timezone")
+                freshness.latest_at = stamp
+                freshness.status = "available"
+        except Exception:
+            freshness.status = "unavailable"
+        return freshness
 
     async def _fetch_adherence_score(self, patient_id: UUID) -> float | None:
         """Return 30-day recorded-response completion, or None if no logs.
@@ -174,23 +275,21 @@ class RiskScoreService:
         )
         return result.count or 0
 
-    async def _fetch_recent_symptom_severity(self, patient_id: UUID) -> int:
-        """Return max symptom severity in last 7 days (0 if none)."""
+    async def _fetch_recent_symptom_severity(self, patient_id: UUID) -> int | None:
+        """Return the highest known confirmed rating, or unknown when none is supplied."""
         cutoff = (datetime.now(UTC) - timedelta(days=_RECENT_SYMPTOM_DAYS)).isoformat()
         result = await self._execute(
             self.db.table("symptom_reports")
             .select("severity")
+            .eq("confirmation_state", "patient_confirmed")
             .eq("patient_id", str(patient_id))
             .gte("created_at", cutoff)
         )
         rows = cast(list[dict[str, Any]], result.data or [])
-        # Legacy and partially completed symptom rows may not carry a severity yet.
-        # Absence is not severity zero on the source row, but it contributes no risk
-        # signal to this maximum. Keep valid recent values instead of failing the whole
-        # patient risk card when another row is null.
+        if not rows:
+            return None
         return max(
-            (int(value) for row in rows if (value := row.get("severity")) is not None),
-            default=0,
+            (int(row["severity"]) for row in rows if row.get("severity") is not None), default=None
         )
 
     async def _fetch_active_med_count(self, patient_id: UUID) -> int:
@@ -216,6 +315,7 @@ class RiskScoreService:
         symptoms_task = self._execute(
             self.db.table("symptom_reports")
             .select("created_at, symptom")
+            .eq("confirmation_state", "patient_confirmed")
             .eq("patient_id", str(patient_id))
             .order("created_at", desc=True)
             .limit(1)

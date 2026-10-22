@@ -141,7 +141,7 @@ export function TodayTaskRow({ task, copy, status, timeLabel, disabled, onDetail
                     ? <button type="button" disabled={disabled} onClick={onComplete} className="ma-press relative before:absolute before:-inset-x-1 before:-inset-y-[7px] before:content-[''] min-h-[34px] rounded-[11px] bg-brand-tint px-3 py-1.5 text-[13px] font-semibold text-brand hover:bg-[#D3E8E1] disabled:opacity-60">{copy.done}</button>
                     : <span className={`text-[12px] font-medium ${status === "missed" ? "text-danger-ink" : status === "skipped" ? "text-note-ink" : "text-muted"}`}>{statusLabel}</span>}
             {task.requiresScheduleConfiguration && !task.scheduledTime
-                ? <Link href="/reminders" className="-my-1 inline-flex min-h-10 items-center text-[13px] font-medium leading-tight text-brand hover:underline">{copy.setTime}</Link>
+                ? <Link href="/reminders" className="-my-1 inline-flex min-h-11 items-center text-[13px] font-medium leading-tight text-brand hover:underline">{copy.setTime}</Link>
                 : status !== "completed" ? <span className="font-mono text-[13px] text-ink-2">{timeLabel}</span> : null}
         </div>
     </li>;
