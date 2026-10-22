@@ -18,9 +18,9 @@ _COPY = {
     ),
     "es-MX": (
         "Cita de MediAgent",
-        "Esta es una copia del calendario. Los cambios y las cancelaciones no se sincronizan. "
+        "Esta es una copia única para tu calendario. Los cambios y las cancelaciones no se sincronizan. "
         "Consulta MediAgent para ver los datos actuales de la cita.",
-        # CLN-003 slice F draft: pending native-speaker review (see .agent/TASKS.md).
+        # CLN-003 slice F: LOC-001 project-scope wording review recorded October 22.
         "Clínica",
     ),
 }

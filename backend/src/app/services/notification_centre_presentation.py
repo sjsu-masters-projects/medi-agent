@@ -13,7 +13,7 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
         "Earlier notification",
         "From the previous inbox; not a new task.",
         "Notificación anterior",
-        "De tu buzón anterior.",
+        "De tu buzón anterior; no es una tarea nueva.",
     ),
     "message_received": (
         "New care-team message",
@@ -34,7 +34,7 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
         "Consulta el horario actual en Citas.",
     ),
     # UX-006: a clinician cancelled a booked visit (event_type appointment_changed, status
-    # cancelled). The Spanish is a draft for native-speaker review (see .agent/TASKS.md).
+    # cancelled). LOC-001 project-scope interface wording review recorded October 22.
     "appointment_cancelled": (
         "Appointment cancelled",
         "Your clinician cancelled this visit. See the reason in Visits.",
@@ -44,8 +44,8 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
     "appointment_response": (
         "Patient responded to an appointment",
         "Review the saved patient response.",
-        "Respuesta a la cita",
-        "Revisa la respuesta guardada.",
+        "El paciente respondió a una cita",
+        "Revisa la respuesta guardada del paciente.",
     ),
     "appointment_reminder": (
         "Appointment reminder",
@@ -68,8 +68,8 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
     "document_review": (
         "Patient document awaiting review",
         "Parsing and clinical review are separate. Open the exact document.",
-        "Documento pendiente de revisión",
-        "El procesamiento y la revisión clínica son pasos distintos.",
+        "Documento del paciente pendiente de revisión",
+        "El procesamiento y la revisión clínica son pasos distintos. Abre el documento correspondiente.",
     ),
     "document_processed": (
         "Document processing completed",
@@ -92,13 +92,13 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
     "barrier_reported": (
         "Care-plan barrier reported",
         "A patient reported difficulty with an activity. This is not a confirmed adverse drug reaction.",
-        "Dificultad reportada",
-        "Se reportó una dificultad con una actividad. Esto no confirma una reacción adversa a un medicamento.",
+        "Dificultad con el plan de atención reportada",
+        "Un paciente reportó una dificultad con una actividad. Esto no confirma una reacción adversa a un medicamento.",
     ),
     "adr_review": (
         "Medication-safety review needed",
         "A candidate finding needs clinician review; it is not a confirmed diagnosis.",
-        "Revisión de seguridad pendiente",
+        "Se necesita una revisión de seguridad de medicamentos",
         "Un hallazgo candidato necesita revisión clínica; no es un diagnóstico confirmado.",
     ),
     "adr_information_requested": (
@@ -114,7 +114,7 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
         "Patient answered medication-safety follow-up",
         "A patient sent answers to follow-up questions. Review the updated evidence; "
         "this is not a clinical decision.",
-        "El paciente respondió el seguimiento de seguridad",
+        "El paciente respondió al seguimiento de seguridad de medicamentos",
         "Un paciente envió respuestas a preguntas de seguimiento. Revisa la evidencia "
         "actualizada; esto no es una decisión clínica.",
     ),
@@ -128,14 +128,14 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
     "critical_result": (
         "Critical test result reported",
         "A patient's document reports a result the laboratory marked critical. Open the document to review it.",
-        "Resultado crítico reportado",
-        "Un documento informa un resultado que el laboratorio marcó como crítico. Ábrelo para revisarlo.",
+        "Resultado crítico de laboratorio reportado",
+        "Un documento del paciente informa un resultado que el laboratorio marcó como crítico. Ábrelo para revisarlo.",
     ),
     "care_plan_review": (
         "Care-team work item",
         "A care-plan item needs your care team. Open the patient to see it.",
         "Tarea del equipo de atención",
-        "Un elemento del plan de cuidado necesita a tu equipo. Abre al paciente para verlo.",
+        "Un elemento del plan de atención requiere la atención de tu equipo. Abre el expediente del paciente para verlo.",
     ),
     # Clinician-only news; the name comes from the event, never stored clinical text. The
     # Spanish pair is an unapproved draft (LOC-001): no patient ever receives it.
@@ -148,8 +148,8 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
     "safety_flag": (
         "Patient safety flag needs review",
         "An automated flag was saved. Review the original conversation; this is not a clinical decision.",
-        "Aviso de seguridad para revisión",
-        "Se guardó un aviso automático. Requiere revisión; no es una decisión clínica.",
+        "Aviso de seguridad del paciente pendiente de revisión",
+        "Se guardó un aviso automático. Revisa la conversación original; esto no es una decisión clínica.",
     ),
     "med_reminder": (
         "Medication reminder",

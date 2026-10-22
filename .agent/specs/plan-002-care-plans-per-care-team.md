@@ -438,9 +438,11 @@ only. A live two-clinician, two-clinic run against a real backend is still requi
 - `care-team-options` has no specialty, so the select labels links by clinic name.
 - Review items have no endpoint to resolve `conflict_reply`; the portal shows them read-only.
 
-**Pending es-MX wording drafts, not approved (LOC-001 review required):** every string in
+**es-MX interface wording reviewed for project use (October 22):** current pairs in
 `apps/patient-portal/src/content/care-team-copy.ts` (Today filter, unowned/contact-clinic, upload
 picker, conditions privacy, plan group labels), including `¿Para qué equipo de atención es esto?`,
 `No estoy seguro`, `Tus equipos de atención decidirán quién lo revisa.`, `Mantener privada`,
 `Ya no está en tu equipo de atención` and `Comunícate con tu clínica`. The clinician portal is
-English only.
+English only. The [dated meaning-and-safety review](../../docs/evidence/spanish-interface-wording-2026-10-22.md)
+and snapshot receipt cover these interface pairs, not stored clinical plan text or
+deployed two-clinician/mobile acceptance.

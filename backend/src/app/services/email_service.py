@@ -30,7 +30,7 @@ _COPY = {
     "appointment_offered": ("Appointment choices available", "Horarios de cita disponibles"),
     "appointment_changed": ("Appointment updated", "Cita actualizada"),
     # A clinician's cancel is an appointment_changed event whose status is cancelled (UX-006).
-    # The Spanish subject is a draft for native-speaker review (see .agent/TASKS.md).
+    # Spanish subjects: LOC-001 project-scope interface review recorded October 22.
     "appointment_cancelled": ("Appointment cancelled", "Cita cancelada"),
     "appointment_response": ("Appointment response received", "Respuesta a la cita recibida"),
     "care_plan_published": ("Your care plan was updated", "Tu plan de cuidado se actualizó"),

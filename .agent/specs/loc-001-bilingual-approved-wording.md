@@ -4,17 +4,22 @@
 locale per approved plan" rule in `pat-005-clinician-approved-today-feed-plan.md`
 (§ locale attestation) and `docs/evidence/portal-ui-ux-review-2026-10-10.md` (language section).
 
-## Pending interface wording review
+## Interface wording review
 
 The [source-linked English/es-MX review pack](../../docs/spanish-draft-review-pack.md)
-collects the interface drafts and conservative whole-dictionary context. It
-includes source keys, line locations and checksums and can be regenerated without
-executing application copy. It is an inventory, not wording approval.
+collects current interface copy and conservative whole-dictionary context.
+The [October 22 meaning-and-safety review](../../docs/evidence/spanish-interface-wording-2026-10-22.md)
+accepts its exact snapshot for synthetic-project interface use after corrections.
+It includes source keys, line locations and checksums and can be regenerated
+without executing application copy. A changed snapshot invalidates acceptance;
+regeneration alone cannot renew it. This is not professional translation or
+clinical validation, and it does not approve stored care-plan wording.
 
 [PAT-001-A recovery-copy drafts](pat-001-a-nora-turn-recovery.md#pending-es-mx-interface-wording-drafts--not-approved)
 list the new recovery, busy/unavailable, retry-help and revised document-unavailable
-wording. They are not yet reviewed/approved Spanish copy; existing clinical safety
-resources are unchanged.
+wording. That historical draft table is superseded for current interface pairs by
+the dated review and matching receipt. Existing clinical safety resources and
+runtime clinical approval requirements are unchanged.
 
 ## Problem
 

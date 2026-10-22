@@ -2,8 +2,10 @@
 
 ## Scope
 
-Delivery: [PR #222](https://github.com/sjsu-masters-projects/medi-agent/pull/222),
-open for review. CI and merge remain separate from the local results below.
+Delivery: [PR #222](https://github.com/sjsu-masters-projects/medi-agent/pull/222)
+merged as `354e6a88`. The local results below remain the original implementation
+record. The later [interface wording review](loc-001-interface-review.md) records
+the corrected inventory and its bounded project acceptance.
 
 Requester-approved grouped follow-up to merged #220 (`9c16adc4`), on
 `codex/safety-release-completion`. INT-002's implementation is already merged;

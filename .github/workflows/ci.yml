@@ -626,7 +626,7 @@ jobs:
         working-directory: .
         run: |
           node --test scripts/extract-spanish-review.test.mjs
-          python3 backend/scripts/build_spanish_review_pack.py --check
+          python3 backend/scripts/build_spanish_review_pack.py --check --require-reviewed
       - name: Lint (ESLint)
         run: npm run lint
       - name: Type check (TypeScript)

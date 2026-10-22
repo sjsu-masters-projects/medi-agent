@@ -450,7 +450,7 @@ describe("Patient profile page", () => {
         expect(screen.getByLabelText("Idioma preferido")).toHaveValue("es-MX");
         expect(
             screen.getByLabelText("Idioma preferido"),
-        ).toHaveAccessibleDescription(/lo aprueba en inglés y en español|los aprueba en inglés y en español/);
+        ).toHaveAccessibleDescription(/se muestran en ese idioma.*tu equipo aprueba en inglés y en español/);
         expect(screen.getByLabelText("Nombre")).toHaveValue("Synthetic");
         expect(
             screen.getByRole("option", { name: "Prefiero no decirlo" }),

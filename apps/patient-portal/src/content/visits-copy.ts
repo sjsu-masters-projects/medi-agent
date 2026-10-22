@@ -123,7 +123,7 @@ const spanish: VisitsCopy = {
     urgent: "Urgente",
     pre_op: "Preoperatoria",
   },
-  offerTitle: "Tu equipo de atención ofreció estos horarios",
+  offerTitle: "Tu profesional clínico ofreció estos horarios",
   choose: "Elegir este horario",
   offerDecline: {
     label: "Motivo del rechazo (opcional)",
@@ -159,7 +159,7 @@ const spanish: VisitsCopy = {
     "Tu zona horaria guardada no está disponible. Los horarios se muestran en UTC.",
   emptyTitle: "Aún no tienes citas",
   emptyDetail:
-    "Cuando tu equipo de atención proponga una cita, aparecerá aquí para que la aceptes, la rechaces o solicites otro horario.",
+    "Cuando tu profesional clínico proponga una cita, aparecerá aquí para que la aceptes, la rechaces o solicites otro horario.",
   proposed: "Esperando tu respuesta",
   upcoming: "Próximas citas",
   waiting: "Esperando a tu equipo de atención",
@@ -167,7 +167,7 @@ const spanish: VisitsCopy = {
   with: "Con",
   atClinic: (clinic: string) => `en ${clinic}`,
   note: "Tu nota:",
-  // Draft wording for native-speaker review (LOC-001), not approved.
+  // LOC-001 project-scope interface review recorded October 22.
   cancelledByCare: "Tu equipo de atención canceló esta cita.",
   cancelReasonLabel: "Motivo:",
   cancelReasons: {

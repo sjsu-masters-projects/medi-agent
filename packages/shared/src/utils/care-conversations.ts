@@ -206,9 +206,9 @@ export function getConversationCopy(locale: string) {
     activityLocked: "La actividad no se puede cambiar mientras se confirma o reintenta este mensaje.",
     activityAttached: "Actividad del plan adjunta",
     activityNotCurrent: "Esta actividad ya no pertenece al plan actual.",
-    // Draft for LOC-001 review, not approved wording.
+    // LOC-001 project-scope interface review recorded October 22.
     translating: "Traduciendo…",
-    // LOC-003 item 5, patient side. Drafts for LOC-001 review, NOT approved wording.
+    // LOC-003 item 5, patient side; project-scope interface review recorded October 22.
     aboutTranslation: "Acerca de esta traducción",
     aboutTranslationTitle: "Esta traducción es automática",
     translationMayErr: "La hizo una computadora, no una persona, y puede tener errores.",

@@ -11,6 +11,23 @@ import pytest
 from app.services.notification_centre_presentation import _COPY, destination, present_item
 
 
+@pytest.mark.parametrize(
+    "kind,fragment",
+    [
+        ("legacy_update", "no es una tarea nueva"),
+        ("appointment_response", "del paciente"),
+        ("document_review", "Abre el documento correspondiente"),
+        ("barrier_reported", "Un paciente reportó"),
+        ("barrier_reported", "no confirma una reacción adversa"),
+        ("critical_result", "el laboratorio marcó como crítico"),
+        ("safety_flag", "Revisa la conversación original"),
+        ("safety_flag", "no es una decisión clínica"),
+    ],
+)
+def test_reviewed_spanish_preserves_attribution_and_action_boundaries(kind, fragment):
+    assert fragment in _COPY[kind][3]
+
+
 def item(**changes):
     return {
         "id": str(uuid4()),
