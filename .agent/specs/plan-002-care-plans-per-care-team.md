@@ -1,6 +1,6 @@
 # PLAN-002 — Care plans per care team
 
-**Status:** In progress on `codex/care-team-plans` from main `f235c278` (October 21).
+**Status:** In progress on PR #210 (October 21); backend in review, portals pending.
 Direction and conflict handling decided October 13. Part of CLN-003
 (slice H). It changes the PAT-005 contract, so read the
 [PAT-005 specification](pat-005-clinician-approved-today-feed-plan.md) first.
@@ -127,12 +127,12 @@ Decided October 13:
 
 ## Implementation sequence
 
-**Isolated starter checkpoint:** requester reassigned G/H to a separate contributor
-before schema work. This branch contains an initial conflict-policy module (30
-unit tests pass) and an unfinished care-team-options scaffold. No schema migration,
-full scope/API tests, publication integration, UI, deployment or PR is delivered.
-Do not merge this starter as completed G/H. The records/continuity and reliability
-work proceeds on a separate branch from merged #209.
+**Status (October 21):** the requester asked for full G/H implementation in
+PR #210 (branch `feature/voice-mode-and-chat-polish`). This pass delivers the backend
+(phases 1-3 below plus the unowned lifecycle and merged Today read) and the API
+contract; the portals (phase 4) are a follow-up pass on the same PR. The starter
+conflict-policy module is reused. No remote migration, deployment or merge is
+authorized.
 
 This is a substantial replacement of the patient-global plan boundary, not a UI
 filter. Current main has one draft/version sequence per patient, patient-scoped

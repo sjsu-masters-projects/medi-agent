@@ -70,6 +70,7 @@ markers = [
     "slow: long-running corpus tests, such as the Form 3500 PDF read-back",
     "before_clinic_memberships: the PostgreSQL fixture stops before 065 so the test checks its backfill",
     "before_clinic_scheduling: the PostgreSQL fixture stops before 069 so the test checks its backfill",
+    "before_care_team_plans: the PostgreSQL fixture stops before 080 so the test seeds a legacy lineage",
 ]
 timeout = 30
 timeout_method = "thread"
