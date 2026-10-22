@@ -16,9 +16,11 @@ from app.models.care_plan import (
     CarePlanDraftUpdate,
     CarePlanTodayPreviewRead,
     CarePlanTranslationRequest,
+    CareTeamPlanScopeRead,
 )
 from app.services.care_plan_preview_service import CarePlanPreviewService
 from app.services.care_plan_service import CarePlanService
+from app.services.care_team_plan_scope import CareTeamPlanScopeService
 
 router = APIRouter()
 _clinician_dep = require_role("clinician")
@@ -30,6 +32,25 @@ def _service(db: Client = Depends(get_db)) -> CarePlanService:
 
 def _preview_service(db: Client = Depends(get_db)) -> CarePlanPreviewService:
     return CarePlanPreviewService(db)
+
+
+def _scope_service(db: Client = Depends(get_db)) -> CareTeamPlanScopeService:
+    return CareTeamPlanScopeService(db)
+
+
+@router.get(
+    "/clinician/patients/{patient_id}/care-team-options",
+    response_model=list[CareTeamPlanScopeRead],
+    summary="List the acting clinician's exact active care-team plan scopes",
+)
+async def get_care_team_plan_options(
+    patient_id: UUID,
+    response: Response,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: CareTeamPlanScopeService = Depends(_scope_service),
+) -> Any:
+    response.headers["Cache-Control"] = "no-store"
+    return service.list_for_clinician(user.id, patient_id)
 
 
 @router.get(

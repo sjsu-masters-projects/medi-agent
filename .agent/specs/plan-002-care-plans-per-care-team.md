@@ -1,6 +1,7 @@
 # PLAN-002 — Care plans per care team
 
-**Status:** Backlog; direction and conflict handling decided October 13. Part of CLN-003
+**Status:** In progress on `codex/care-team-plans` from main `f235c278` (October 21).
+Direction and conflict handling decided October 13. Part of CLN-003
 (slice H). It changes the PAT-005 contract, so read the
 [PAT-005 specification](pat-005-clinician-approved-today-feed-plan.md) first.
 
@@ -57,7 +58,7 @@ checked against the patient's other approved plans and the shared medication lis
 | Duplicate therapy | two plans with the same ingredient |
 | Conflicting instructions | different doses or schedules for the same medication |
 | Stop versus continue | this draft stops a medication that another plan keeps active, or the reverse |
-| Interactions | through MED-001's checker, with its severity |
+| Interaction coverage | Comprehensive interactions/equivalence are unchecked: the requester subsequently excluded that engine from MED-001. Never invent severity or describe public reference retrieval as an interaction check. |
 
 **How a blocker is handled (decided October 13: conflicts block publication):**
 
@@ -78,10 +79,12 @@ checked against the patient's other approved plans and the shared medication lis
    - **Publish without this item.** The rest of the plan publishes; the conflicting item
      stays in the draft as pending.
 3. **By severity.**
-   - **Must be resolved or acknowledged with a reason:** stop versus continue, an exact
-     duplicate ingredient, and a major interaction.
-   - **Warning only, with acknowledgement optional:** minor interactions and schedule
-     overlaps.
+   - **Must be resolved or acknowledged with a reason:** stop versus continue, a
+     supported duplicate ingredient/name identity, and conflicting dose/instructions
+     for that identity. Same-name comparisons are review flags, not equivalence proof.
+   - **Warning only, with acknowledgement optional:** non-medication schedule overlaps.
+   - Interaction severity is not available without a maintained rules source; no
+     major/minor interaction verdict is asserted by this increment.
 4. **The other care team is always told.** They get a review item ("The orthopaedic plan
    by Dr. X conflicts with your cardiology plan: duplicate ibuprofen"), can adjust their
    own plan, and see the reason if the conflict was acknowledged.
@@ -121,3 +124,48 @@ Decided October 13:
 4. **Decided October 13:** a patient upload marked "Not sure" appears in every one of the
    patient's care teams' queues. Any of them can claim the whole document; once one does, it
    leaves the other queues, and the claim is audited.
+
+## Implementation sequence
+
+**Isolated starter checkpoint:** requester reassigned G/H to a separate contributor
+before schema work. This branch contains an initial conflict-policy module (30
+unit tests pass) and an unfinished care-team-options scaffold. No schema migration,
+full scope/API tests, publication integration, UI, deployment or PR is delivered.
+Do not merge this starter as completed G/H. The records/continuity and reliability
+work proceeds on a separate branch from merged #209.
+
+This is a substantial replacement of the patient-global plan boundary, not a UI
+filter. Current main has one draft/version sequence per patient, patient-scoped
+generation, publication that supersedes patient-wide projections, and broad
+assigned-clinician reads. None may be treated as already per-team.
+
+1. **Domain and migration foundation:** explicit plan lineage and exact care-team
+   ownership, fail-closed scope selection, deterministic source-based conflicts,
+   content-bound conflict resolutions, append-only ownership/conflict audit. Legacy
+   owner assignment must be unambiguous; unresolved ownership stays visible for
+   review, never guessed. Applied migrations are immutable.
+2. **Shared clinical core / private sources:** medications/allergies shared with
+   recording-team provenance; patient-controlled sensitive conditions; owned
+   documents, plan details, messages, SOAP and ADR records. Audit every clinician
+   read path (including timeline, exports, source preview and notifications), not
+   only the new screen. Cross-team conflict summaries reveal only the permitted
+   medication instruction and plan metadata, not private source documents.
+3. **Routed drafting and atomic publication:** patient team picker/Not sure claim,
+   exact clinician upload scope, per-plan generation/drafts, patient-wide
+   publication lock and current-state cross-plan checks inside SQL. Preserve
+   bilingual/source/overlap gates. Publishing one plan must not deactivate another
+   plan's projections. Retries must be content/actor/source bound.
+4. **Portals and follow-through:** owner selection and conflict resolutions,
+   patient merged Today and care-team filter/details, approved-plan Nora provenance,
+   activity-owner barrier/reminder routing, unowned plan review/adopt/retire. Team
+   departure never changes medication status or silently stops reminders.
+5. **Acceptance:** two clinicians/two clinics, independent concurrent drafts,
+   private-source denial and sensitive-condition non-disclosure, duplicate/stop/
+   dose conflict + stale acknowledgement, concurrent publication/claim/adoption,
+   same clinician at two clinics, ambiguous legacy records, revocation, no remaining
+   team, bilingual mobile/desktop states and unchanged activity identities/history.
+
+Use existing services/RPC patterns; no autonomous clinical decisions, no remote
+migration, deployment, backfill or merge is authorized by this task. Foundations
+and local tests are not full G/H completion; record each integrated acceptance
+path before marking Done.

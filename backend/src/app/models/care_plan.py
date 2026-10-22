@@ -91,6 +91,16 @@ class CarePlanApprovalRequest(BaseModel):
     note: str = Field(min_length=1, max_length=5000)
 
 
+class CareTeamPlanScopeRead(BaseModel):
+    """Only the acting clinician's active exact links, not another team's plan detail."""
+
+    care_team_id: UUID
+    patient_id: UUID
+    clinician_id: UUID
+    clinic_id: UUID
+    clinic_name: str | None = None
+
+
 class CarePlanTodayPreviewRead(BaseModel):
     """Current-record snapshot, not a reservation or publication result."""
 
