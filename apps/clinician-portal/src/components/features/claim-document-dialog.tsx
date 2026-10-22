@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from "react";
 import { Modal } from "@/components/ui";
 import { claimDocument, errorCode, fetchCareTeamOptions } from "@/services/care-team-plans";
 import type { ClinicianCareTeamOption } from "@/types";
+import { careTeamOptionLabel } from "@/components/features/care-team-select";
 
 /** Label of the unrouted state, shown on every row and card that can be claimed. */
 export const UNROUTED_LABEL = "Patient uploaded · not routed to a care team";
@@ -72,7 +73,7 @@ export function ClaimDocumentDialog({ open, patientId, documentId, fileName, cla
                     <span className="mb-1.5 block text-[13px] font-medium text-ink-2">Claim for which care team? (required)</span>
                     <select className="h-10 w-full max-w-sm rounded-lg border border-line-strong bg-surface px-3 text-sm text-ink" id={selectId} onChange={(event) => setCareTeamId(event.target.value)} value={careTeamId}>
                         {careTeamId ? null : <option disabled value="">Choose a care team</option>}
-                        {options.map((option) => <option key={option.care_team_id} value={option.care_team_id}>{option.clinic_name ?? "Care team"}</option>)}
+                        {options.map((option) => <option key={option.care_team_id} value={option.care_team_id}>{careTeamOptionLabel(option)}</option>)}
                     </select>
                 </label>
             </div> : null}

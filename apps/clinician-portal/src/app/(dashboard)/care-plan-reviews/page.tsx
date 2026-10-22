@@ -10,32 +10,7 @@ import { Icon } from "@/components/ui/icons";
 import { clinicScopeLabel } from "@/hooks/clinic-scope";
 import { useClinicFilter } from "@/hooks/use-clinic-filter";
 import { fetchReviewItems } from "@/services/care-team-plans";
-import { fetchDashboard } from "@/services/clinicians";
 import type { ReviewItemList } from "@/types";
-
-interface RosterEntry { label: string; clinicId: string | null; clinicName: string | null }
-
-const ROSTER_PAGE_SIZE = 100;
-const ROSTER_MAX_PAGES = 20;
-
-/** Every page of the (clinic-filtered) roster, so a patient on a later page still gets a name and a clinic. */
-async function loadRoster(clinicId: string | null): Promise<Map<string, RosterEntry> | null> {
-    const entries = new Map<string, RosterEntry>();
-    try {
-        for (let page = 1; page <= ROSTER_MAX_PAGES; page += 1) {
-            const dashboard = await fetchDashboard({ clinicId: clinicId ?? undefined, page, pageSize: ROSTER_PAGE_SIZE });
-            for (const patient of dashboard.patients) {
-                if (!entries.has(patient.patient_id)) {
-                    entries.set(patient.patient_id, { label: `${patient.first_name} ${patient.last_name}`.trim(), clinicId: patient.clinic_id ?? null, clinicName: patient.clinic_name ?? null });
-                }
-            }
-            if (dashboard.patients.length < ROSTER_PAGE_SIZE || entries.size >= dashboard.total) break;
-        }
-        return entries;
-    } catch {
-        return null;
-    }
-}
 
 /**
  * Care plan review items: cross-plan asks and decisions, plans nobody owns, and legacy plans
@@ -49,7 +24,6 @@ function CarePlanReviewsContent() {
     const highlightId = params?.get("item") ?? null;
     const patientId = params?.get("patient") ?? null;
     const [list, setList] = useState<ReviewItemList | null>(null);
-    const [roster, setRoster] = useState<Map<string, RosterEntry> | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const sequence = useRef(0);
@@ -58,18 +32,17 @@ function CarePlanReviewsContent() {
         const request = ++sequence.current;
         setLoading(true); setError(null);
         try {
-            // Names and clinics come from the roster: review items carry ids only.
-            const [items, nextRoster] = await Promise.all([fetchReviewItems("open"), loadRoster(clinicId)]);
+            // Each item carries its patient's name and the clinic of the addressed link.
+            const items = await fetchReviewItems("open");
             if (request !== sequence.current) return;
             setList(items);
-            setRoster(nextRoster);
         } catch (cause) {
             if (request !== sequence.current) return;
             setError(cause instanceof Error ? cause.message : "Unable to load care plan review items.");
         } finally {
             if (request === sequence.current) setLoading(false);
         }
-    }, [clinicId]);
+    }, []);
 
     useEffect(() => {
         if (!ready) return;
@@ -79,15 +52,11 @@ function CarePlanReviewsContent() {
 
     const items = useMemo(() => (list?.items ?? []).filter((item) => {
         if (patientId && item.patient_id !== patientId) return false;
-        // A clinic filter keeps the patients of that clinic (the roster is already filtered).
-        return !clinicId || (roster ? roster.has(item.patient_id) : false);
-    }), [list, patientId, clinicId, roster]);
+        // A clinic filter keeps the items addressed to my link at that clinic.
+        return !clinicId || item.clinic_id === clinicId;
+    }), [list, patientId, clinicId]);
     const clinicItems = useMemo(() => (list?.clinic_items ?? []).filter((item) => !clinicId || item.target_clinic_id === clinicId), [list, clinicId]);
     const clinicName = (id: string) => clinicFilter.clinics.find((clinic) => clinic.clinic_id === id)?.clinic_name ?? null;
-    const lookup = useCallback((id: string) => {
-        const entry = roster?.get(id);
-        return { label: entry?.label ?? null, clinicName: clinicFilter.multi ? (entry?.clinicName ?? null) : null };
-    }, [roster, clinicFilter.multi]);
     const total = items.length + clinicItems.length;
 
     return <div className="ma-page space-y-5">
@@ -106,7 +75,6 @@ function CarePlanReviewsContent() {
         </div>
 
         {patientId ? <p className="text-sm text-ink-2">Showing items for one patient. <Link className="font-medium text-primary hover:underline" href="/care-plan-reviews">Show all</Link></p> : null}
-        {!loading && !error && roster === null && list ? <p className="rounded-lg border border-warn-line bg-warn-soft px-3 py-2 text-sm text-warn-ink" role="status">Patient names could not be loaded. Items are still listed and each opens its patient&apos;s care plan.</p> : null}
 
         {error ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink" role="alert">
             <span className="inline-flex items-center gap-2"><Icon name="alert" className="h-4 w-4 shrink-0" />{error}</span>
@@ -121,7 +89,7 @@ function CarePlanReviewsContent() {
             {clinicId ? null : <p className="text-sm text-muted">New conflicts and unowned plans appear here and in your alerts.</p>}
         </div> : null}
 
-        {items.length > 0 ? <PlanReviewItemsList highlightId={highlightId} items={items} onChanged={() => void load()} patientLookup={lookup} /> : null}
+        {items.length > 0 ? <PlanReviewItemsList highlightId={highlightId} items={items} onChanged={() => void load()} showClinic={clinicFilter.multi} /> : null}
 
         {clinicItems.length > 0 ? <section aria-labelledby="review-clinic-work" className="overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
             <div className="border-b border-line px-[22px] py-3.5">

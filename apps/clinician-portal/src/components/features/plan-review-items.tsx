@@ -186,10 +186,10 @@ export function ClinicReviewItemRow({ item, clinicName }: { item: ClinicReviewIt
 }
 
 /** The open review items grouped by what the clinician has to do. */
-export function PlanReviewItemsList({ items, patientLookup, highlightId, onChanged }: {
+export function PlanReviewItemsList({ items, showClinic = false, highlightId, onChanged }: {
     items: PlanReviewItem[];
-    /** Patient name and clinic per patient id; a missing entry shows no name rather than a guess. */
-    patientLookup: (patientId: string) => { label: string | null; clinicName: string | null };
+    /** Name the clinic on each row (multi-clinic clinicians). The name and clinic come from the item. */
+    showClinic?: boolean;
     highlightId?: string | null;
     onChanged: () => void;
 }) {
@@ -204,8 +204,7 @@ export function PlanReviewItemsList({ items, patientLookup, highlightId, onChang
                 </div>
                 <ul>
                     {rows.map((item) => {
-                        const patient = patientLookup(item.patient_id);
-                        return <PlanReviewItemRow clinicName={patient.clinicName} highlighted={highlightId === item.id} item={item} key={item.id} onChanged={onChanged} patientLabel={patient.label} />;
+                        return <PlanReviewItemRow clinicName={showClinic ? (item.clinic_name ?? null) : null} highlighted={highlightId === item.id} item={item} key={item.id} onChanged={onChanged} patientLabel={item.patient_name ?? null} />;
                     })}
                 </ul>
             </section>;

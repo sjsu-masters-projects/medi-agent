@@ -63,6 +63,11 @@ export function useCareTeamChoice(patientId: string, enabled = true) {
     };
 }
 
+/** "Cardiology · Cedar Grove"; the clinic alone when the link has no specialty. */
+export function careTeamOptionLabel(option: Pick<ClinicianCareTeamOption, "specialty" | "clinic_name">): string {
+    return [option.specialty, option.clinic_name].filter((part): part is string => Boolean(part && part.trim())).join(" · ") || "Care team";
+}
+
 export function CareTeamSelect({ options, value, onChange, required, showRequired = false, className = "" }: {
     options: ClinicianCareTeamOption[]; value: string; onChange: (careTeamId: string) => void;
     required: boolean; showRequired?: boolean; className?: string;
@@ -75,7 +80,7 @@ export function CareTeamSelect({ options, value, onChange, required, showRequire
             <select aria-invalid={invalid || undefined} aria-required={required || undefined} className="h-10 w-full max-w-sm rounded-lg border border-line-strong bg-surface px-3 text-sm text-ink"
                 onChange={(event) => onChange(event.target.value)} value={value}>
                 {value ? null : <option disabled value="">Choose a care team</option>}
-                {options.map((option) => <option key={option.care_team_id} value={option.care_team_id}>{option.clinic_name ?? "Care team"}</option>)}
+                {options.map((option) => <option key={option.care_team_id} value={option.care_team_id}>{careTeamOptionLabel(option)}</option>)}
             </select>
         </label>
         <p className={`mt-1.5 text-xs ${invalid ? "font-medium text-risk-ink" : "text-muted"}`} role={invalid ? "alert" : undefined}>

@@ -9,22 +9,21 @@ import type { PlanReviewItem } from "@/types";
 
 const nav = vi.hoisted(() => ({ search: "" }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(nav.search) }));
-vi.mock("@/hooks/use-clinic-filter", async () => (await import("@/test/clinic-filter-mock")).clinicFilterModule);
 vi.mock("@/services/clinicians", () => ({ fetchDashboard: vi.fn() }));
+vi.mock("@/hooks/use-clinic-filter", async () => (await import("@/test/clinic-filter-mock")).clinicFilterModule);
 vi.mock("@/services/care-team-plans", async (original) => ({
     ...(await original<typeof import("@/services/care-team-plans")>()),
     fetchReviewItems: vi.fn(), replyToReviewItem: vi.fn(), fetchUnownedActivities: vi.fn(), adoptCarePlan: vi.fn(), retireCarePlanItems: vi.fn(), takeRecord: vi.fn(),
 }));
 
 const item = (extra: Partial<PlanReviewItem>): PlanReviewItem => ({
-    id: "r1", patient_id: "p1", care_plan_id: "plan-1", kind: "cross_plan_conflict", target_care_team_id: "team-1", conflict_fingerprint: "fp",
+    id: "r1", patient_id: "p1", patient_name: "Ana Lopez", clinic_id: "c1", clinic_name: "Cedar Grove", care_plan_id: "plan-1", kind: "cross_plan_conflict", target_care_team_id: "team-1", conflict_fingerprint: "fp",
     summary: { from: { specialty: "Orthopaedics", clinician_name: "Dr. Lee", clinic_name: "Willow Terrace" }, ours: { name: "Ibuprofen", dosage: "400 mg" }, theirs: { name: "Ibuprofen", dosage: "200 mg" } },
     request_note: "Can we agree on one dose?", reply_note: null, status: "open", created_at: "2026-10-20T12:00:00Z", resolved_at: null, ...extra,
 });
 const err = (code: string, status = 409) => new ApiClientError(code, status, { error: { code, message: code } });
 function load(items: PlanReviewItem[], clinic_items: never[] = []) {
     vi.mocked(plans.fetchReviewItems).mockResolvedValue({ items, clinic_items });
-    vi.mocked(fetchDashboard).mockResolvedValue({ patients: [{ patient_id: "p1", first_name: "Ana", last_name: "Lopez", clinic_id: "c1", clinic_name: "Cedar Grove" }], total: 1 } as never);
 }
 const activities = { care_plan_id: "plan-1", ownership_state: "unowned" as const, previous_owner: { specialty: "ENT", clinician_name: "Dr. Moss", clinic_id: "c1", clinic_name: "Cedar Grove" }, unowned_since: null, approved_at: null,
     activities: [{ id: "a1", category: "medication", title: "Ear drops", instructions: "Twice daily", frequency: "twice daily", medication: {}, wording: {} }, { id: "a2", category: "movement", title: "Neck stretches", instructions: "", frequency: "daily", medication: {}, wording: {} }] };
@@ -38,6 +37,8 @@ describe("care plan review items", () => {
         render(<CarePlanReviewsPage />);
         const row = await screen.findByRole("listitem", { name: "Another care team asks about a conflict" });
         expect(row).toHaveTextContent("Ana Lopez");
+        // Name and clinic come on the item: the roster is never paged to find them.
+        expect(fetchDashboard).not.toHaveBeenCalled();
         expect(within(row).getByRole("region", { name: "Their draft" })).toHaveTextContent("400 mg");
         expect(within(row).getByRole("region", { name: "Your plan" })).toHaveTextContent("200 mg");
         expect(row).toHaveTextContent("From Orthopaedics · Dr. Lee · Willow Terrace");
@@ -150,7 +151,6 @@ describe("care plan review items", () => {
 
     it("shows an error with retry when the items cannot load", async () => {
         vi.mocked(plans.fetchReviewItems).mockRejectedValueOnce(new Error("down"));
-        vi.mocked(fetchDashboard).mockResolvedValue({ patients: [], total: 0 } as never);
         render(<CarePlanReviewsPage />);
         expect(await screen.findByRole("alert")).toHaveTextContent("down");
         vi.mocked(plans.fetchReviewItems).mockResolvedValue({ items: [], clinic_items: [] });

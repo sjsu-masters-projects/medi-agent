@@ -132,7 +132,7 @@ function Harness({ patientId }: { patientId: string }) {
 
 describe("care-team select for creating records", () => {
     beforeEach(() => { cleanup(); vi.resetAllMocks(); });
-    const option = (id: string, clinic: string) => ({ care_team_id: id, patient_id: "p", clinician_id: "c", clinic_id: id, clinic_name: clinic });
+    const option = (id: string, clinic: string, specialty: string | null = null) => ({ care_team_id: id, patient_id: "p", clinician_id: "c", clinic_id: id, clinic_name: clinic, specialty });
 
     it("shows nothing and requires nothing with a single link", async () => {
         vi.mocked(plans.fetchCareTeamOptions).mockResolvedValue([option("t1", "Cedar Grove")]);
@@ -143,10 +143,13 @@ describe("care-team select for creating records", () => {
     });
 
     it("requires a choice with several links and returns it", async () => {
-        vi.mocked(plans.fetchCareTeamOptions).mockResolvedValue([option("t1", "Cedar Grove"), option("t2", "Willow Terrace")]);
+        vi.mocked(plans.fetchCareTeamOptions).mockResolvedValue([option("t1", "Cedar Grove", "Cardiology"), option("t2", "Willow Terrace")]);
         render(<Harness patientId="p" />);
         const select = await screen.findByRole("combobox", { name: /Care team/ });
         expect(select).toBeRequired();
+        // Specialty and clinic; the clinic alone when the link has no specialty.
+        expect(within(select).getByRole("option", { name: "Cardiology · Cedar Grove" })).toBeInTheDocument();
+        expect(within(select).getByRole("option", { name: "Willow Terrace" })).toBeInTheDocument();
         expect(screen.getByTestId("state")).toHaveTextContent("missing:none");
         fireEvent.change(select, { target: { value: "t2" } });
         expect(screen.getByTestId("state")).toHaveTextContent("ok:t2");
