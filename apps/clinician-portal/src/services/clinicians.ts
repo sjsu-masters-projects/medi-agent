@@ -919,6 +919,8 @@ interface PatientDeepDiveResponse
             first_name?: string;
             last_name?: string;
         } | null;
+        routing_state?: "routed" | "unrouted";
+        care_team_id?: string | null;
     }>;
 }
 
@@ -944,6 +946,9 @@ interface DocumentReviewQueueItemResponse {
     created_at: string;
     uploaded_by_role: UploaderRole;
     review_status: DocumentReviewStatus;
+    needs_claim?: boolean;
+    claimable_care_team_ids?: string[];
+    care_team_id?: string | null;
 }
 
 export interface ObligationSetPayload {
@@ -1110,6 +1115,7 @@ function normalizePatientDocument(
         reviewedAt: document.reviewed_at,
         reviewNote: document.review_note,
         reviewer: normalizeReviewer(document.reviewer),
+        ...(document.routing_state ? { routingState: document.routing_state } : {}),
     };
 }
 
@@ -1138,6 +1144,7 @@ function normalizeDocumentReviewQueueItem(
         createdAt: item.created_at,
         uploadedByRole: item.uploaded_by_role,
         reviewStatus: item.review_status,
+        ...(item.needs_claim ? { needsClaim: true, claimableCareTeamIds: item.claimable_care_team_ids ?? [] } : {}),
     };
 }
 

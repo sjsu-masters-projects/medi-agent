@@ -12,6 +12,7 @@ import {
     ParseStatusBadge,
     ReviewStatusBadge,
 } from "@/components/features/document-review-badges";
+import { ClaimDocumentDialog, UnroutedBadge } from "@/components/features/claim-document-dialog";
 import { Modal, Skeleton } from "@/components/ui";
 import { AiChip } from "@/components/ui/ai-chip";
 import { Icon } from "@/components/ui/icons";
@@ -21,6 +22,7 @@ import {
     rejectDocumentReview,
     type ClinicReviewQueueItem,
 } from "@/services/clinicians";
+import { errorCode } from "@/services/care-team-plans";
 import { loadPatientDeepDive } from "@/store/slices/patient-detail-slice";
 import type { AppDispatch, RootState } from "@/store/store";
 import { formatClinicianDateTime } from "@/utils/dates";
@@ -43,6 +45,8 @@ export default function ReviewQueuePage() {
     const [busyDocumentId, setBusyDocumentId] = useState<string | null>(null);
     const [rejectingItem, setRejectingItem] = useState<ClinicReviewQueueItem | null>(null);
     const [rejectNote, setRejectNote] = useState("");
+    const [claimingItem, setClaimingItem] = useState<ClinicReviewQueueItem | null>(null);
+    const [claimNotice, setClaimNotice] = useState<string | null>(null);
     const requestSequence = useRef(0);
 
     const pendingCount = useMemo(() => items.length, [items.length]);
@@ -111,14 +115,24 @@ export default function ReviewQueuePage() {
                 void dispatch(loadPatientDeepDive(item.patientId));
             }
         } catch (reviewError) {
-            setError(
-                reviewError instanceof Error
-                    ? reviewError.message
-                    : "Unable to approve this document.",
-            );
+            if (errorCode(reviewError) === "DOCUMENT_CLAIM_REQUIRED") {
+                markNeedsClaim(item);
+            } else {
+                setError(
+                    reviewError instanceof Error
+                        ? reviewError.message
+                        : "Unable to approve this document.",
+                );
+            }
         } finally {
             setBusyDocumentId(null);
         }
+    }
+
+    /** The server says this upload is unrouted: show the claim state instead of a bare error. */
+    function markNeedsClaim(item: ClinicReviewQueueItem) {
+        setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, needsClaim: true, claimableCareTeamIds: entry.claimableCareTeamIds ?? [] } : entry));
+        setClaimNotice("This upload is not routed to a care team yet. Claim it before you approve or reject it.");
     }
 
     async function handleReject() {
@@ -138,11 +152,17 @@ export default function ReviewQueuePage() {
             setRejectingItem(null);
             setRejectNote("");
         } catch (reviewError) {
-            setError(
-                reviewError instanceof Error
-                    ? reviewError.message
-                    : "Unable to reject this document.",
-            );
+            if (errorCode(reviewError) === "DOCUMENT_CLAIM_REQUIRED") {
+                markNeedsClaim(rejectingItem);
+                setRejectingItem(null);
+                setRejectNote("");
+            } else {
+                setError(
+                    reviewError instanceof Error
+                        ? reviewError.message
+                        : "Unable to reject this document.",
+                );
+            }
         } finally {
             setBusyDocumentId(null);
         }
@@ -218,6 +238,13 @@ export default function ReviewQueuePage() {
                 </div>
             )}
 
+            {claimNotice && (
+                <p className="flex items-start gap-2.5 rounded-xl border border-warn-line bg-warn-soft px-4 py-3 text-sm text-warn-ink" role="status">
+                    <Icon name="info" aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{claimNotice}</span>
+                </p>
+            )}
+
             <section className="overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
                 <div className="flex items-center justify-between gap-3 border-b border-line px-[22px] py-4">
                     <h2 className="text-[15px] font-semibold text-ink">Pending patient uploads</h2>
@@ -283,6 +310,7 @@ export default function ReviewQueuePage() {
                                                 <span className="capitalize">{getDocumentTypeLabel(item.documentType)}</span>
                                                 {item.sourceClinic ? ` · ${item.sourceClinic}` : ""}
                                             </p>
+                                            {item.needsClaim ? <p className="mt-1"><UnroutedBadge /></p> : null}
                                         </div>
                                     </div>
                                     <div className="flex min-w-0 flex-col items-start gap-0.5">
@@ -310,6 +338,17 @@ export default function ReviewQueuePage() {
                                         >
                                             Review document
                                         </Link>
+                                        {item.needsClaim ? (
+                                            <button
+                                                aria-label={`Claim ${item.fileName}`}
+                                                className="ma-press inline-flex h-8 items-center justify-center rounded-lg border border-primary-line bg-primary-tint px-3 text-[13px] font-semibold text-primary hover:bg-surface"
+                                                onClick={() => { setClaimNotice(null); setClaimingItem(item); }}
+                                                type="button"
+                                            >
+                                                Claim
+                                            </button>
+                                        ) : (
+                                            <>
                                         <button
                                             className="ma-press inline-flex h-8 items-center justify-center rounded-lg border border-ok-line bg-surface px-3 text-[13px] font-semibold text-ok-ink hover:bg-ok-soft disabled:cursor-not-allowed disabled:border-line disabled:text-[#94A3B8]"
                                             disabled={busyDocumentId === item.id}
@@ -329,6 +368,8 @@ export default function ReviewQueuePage() {
                                         >
                                             Reject
                                         </button>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
 
@@ -345,6 +386,30 @@ export default function ReviewQueuePage() {
                     </div>
                 )}
             </section>
+
+            {claimingItem ? (
+                <ClaimDocumentDialog
+                    claimableCareTeamIds={claimingItem.claimableCareTeamIds ?? []}
+                    documentId={claimingItem.id}
+                    fileName={claimingItem.fileName}
+                    onAlreadyClaimed={() => {
+                        const claimed = claimingItem;
+                        setItems((current) => current.filter((entry) => entry.id !== claimed.id));
+                        setClaimingItem(null);
+                        setClaimNotice("Another care team claimed this document first. It was removed from your queue.");
+                    }}
+                    onClaimed={() => {
+                        const claimed = claimingItem;
+                        setItems((current) => current.map((entry) => entry.id === claimed.id ? { ...entry, needsClaim: false } : entry));
+                        setClaimingItem(null);
+                        setClaimNotice("You claimed this document. You can now review it.");
+                        void loadQueue(true);
+                    }}
+                    onClose={() => setClaimingItem(null)}
+                    open
+                    patientId={claimingItem.patientId}
+                />
+            ) : null}
 
             <Modal
                 onClose={() => {
