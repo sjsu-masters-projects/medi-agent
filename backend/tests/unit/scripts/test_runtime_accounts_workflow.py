@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -33,8 +34,16 @@ def test_jobs_account_variable_is_format_checked() -> None:
     assert "CLOUD_RUN_JOBS_RUNTIME_SA; do" in check
 
 
-def test_dry_run_creates_jobs_account_and_changes_nothing() -> None:
-    out = subprocess.run(["bash", str(SCRIPT)], capture_output=True, text=True, check=False).stdout
+def test_dry_run_creates_jobs_account_and_changes_nothing(tmp_path: Path) -> None:
+    # A stand-in gcloud that knows no accounts, so the dry run never depends on whoever runs
+    # the test being signed in to the real project (where the accounts may already exist).
+    fake = tmp_path / "gcloud"
+    fake.write_text("#!/usr/bin/env bash\nexit 1\n")
+    fake.chmod(0o755)
+    env = {**os.environ, "PATH": f"{tmp_path}{os.pathsep}{os.environ.get('PATH', '')}"}
+    out = subprocess.run(
+        ["bash", str(SCRIPT)], capture_output=True, text=True, check=False, env=env
+    ).stdout
     assert "MODE: DRY RUN" in out
     assert "service-accounts create mediagent-jobs-runtime" in out
     assert "--role roles/aiplatform.user" in out
