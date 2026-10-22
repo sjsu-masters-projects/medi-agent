@@ -258,7 +258,7 @@ function ConversationThread({ token, audience, thread, locale, visible, draft, o
     [token, thread.id],
   );
   const preview = useReplyPreview(requestPreview, draft.body);
-  const previewBlocker = audience === "clinician" ? sendBlocker(preview.state, draft.body, preview.confirmed) : null;
+  const previewBlocker = audience === "clinician" && !draft.clientMessageId ? sendBlocker(preview.state, draft.body, preview.confirmed) : null;
   const callbacks = useRef({ onRead, onSaved, onSending });
   useEffect(() => { callbacks.current = { onRead, onSaved, onSending }; }, [onRead, onSaved, onSending]);
 
@@ -336,11 +336,11 @@ function ConversationThread({ token, audience, thread, locale, visible, draft, o
     const body = draft.body.trim();
     if (!body || body.length > 4000 || busy.current || denied || !thread.writable || draft.failure === "mismatch") return;
     if (previewBlocker) return;
-    const confirmedTranslation = audience === "clinician"
+    const confirmedTranslation = draft.clientMessageId ? draft.confirmedTranslation ?? null : audience === "clinician"
       ? confirmedTranslationFor(preview.state, body, preview.confirmed)
       : null;
     const clientMessageId = draft.clientMessageId ?? crypto.randomUUID();
-    onDraft({ body: draft.body, clientMessageId });
+    onDraft({ body: draft.body, clientMessageId, confirmedTranslation });
     busy.current = true;
     generation.current++;
     setSending(true);
@@ -366,6 +366,7 @@ function ConversationThread({ token, audience, thread, locale, visible, draft, o
         onDraft({
           body: draft.body,
           clientMessageId: failureKind === "invalid" || failureKind === "activityUnavailable" ? undefined : clientMessageId,
+          confirmedTranslation,
           failure: failureKind,
         });
       }

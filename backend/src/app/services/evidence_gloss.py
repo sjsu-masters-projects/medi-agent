@@ -50,8 +50,7 @@ _NAMESPACE = uuid.UUID("5f3b9a4e-7c21-4d8a-9a71-2f6c0d1b8e55")
 #: turn one screen into an unbounded number of model calls.
 MAX_PER_REQUEST = 10
 
-#: Excerpts longer than this are glossed in full but never allowed to grow a prompt without
-#: limit; the printed original remains on screen either way.
+#: Oversized excerpts remain original-only; never label a partial translation as a full gloss.
 MAX_EXCERPT_CHARS = 2000
 
 START = "<<<EVIDENCE_TEXT"
@@ -120,7 +119,9 @@ async def gloss_excerpt(
     excerpt: str, protected_terms: Sequence[str] = ()
 ) -> tuple[str, bool, str | None]:
     """Gloss one excerpt: ``(gloss, guard_passed, model_id)``. Raises if the model fails."""
-    text = normalise(excerpt)[:MAX_EXCERPT_CHARS]
+    text = normalise(excerpt)
+    if len(text) > MAX_EXCERPT_CHARS:
+        raise ValueError("Excerpt exceeds gloss limit")
     response = await generate_or_stub(
         stub=lambda: json.dumps({"gloss": translate_text(text, "en-US")}, ensure_ascii=False),
         generate=lambda: generate_for_workload(
@@ -169,7 +170,11 @@ class EvidenceGlossService:
         for address, text in wanted.items():
             row = stored.get(address)
             if row and not is_failure_marker(row):
-                if row.get("guard_passed", True):
+                if (
+                    row.get("guard_passed", True)
+                    and guard_failure(text, str(row.get("translated_text") or ""), protected_terms)
+                    is None
+                ):
                     results[address] = {
                         "excerpt": text,
                         "gloss": row.get("translated_text"),

@@ -250,7 +250,7 @@ async def test_queued_canonical_report_creates_adr_draft_and_retry_preserves_rev
             return self
 
         def eq(self, key, value):
-            assert key in {"id", "patient_id", "symptom_report_id"}
+            assert key in {"id", "patient_id", "symptom_report_id", "idempotency_key", "status"}
             self.filters.append(f"{key}={literal(value)}")
             return self
 
@@ -266,6 +266,11 @@ async def test_queued_canonical_report_creates_adr_draft_and_retry_preserves_rev
         def upsert(self, row, *, on_conflict, ignore_duplicates):
             assert self.name == "adr_assessments"
             assert on_conflict == "symptom_report_id" and ignore_duplicates is True
+            self.row, self.operation = row, "upsert"
+            return self
+
+        def insert(self, row):
+            assert self.name == "adr_assessments"
             self.row, self.operation = row, "insert"
             return self
 
@@ -277,8 +282,15 @@ async def test_queued_canonical_report_creates_adr_draft_and_retry_preserves_rev
                 assert all(key.replace("_", "").isalpha() for key in self.row)
                 columns = ",".join(self.row)
                 values = f"SELECT {columns} FROM jsonb_populate_record(NULL::{self.name},{literal(json.dumps(self.row))}::jsonb)"
-                if self.operation == "insert":
-                    statement = f"INSERT INTO {self.name} ({columns}) {values} ON CONFLICT(symptom_report_id) DO NOTHING RETURNING *"
+                if self.operation in {"insert", "upsert"}:
+                    conflict = (
+                        " ON CONFLICT(symptom_report_id) DO NOTHING"
+                        if self.operation == "upsert"
+                        else ""
+                    )
+                    statement = (
+                        f"INSERT INTO {self.name} ({columns}) {values}{conflict} RETURNING *"
+                    )
                 else:
                     statement = f"UPDATE {self.name} SET ({columns})=({values}) WHERE {' AND '.join(self.filters)} RETURNING *"
                 result = db(
@@ -287,6 +299,14 @@ async def test_queued_canonical_report_creates_adr_draft_and_retry_preserves_rev
             return SimpleNamespace(data=json.loads(result))
 
     service = A2ATaskService(SimpleNamespace(table=Query))
+    report_id = db("SELECT id FROM symptom_reports;")
+    # The public confirmation path must adopt 071's queued task, not insert a
+    # second task under the older symptom_event key or execute it inline.
+    adopted = await service.run_symptom_to_pharmacovigilance(
+        patient_id=PATIENT, payload={"symptom_report": {"id": report_id}}
+    )
+    assert adopted["task_id"] == task_id and adopted["status"] == "retrying"
+    assert db("SELECT count(*) FROM a2a_tasks;") == "1"
     result = await service.retry_task(task_id)
     assert result["status"] == "completed", result.get("error_message")
     assert result["output_payload"]["adr_assessment_id"]
@@ -294,7 +314,10 @@ async def test_queued_canonical_report_creates_adr_draft_and_retry_preserves_rev
     assert assessment["suspect_medication_id"] == medication
     assert assessment["status"] == "draft" and assessment["naranjo_answers"] == {}
     db(f"UPDATE adr_assessments SET status='reviewed',reviewed_by='{CLINICIAN}';")
-    # Repeat delivery after a worker crash must not reset a clinician's decision.
+    # Requeue after a failed completion write, without resetting the reviewed assessment.
+    db(
+        f"UPDATE a2a_tasks SET status='retrying',completed_at=NULL,next_retry_at=clock_timestamp() WHERE id='{task_id}';"
+    )
     result = await service.retry_task(task_id)
     assert result["status"] == "completed"
     assert db("SELECT count(*) FROM adr_assessments;") == "1"

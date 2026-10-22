@@ -11,7 +11,7 @@ Two jobs:
     unreachable, which is exactly where they used to be uncheckable.
 
 ``--check-target`` (read-only reads of the configured project)
-    Reports whether migrations 079-082 are recorded in the target's ledger with the
+    Reports whether migrations 080-083 are recorded in the target's ledger with the
     checksums this working tree holds, and whether the columns and labels they add are
     actually present. Run this before the deployed acceptance journeys; the journeys
     themselves are recorded in docs/deployed-recheck-2026-10-11.md.
@@ -32,10 +32,10 @@ ROOT = Path(__file__).resolve().parents[1] / "src/app"
 
 #: The migrations LOC-003's clinician surfaces need in the target.
 REQUIRED = (
-    "079_english_display_facts.sql",
     "080_message_translation_integrity.sql",
     "081_care_plan_wording_verification.sql",
     "082_loc003_display_provenance.sql",
+    "083_confirmed_message_translation.sql",
 )
 
 #: Wording that exercises every guard at once: a dose with a unit, a thousands separator, a
@@ -125,7 +125,7 @@ async def _self_check() -> bool:
     # caught. See the LOC-003 spec's follow-up; changing it is an LOC-001 guard decision.
     print(
         "KNOWN_GAP negation_count_not_compared",
-        "one of several negations can be dropped without failing the guard",
+        "cross-language presence checks are not semantic proof; English back-translations additionally compare counts",
         "PASS"
         if guard_failure(GUARDED, GUARDED.replace("Do not take", "Take")) is None
         else "CLOSED",
@@ -312,6 +312,7 @@ def _check_target() -> bool:
         ("care_plan_items", "back_translation"),
         ("care_plan_items", "wording_verification"),
         ("care_plan_items", "translation_model_id"),
+        ("message_translations", "clinician_confirmed"),
     ):
         try:
             db.table(table).select(column).limit(1).execute()

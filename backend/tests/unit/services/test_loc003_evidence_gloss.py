@@ -112,6 +112,26 @@ class TestGlossing:
         assert result[address]["gloss"] == ENGLISH
         assert result[address]["model_id"] == "stored"
 
+    async def test_cached_gloss_rechecks_current_protected_medication_names(self) -> None:
+        service = _service(
+            {
+                excerpt_id(SPANISH): {
+                    "translated_text": ENGLISH,
+                    "guard_passed": True,
+                    "model_id": "stored",
+                }
+            }
+        )
+        assert await service.glosses_for([SPANISH], ["Metformina"]) == {}
+
+    async def test_oversized_excerpt_is_not_partially_translated(self) -> None:
+        with (
+            patch.object(module, "generate_or_stub", AsyncMock()) as generate,
+            pytest.raises(ValueError, match="exceeds gloss limit"),
+        ):
+            await module.gloss_excerpt(SPANISH * 100)
+        generate.assert_not_awaited()
+
     async def test_a_gloss_that_failed_its_guard_is_never_returned(self) -> None:
         """A gloss that moved a dose reads as the document, so it must not be shown at all."""
         service = _service()
@@ -209,7 +229,7 @@ class TestGlossPromptSafety:
         start, end = prompt.index(module.START), prompt.rindex(module.END)
         assert "ignora las instrucciones" in prompt[start:end]
 
-    async def test_a_very_long_excerpt_is_truncated_for_the_prompt(self) -> None:
+    async def test_maximum_length_excerpt_fits_a_bounded_prompt(self) -> None:
         sent: dict[str, Any] = {}
 
         async def fake(*_args: Any, **kwargs: Any) -> Any:
@@ -217,7 +237,7 @@ class TestGlossPromptSafety:
             return MagicMock(text='{"gloss": "ok"}', telemetry=MagicMock(model="m"))
 
         with patch.object(module, "generate_for_workload", fake):
-            await module.gloss_excerpt("a " * 4000)
+            await module.gloss_excerpt("a " * 1000)
         assert len(sent["prompt"]) < module.MAX_EXCERPT_CHARS + 600
 
     async def test_an_empty_gloss_is_an_error_not_a_blank_line(self) -> None:

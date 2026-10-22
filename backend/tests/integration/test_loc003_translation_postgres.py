@@ -356,7 +356,7 @@ def test_marking_wording_verified_without_a_record_is_rejected(sql) -> None:
         f"UPDATE public.care_plan_items SET wording_verified = true WHERE id = '{ITEM}'",
         succeeds=False,
     )
-    assert "care_plan_items_wording_verification_present" in error
+    assert "Verified wording requires a verification record" in error
 
 
 def test_marking_it_verified_with_a_record_is_accepted(sql) -> None:
@@ -399,7 +399,7 @@ def test_a_row_approved_before_the_migration_is_not_rewritten(sql) -> None:
     legacy = "00000000-0000-0000-0000-0000000000d1"
     sql(f"""
       ALTER TABLE public.care_plan_items
-        DROP CONSTRAINT care_plan_items_wording_verification_present;
+        DISABLE TRIGGER care_plan_items_wording_verification_present;
       INSERT INTO public.care_plan_items(id, plan_version_id, wording_verified)
         VALUES ('{legacy}', '{PLAN}', true);
     """)
@@ -413,12 +413,34 @@ def test_a_row_approved_before_the_migration_is_not_rewritten(sql) -> None:
     )
 
 
+def test_legacy_verified_wording_allows_cache_updates_but_not_unrecorded_edits(sql) -> None:
+    legacy = "00000000-0000-0000-0000-0000000000d2"
+    sql(f"""
+      ALTER TABLE public.care_plan_items DISABLE TRIGGER care_plan_items_wording_verification_present;
+      INSERT INTO public.care_plan_items(id,plan_version_id,wording_verified)
+        VALUES ('{legacy}','{PLAN}',true);
+    """)
+    sql((MIGRATIONS / "081_care_plan_wording_verification.sql").read_text())
+    sql(
+        f"UPDATE public.care_plan_items SET back_translation='{{\"cached\":true}}' WHERE id='{legacy}';"
+    )
+    assert (
+        sql(f"SELECT wording_verification IS NULL FROM public.care_plan_items WHERE id='{legacy}';")
+        == "t"
+    )
+    error = sql(
+        f'UPDATE public.care_plan_items SET wording=\'{{"en-US":{{"title":"Changed"}}}}\' WHERE id=\'{legacy}\';',
+        succeeds=False,
+    )
+    assert "requires a verification record" in error
+
+
 def test_the_verification_migration_can_be_applied_twice(sql) -> None:
     sql((MIGRATIONS / "081_care_plan_wording_verification.sql").read_text())
     sql((MIGRATIONS / "081_care_plan_wording_verification.sql").read_text())
     assert (
-        sql("""SELECT count(*) FROM pg_constraint
-                  WHERE conname = 'care_plan_items_wording_verification_present'""")
+        sql("""SELECT count(*) FROM pg_trigger
+                  WHERE tgname = 'care_plan_items_wording_verification_present' AND NOT tgisinternal""")
         == "1"
     )
 

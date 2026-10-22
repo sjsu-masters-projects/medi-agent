@@ -391,6 +391,10 @@ async def back_translate_spanish(
         "instructions": parsed.instructions.strip(),
         "frequency": parsed.frequency.strip(),
     }
+    from app.services.translation_guards import same_language_negation_changed
+
+    if same_language_negation_changed(_joined(english_wording), _joined(back)):
+        raise ValueError("English back-translation changed a negation")
 
     # Guard: check numbers and medication names against the *original English* wording.
     numbers_match = _numbers(english_wording) == _numbers(back)

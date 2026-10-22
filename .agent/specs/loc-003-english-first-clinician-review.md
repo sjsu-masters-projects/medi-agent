@@ -154,7 +154,7 @@ Both uses are labelled as such.
 
 ## Remaining (owner: Jeevan)
 
-- **Apply migrations 079–082**, then run the deployed acceptance journeys below. The apply
+- **Apply migrations 080–083 with separate authorization before deploying #203**, then run the deployed acceptance journeys below. The apply
   needs `MEDIAGENT_DB_URL` (the Session pooler URI from Dashboard → Connect), which is not
   stored in this repository or in `.env`; see `docs/supabase_setup_guide.md`.
 - **LOC-001 review of the es-MX caveat drafts** for the patient-side translation note (listed
@@ -169,9 +169,10 @@ Both uses are labelled as such.
   translations. The narrow fix worth considering is to compare counts **only when both texts
   are in the same language**, which is exactly the back-translation comparison
   (English source against English back-translation) and would catch the inverted-instruction
-  case without touching cross-language behaviour. Not changed here: it is a LOC-001 guard
-  decision, not a LOC-003 display one. `preflight_loc003_translation.py --self-check` prints
-  this as `KNOWN_GAP negation_count_not_compared` on every run so it is not rediscovered.
+  case without touching cross-language behaviour. #203 review now applies that narrow
+  English-original/English-back-translation check to reply and care-plan review. A rejected
+  reverse translation is never returned as usable. Cross-language presence checks remain
+  limited heuristics, not proof of clinical meaning; preflight explicitly reports that limit.
 
 ### Clinician portal — done (October 19)
 
@@ -246,7 +247,7 @@ Both uses are labelled as such.
     negation, a separator swap and a changed drug name being rejected; proper names never
     reaching the model; the fingerprint tracking edits; the reply round trip; the gloss
     address being its own text. 19/19 pass with no network, database or model.
-    `--check-target` reads the configured project's ledger and the columns 079–082 add, with
+    `--check-target` reads the configured project's ledger and the columns 080–083 add, with
     no mutations. Both are read-only.
 
 ### Backend and data — done (October 19)
@@ -270,8 +271,9 @@ endpoint below; a background job was never an outstanding implementation require
 15. **The guard outcome is recorded with the verification.**
     `care_plan_items.wording_verification` stores each deterministic check and its result
     (numbers with units, negation, medication name, field presence), the fingerprints of the
-    wording checked, who attested and when (migration 081). A `NOT VALID` check constraint
-    requires a verified item to carry the record. It is display and audit only: the
+    wording checked, who attested and when (migration 081). A trigger requires new or
+    changed verified wording to carry the record, without blocking cache-only writes to
+    unchanged legacy approved wording. It is display and audit only: the
     publication preflight and the database guard both re-run the checks and never trust it.
     This closes the follow-up noted under decision 9.
 16. **`message_translations` has referential integrity and a retention rule** (migration 080).
@@ -282,9 +284,10 @@ endpoint below; a background job was never an outstanding implementation require
     (`POST /api/v1/cron/message-translations/purge`). A successful translation is kept while
     its message lives. Nothing clinical is lost: a translation is display state, and the
     original message stays the record.
-17. **The duplicate `067` prefix is resolved.** `067_english_display_facts.sql` is renumbered to
-    `079_english_display_facts.sql`; it is re-runnable, so it reapplies cleanly, and the
-    validator no longer grandfathers sequence 67.
+17. **Applied migration identity is retained.** Keep `067_english_display_facts.sql`
+    byte-for-byte unchanged. Its proposed 079/083 copies were redundant and removed.
+    Only the exact historical 067 filename pair is grandfathered. New 083 is instead
+    the atomic confirmed-message transaction, not a repeated English-display migration.
 18. **Translation runs without a live model when explicitly enabled.** `TRANSLATION_STUB_ENABLED`
     answers all four translation paths — second-language drafting, back-translation, fact
     display fields and message translation — from a small deterministic bilingual glossary

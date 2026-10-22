@@ -800,6 +800,14 @@ class ClinicianService:
         risk = await risk_service.get_patient_risk(patient_id)
         return risk.model_dump()
 
+    async def get_patient_timeline(self, clinician_id: UUID, patient_id: UUID) -> Any:
+        """Read bounded source events after checking current patient assignment."""
+        from app.services.patient_timeline_service import PatientTimelineService
+
+        return await PatientTimelineService(self.db, self._assert_patient_assignment).get_timeline(
+            clinician_id, patient_id
+        )
+
     async def get_patient_deep_dive(self, clinician_id: UUID, patient_id: UUID) -> Any:
         """Aggregate all patient data for the Patient Deep Dive view.
 
@@ -1124,9 +1132,13 @@ class ClinicianService:
             return result  # already English: nothing to translate
 
         service = MessageTranslationService(self.db)
-        stored = await service.get_translation(
-            _CHAT_SOURCE_TABLE, str(message_id), CLINICIAN_LOCALE
-        )
+        try:
+            stored = await service.get_translation(
+                _CHAT_SOURCE_TABLE, str(message_id), CLINICIAN_LOCALE
+            )
+        except Exception:
+            logger.warning("Stored transcript translation unavailable", exc_info=False)
+            return result
         if stored and not is_failure_marker(stored):
             return _with_transcript_translation(result, stored)
         if stored and failure_marker_is_recent(stored):

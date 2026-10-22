@@ -39,7 +39,7 @@ export function confirmedTranslationFor(
     const { result } = state;
     // Only wording that is current, needed and passed its guard may be sent as confirmed.
     if (state.body !== body.trim() || !result.needed || !result.translation) return null;
-    if (result.guard_passed !== true) return null;
+    if (result.guard_passed !== true || !result.back_translation || result.model_id === "offline-translation-stub") return null;
     return { text: result.translation, locale: result.target_locale, model_id: result.model_id };
 }
 
@@ -58,7 +58,9 @@ export function sendBlocker(
     if (state.kind === "error") return null;
     if (state.body !== text) return "Your message changed. Preview it again.";
     if (!state.result.needed) return null; // the patient reads the language you wrote in
+    if (state.result.model_id === "offline-translation-stub") return "Offline stub wording cannot be sent as approved patient wording. Check again with the configured model.";
     if (state.result.guard_passed !== true) return null; // sent in English instead, on purpose
+    if (!state.result.back_translation) return "A valid back-translation is required before confirming. Check again.";
     if (!confirmed) return "Confirm the wording the patient will receive.";
     return null;
 }
@@ -222,7 +224,7 @@ export function ReplyPreview({
                             <input
                                 checked={confirmed}
                                 className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-ok)]"
-                                disabled={disabled || !result.back_translation}
+                                disabled={disabled || !result.back_translation || result.model_id === "offline-translation-stub"}
                                 onChange={(event) => onConfirm(event.target.checked)}
                                 type="checkbox"
                             />

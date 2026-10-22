@@ -52,6 +52,31 @@ const reviewResponse = {
 };
 
 describe("SMART import review panel", () => {
+  it("does not invent a zero count while loading or after an initial failure", async () => {
+    let reject!: (reason: Error) => void;
+    get.mockImplementation(() => new Promise((_, fail) => { reject = fail; }));
+    render(<SmartImportReviewPanel patientId="patient-1" />);
+    expect(screen.getByText(/Loading imported fact count/)).toBeInTheDocument();
+    expect(screen.queryByText((_, element) => element?.tagName === "P" && /0 facts in this review state/.test(element.textContent ?? ""))).not.toBeInTheDocument();
+    reject(new Error("Unavailable"));
+    expect(await screen.findByText(/Imported fact count unavailable/)).toBeInTheDocument();
+    expect(screen.queryByText((_, element) => element?.tagName === "P" && /0 facts in this review state/.test(element.textContent ?? ""))).not.toBeInTheDocument();
+  });
+
+  it("shows a genuine empty count only after a successful response", async () => {
+    get.mockResolvedValue({ ...reviewResponse, total_count: 0, facts: [] });
+    render(<SmartImportReviewPanel patientId="patient-1" />);
+    expect(await screen.findByText((_, element) => element?.tagName === "P" && /0 facts in this review state/.test(element.textContent ?? ""))).toBeInTheDocument();
+  });
+
+  it("hides the old count while a different review-state filter loads", async () => {
+    get.mockResolvedValueOnce(reviewResponse).mockImplementation(() => new Promise(() => {}));
+    render(<SmartImportReviewPanel patientId="patient-1" />);
+    await screen.findByText("Metformin");
+    fireEvent.click(screen.getByRole("button", { name: /Approved/ }));
+    expect(screen.getByText(/Loading imported fact count/)).toBeInTheDocument();
+    expect(screen.queryByText((_, element) => element?.tagName === "P" && /1 fact in this review state/.test(element.textContent ?? ""))).not.toBeInTheDocument();
+  });
   it.each([
     ["condition", "Diabetes mellitus tipo 2"],
     ["medication", "Metformin 500"],
@@ -136,11 +161,16 @@ describe("SMART import review panel", () => {
       candidate_fields: { name: "Metformin", dosage: "500 mg daily" },
       available_fields: ["name", "dosage"],
       matches: [],
+      safety_coverage: "Source text/name comparisons only. Drug interactions are not checked.",
+      review_flags: ["No matching local medication was found. The approved list is unchanged."],
     });
     post.mockResolvedValue({});
     fireEvent.click(screen.getByRole("button", { name: /review changes/i }));
 
     await screen.findByText(/no conservative match was found/i);
+    expect(screen.getByRole("region", { name: "Medication comparison coverage" })).toHaveTextContent("Drug interactions are not checked");
+    expect(screen.getByRole("region", { name: "Medication comparison coverage" })).toHaveTextContent("approved list is unchanged");
+    expect(post).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /add local record/i }));
 
     await waitFor(() => {

@@ -336,12 +336,10 @@ function FactCandidate({ fact, selected, onSelect, glosses }: FactCandidateProps
     const translated = isFactTranslatedFromSpanish(fact);
     const untranslated = isFactUntranslated(fact);
     return (
-        <button
-            aria-pressed={selected}
+        <article
             className={`ma-press w-full rounded-xl border p-3.5 text-left ${selected ? "border-primary bg-primary-tint" : "border-line bg-surface hover:bg-surface-2"}`}
-            onClick={() => onSelect(fact.id)}
-            type="button"
         >
+            <button aria-pressed={selected} className="ma-press mb-2 min-h-10 w-full rounded-lg px-2 text-left text-sm font-semibold text-primary hover:bg-primary-tint" onClick={() => onSelect(fact.id)} type="button">Select {factTypeHeading(fact.fact_type)} evidence</button>
             <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
                 <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -371,7 +369,7 @@ function FactCandidate({ fact, selected, onSelect, glosses }: FactCandidateProps
                 <span className="block" lang={fact.display_locale === "es-MX" ? "es-MX" : undefined}>“{citation.excerpt}”{citation.location?.page ? ` · page ${citation.location.page}` : ""}</span>
                 {glosses ? <EvidenceGlossLine gloss={glossFor(glosses, citation.excerpt)} /> : null}
             </span> : null}
-        </button>
+        </article>
     );
 }
 

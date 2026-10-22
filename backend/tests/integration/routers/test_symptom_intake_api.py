@@ -16,10 +16,13 @@ ROOT = "/api/v1/patients/me/symptom-intakes"
 
 @pytest.fixture
 def patient_dependencies():
+    def database() -> MagicMock:
+        return MagicMock()
+
     user = CurrentUser(id=uuid4(), email="synthetic@invalid.test", role="patient")
     previous = dict(app.dependency_overrides)
     app.dependency_overrides[get_current_user] = lambda: user
-    app.dependency_overrides[get_db] = lambda: MagicMock()
+    app.dependency_overrides[get_db] = database
     try:
         yield user
     finally:

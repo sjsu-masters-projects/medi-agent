@@ -18,6 +18,7 @@ import {
 } from "@/store/slices/auth-slice";
 import {
   fetchTodayFeed,
+  defaultFeedSummary,
   markTaskComplete,
   markTaskSkipped,
 } from "@/store/slices/feed-slice";
@@ -268,13 +269,13 @@ export function useFeedData(locale: Locale = "en-US") {
     adherenceStats,
     documentImportError: documentImportError ? getTodayDocumentImportErrorMessage(documentImportError, locale) : null,
     documentImporting,
-    error: feed.error,
+    error: feed.locale === locale ? feed.error : null,
     importDocumentFile,
-    loading: feed.loading,
+    loading: feed.loading || feed.locale !== locale,
     markComplete,
     reportBarrier,
     refreshFeed,
-    summary: feed.summary,
-    tasks: feed.tasks,
+    summary: feed.locale === locale ? feed.summary : defaultFeedSummary,
+    tasks: feed.locale === locale ? feed.tasks : [],
   };
 }

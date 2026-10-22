@@ -3,6 +3,15 @@
 Next.js PWA for MediAgent patients: Today, Records, Chat with Nora and the care team,
 Visits, Reminders and Profile, in en-US and es-MX.
 
+Symptom-intake region labels reflect the saved state (private draft, confirmed,
+cancelled or safety-interrupted), matching the visible localized heading.
+
+Chat preserves saved turns through offline/online reconnection without automatic
+resends. Visible healthy sockets use the existing ping/pong protocol to detect
+stale OPEN connections; hidden-page timer throttling is not treated as failure.
+Records counts appear only after a successful read, not as an invented zero while
+loading or unavailable. Agenda reminder links retain 44px touch height.
+
 ## Local development
 
 From `apps/patient-portal`, install dependencies and run the portal on the default port
@@ -26,6 +35,12 @@ On Node 26, if auth-session tests fail because localStorage is unavailable, run
 `NODE_OPTIONS=--no-experimental-webstorage npm run test` so jsdom supplies browser storage.
 
 ## Behaviour notes
+
+ADR care-team follow-ups label the symptom as quoted original wording and the
+medicine name as recorded. Spanish interface text does not imply that a stored
+English symptom or medicine name has been translated. The same copy applies to
+pending forms and read-only answered/closed history; safety questions and answers
+are unchanged. New Spanish labels await the tracked bilingual wording review.
 
 - Sessions are shared across tabs (one refresh at a time, sign-out in any tab signs out all).
   Defaults: 30 days idle and 90 days absolute, silent with a login notice; override with
@@ -79,6 +94,12 @@ without a hint briefly defer content until the browser locale is resolved.
 Today stores stable failure keys and resolves feedback in the current language,
 including after a language switch; backend error prose is not displayed. Notification
 load/write feedback already follows the same localized-key pattern.
+Today associates loaded feed data with the requested saved locale. A language change
+holds activity content until that locale's response arrives; an older response or
+failure cannot replace the current request. A failed language-specific load shows
+retry feedback without displaying the previous locale's instructions. Refreshes in
+the same locale retain their existing activities. This changes presentation only;
+adherence writes, schedules and approved wording remain owned by existing APIs.
 Today's symptom shortcut opens Nora directly, without an intermediate timeline.
 The existing Symptoms URL remains a compact mobile-friendly handoff and explicitly
 says that patient symptom history is not connected; it must not display invented
@@ -206,7 +227,8 @@ exists; empty; and recent history (up to 5 answered or closed requests from the 
 
 **Localization.** All strings come from `src/content/adr-follow-up-copy.ts` in en-US and es-MX,
 guarded by a key-parity test. The clinician's message, symptom and medication name are shown
-verbatim. The Spanish wording is pending review by a Spanish-fluent reviewer.
+verbatim. ADR Spanish wording received requester-authorized LLM-assisted demo
+meaning-and-safety review on October 19; this is not professional translation validation.
 
 **Errors and drafts.** The server error code is mapped to localized copy: `ADR_REQUEST_CLOSED`
 shows the closed state, and server message text is never displayed. Unsent answers live only in
@@ -248,7 +270,9 @@ hands-free mode prompts are read aloud and listening resumes after playback;
 local pause detection ends an answer after speech and 1.8 seconds of silence when
 Web Audio is available (15 seconds of initial silence; 60-second recording limit).
 The microphone button remains a manual stop. No analysis samples are stored;
-unknown/skip and explicitly accepting a source suggestion are supported. Ambiguous
+the portal permits microphone access only for its own origin, and the browser's
+microphone permission is still required. Camera and geolocation remain disabled.
+Unknown/skip and explicitly accepting a source suggestion are supported. Ambiguous
 numbers need clarification. Private STT recordings are not stored as chat audio;
 private TTS has no chat message ID. Late recordings cannot answer a different
 revision. Detailed fields remain available as a fallback. Read the preview, select

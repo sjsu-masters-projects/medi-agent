@@ -4,14 +4,16 @@ Status: **Verify deployed**. [#188](https://github.com/sjsu-masters-projects/med
 merged as `6026647` on October 17, 2026 (Pacific); PR checks passed. The requester
 confirmed migrations **072**, **073** (#189) and **074** (#192) applied. Backend deployment and both Vercel deployment
 statuses and main CI succeeded for the merge commit.
-Live acceptance and bilingual wording review below remain unrecorded. Current release
-status belongs in [TASKS.md](../TASKS.md), not a duplicate rollout log here.
+Terminal recovery now has deployed reload, multi-tab, Spanish, long-session and
+real in-flight outage evidence. Focused-document rejection presentation still
+needs its correction deployed and rechecked. Current per-slice release status
+belongs in [TASKS.md](../TASKS.md), not a duplicate rollout log here.
 
-OPS-006 phase 1 (branch, not deployed): completion payloads no longer let the reply's `id`
+OPS-006 phase 1 (merged in #194): completion payloads no longer let the reply's `id`
 replace the turn id, refusals carry a `reason` (migration 077), and every turn transition is
 logged by `turn_id`; see [OPS-006](ops-006-workers-and-event-stream.md).
 
-OPS-006 phase 2 (branch `feature/ops-006-phase-2`, not deployed, behind `CHAT_TURNS_VIA_WORKER`): a
+OPS-006 phase 2 (merged in #195, behind `CHAT_TURNS_VIA_WORKER`): a
 turn can be `queued` (migration 078) and executed by a worker service instead of an API instance.
 The contract above is unchanged: the same client message id, request hash, lease, deadline,
 `actions_started` rule, three-attempt limit, document snapshot and completed-reply replay apply.
@@ -23,6 +25,11 @@ recovery show the draft and the final reply from `chat_turn_events` on any insta
 crisis guidance still comes from the deterministic safety floor, shown from the turn's own status
 event whether or not a worker is available. Setup and rollback: [chat-worker-setup](../../docs/chat-worker-setup.md).
 
+October 20 live evidence records completed worker execution on attempt 1 and a
+64-minute connected-view journey, followed by an actual in-flight Wi-Fi outage
+with automatic saved-reply recovery. This is not proof of the complete OPS-006
+load/configuration matrix; current verdicts are in TASKS and the linked evidence.
+
 ## Scope
 
 One increment covers the saved chat-turn lifecycle and document focus. Human
@@ -30,6 +37,13 @@ care-team messaging, LOC-003 translations and PAT-002-B symptom intake remain
 unchanged. Use synthetic tests only; preserve existing conversations and sources.
 
 ## Contract
+
+- Network loss closes the stale view, pauses reconnection attempts while offline
+  and preserves the saved turn. Connectivity restoration re-subscribes with the
+  current token; it never resends a user message automatically. A visible,
+  handshaken socket uses the existing ping/pong protocol every 15 seconds; a
+  missed response closes it for normal bounded recovery. Hidden tabs do not
+  fail heartbeat checks merely because their timers were throttled.
 
 - A client-generated UUID identifies one patient/session turn and its exact text,
   language and selected document. Reusing it with different content is rejected.

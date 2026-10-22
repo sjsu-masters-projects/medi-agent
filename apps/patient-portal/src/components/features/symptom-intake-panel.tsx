@@ -34,10 +34,14 @@ export function SymptomIntakePanel({ locale: appLocale, sourceMessageId, session
     const draft = intake.draft;
     const locale = draft?.locale ?? appLocale;
     const copy = getSymptomIntakeCopy(locale);
-    const [editing, setEditing] = useState<string | null>(null);
+    const [editSelection, setEditSelection] = useState<{ intakeId: string; questionId: string } | null>(null);
+    const editing = editSelection && editSelection.intakeId === draft?.intake_id ? editSelection.questionId : null;
+    function setEditing(questionId: string | null) {
+        setEditSelection(questionId && draft ? { intakeId: draft.intake_id, questionId } : null);
+    }
     const [consent, setConsent] = useState<string | null>(null);
     const [hint, setHint] = useState(false);
-    const [unsaved, setUnsaved] = useState<{ text: string; revision: number } | null>(null);
+    const [unsaved, setUnsaved] = useState<{ text: string; intakeId: string; questionId: string; revision: number } | null>(null);
     const reader = useRef(onReadAloud);
     useLayoutEffect(() => { reader.current = onReadAloud; }, [onReadAloud]);
     const lastSpoken = useRef("");
@@ -66,7 +70,7 @@ export function SymptomIntakePanel({ locale: appLocale, sourceMessageId, session
             } else if (["review", "review before sharing", "revisar", "revisar antes de compartir"].includes(command) && draft.can_review) {
                 setConsent(null); intake.mutate("preview", {});
             } else if (question) {
-                setUnsaved({ text, revision: draft.revision });
+                setUnsaved({ text, intakeId: draft.intake_id, questionId: question.id, revision: draft.revision });
                 if (suggestion !== undefined && ["use this answer", "use that", "usar esta respuesta", "usa esa respuesta"].includes(command)) {
                     save("answered", suggestion, String(suggestion), mode);
                 } else {
@@ -93,15 +97,16 @@ export function SymptomIntakePanel({ locale: appLocale, sourceMessageId, session
         }
     }, [active, handsFree, disabled, draft?.intake_id, draft?.revision, draft?.preview_hash, question?.id, locale, prompt]);
 
-    return <section className="space-y-3 break-words rounded-2xl border border-line bg-surface-2 p-4" aria-label={copy.title} lang={locale}>
+    const title = draft?.status === "confirmed" ? copy.saved : draft?.status === "cancelled" ? copy.cancelled
+        : draft?.status === "interrupted_safety" ? copy.interrupted : copy.title;
+    return <section className="space-y-3 break-words rounded-2xl border border-line bg-surface-2 p-4" aria-label={title} lang={locale}>
         {intake.busy && <p role="status">{copy.loading}</p>}
         {intake.error && <div role="alert"><p>{intakeErrorCopy(String(intake.error), locale)}</p><button className={button} disabled={intake.busy} onClick={() => void intake.reload()}>{copy.reload}</button></div>}
         {intake.pending && <button className={button} disabled={intake.busy} onClick={intake.retry}>{copy.retry}</button>}
         {(!draft || !active) && !intake.busy && !intake.error && <button className={button} disabled={!sourceMessageId || intake.pending}
             onClick={() => sourceMessageId && void intake.start(sourceMessageId)}>{copy.start}</button>}
         {draft && <>
-            <h2 className="text-base font-semibold text-ink">{draft.status === "confirmed" ? copy.saved : draft.status === "cancelled" ? copy.cancelled
-                : draft.status === "interrupted_safety" ? copy.interrupted : copy.title}</h2>
+            <h2 className="text-base font-semibold text-ink">{title}</h2>
             {active && <p className="text-sm text-ink-2">{copy.intro}</p>}
             {draft.existing_draft && active && <p role="status">{copy.existingDraft}</p>}
             {draft.review_requested && <p role="status" className="rounded-xl bg-note-tint p-3 text-note-ink">{copy.urgentReview}</p>}
@@ -128,7 +133,7 @@ export function SymptomIntakePanel({ locale: appLocale, sourceMessageId, session
                     <button className={button} disabled={disabled} onClick={() => save("answered", suggestion, String(suggestion))}>{copy.useSuggestion}</button>
                 </div>}
             </>}
-            {active && unsaved?.revision === draft.revision && <div className="rounded-xl border border-line p-3">
+            {active && unsaved?.intakeId === draft.intake_id && unsaved.questionId === question?.id && unsaved.revision === draft.revision && <div className="rounded-xl border border-line p-3">
                 <p className="text-xs text-muted">{copy.pendingAnswer}</p><p>{unsaved.text}</p>
                 {intake.error && !intake.pending && <button className={button} onClick={() => onRestoreInput?.(unsaved.text)}>{copy.editReply}</button>}
             </div>}

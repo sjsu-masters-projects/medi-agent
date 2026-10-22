@@ -88,5 +88,7 @@ export interface ConversationDraft {
   body: string;
   carePlanItemId?: string;
   clientMessageId?: string;
+  /** Immutable translated wording retained with an uncertain send's retry key. */
+  confirmedTranslation?: ConfirmedTranslation | null;
   failure?: "uncertain" | "mismatch" | "invalid" | "activityUnavailable";
 }

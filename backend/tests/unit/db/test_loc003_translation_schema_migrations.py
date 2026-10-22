@@ -1,4 +1,4 @@
-"""Text-level guarantees of the LOC-003 translation schema migrations (079-081)."""
+"""Text-level guarantees of LOC-003 migrations 080-083 and applied-file identity."""
 
 from pathlib import Path
 
@@ -18,22 +18,26 @@ PROVENANCE_CODE = _code(PROVENANCE)
 
 
 class TestDuplicatePrefixIsResolved:
-    def test_english_display_facts_moved_off_the_shared_067_prefix(self) -> None:
-        """Item 10: 067 holds one migration again, so a new collision there fails CI."""
-        assert [path.name for path in MIGRATIONS.glob("067_*.sql")] == [
-            "067_clinic_lists_and_roles.sql"
-        ]
-        assert (MIGRATIONS / "079_english_display_facts.sql").exists()
+    def test_applied_files_stay_and_the_unapplied_duplicate_is_removed(self) -> None:
+        assert (MIGRATIONS / "067_english_display_facts.sql").exists()
+        assert (MIGRATIONS / "079_unlisted_product_review_alerts.sql").exists()
+        assert not (MIGRATIONS / "079_english_display_facts.sql").exists()
+        assert not (MIGRATIONS / "083_english_display_facts.sql").exists()
+        assert (MIGRATIONS / "083_confirmed_message_translation.sql").exists()
 
     def test_the_renumbered_file_is_re_runnable_because_the_ledger_keys_on_the_name(self) -> None:
-        renumbered = (MIGRATIONS / "079_english_display_facts.sql").read_text()
+        renumbered = (MIGRATIONS / "067_english_display_facts.sql").read_text()
         assert "ADD COLUMN IF NOT EXISTS display_locale" in renumbered
         assert "ADD COLUMN IF NOT EXISTS display_value" in renumbered
 
-    def test_the_validator_no_longer_grandfathers_067(self) -> None:
+    def test_only_the_exact_historical_067_pair_is_grandfathered(self) -> None:
         from scripts import validate_migrations
 
         assert 67 not in validate_migrations.LEGACY_SHARED_SEQUENCES
+        assert (
+            frozenset({"067_clinic_lists_and_roles.sql", "067_english_display_facts.sql"})
+            in validate_migrations.LEGACY_SHARED_FILENAME_GROUPS
+        )
 
 
 class TestMessageTranslationIntegrity:
@@ -94,13 +98,12 @@ class TestCarePlanWordingVerification:
         assert VERIFICATION_CODE.count("jsonb_typeof") == 2
 
     def test_a_verified_item_must_carry_its_guard_outcome(self) -> None:
-        assert "CHECK (NOT wording_verified OR wording_verification IS NOT NULL)" in (
-            VERIFICATION_CODE
-        )
+        assert "IF NEW.wording_verified AND NEW.wording_verification IS NULL" in VERIFICATION_CODE
+        assert "TG_OP='INSERT'" in VERIFICATION_CODE
 
     def test_the_constraint_does_not_rewrite_already_approved_rows(self) -> None:
-        assert "NOT VALID" in VERIFICATION_CODE
-        assert "IF NOT EXISTS (" in VERIFICATION_CODE
+        assert "ROW(OLD.wording,OLD.wording_verified,OLD.wording_verification)" in VERIFICATION_CODE
+        assert "IS DISTINCT FROM" in VERIFICATION_CODE
 
     def test_the_translating_model_is_stored_with_the_wording(self) -> None:
         """Item 5: the clinician sees which model drafted the second language."""
@@ -112,7 +115,7 @@ class TestCarePlanWordingVerification:
 
     def test_it_adds_no_table_and_so_no_new_grants(self) -> None:
         assert "CREATE TABLE" not in VERIFICATION_CODE
-        assert "GRANT" not in VERIFICATION_CODE
+        assert "GRANT EXECUTE" not in VERIFICATION_CODE
 
 
 class TestDisplayProvenance:

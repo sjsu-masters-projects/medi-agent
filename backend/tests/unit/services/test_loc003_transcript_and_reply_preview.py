@@ -336,77 +336,88 @@ class TestReplyPreview:
 
 @pytest.mark.asyncio
 class TestConfirmedTranslationOnSend:
-    async def test_the_confirmed_wording_is_what_is_stored(self) -> None:
+    async def test_the_confirmation_reaches_one_atomic_send(self) -> None:
         service = _conversation_service()
-        confirmed = ConfirmedTranslation(text=REPLY_ES, locale="es-MX", model_id="gemini-test")
-        with patch(
-            "app.services.message_translation.MessageTranslationService.store_gloss",
-            AsyncMock(return_value=None),
-        ) as store:
-            await service.store_confirmed_translation(
-                str(CONVERSATION), str(MESSAGE), REPLY, confirmed
-            )
-        stored = store.await_args.kwargs
-        assert stored["translated_text"] == REPLY_ES
-        assert stored["target_locale"] == "es-MX"
-        assert stored["guard_passed"] is True
-        assert stored["model_id"] == "gemini-test"
-
-    async def test_the_server_rechecks_the_guards_rather_than_trusting_the_browser(self) -> None:
-        service = _conversation_service()
-        tampered = ConfirmedTranslation(text="Toma 250 mg dos veces al día", locale="es-MX")
-        store = AsyncMock()
-        with (
-            patch("app.services.message_translation.MessageTranslationService.store_gloss", store),
-            pytest.raises(ValidationError, match="number or unit differs"),
-        ):
-            await service.store_confirmed_translation(
-                str(CONVERSATION), str(MESSAGE), REPLY, tampered
-            )
-        store.assert_not_awaited()
-
-    async def test_a_confirmed_translation_in_the_source_language_is_rejected(self) -> None:
-        service = _conversation_service()
-        same = ConfirmedTranslation(text=REPLY, locale="en-US")
-        with pytest.raises(ValidationError, match="patient's language"):
-            await service.store_confirmed_translation(str(CONVERSATION), str(MESSAGE), REPLY, same)
-
-    async def test_send_stores_the_confirmation_and_reports_it_on_the_message(self) -> None:
-        service = _conversation_service()
-        service._call = AsyncMock(return_value={"id": str(MESSAGE), "body": REPLY})  # type: ignore[method-assign]
-        service.store_confirmed_translation = AsyncMock()  # type: ignore[method-assign]
+        saved = {
+            "id": str(MESSAGE),
+            "translation": REPLY_ES,
+            "translation_locale": "es-MX",
+            "translation_guard_passed": True,
+        }
+        service._call = AsyncMock(return_value=saved)
         data = ConversationSend(
             body=REPLY,
             client_message_id=UUID(int=7),
-            confirmed_translation=ConfirmedTranslation(text=REPLY_ES, locale="es-MX"),
-        )
-        result = await service.send(CONVERSATION, data)
-        service.store_confirmed_translation.assert_awaited_once()
-        assert result["translation"] == REPLY_ES
-        assert result["translation_locale"] == "es-MX"
-        assert result["translation_guard_passed"] is True
-
-    async def test_the_confirmed_wording_never_reaches_the_send_rpc(self) -> None:
-        """The database function has no such parameter; sending one would be rejected."""
-        service = _conversation_service()
-        service._call = AsyncMock(return_value={"id": str(MESSAGE)})  # type: ignore[method-assign]
-        service.store_confirmed_translation = AsyncMock()  # type: ignore[method-assign]
-        await service.send(
-            CONVERSATION,
-            ConversationSend(
-                body=REPLY,
-                client_message_id=UUID(int=7),
-                confirmed_translation=ConfirmedTranslation(text=REPLY_ES, locale="es-MX"),
+            confirmed_translation=ConfirmedTranslation(
+                text=REPLY_ES, locale="es-MX", model_id="gemini-test"
             ),
         )
-        assert "confirmed_translation" not in service._call.await_args.args[1]
+        assert await service.send(CONVERSATION, data) == saved
+        calls = service._call.await_args_list
+        assert [call.args[0] for call in calls] == ["messages", "send"]
+        assert calls[-1].args[1]["confirmed_translation"] == {
+            "text": REPLY_ES,
+            "locale": "es-MX",
+            "model_id": "gemini-test",
+            "source_locale": "en-US",
+        }
 
-    async def test_a_send_without_a_confirmation_stores_nothing_extra(self) -> None:
+    @pytest.mark.parametrize(
+        "confirmed",
+        [
+            ConfirmedTranslation(text="Toma 250 mg", locale="es-MX"),
+            ConfirmedTranslation(text=REPLY, locale="en-US"),
+            ConfirmedTranslation(
+                text=REPLY_ES, locale="es-MX", model_id="offline-translation-stub"
+            ),
+        ],
+    )
+    async def test_invalid_confirmation_is_rejected_before_send(self, confirmed) -> None:
         service = _conversation_service()
-        service._call = AsyncMock(return_value={"id": str(MESSAGE)})  # type: ignore[method-assign]
-        service.store_confirmed_translation = AsyncMock()  # type: ignore[method-assign]
+        with pytest.raises(ValidationError):
+            await service.send(
+                CONVERSATION,
+                ConversationSend(
+                    body=REPLY, client_message_id=UUID(int=7), confirmed_translation=confirmed
+                ),
+            )
+        assert all(call.args[0] != "send" for call in service._call.await_args_list)
+
+    async def test_patient_cannot_supply_a_clinician_facing_translation(self) -> None:
+        from app.core.exceptions import AuthorizationError
+
+        service = _conversation_service()
+        service.actor = CurrentUser(id=PATIENT, email="p@synthetic.invalid", role="patient")
+        with pytest.raises(AuthorizationError):
+            await service.send(
+                CONVERSATION,
+                ConversationSend(
+                    body="Me duele la cabeza",
+                    client_message_id=UUID(int=7),
+                    confirmed_translation=ConfirmedTranslation(text="I feel fine", locale="en-US"),
+                ),
+            )
+        service._call.assert_not_awaited()
+
+    async def test_changed_patient_locale_rejects_before_delivery(self) -> None:
+        service = _conversation_service(patient_locale="en-US")
+        with pytest.raises(ValidationError):
+            await service.send(
+                CONVERSATION,
+                ConversationSend(
+                    body=REPLY,
+                    client_message_id=UUID(int=7),
+                    confirmed_translation=ConfirmedTranslation(text=REPLY_ES, locale="es-MX"),
+                ),
+            )
+        assert all(call.args[0] != "send" for call in service._call.await_args_list)
+
+    async def test_a_send_without_confirmation_uses_existing_payload(self) -> None:
+        service = _conversation_service()
+        service._call = AsyncMock(return_value={"id": str(MESSAGE)})
         result = await service.send(
             CONVERSATION, ConversationSend(body=REPLY, client_message_id=UUID(int=7))
         )
-        service.store_confirmed_translation.assert_not_awaited()
+        service._call.assert_awaited_once()
+        assert "confirmed_translation" not in service._call.await_args.args[1]
         assert "translation" not in result

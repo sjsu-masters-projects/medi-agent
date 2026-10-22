@@ -3,6 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 import { Modal } from "@/components/ui/modal";
 
 describe("Clinician review modal", () => {
+    it("restores an explicit opener when async work lost its focus before mounting", () => {
+        const opener = document.createElement("button");
+        document.body.append(opener);
+        const returnFocusRef = { current: opener };
+        const view = render(<Modal open title="Delayed review" onClose={vi.fn()} returnFocusRef={returnFocusRef}><button>Cancel</button></Modal>);
+        view.rerender(<Modal open={false} title="Delayed review" onClose={vi.fn()} returnFocusRef={returnFocusRef}><button>Cancel</button></Modal>);
+        expect(opener).toHaveFocus();
+        opener.remove();
+    });
     it("labels the dialog, traps focus, closes on Escape, and returns focus to the opener", () => {
         const close = vi.fn();
         const opener = document.createElement("button");

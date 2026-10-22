@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
     OriginalText,
@@ -16,6 +17,7 @@ import {
 } from "@/components/features/evidence-gloss";
 import {
     factFields,
+    ExtractedFactCandidates,
     isFactTranslatedFromSpanish,
     isFactUntranslated,
 } from "@/components/features/extracted-fact-candidates";
@@ -50,6 +52,11 @@ afterEach(cleanup);
 /* ── Item 5: "may contain errors" and the model behind the text ─────────── */
 
 describe("translation provenance", () => {
+    it("labels English patient preview as translated from Spanish", () => {
+        render(<PatientPhonePreview locale="en-US" wording={{ title: "Drink water" }} translated />);
+        expect(screen.getByText("Translated from Spanish")).toBeInTheDocument();
+        expect(screen.queryByText("Translated from English")).not.toBeInTheDocument();
+    });
     it("always offers the model's caveat beside translated text", async () => {
         render(<TranslationBadge modelId="gemini-test" />);
         expect(screen.getByText("Translated from Spanish")).toBeInTheDocument();
@@ -94,6 +101,17 @@ function fact(changes: Partial<ExtractedDocumentFact> = {}): ExtractedDocumentFa
 }
 
 describe("untranslated facts", () => {
+    it("keeps translation disclosures separate from evidence selection", () => {
+        const select = vi.fn();
+        const { container } = render(<ExtractedFactCandidates facts={[fact({
+            display_locale: "es-MX", display_value: { description: "Drink water" },
+        })]} selectedFactId={null} onSelect={select} />);
+        expect(container.querySelector("button button")).toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: /may contain errors/i }));
+        expect(select).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: /Select.*evidence/i }));
+        expect(select).toHaveBeenCalledWith("fact-1");
+    });
     it("treats a Spanish fact with no English display fields as untranslated", () => {
         expect(isFactUntranslated(fact({ display_locale: "es-MX" }))).toBe(true);
         expect(isFactUntranslated(fact({ display_locale: "es-MX", display_value: {} }))).toBe(true);
@@ -197,8 +215,8 @@ function gloss(changes: Partial<EvidenceGloss> = {}): EvidenceGloss {
     };
 }
 
-function GlossHarness({ excerpts }: { excerpts: Array<string | null | undefined> }) {
-    const glosses = useEvidenceGlosses("patient-1", excerpts);
+function GlossHarness({ excerpts, patientId = "patient-1" }: { excerpts: Array<string | null | undefined>; patientId?: string }) {
+    const glosses = useEvidenceGlosses(patientId, excerpts);
     return (
         <>
             {excerpts.map((excerpt, index) => (
@@ -212,6 +230,31 @@ function GlossHarness({ excerpts }: { excerpts: Array<string | null | undefined>
 }
 
 describe("evidence glosses", () => {
+    it("retries canceled in-flight excerpts when the list grows", async () => {
+        glossApi.mockReturnValueOnce(new Promise(() => {}));
+        glossApi.mockResolvedValue({ glosses: [gloss()] });
+        const { rerender } = render(<GlossHarness excerpts={[SPANISH_EXCERPT]} />);
+        await waitFor(() => expect(glossApi).toHaveBeenCalledTimes(1));
+        rerender(<GlossHarness excerpts={[SPANISH_EXCERPT, "No tome agua"]} />);
+        expect(await screen.findByText("Take 1 tablet of Metformina 500 mg twice daily")).toBeInTheDocument();
+        expect(glossApi.mock.calls[1][1]).toContain(SPANISH_EXCERPT);
+    });
+
+    it("does not strand an excerpt after StrictMode cleanup", async () => {
+        glossApi.mockResolvedValue({ glosses: [gloss()] });
+        render(<StrictMode><GlossHarness excerpts={[SPANISH_EXCERPT]} /></StrictMode>);
+        expect(await screen.findByText("Take 1 tablet of Metformina 500 mg twice daily")).toBeInTheDocument();
+    });
+
+    it("does not reuse the previous patient's displayed gloss", async () => {
+        glossApi.mockResolvedValueOnce({ glosses: [gloss()] });
+        const { rerender } = render(<GlossHarness excerpts={[SPANISH_EXCERPT]} />);
+        await screen.findByText("In English");
+        glossApi.mockReturnValue(new Promise(() => {}));
+        rerender(<GlossHarness excerpts={[SPANISH_EXCERPT]} patientId="patient-2" />);
+        expect(screen.queryByText("In English")).not.toBeInTheDocument();
+        await waitFor(() => expect(glossApi).toHaveBeenLastCalledWith("patient-2", [SPANISH_EXCERPT]));
+    });
     it("only asks about text that reads as Spanish", () => {
         expect(mayNeedGloss(SPANISH_EXCERPT)).toBe(true);
         expect(mayNeedGloss("Take 1 tablet twice daily by mouth")).toBe(false);
@@ -393,6 +436,15 @@ function ready(overrides: Partial<PreviewState & { result: unknown }> = {}): Pre
 }
 
 describe("reply preview gate", () => {
+    it("never confirms offline stub wording or missing back-translation", () => {
+        for (const overrides of [{ model_id: "offline-translation-stub" }, { back_translation: null }]) {
+            const state = ready();
+            if (state.kind !== "ready") throw new Error("Expected ready fixture");
+            const blocked = { ...state, result: { ...state.result, ...overrides } };
+            expect(sendBlocker(blocked, BODY, true)).not.toBeNull();
+            expect(confirmedTranslationFor(blocked, BODY, true)).toBeNull();
+        }
+    });
     it("asks for a preview before the first send", () => {
         expect(sendBlocker({ kind: "idle" }, BODY, false)).toMatch(/Preview what the patient will receive/);
     });

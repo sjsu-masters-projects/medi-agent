@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { Card, Modal, Skeleton } from "@/components/ui";
 import { ApprovalSeal } from "@/components/ui/approval-seal";
@@ -9,6 +9,79 @@ import { api } from "@/services/api";
 import type { RootState } from "@/store/store";
 
 type ReviewState = "pending_review" | "approved" | "rejected";
+
+interface MedicationReferenceResult {
+  fact_id: string;
+  status: "found" | "not_found" | "unavailable";
+  subject: string | null;
+  rxcui: string | null;
+  retrieved_at: string;
+  references: Array<{
+    source: "medlineplus" | "dailymed";
+    locale: "en-US" | "es-MX";
+    title: string;
+    url: string;
+    summary: string;
+    source_version: string | null;
+    source_updated: string | null;
+    checked_at: string;
+    stale: boolean;
+  }>;
+}
+
+function ReferenceTime({ value }: { value: string | null }) {
+  if (!value || !Number.isFinite(Date.parse(value))) return <>Unknown</>;
+  return <time dateTime={value}>{value.slice(0, 10).length === value.length ? value : new Date(value).toLocaleString("en-US")}</time>;
+}
+
+function MedicationReferencePanel({ patientId, factId, token }: { patientId: string; factId: string; token: string }) {
+  const [result, setResult] = useState<MedicationReferenceResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const generation = useRef(0);
+  useEffect(() => () => { generation.current += 1; }, []);
+
+  async function lookup() {
+    const request = ++generation.current;
+    setLoading(true);
+    setFailed(false);
+    setResult(null);
+    try {
+      const response = await api.get<MedicationReferenceResult>(
+        `/api/v1/smart/patients/${encodeURIComponent(patientId)}/facts/${encodeURIComponent(factId)}/medication-reference`, { token },
+      );
+      if (request !== generation.current) return;
+      if (response.fact_id !== factId) throw new Error("Reference scope changed");
+      setResult(response);
+    } catch {
+      if (request === generation.current) setFailed(true);
+    } finally {
+      if (request === generation.current) setLoading(false);
+    }
+  }
+
+  return <section aria-label="Medication reference" className="space-y-3 rounded-xl border border-line p-3 text-sm text-ink-2">
+    <button type="button" disabled={loading} onClick={() => void lookup()} className="min-h-9 rounded-lg border border-line-strong px-3 py-2 font-medium text-primary disabled:opacity-50">{loading ? "Loading medication reference…" : result || failed ? "Retry medication reference" : "Medication reference"}</button>
+    <p className="text-xs text-muted">Optional external public lookup sends only the recorded drug name to the existing reference providers; patient identity and chart details are not sent. A resolved RxNorm ingredient concept is not an exact formulation match or proof of product identity, therapeutic equivalence, interaction safety or clinical approval. This lookup does not apply values or change the chart or imported record.</p>
+    {loading && <p role="status">Loading public medication references…</p>}
+    {failed && <p role="alert">Medication reference unavailable. Retry to check the public sources; no safety conclusion can be drawn.</p>}
+    {result && <>
+      <p>Reference subject: {result.subject ?? "Unknown"} · Resolved RxNorm ingredient: {result.rxcui ?? "Unknown"}</p>
+      <p className="text-xs text-muted">Lookup returned: <ReferenceTime value={result.retrieved_at} />. Source check dates below are not the last clinical review.</p>
+      {result.status === "unavailable" && <p role="alert">Public reference lookup unavailable. Any cached references below retain their own check dates.</p>}
+      {result.status === "not_found" && <p role="status">No public reference found for this candidate. This does not mean the product is safe or has no interactions.</p>}
+      {result.references.length > 0 && <p className="text-xs text-muted">Up to 3 references; excerpts are limited to 1,200 characters each. Open the official source for the full reference.</p>}
+      <ul className="space-y-3">
+        {result.references.map((reference) => <li key={`${reference.source}:${reference.locale}:${reference.url}`} className="space-y-1 border-t border-line pt-3">
+          <a className="font-medium text-primary underline" href={reference.url} target="_blank" rel="noopener noreferrer">{reference.title || reference.source} ({reference.locale})</a>
+          <p className="whitespace-pre-wrap break-words">{reference.summary}</p>
+          <p className="text-xs text-muted">Source checked: <ReferenceTime value={reference.checked_at} /> · Source updated: <ReferenceTime value={reference.source_updated} /> · Source version: {reference.source_version ?? "Unknown"}</p>
+          <p className={reference.stale ? "text-xs font-medium text-warn-ink" : "text-xs text-muted"}>{reference.stale ? "Stale cached reference — verify the official source before relying on it." : "Within the reference cache age window; this is not proof of clinical currency or review."}</p>
+        </li>)}
+      </ul>
+    </>}
+  </section>;
+}
 
 interface ReviewSource {
   issuer: string;
@@ -43,6 +116,8 @@ interface ReconciliationMatch {
 }
 
 interface ReconciliationPreview {
+  review_flags?: string[];
+  safety_coverage?: string | null;
   fact_id: string;
   fact_type: string;
   projectable: boolean;
@@ -355,6 +430,7 @@ export function SmartImportReviewPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyFactId, setBusyFactId] = useState<string | null>(null);
+  const reconciliationTrigger = useRef<HTMLButtonElement | null>(null);
   const [rejecting, setRejecting] = useState<ReviewFact | null>(null);
   const [correcting, setCorrecting] = useState<ReviewFact | null>(null);
   const [reconciling, setReconciling] = useState<{
@@ -442,8 +518,9 @@ export function SmartImportReviewPanel({
     }
   }
 
-  async function openReconciliation(fact: ReviewFact) {
+  async function openReconciliation(fact: ReviewFact, trigger: HTMLButtonElement) {
     if (!token) return;
+    reconciliationTrigger.current = trigger;
     setBusyFactId(fact.id);
     setError(null);
     try {
@@ -744,8 +821,13 @@ export function SmartImportReviewPanel({
             {stateLabel(reviewState)} imported facts
           </h3>
           <p className="text-[13px] text-muted">
-            <span className="font-mono">{total}</span> facts in this review state. Source data remains synthetic
-            and read-only.
+            {loading ? (
+              "Loading imported fact count…"
+            ) : error ? (
+              "Imported fact count unavailable."
+            ) : (
+              <><span className="font-mono">{total}</span> {total === 1 ? "fact" : "facts"} in this review state.</>
+            )} Source data remains synthetic and read-only.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3 border-b border-line bg-surface-2 px-5 py-3">
@@ -940,7 +1022,7 @@ export function SmartImportReviewPanel({
                           <button
                             className={PRIMARY_BUTTON}
                             disabled={busyFactId === fact.id}
-                            onClick={() => void openReconciliation(fact)}
+                            onClick={(event) => void openReconciliation(fact, event.currentTarget)}
                             type="button"
                           >
                             <Icon name="history" className="h-4 w-4" /> Review
@@ -1089,6 +1171,7 @@ export function SmartImportReviewPanel({
         }}
         open={Boolean(reconciling)}
         title="Reconcile imported record"
+        returnFocusRef={reconciliationTrigger}
       >
         {reconciling && (
           <div className="space-y-5">
@@ -1097,6 +1180,11 @@ export function SmartImportReviewPanel({
               values never clear the local chart; this action is recorded with
               the original source version.
             </p>
+            {reconciling.preview.safety_coverage && <section aria-label="Medication comparison coverage" className="rounded-xl border border-warn-line bg-warn-soft p-3 text-sm text-ink-2">
+              <p>{reconciling.preview.safety_coverage}</p>
+              {!!reconciling.preview.review_flags?.length && <ul className="mt-2 list-disc space-y-1 pl-5">{reconciling.preview.review_flags.map((flag) => <li key={flag}>{flag}</li>)}</ul>}
+            </section>}
+            {reconciling.fact.fact_type === "medication" && token && <MedicationReferencePanel key={`${patientId}:${reconciling.fact.id}:${token}`} patientId={patientId} factId={reconciling.fact.id} token={token} />}
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-[14px] border border-line bg-surface-2 p-4">
                 <h3 className="text-[13px] font-semibold text-ink">

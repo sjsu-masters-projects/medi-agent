@@ -1,5 +1,7 @@
 """Short-lived, actor-bound snapshots prevent bulk reads consuming new arrivals."""
 
+import hashlib
+import hmac
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -11,6 +13,19 @@ from app.models.auth import CurrentUser
 
 _AUDIENCE = "mediagent-notification-centre"
 _ISSUER = "mediagent-notification-snapshot"
+
+
+def _signing_key() -> bytes:
+    """Separate snapshots from login JWTs even before an independent key is set.
+
+    Derive from either secret, so accidentally configuring the same root secret
+    cannot turn notification snapshots into authentication tokens. All API
+    replicas must use the same root. Never accept the legacy raw JWT key.
+    """
+    root = settings.notification_token_signing_secret or settings.supabase_jwt_secret
+    return hmac.digest(
+        root.encode("utf-8"), b"mediagent:notification-centre:snapshot:v1", hashlib.sha256
+    )
 
 
 def issue_token(actor: CurrentUser, purpose: str, data: Any) -> str:
@@ -26,7 +41,7 @@ def issue_token(actor: CurrentUser, purpose: str, data: Any) -> str:
             "iat": now,
             "exp": now + timedelta(minutes=15),
         },
-        settings.supabase_jwt_secret,
+        _signing_key(),
         algorithm="HS256",
     )
 
@@ -35,7 +50,7 @@ def read_token(actor: CurrentUser, purpose: str, token: str) -> Any:
     try:
         payload = jwt.decode(
             token,
-            settings.supabase_jwt_secret,
+            _signing_key(),
             algorithms=["HS256"],
             audience=_AUDIENCE,
             issuer=_ISSUER,

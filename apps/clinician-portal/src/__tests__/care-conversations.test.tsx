@@ -7,7 +7,7 @@ import type { CareConversation, CareConversationMessage } from "@/types/care-con
 const auth = vi.hoisted(() => ({ accessToken: "synthetic-token", user: { id: "patient" } }));
 vi.mock("react-redux", () => ({ useSelector: (select: (state: unknown) => unknown) => select({ auth }) }));
 vi.mock("@/services/care-conversations", () => ({
-  careConversations: { recipients: vi.fn(), list: vi.fn(), open: vi.fn(), messages: vi.fn(), send: vi.fn(), read: vi.fn(), translate: vi.fn() },
+  careConversations: { recipients: vi.fn(), list: vi.fn(), open: vi.fn(), messages: vi.fn(), send: vi.fn(), read: vi.fn(), translate: vi.fn(), preview: vi.fn() },
 }));
 const thread: CareConversation = {
   id: "thread-one", patient_id: "patient", clinician_id: "clinician-one",
@@ -52,7 +52,7 @@ describe("non-blocking message translation", () => {
     await open();
     expect(await screen.findByText("Tomo 5 mg al dia")).toBeInTheDocument();
     expect(screen.getByText("Translating…")).toBeInTheDocument();
-    expect(careConversations.translate).toHaveBeenCalledWith("synthetic-token", "thread-one", "m1");
+    await waitFor(() => expect(careConversations.translate).toHaveBeenCalledWith("synthetic-token", "thread-one", "m1"));
     await act(async () => finish(result("m1")));
     await screen.findByText("I take 5 mg daily");
     expect(screen.queryByText("Translating…")).not.toBeInTheDocument();
@@ -92,6 +92,33 @@ describe("non-blocking message translation", () => {
 });
 
 describe("human conversations", () => {
+  it("retains exact confirmed translation for an uncertain clinician retry after switching threads", async () => {
+    const other = { ...thread, id: "thread-two", patient_name: "Second Patient" };
+    vi.mocked(careConversations.list).mockResolvedValue([thread, other]);
+    vi.mocked(careConversations.preview).mockResolvedValue({
+      needed: true, target_locale: "es-MX", translation: "Toma 500 mg", back_translation: "Take 500 mg",
+      guard_passed: true, guard_failure_code: null, model_id: "test-model",
+    });
+    vi.mocked(careConversations.send).mockRejectedValueOnce(new Error("uncertain"));
+    render(<CareConversations audience="clinician" />);
+    fireEvent.click(await screen.findByRole("button", { name: /Synthetic Patient · Clinic One/ }));
+    await screen.findByText("Newest reply");
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Take 500 mg" } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    fireEvent.click(await screen.findByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByText(/Send could not be confirmed/);
+    const first = vi.mocked(careConversations.send).mock.calls[0];
+    expect(first.at(-1)).toEqual({ text: "Toma 500 mg", locale: "es-MX", model_id: "test-model" });
+    fireEvent.click(screen.getByRole("button", { name: /Second Patient · Clinic One/ }));
+    await screen.findByText("Newest reply");
+    fireEvent.click(screen.getByRole("button", { name: /Synthetic Patient · Clinic One/ }));
+    const retry = await screen.findByRole("button", { name: "Retry" });
+    await waitFor(() => expect(retry).toBeEnabled());
+    fireEvent.click(retry);
+    await waitFor(() => expect(careConversations.send).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(careConversations.send).mock.calls[1]).toEqual(first);
+  });
   it("shows a passed English translation of a Spanish patient message, wrapping long words", async () => {
     vi.mocked(careConversations.messages).mockResolvedValue({
       items: [{ ...message("newest", "Tomo 5 mg al dia"), sender_role: "patient", translation: "I take 5 mg daily", translation_locale: "en-US", translation_guard_passed: true }],

@@ -28,18 +28,36 @@ COMMENT ON COLUMN public.care_plan_items.translation_model_id IS
   'LOC-003 item 5: the model that drafted the second language, shown to the clinician '
   'beside the translated wording so machine wording is never read as reviewed wording.';
 
--- A verified item must carry its guard outcome, and an unverified one must not keep a
--- stale record of a check that no longer describes the stored wording. Added NOT VALID so
--- rows approved before this migration are not rewritten; new writes are checked.
+-- A NOT VALID CHECK still rejects cache-only updates to old verified rows.
+-- Require records for new/changed verification, retaining unchanged legacy approvals.
+ALTER TABLE public.care_plan_items
+  DROP CONSTRAINT IF EXISTS care_plan_items_wording_verification_present;
+CREATE OR REPLACE FUNCTION private.require_wording_verification_record()
+RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
+BEGIN
+  IF NEW.wording_verified AND NEW.wording_verification IS NULL THEN
+    IF TG_OP='INSERT' THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='Verified wording requires a verification record', CONSTRAINT='care_plan_items_wording_verification_present';
+    ELSIF ROW(NEW.wording,NEW.wording_verified,NEW.wording_verification) IS DISTINCT FROM
+          ROW(OLD.wording,OLD.wording_verified,OLD.wording_verification) THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='Verified wording requires a verification record', CONSTRAINT='care_plan_items_wording_verification_present';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION private.require_wording_verification_record() FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS care_plan_items_wording_verification_present ON public.care_plan_items;
+CREATE TRIGGER care_plan_items_wording_verification_present
+  BEFORE INSERT OR UPDATE ON public.care_plan_items
+  FOR EACH ROW EXECUTE FUNCTION private.require_wording_verification_record();
+
 DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_catalog.pg_constraint
-    WHERE conrelid = 'public.care_plan_items'::regclass
-      AND conname = 'care_plan_items_wording_verification_present'
-  ) THEN
-    ALTER TABLE public.care_plan_items
-      ADD CONSTRAINT care_plan_items_wording_verification_present
-      CHECK (NOT wording_verified OR wording_verification IS NOT NULL) NOT VALID;
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_trigger
+      WHERE tgrelid='public.care_plan_items'::regclass
+        AND tgname='care_plan_items_wording_verification_present' AND NOT tgisinternal)
+     OR has_function_privilege('anon','private.require_wording_verification_record()','EXECUTE')
+     OR has_function_privilege('authenticated','private.require_wording_verification_record()','EXECUTE') THEN
+    RAISE EXCEPTION 'Wording verification guard must remain present and backend-only';
   END IF;
 END $$;

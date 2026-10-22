@@ -121,3 +121,338 @@ override was reset. Physical microphone, bilingual/source-locale, authenticated
 access-denial, connectivity interruption, new SQL handoff and deployed acceptance
 remain pending until recorded. No new screenshot is evidence of a completed path
 unless its corresponding state is described here.
+
+
+## October 18 continuation — authorized SQL and authenticated handoff
+
+The requester authorized only `071_confirmed_symptom_handoff.sql` with SHA-256
+`f690b788d5f29c3d7583f2fe8cc43b7a51a6af817c276d6839cc9c9ab2ded36b`.
+It was applied in the authenticated synthetic-project SQL editor with prerequisite
+checksum guards, the existing advisory transaction lock and its ledger insert in
+one transaction. The returned ledger row and a separate read-only preflight match.
+Preflight passes 059/060/065/071, candidate-1 eligibility, trigger presence and
+browser report/task write denial. No other remote migration, seed/reset, manual
+deployment or merge was performed. There were zero existing due ADR retry tasks
+before starting the local backend with both intake and retry flags enabled.
+
+The patient confirmed the prepared preview through the checkbox/button. Report
+`6675bec7-c256-4c1f-ae29-ad06f24e2ea6` has exactly one completed task
+`c35c66d2-3065-4639-b7d7-8b8fc2489726`, ADR draft
+`c6860843-bf91-4bfb-b4bf-5a781d112c7f` and one Elena review notice. Its exact
+active-list product is Metformin. The unlisted herbal tea is absent from medications.
+These are synthetic application records, not a professional clinical judgment.
+
+Authenticated Elena → Maya → Symptoms shows the new Patient-confirmed summary,
+3/10 severity and unverified testimony. ADR opens the new Metformin case awaiting
+review. Its score is 0 with all ten Naranjo inputs missing, visibly labelled decision
+support; no reviewer decision or causality evidence was fabricated. The canonical
+unassigned José fixture shows Access denied with no patient record content. Its
+normal authorization audit records `ASSIGNMENT_EXISTS_FOR_DIFFERENT_PATIENT_ONLY`.
+
+Screenshots: `migration-071-applied.png`, `clinician-confirmed-summary.png`,
+`clinician-adr-draft.png` under the local verification directory. The patient session
+expired during the next refresh and a sign-in tab is prepared; further authenticated
+patient recovery, Spanish and physical voice checks await sign-in.
+
+All PR checks on code commit `708403c` passed, including full backend coverage and
+shards, both portals, migration syntax and security checks. The PR description's
+required checklist was restored and its policy job passed on rerun. The new intake
+SQL suites are now added to the required PostgreSQL CI matrix with 17/8 minimum
+case counts and zero-skips enforcement; workflow YAML and the required-summary
+edge parse correctly. A new CI result is needed for that addition.
+
+Main advanced to `582c397` with merged Nora recovery/session/notification work.
+Integration and post-integration verification are in progress; earlier results
+remain evidence for their named commit. The already applied intake 071 file will
+not be renamed even though main independently added another 071 filename.
+
+
+### Post-main integration checks
+
+Main `582c397` is integrated with private composer routing, stable reconnect history
+and the verified durable handshake retained. Emergency direction bypasses ordinary
+turn work. A saved safety-outbox acknowledgement clears only its correlated
+in-memory client request; retries derive a stable patient/session-scoped safety
+identity, and uncertain persistence cannot acknowledge success. The symptom route
+checks the existing action fence before opening the owned draft; no direct symptom
+report writer or unconfirmed ADR delegation was restored.
+
+Checks: **175** backend chat/intake/ADR-service cases; **116** focused UI cases;
+**767** patient and **607** clinician tests; both portal lint/typecheck/builds;
+Ruff checks/format for 288 files, mypy for 268 source files, and **91** migration
+files parsed. The exact required SQL job passed **25** cases with XML-verified
+17/8 counts and zero skipped/failed/error cases. Applied 071 still hashes to its
+authorized checksum. Read-only readiness also passes existing Nora 072/073/074.
+
+Live Spanish-source check used the patient's unchanged English profile and showed
+the approved Spanish prompts. A Spanish private answer advanced while the chat
+socket was unavailable during a local restart, then explicit Reconnect restored
+Connected. The draft was cancelled, preserving chat and creating no report.
+
+That first integrated turn exposed an upstream completion identity collision:
+`TurnExecution.finish` allowed the staged assistant message's `id` to replace the
+claimed turn `id`, producing immediate `CHAT_TURN_EXPIRED` despite time remaining.
+The merge now preserves the claimed id/lease after merging the message payload.
+The regression asserts the actual RPC identity and separate message id. The failed
+attempt remains failed and was dismissed only through the normal UI; no row was
+rewritten to manufacture a successful result. The fresh live turn completed; see the authenticated checks below.
+
+
+### Final authenticated continuation — October 18
+
+A fresh Spanish-source turn `80cbeac0-48aa-4524-895d-3e50c3bf2f8a` completed normally
+with the identity fix. The patient's profile remained English; prompts, source
+suggestions, review and confirmation used Spanish. Typed private answers, unknown
+course/severity and declined history were preserved. During a deliberate local
+backend stop, the final answer remained visibly unverified. After restart, reload
+and **Retry the same action** saved it; explicit Reconnect restored Connected.
+Refresh recovered the exact preview with the consent checkbox cleared.
+
+The patient explicitly confirmed through the Spanish checkbox/button. Report
+`8c3310e8-1cf0-4c1f-be6d-1ff9297f5635` exists once, has null severity and null
+related-medication FK. Its one handoff task
+`f0dc00e9-bcc6-407a-9b5a-bdbcfbbd7811` completed; one same-transaction Elena notice
+exists (`17a53c16-2cca-4819-9258-e4559e5c92d7`). The unlisted tea has zero medication
+rows. Elena → Maya → Symptoms shows the new Patient-confirmed report, unknown
+severity and the full Spanish unverified-product summary. No clinical decision was
+submitted. The earlier cancelled Spanish draft
+`5e35cadc-5bd1-4c5d-8829-120aecddb216` has zero reports; its failed chat turn remains
+failed rather than being rewritten. Reads used the existing owned intake RPC;
+direct service-role table SELECT was denied as designed. No grants were changed.
+
+The browser found a second display issue: an unsaved answer from a previous draft
+could appear at the same revision in a new draft. Pending-answer display now checks
+draft identity, question identity and revision. A regression reproduces same-revision
+draft replacement and verifies the previous answer disappears.
+
+The patient portal's inherited Permissions-Policy disabled microphones entirely.
+It now permits `microphone=(self)` while retaining camera/geolocation denial and
+browser permission. The actual local `/chat` response was HTTP 200 with that header.
+A fresh English nausea draft is left at the location question for a human speech
+check. **The requester chose to keep physical microphone verification pending.**
+Automated audio events and the working HTTP policy are not actual speech evidence.
+The ordinary new-symptom urgency banner follows the existing coordinator policy;
+no clinical urgency downgrade was introduced by intake.
+
+Final patient suite: **768 passed**, 71 files; focused chat/intake/recovery/voice
+suite: **117 passed**. Patient lint/typecheck and production build pass. The first
+build hit a sandbox worker-port failure; after moving generated Turbopack cache
+aside, the build passed outside the sandbox. No source workaround was used.
+Backend **175**, clinician **607**, real SQL **25**, Python checks and migration
+parse results above remain applicable; only patient presentation/configuration and
+docs changed afterward. Current-head CI is recorded separately once returned.
+
+Screenshots under `output/verification/pat002b-oct17/`:
+`spanish-answer-outage.png`, `spanish-preview-recovered.png`,
+`spanish-confirmed.png`, `clinician-spanish-summary.png`, `voice-check-ready.png`.
+These are local, untracked synthetic verification artifacts. A requested viewport
+override did not change the observed desktop size; physical phone acceptance,
+physical speech, candidate-2 approval/activation, peer review, merge and authorized
+deployed configuration remain pending. No additional migration, seed/reset,
+manual deployment or merge was performed.
+
+
+### Delivery coordination
+
+The first push was rejected without changing remote history: PR #159 had advanced
+to Ganesh's `67aadefa`, merging ADR/MedWatch follow-up work and replacing the handoff
+file with a different `076_confirmed_symptom_handoff.sql` checksum. That file is not
+the exact 071 authorized and applied above. It was not run here.
+
+To preserve the requested intake scope and the collaborator's work, the tested
+continuation is published separately on `fix/confirmed-intake-integration`, draft
+[PR #193](https://github.com/sjsu-masters-projects/medi-agent/pull/193). PR #159 is
+unchanged. These are alternative review candidates for overlapping feature work;
+maintainers must choose/reconcile the delivery path before merging. This is not
+permission to apply 076, drop/rename applied 071, or merge both feature copies.
+The working tree retains the unrelated task-board, scheduling, team, map and local
+script edits. Physical microphone verification remains pending by requester choice.
+
+
+### Final correction-selection regression and CI receipt
+
+All **34 PR checks passed on `0855608fc678c59f4440e0662d21117fcdfd8466`**:
+[CI run](https://github.com/sjsu-masters-projects/medi-agent/actions/runs/39180537308).
+The full backend run reported **3,700 passed / 400 skipped**, **89.08% coverage**
+(80% required), and 31 real appointment transaction cases with zero skips. The
+separate required symptom SQL job reported **25 passed**, verified as 17 intake
+and 8 handoff cases with zero skips. All four PostgreSQL matrix jobs passed.
+Both portal builds/tests, migration syntax, secret scan and CodeQL passed.
+
+A final state inspection found correction-question selection also needed draft
+identity binding. Selection now belongs to its intake, so a new draft uses its
+own current question. The regression replaces an edited draft with a new one and
+asserts the new description question appears. After this patient-only change,
+**769 patient tests / 71 files**, the 21 intake cases, lint, typecheck and patient
+production build pass locally. This follow-up needs its own current-head CI result;
+the preceding 34 green checks are evidence for the named commit, not a fabricated
+result for a later head. No backend/SQL code changed after that green run.
+
+A final read-only privacy check found exactly two messages in the confirmed Spanish
+conversation (source and assistant acknowledgement); the tested private answers
+were absent from ordinary chat content. The requester explicitly chose separate
+intake delivery preserving #159, and elected to leave physical microphone
+verification pending. Existing release prerequisites above remain in force.
+
+
+### Requester-reported manual acceptance and review readiness — October 18
+
+Tushar reported, “I have verified the remaining things,” and clarified:
+“App, microphone and phone flows verified.” This closes those manual checks as
+**requester-reported verification**. No new device, browser, locale, audio-provider
+trace, screenshot or independent clinical validation is asserted. Earlier pending
+notes above describe the earlier checkpoints, not the current manual-check status.
+
+All **34 checks passed on final implementation commit
+`ca12c395d23344894386fca368137486d5db90e2`**:
+[CI run](https://github.com/sjsu-masters-projects/medi-agent/actions/runs/39182054190).
+The run reports 3,700 backend passes / 400 skips and 89.08% coverage. The separate
+required symptom SQL job passed 25 cases (17 intake / 8 handoff), zero skips.
+All four SQL matrix jobs, portal tests/builds, typechecks, migration syntax and
+security checks passed. `origin/main` is already an ancestor; no rebase, conflict
+resolution or implementation change is needed. GitHub reports MERGEABLE/CLEAN.
+
+The requester did **not** report candidate-2 wording approval. Its manifest entry
+remains pending, active_version stays candidate-1, and no remote eligibility write
+is authorized or performed. Candidate-2 requires Ganesh's genuine paired-wording
+review before activation. Manual verification is not a GitHub PR approval: only a
+code-quality bot comment is recorded at this checkpoint. The committed team
+contract still requires one peer approval plus safety review before merge.
+
+PR #193 is being moved from draft to ready for review; #159 is preserved, and its
+concurrent 076 migration remains outside this delivery. Do not merge both copies
+without reconciling their overlap. The documentation-only evidence update needs
+its own CI result, available on the PR. No source, dependency, migration, library
+selection, remote configuration, deployment or merge changes are part of this step.
+
+
+### October 19 — integration after PR #159 merged
+
+The previous readiness head `34f34d3` passed all 34 checks. On continuation, GitHub
+reported conflicts because main advanced to `5d46c30` and independently merged #159
+through `20ea7ac`. The earlier separate/unmerged #159 notes above are historical.
+Integration uses an isolated worktree so the requester's unrelated board, team,
+scheduling, map and locally edited scripts stay untouched in the original checkout.
+
+Main now contains the intake implementation and the exact historical 071 migration
+with SHA-256 `f690b788d5f29c3d7583f2fe8cc43b7a51a6af817c276d6839cc9c9ab2ded36b`.
+No migration bytes, names or ledger rows change here. PR #193 now carries the
+remaining fixes and evidence rather than another copy of the feature. Retain main's
+server-owned turns, worker/event protocol, conditional ADR claim, locale/feed fixes
+and split SQL CI jobs. Its completion identity fix already covers the earlier fix;
+its standard terminal recovery replaces the superseded private acknowledgement
+helper. No ADR follow-up implementation is added or reverted by this PR.
+
+Retained fixes: pending answer and correction selection belong to their draft;
+the microphone policy permits only the portal's own origin; a private REST reply
+uses its intake's own busy state while an ordinary Nora turn is outstanding;
+source-bound draft opening checks the durable action fence first. The voice route
+also now forwards the recognizer locale through the page wrapper. A Spanish
+`cinco` regression checks that locale in the private answer request; this is an
+automated transport test, not new physical speech evidence.
+
+The real-worker SQL transport adapter now supports main's conditional status filter.
+Its retry case requeues the task after a simulated failed completion write and
+verifies the actual database assessment keeps the clinician's reviewed state.
+The runtime ADR worker itself is unchanged. The required 17/8 intake SQL counts
+remain enforced alongside all six main SQL jobs.
+
+Post-integration local verification:
+
+- Backend chat/worker/intake API and library/service cases: **229 passed**.
+- Patient suite: **818 passed**, 75 files; final chat-page regression: **99 passed**.
+- Clinician suite: **617 passed**, 69 files.
+- Both portal lint/typecheck and production builds pass.
+- Ruff and format pass across **298** source/script files; changed router/preflight
+  mypy passes; parser validation passes **94** migration files.
+
+The first local backend launch lacked synthetic CI settings; rerun used explicit
+fake test settings. Docker was stopped, so the initial SQL fixture setup could not
+start; the installed local daemon was started. Turbopack rejected dependencies
+symlinked outside the isolated worktree, so dependencies were copied locally and
+both normal builds passed. No application configuration workaround was introduced.
+The corrected SQL rerun passed **25** cases (17 intake / 8 handoff), with XML-verified
+zero skips/failures/errors. Its first application-level failure identified the local
+adapter's outdated status filter and upsert operation; the adapter now executes
+main's actual insert and conditional claim. A separate setup timeout occurred under
+parallel build load; the completed rerun changed no timeout or runtime behavior.
+New-head CI results are recorded on PR #193 when available.
+
+Requester-reported October 18 app/microphone/phone acceptance remains evidence for
+its named prior implementation. No new authenticated deployed journey is claimed
+for this integration. Candidate-1 stays active; candidate-2 remains pending actual
+wording review. Genuine peer/safety review is still required. No remote migration,
+seed/reset, service configuration, deployment or merge is performed by this step.
+
+## October 21 — PR #193 review against merged #209
+
+**Delivery receipt, October 22:** #193 merged as `37224b2f` after all 41 PR checks passed.
+Main CI, frontend CI and automatic backend deployment succeeded. No additional migration,
+flag change or manual deployment is required by #193. The local review evidence below
+does not close the remaining deployed/private-intake or separately tracked physical-voice
+acceptance cases.
+
+Integrated `origin/main` at `36972470` without rewriting shared history. Resolved
+four conflicts: retain current task-board acceptance, main's 44px microphone
+target, all existing PostgreSQL/PostgREST CI lanes, and current report-keyed worker
+identity. The new confirmed-symptoms lane still requires 17 intake and eight
+handoff cases, with XML verification rejecting skipped/failed/missing cases.
+No migration file differs from main; no hosted SQL/configuration or deployment.
+
+Reviewed boundaries and corrections:
+
+- Unsaved answer display is bound to intake, question and revision; correction
+  selection is bound to the intake. New drafts cannot display the preceding
+  draft's pending answer or edit question at the same revision.
+- Private REST replies use their own busy/retry state while an ordinary Nora
+  turn is queued or processing. Tests also check the microphone remains enabled
+  on a supported mocked device and retains its 44px target. Unsupported devices
+  correctly remain disabled; no physical microphone acceptance is inferred.
+- The page forwards the recognizer locale to the private reply. Typed/voice
+  replies do not confirm a report: explicit preview/consent/button remain required.
+- Source-bound intake creation checks the durable action fence first. Added the
+  negative case: a rejected fence does not call intake start or direct report save.
+- Fixed the two existing code-quality comments: duplicate regex character removed
+  without changing its accepted character set, and the test DB dependency uses a
+  named zero-argument factory. Passing MagicMock directly is not equivalent in
+  FastAPI because its callable signature becomes dependency parameters; owning
+  router tests caught that intermediate attempt, and the named factory passes.
+- A clinician translation test asserted an asynchronous request before its effect
+  ran. It now waits for that request; application behaviour is unchanged. The
+  312-case evidence-label test passed with unchanged timeout on the bounded rerun.
+- Current-head CI exposed the same effect-ordering race in the private-question
+  read-aloud regression: rendered question text could precede the speech effect.
+  That assertion now waits for the existing read-aloud callback before testing
+  Spanish reply routing. No application timing, timeout or assertion was removed.
+
+Verification commands (from the owning app/backend directory):
+
+- `PYTHONPATH=src .../python -m pytest tests/unit tests/integration/routers --no-cov -q`:
+  **4,033 passed**. Synthetic CI settings only; no configured live credentials.
+- Final owning rerun after small review fixes:
+  `pytest tests/integration/routers/test_chat_turn_recovery.py tests/integration/routers/test_symptom_intake_api.py tests/unit/intake --no-cov -q`:
+  **99 passed**.
+- `SYMPTOM_INTAKE_TEST_POSTGRES=1 CHAT_SAFETY_TEST_POSTGRES_DOCKER=1 pytest tests/integration/test_symptom_intake_postgres.py tests/integration/test_symptom_handoff_postgres.py --no-cov -q --junitxml=...`:
+  **25 passed**, XML verified **17/8, zero skips/failures/errors**. Disposable,
+  network-isolated PostgreSQL containers only. Initial missing synthetic settings
+  prevented collection; a concurrent-load setup later hit the unchanged 30-second
+  timeout. The completed rerun passed without increasing timeouts or weakening SQL.
+- Clinician `NODE_OPTIONS=--no-experimental-webstorage npm test -- --reporter=dot --maxWorkers=2`:
+  **680 passed / 76 files**. The first concurrent run had the async assertion race
+  above and an evidence-test timeout; both pass on the corrected bounded run.
+- Final patient `NODE_OPTIONS=--no-experimental-webstorage npm test -- --reporter=dot --maxWorkers=2`:
+  **839 passed / 75 files**, including the final 137-case focused intake/chat run.
+  Both portals' `npm run lint`, `npm run typecheck` and normal `npm run build`
+  pass with synthetic public configuration. Local dependency copies avoid the
+  isolated-checkout external-symlink restriction; no application build workaround.
+  Existing React act warnings, Sentry deprecation warnings and jsdom navigation
+  notices remain non-failing. Hosted CI is a separate receipt on the current PR.
+  Do not infer new deployed or device acceptance.
+- Changed Python Ruff/format pass, source mypy passes for router/intake/preflight,
+  and parser validation passes **95 migrations**. Applied 071 remains unchanged.
+
+Candidate-1 remains active; candidate-2 remains gated. VOI-001-M physical audio,
+wider deployed private-intake UI acceptance, and PAT-002-C history/detail remain
+separate tasks. This is a software integration review, not clinical validation or
+the repository's required independent peer/safety approval. No remote write or
+clinical-state mutation was performed during this review.

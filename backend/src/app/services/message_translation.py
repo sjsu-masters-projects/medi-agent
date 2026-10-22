@@ -92,11 +92,13 @@ def _fence(text: str) -> str:
 
 
 def is_failure_marker(row: dict[str, Any]) -> bool:
-    return row.get("guard_failure_code") == MODEL_ERROR
+    return row.get("guard_failure_code") in {MODEL_ERROR, "original_only"}
 
 
 def failure_marker_is_recent(row: dict[str, Any], now: datetime | None = None) -> bool:
     """True while a stored failure marker should stop the model being called again."""
+    if row.get("guard_failure_code") == "original_only":
+        return True  # A clinician chose original-only delivery; never auto-translate it later.
     raw = row.get("translated_at")
     try:
         stamp = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
@@ -163,9 +165,11 @@ async def back_translate_message(
     its English back-translation. This is the same guarded translation path in reverse, so
     there is one prompt, one schema and one set of guards rather than a second of each.
     """
-    back, _guard_passed, _failure, _model = await translate_message(
+    back, guard_passed, failure, _model = await translate_message(
         translated_text, translated_locale, original_locale, protected_terms
     )
+    if not guard_passed:
+        raise ValueError(f"Back-translation guard rejected: {failure}")
     return back
 
 
@@ -218,7 +222,7 @@ class MessageTranslationService:
             "guard_failure_code": guard_failure_code,
             "model_id": model_id,
         }
-        return await self._store(row) or row
+        return await self._store(row)
 
     async def store_gloss(
         self,
@@ -312,7 +316,7 @@ class MessageTranslationService:
             rows = cast(list[dict[str, Any]], result.data or [])
             return rows[0] if rows else None
         except Exception:
-            return None
+            raise RuntimeError("Stored translation unavailable") from None
 
     async def get_translations_for_messages(
         self,

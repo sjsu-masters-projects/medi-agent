@@ -15,6 +15,9 @@ REQUIRED = (
     "060_confirmed_symptom_intake.sql",
     "065_clinic_memberships.sql",
     "071_confirmed_symptom_handoff.sql",
+    "072_nora_turn_recovery.sql",
+    "073_nora_turn_begin_validation.sql",
+    "074_nora_late_completion.sql",
 )
 
 

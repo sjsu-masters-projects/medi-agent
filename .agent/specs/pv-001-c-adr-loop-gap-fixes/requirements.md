@@ -1,6 +1,25 @@
 # Requirements Document
 
-> **Status:** PR 1 and groundwork delivered in the PR that adds this folder; PR 2 and PR 3 are planned follow-ups.
+> **Acceptance scope — October 20, 2026:** Disposable-account deletion is not a
+> required live expo test. Existing deletion behavior, privacy safeguards and
+> automated R12 regressions remain; do not delete an account to close this issue.
+
+> **Wording-review decision — October 19, 2026:** The requester replaces the
+> separate Spanish-fluent reviewer requirement with an explicitly labelled
+> LLM-assisted English/es-MX meaning-and-safety review for the synthetic expo.
+> That review covers retrospective questions, medication cautions, unknown answers,
+> confirmation, outcomes, notifications and PR #202 source-wording labels. It is
+> demo acceptance only, not professional translation or clinical validation.
+
+> **Scope decision — October 19, 2026:** The requester excludes actual FDA
+> submission and external-submission recording from the current project. Neither
+> is an acceptance gate or future integration commitment. MedWatch ends at
+> draft/review/approval, preview/export and retained discard history. Historical
+> Requirement 22 and its external-record clauses below describe already-existing
+> implementation, not required work. This documentation decision does not itself
+> remove deployed controls, stored records or audit safeguards.
+
+> **Status:** Implementation merged/deployed in #171, with migrations 063/064 recorded applied. Remaining acceptance is tracked under PV-001-C and PV-002, not a pending implementation sequence.
 > Requirements 1 to 14 (PR 1, PR 2) were approved by the requester on 2026-10-12; requirements 15 to 24 (PR 3) were
 > added the same day, and the requester decided D12 to D17 exactly as proposed. Design in `design.md`, tasks in
 > `tasks.md`.
@@ -11,13 +30,26 @@
 > (critical-result alerts and chat attachments), so PR 2 is `063_adr_information_loop_lifecycle.sql` and PR 3 is
 > `064_medwatch_form_3500.sql`. The contract-test fixture finds the PR 2 file by name
 > (`*_adr_information_loop_lifecycle.sql`).
-> **Worktree / branch:** `.worktrees/adr-loop-gaps`, `fix/adr-information-loop-gaps`, based on `origin/main` `87a466d`
-> (drafted at `62a1945`; the only later commit is the #157 email-branding change, re-checked: no ADR copy, category
-> or link impact; `email_service.py` keeps the `adr_information_requested` titles and links every notice to
-> `/notifications`).
-> **Scope tracker:** a scoped task entry (proposed ID `PV-001-C`) is created in `.agent/TASKS.md` before implementation (Requirement 2).
+> **Scope tracker:** `.agent/TASKS.md` → PV-001-C / PV-002. Historical implementation findings below describe their stated baseline, not current deployment status. October 19 Spanish answers and synthetic draft/export/discard evidence are in the [grouped acceptance checkpoint](../../../docs/deployed-recheck-2026-10-11.md#pr-202-grouped-acceptance-continuation--october-19).
 
 ## Introduction
+
+### Presentation follow-up in PR #202 (October 19)
+
+- DV-007: retain every evidence entry and its stored answer. Patient follow-up
+  evidence identifies whether it belongs to the case's current request, a
+  different recorded request, or has no request metadata. Only an exact request
+  match may carry the current response timestamp. No inferred chronology,
+  deduplication, scoring change or evidence rewrite is permitted.
+- DV-008: follow-up headings identify quoted symptom text as original wording;
+  medication text is explicitly the recorded name. This applies to pending,
+  answered, closed and history views through their existing shared copy. The
+  stored symptom/medicine values are not automatically translated.
+- **New es-MX wording, accepted by LLM-assisted synthetic-demo review October 19 (not professional translation validation):**
+  `Síntoma reportado (texto original): «{symptom}»` and
+  `Medicamento (nombre registrado): {medication}.`
+  These labels do not certify a translation of medical source text. Existing
+  retrospective-question and medication-change cautions remain unchanged.
 
 PR #136 (`feat(adr): close patient information loop`) lets an assigned clinician request up to three
 patient-answerable, retrospective Naranjo questions (`reappeared_on_rechallenge`, `dose_response`,
@@ -248,8 +280,8 @@ Spanish, so that I can answer accurately and safely.
    medicine just to answer these questions." The confirmation text SHALL keep its meaning in both locales.
    *Evidence: Observed in `QUESTION_COPY` and the notice block.*
 6. THE es-MX strings SHALL use the second-person register of existing es-MX copy ("tu equipo de atención") and SHALL
-   be reviewed by a Spanish-fluent reviewer before acceptance. *Evidence: Observed register in
-   `notification_centre_presentation.py`; review is a manual item.*
+   receive the requester-authorized LLM-assisted meaning-and-safety review for synthetic-demo acceptance.
+   *Evidence: October 19 wording-review decision above; no professional review asserted.*
 7. IF saving the answers fails, THEN THE Follow_Up_Form SHALL show a message in the Saved_Locale chosen from the
    failure class (request closed, not found, unavailable, other) and SHALL not display raw server text. *Evidence:
    Observed. The panel renders `submissionError.message`; backend errors such as "This information request has
@@ -554,11 +586,11 @@ cover these tables.
    TRUNCATE on them, so the cascade is the only removal path. *Evidence: Observed. 053 revokes and verifies this for
    conversation history; 048 grants `ALL` on `medwatch_draft_audit_events` to `service_role`, and no backend code
    deletes from either table, so Migration_063 revokes DELETE and TRUNCATE (as 053 did).*
-5. THE clinician side (deleting a clinician who requested information, authored or approved a draft) SHALL remain as
-   today until decision D1 is made, and THE spec SHALL not introduce a policy for it. *Evidence: Observed. 046, 047
+5. THE clinician side SHALL retain accounts referenced by clinical provenance/audit; permanent clinician deletion
+   is outside expo scope (D1, requester approved October 21). Preserve existing restrictions. *Evidence: Observed. 046, 047
    and 048 reference `clinicians(id)` `ON DELETE RESTRICT`: `adr_information_requests.requested_by`,
    `adr_assessment_audit_events.actor_id`, `medwatch_drafts.created_by` / `approved_by`,
-   `medwatch_draft_audit_events.actor_id`; TASKS.md NOT-003 records the open decision.*
+   `medwatch_draft_audit_events.actor_id`; TASKS.md NOT-003 records the accepted retention decision.*
 6. IF the Contract_Test does not reproduce criterion 1, THEN no foreign-key change SHALL ship for it and the
    Migration_063 verification block SHALL omit the foreign-key check (Requirement 14.9). *Evidence: Design.*
 
@@ -963,8 +995,8 @@ that I can approve it without touching a remote environment.
    unassigned clinician). Inferred: a missing draft ID likely returns 500 today, because `.single()` raises an unmapped
    PostgREST error (as in Requirement 6.3).*
 2. THE Migration_064 SHALL make every new table or column holding patient data cascade on patient deletion, as
-   Requirement 12 does, and SHALL reference clinicians (recorder, amender, discarder) with `ON DELETE RESTRICT` until D1
-   is decided, with the new references added to NOT-003. *Evidence: Observed (048 clinician references are RESTRICT;
+   Requirement 12 does, and SHALL retain clinician (recorder, amender, discarder) references with `ON DELETE RESTRICT`
+   under the accepted D1 retention decision. *Evidence: Observed (048 clinician references are RESTRICT;
    NOT-003).*
 3. THE Migration_064 SHALL be one file named `064_<snake_case_name>.sql` that passes
    `backend/scripts/validate_migrations.py`, is ordered after 063 and states in its header that it requires 063. It
@@ -1025,7 +1057,7 @@ to D17 for PR 3 on 2026-10-12, exactly as proposed.
 
 | ID | Status | Decision | Outcome | Affects |
 | --- | --- | --- | --- | --- |
-| **D1** | **Open** | Clinician-deletion policy for MedWatch drafts and ADR audit (TASKS.md NOT-003) | Unchanged by this work. Options remain: (a) keep records, NULL the clinician reference, keep a name snapshot (as 053); (b) delete the clinician's authored drafts and audit; (c) keep blocking deletion until ownership is reassigned. | R12.5, NOT-003 |
+| **D1** | **Decided (2026-10-21)** | Clinician-deletion policy for MedWatch drafts and ADR audit (TASKS.md NOT-003) | Retain clinician accounts referenced by provenance/audit with existing RESTRICT safeguards. Permanent clinician deletion is not expo scope. Do not delete authored records, null attribution or weaken FKs; no account deletion authorized. | R12.5, NOT-003 |
 | **D2** | Decided | Do draft answers persist across reload? | (a) No. Unsent answers live only in component state; the form shows a visible note near Send. | R6.8 |
 | **D3** | Decided | Is the clinician "patient answered" alert actionable? | (b) Informational, History-only, unread in the bell, not in Needs attention. | R11.5 |
 | **D4** | Decided | Do requests expire? | No expiry now. | none |
@@ -1033,7 +1065,7 @@ to D17 for PR 3 on 2026-10-12, exactly as proposed.
 | **D6** | Decided | Does Today also carry an entry row? | Entry row in both the chat inbox and Today, only while a request is pending. | R4.4 |
 | **D7** | Decided | Who receives the answered alert? | (a) Shared with all currently assigned clinicians. | R11.3 |
 | **D8** | Decided: in scope (PR 3) | Can a MedWatch draft be discarded or reopened? | Yes, in PR 3 (requester, 2026-10-12): discard with a reason returns the assessment to review. | R23 |
-| **D9** | Manual requester item | Spanish wording sign-off | A Spanish-fluent reviewer named by the requester signs off (V13). | R3.6, R5 |
+| **D9** | Decided October 19 | Demo Spanish wording review | Requester authorizes LLM-assisted English/es-MX meaning-and-safety review (V13); no separate fluent reviewer or professional validation required. | R3.6, R5 |
 | **D10** | Decided | Does answering mark the request's notification read? | Yes. | R9.3 |
 | **D11** | Decided (later) | Remove unused score fields from the patient read model? | Later, as data minimisation. | none |
 | **D12** | Decided (2026-10-12) | Non-serious events (no B2 outcome): block approval, or allow with attestation? | Allow with an explicit, audited clinician attestation that the event is not serious and is reported anyway. FDA's "please limit" is guidance, not a prohibition. | R19.3 |
@@ -1077,7 +1109,7 @@ cd apps/clinician-portal && npm ci
 | V10 | Locale parity and wording tests | Copy-key parity test; presentation tests for all three keys in both locales; exhaustive table test over generated `requested_information` values (R5.2; no property-testing library is a dependency, see design) | 1 | Run output |
 | V11 | Contrast record | Computed ratio for each text / background token pair on changed surfaces (script or devtools) | 1 | Recorded table |
 | V12 | Authenticated manual checks, synthetic accounts | Patient in `en-US` and `es-MX` at 320, 360 and 430 px: notification to form, chat-inbox and Today rows, answer, review, send, answered and closed states, keyboard-only pass including hidden radios, 200% zoom, reduced motion, safe areas. Clinician at 1024, 1280 and 1536 px: ADR card provenance (AI, patient, mixed), MedWatch prepare, edit, refresh with unsaved edits, approve, export, answered alert from the bell. | 1, 2 | **Requester** (screenshots per R1.19) |
-| V13 | Spanish copy review | Fluent reviewer signs off es-MX question, caution, confirmation and notification wording | 1 | **Requester** |
+| V13 | Demo Spanish copy review | Record LLM-assisted review of es-MX question, caution, confirmation, notification and source-label meaning/safety under the October 19 requester decision | 1 | Recorded bilingual comparison; synthetic-demo only |
 | V14 | Apply 063 to a remote environment | Not done by this work; needs explicit authorization naming the action | 2 | **Requester** |
 | V15 | Tracker and docs | TASKS.md rows, NOT-001 spec, patient-portal README updated as in R2.5, recording 048 MedWatch applied to `mediagent-staging` on 2026-10-12 (ledger synchronized through 058) and 063 not applied anywhere | 1, 2 | Diff review |
 | V16 | Dependency lock and audit | After adding `pypdf==6.20.1` to `requirements.in`: `cd backend && uv pip compile requirements.in --universal --python-version 3.12 --output-file requirements.txt && uv pip compile requirements-dev.in --universal --python-version 3.12 --output-file requirements-dev.txt && git diff --stat -- requirements.txt requirements-dev.txt`, then `uvx --from pip-audit==2.10.1 pip-audit -r requirements-dev.txt` (as CI; `uv` 0.9.24 as pinned in CI). CI runs `git diff --exit-code` after recompiling, which is meaningful only once the lockfiles are committed; before that, copy both files first and `cmp` them with the recompiled output | 1, 3 | Run output |

@@ -91,9 +91,7 @@ def source_suggestions(text: str) -> dict[str, str | int]:
     suggestions: dict[str, str | int] = {}
     if text.strip() and len(text) <= 1000:
         suggestions["description"] = text.strip()
-    onset = re.search(
-        r"\b(?:since|started|began|desde|empe[zózo]+)\s+([^.!?\n]{1,100})", text, re.I
-    )
+    onset = re.search(r"\b(?:since|started|began|desde|empe[zóo]+)\s+([^.!?\n]{1,100})", text, re.I)
     if onset:
         suggestions["onset"] = onset[0].strip()
     rating = re.search(r"\b(10|[1-9])\s*(?:/|out of|de)\s*10\b", text, re.I)

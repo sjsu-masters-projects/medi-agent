@@ -95,6 +95,7 @@ export interface BackCheck {
  * must be of the SAVED Spanish wording, loaded, with both guards passed, and nothing unsaved.
  */
 export function verificationBlocker(item: CarePlanItem, check: BackCheck | undefined, unsaved: boolean): string | null {
+    if (item.translation_model_id === "offline-translation-stub") return "Offline demo wording cannot be verified. Regenerate with the configured translation service.";
     if (!wordingComplete(item)) return "Complete both languages first.";
     if (unsaved) return "Save your changes first";
     if (!check || check.key !== spanishKey(item.wording?.["es-MX"]) || check.state === "loading") return "Back-translation is loading";

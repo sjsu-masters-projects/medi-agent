@@ -64,7 +64,7 @@ export function PatientPhonePreview({
                     What the patient sees
                 </span>
                 <span>· {LOCALE_NAME[locale]}</span>
-                {translated ? <TranslationBadge from="English" modelId={modelId} /> : null}
+                {translated ? <TranslationBadge from={locale === "en-US" ? "Spanish" : "English"} modelId={modelId} /> : null}
             </figcaption>
             {/* A static frame: no motion, no 3D transform, and it never scales the text. */}
             <div className="mx-auto w-full max-w-[300px] rounded-[26px] border border-line-strong bg-[#17233a] p-[6px] shadow-[var(--shadow-page)]">

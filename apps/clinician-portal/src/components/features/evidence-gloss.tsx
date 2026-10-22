@@ -48,8 +48,9 @@ export function useEvidenceGlosses(
     patientId: string | undefined,
     excerpts: Array<string | null | undefined>,
 ): GlossMap {
-    const [glosses, setGlosses] = useState<Map<string, EvidenceGloss>>(new Map());
+    const [state, setState] = useState<{ patientId: string | undefined; glosses: Map<string, EvidenceGloss> }>({ patientId, glosses: new Map() });
     const asked = useRef(new Set<string>());
+    const scope = useRef(patientId);
 
     const wanted = useMemo(() => {
         const unique = new Set<string>();
@@ -61,36 +62,39 @@ export function useEvidenceGlosses(
 
     // One dependency standing for the excerpt set, so a re-render with the same excerpts
     // in a new array does not re-run the effect.
-    const key = wanted.join("|");
+    const key = JSON.stringify(wanted);
     useEffect(() => {
+        if (scope.current !== patientId) { asked.current.clear(); scope.current = patientId; }
         if (!patientId) return;
-        const pending = wanted.filter((excerpt) => !asked.current.has(excerpt));
+        const requested = asked.current;
+        const pending = wanted.filter((excerpt) => !requested.has(excerpt));
         if (!pending.length) return;
-        for (const excerpt of pending) asked.current.add(excerpt);
+        for (const excerpt of pending) requested.add(excerpt);
         let alive = true;
         void fetchEvidenceGlosses(patientId, pending)
             .then((result) => {
                 if (!alive || !result.glosses.length) return;
-                setGlosses((current) => {
-                    const next = new Map(current);
+                setState((current) => {
+                    const next = new Map(current.patientId === patientId ? current.glosses : []);
                     for (const gloss of result.glosses) {
                         if (gloss.excerpt) next.set(gloss.excerpt, gloss);
                     }
-                    return next;
+                    return { patientId, glosses: next };
                 });
             })
             .catch(() => {
                 // The original stays on screen; let a later render ask again.
-                if (alive) for (const excerpt of pending) asked.current.delete(excerpt);
+                if (alive) for (const excerpt of pending) requested.delete(excerpt);
             });
         return () => {
             alive = false;
+            for (const excerpt of pending) requested.delete(excerpt);
         };
         // `key` stands for `wanted`, which is derived from it.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [patientId, key]);
 
-    return glosses;
+    return state.patientId === patientId ? state.glosses : new Map();
 }
 
 /** Find an excerpt's gloss in the map the hook returns. */

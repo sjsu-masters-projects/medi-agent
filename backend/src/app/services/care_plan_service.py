@@ -214,7 +214,7 @@ class CarePlanService:
             )
             verification: dict[str, Any] | None = None
             if verified:
-                merged = {**item.model_dump(), **wording_fields}
+                merged = {**original, **item.model_dump(), **wording_fields}
                 self._require_wording_guards(merged)
                 # LOC-003 item 11: the checks that actually passed are recorded with the
                 # verification, so a reviewer can see what was checked, not only that
@@ -316,6 +316,10 @@ class CarePlanService:
         The stored English and Spanish wording is compared directly (numbers with units,
         negation, medication name); a model is not called on a save or an approval.
         """
+        if item.get("translation_model_id") == "offline-translation-stub":
+            raise ValidationError(
+                "Offline stub wording cannot be verified or published. Regenerate it using the configured model."
+            )
         wording = cast(dict[str, dict[str, str]], item.get("wording") or {})
         source_locale = item.get("source_locale")
         if source_locale not in PATIENT_LOCALES:
@@ -1316,7 +1320,7 @@ class CarePlanService:
                 cast(
                     list[dict[str, Any]],
                     self.db.table("documents")
-                    .select("id, file_name, uploaded_by_role, review_status")
+                    .select("id, file_name, display_title, uploaded_by_role, review_status")
                     .in_("id", document_ids)
                     .execute()
                     .data
@@ -1350,6 +1354,9 @@ class CarePlanService:
                         {
                             "document_id": document_id,
                             "file_name": document_names.get(str(document_id)),
+                            "display_title": document_reviews.get(str(document_id), {}).get(
+                                "display_title"
+                            ),
                             "upload_review_status": (
                                 document_reviews.get(str(document_id), {}).get("review_status")
                                 or "pending"

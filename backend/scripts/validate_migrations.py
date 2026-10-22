@@ -14,11 +14,17 @@ MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "src" / "app" / "db" / "m
 # Preserve historical independent files already recorded by filename/checksum.
 # New collisions must be fixed by renumbering the unapplied migration, not by
 # extending this grandfathered list or changing applied migration bytes.
-# 067 is deliberately absent: LOC-003's english_display_facts file was renumbered to 079,
-# so 067 holds one migration again and a new collision there must fail like any other.
+# Applied 067 filenames stay immutable. Only that exact historical pair is allowed;
+# an additional file at 067 must still fail rather than silently changing history.
 LEGACY_SHARED_SEQUENCES = frozenset({11, 38, 39, 40, 41, 42, 43, 47, 48, 51})
 LEGACY_SHARED_FILENAME_GROUPS = frozenset(
     {
+        frozenset(
+            {
+                "067_clinic_lists_and_roles.sql",
+                "067_english_display_facts.sql",
+            }
+        ),
         frozenset(
             {
                 "059_chat_safety_alerts.sql",
