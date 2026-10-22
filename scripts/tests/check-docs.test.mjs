@@ -8,6 +8,8 @@ import { checkDocument, headings } from '../check-docs.mjs';
 test('headings preserve Unicode, repeated separators and duplicate suffixes', () => {
   assert.deepEqual([...headings('# Overview\n## Overview\n## Español: setup\n## One / two')],
     ['overview', 'overview-1', 'español-setup', 'one--two']);
+  assert.deepEqual([...headings('# <strong>Overview</strong>\n## <<em>Nested</em>')],
+    ['overview', 'nested']);
 });
 
 test('code examples do not create anchors', () => {

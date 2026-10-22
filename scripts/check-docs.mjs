@@ -12,7 +12,7 @@ export function headings(source) {
   for (const line of withoutFences(source).split('\n')) {
     const match = line.match(/^ {0,3}#{1,6}\s+(.+?)\s*#*$/);
     if (!match) continue;
-    const slug = match[1].replace(/<[^>]*>/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    const slug = match[1].replace(/<[^>]*>/g, '').replace(/[<>]/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
       .toLowerCase().replace(/[^\p{L}\p{N}\p{M}\s_-]/gu, '').replace(/ /g, '-');
     const count = counts.get(slug) ?? 0;
     ids.add(count ? `${slug}-${count}` : slug);
