@@ -377,7 +377,7 @@ the settings and history UI.
 
 ### Known limitations
 
-- Slice G follow-ups closed by migration 088: a clinician with two links to one patient can now
+- Slice G follow-ups closed by migration 091: a clinician with two links to one patient can now
   run a SMART import by choosing the care team (required select; fail closed on a team that
   is not theirs); clinic-admin review items reach only that clinic's admins in the
   notification centre without patient detail; conflict replies can be resolved by the asking
