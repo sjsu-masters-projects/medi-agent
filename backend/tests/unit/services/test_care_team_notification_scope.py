@@ -1,6 +1,6 @@
 """Notification and email wording follows record ownership (PLAN-002 / CLN-003 slice G).
 
-The recipient rule itself lives in the database (083, covered by the disposable PostgreSQL
+The recipient rule itself lives in the database (087, covered by the disposable PostgreSQL
 contract tests). These tests pin what the Python layer adds: the clinic an email names and the
 link and copy of a shared critical-result alert a team cannot open. Synthetic data only.
 """

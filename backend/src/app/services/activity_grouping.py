@@ -3,7 +3,7 @@
 Read-model only: plan items, medications and obligations are never merged or deleted. Two
 live activities group only when they are provably the same instruction; any difference
 keeps them apart (publication of a conflicting plan is blocked in SQL anyway). Medication
-identity uses the same precedence as ``private.care_plan_cross_conflicts`` (migration 082):
+identity uses the same precedence as ``private.care_plan_cross_conflicts`` (migration 086):
 canonical target, recorded ingredient rxcui, normalized recorded name.
 """
 

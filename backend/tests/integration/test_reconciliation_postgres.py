@@ -507,8 +507,25 @@ def test_browser_roles_cannot_invoke_lifecycle_rpcs(sql, role):
     assert not rows(sql, "clinical_fact_mapping_revisions")
 
 
-def service_decision(sql, key, *, request=None, patient=PATIENT):
+class _DatabaseOnlyGate:
+    """This reduced schema (migrations up to 032) has no care-team ownership columns.
+
+    The ownership gate has its own tests (unit and care-team Postgres suites); here the suite
+    exercises the reconciliation functions, which repeat the assignment check themselves.
+    """
+
+    def fact(self, clinician_id, patient_id, fact_id):
+        return None
+
+
+def reconciliation_service(sql):
     service = ClinicalReconciliationService(PostgresDatabase(sql))
+    service.gate = _DatabaseOnlyGate()  # type: ignore[assignment]
+    return service
+
+
+def service_decision(sql, key, *, request=None, patient=PATIENT):
+    service = reconciliation_service(sql)
     return service.decide(
         fact_id=UUID(key),
         patient_id=UUID(patient),
@@ -615,8 +632,10 @@ def test_revoked_assignment_blocks_saved_replay_without_snapshot_or_mutation(sql
 @pytest.mark.parametrize("allergen", ["NKDA", "No known drug allergies", "Sin alergias conocidas"])
 def test_absence_of_allergy_is_reviewable_evidence_without_positive_allergen(sql, allergen):
     key = fact(sql, kind="allergy", value={"allergen": allergen})
-    service = ClinicalReconciliationService(PostgresDatabase(sql))
-    preview = service.preview(fact_id=UUID(key), patient_id=UUID(PATIENT))
+    service = reconciliation_service(sql)
+    preview = service.preview(
+        fact_id=UUID(key), patient_id=UUID(PATIENT), clinician_id=UUID(CLINICIAN)
+    )
     assert preview["projectable"] is False
     assert preview["candidate_fields"] == {}
     with pytest.raises(ValidationError, match="evidence-only"):

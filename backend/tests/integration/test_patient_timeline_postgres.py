@@ -92,6 +92,10 @@ class TimelineQuery:
     def eq(self, field, value):
         return self._filter(field, "=", literal(value))
 
+    def in_(self, field, values):
+        members = ",".join(literal(value) for value in values) or "NULL"
+        return self._filter(field, "IN", f"({members})")
+
     def gte(self, field, value):
         return self._filter(field, ">=", literal(value))
 
@@ -143,6 +147,18 @@ def timeline_sql(sql):
         "060_confirmed_symptom_intake.sql",
     ):
         sql((MIGRATIONS / name).read_text())
+    # Care-team ownership columns the timeline reads (the real definitions are migrations
+    # 084 and 085; this reduced schema only needs their shape). Shared: unrouted/unowned.
+    sql("""
+      ALTER TABLE documents ADD COLUMN IF NOT EXISTS care_team_id uuid,
+        ADD COLUMN IF NOT EXISTS routing_state text NOT NULL DEFAULT 'unrouted';
+      ALTER TABLE adr_assessments ADD COLUMN IF NOT EXISTS reviewed_by_care_team_id uuid;
+      ALTER TABLE source_provenances ADD COLUMN IF NOT EXISTS care_team_id uuid;
+      CREATE TABLE IF NOT EXISTS care_plans(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        patient_id uuid NOT NULL, care_team_id uuid, ownership_state text NOT NULL DEFAULT 'owned');
+      ALTER TABLE care_plan_versions ADD COLUMN IF NOT EXISTS care_plan_id uuid;
+      GRANT ALL ON care_plans TO service_role;
+    """)
     return sql
 
 
@@ -193,7 +209,9 @@ def seed_events(sql):
         VALUES('{PATIENT}','medication','{med}','taken');
       INSERT INTO appointment_offer_events(appointment_id,patient_id,proposal_group_id,actor_id,action,new_status)
         VALUES('{visit}','{PATIENT}','{uuid4()}','{CLINICIAN}','propose','scheduled');
-      INSERT INTO care_plan_versions(id,patient_id,version_number) VALUES('{plan}','{PATIENT}',1);
+      INSERT INTO care_plans(id,patient_id,care_team_id) VALUES('{plan}','{PATIENT}','{TEAM}');
+      INSERT INTO care_plan_versions(id,patient_id,version_number,care_plan_id)
+        VALUES('{plan}','{PATIENT}',1,'{plan}');
       INSERT INTO care_plan_audit_events(plan_version_id,actor_id,event_type)
         VALUES('{plan}','{CLINICIAN}','created');
       INSERT INTO clinical_facts(id,patient_id,fact_type,subject_type)
@@ -224,7 +242,13 @@ async def test_every_source_selection_executes_as_service_role_and_returns_real_
     result = await ClinicianService(db).get_patient_timeline(UUID(CLINICIAN), UUID(PATIENT))
     assert db.failures == []
     assert len(result.sources) == len(SOURCES)
-    assert all(source.status == "available" and source.returned >= 1 for source in result.sources)
+    assert all(
+        source.status == "available" and source.returned >= 1 for source in result.sources
+    ), [
+        (s.source, s.status, s.returned)
+        for s in result.sources
+        if s.status != "available" or s.returned < 1
+    ]
     assert all(source.omitted_invalid == 0 for source in result.sources)
     assert {event.domain for event in result.events} == {
         "document",

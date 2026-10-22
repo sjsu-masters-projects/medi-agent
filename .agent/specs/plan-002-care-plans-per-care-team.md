@@ -125,6 +125,19 @@ Decided October 13:
    patient's care teams' queues. Any of them can claim the whole document; once one does, it
    leaves the other queues, and the claim is audited.
 
+5. **Decided October 22:** Today shows ONE combined entry when two or more approved plans
+   contain the same activity with identical instructions (a medication duplicate resolved
+   with "keep both, with a reason", or a warning-only non-medication overlap). The key is the
+   same supported medication identity (or the same normalized activity) AND identical
+   dose/frequency/route/instructions/schedule; any difference keeps the entries apart, and
+   publication stays blocked for a medication difference, so a combined entry never hides a
+   difference. The entry names every owning care team, has one reminder and one check-off,
+   and a completion or barrier is written once per underlying plan item and reported to each
+   owner. It is a read-model grouping, recomputed on every read: plan items are never merged
+   or deleted, so retiring or changing one side simply dissolves the group and the entry
+   falls back to the remaining item with its history. An unowned side participates with its
+   "no longer on your care team" label.
+
 ## Implementation sequence
 
 **Status (October 21):** the requester asked for full G/H implementation in
@@ -169,3 +182,155 @@ Use existing services/RPC patterns; no autonomous clinical decisions, no remote
 migration, deployment, backfill or merge is authorized by this task. Foundations
 and local tests are not full G/H completion; record each integrated acceptance
 path before marking Done.
+
+
+## Delivered in PR #210 (backend)
+
+Migrations (unapplied; no remote SQL is authorized):
+
+| File | What it does |
+| --- | --- |
+| `084_care_team_plan_ownership.sql` | `care_plans` (one plan per care-team link, owner, `ownership_state`, last-owner snapshot); per-plan versions, one open draft and one approved version per plan (replaces the per-patient constraints); per-plan generation requests, claim, completion and publication guard; legacy backfill (approver's only link, then the link the activities were projected for, then the patient's only care team; ambiguous becomes `unassigned_legacy` and opens a review item, never guessed); team-ends trigger (plan becomes `unowned`, activities and medications untouched, review items to the remaining teams and, without patient detail, the clinic's admins); `adopt_care_plan` and `retire_care_plan_items` (patient-wide lock, exactly one adoption winner); append-only ownership trail; plan RLS follows the owning link. |
+| `085_care_team_owned_records.sql` | Document owner and routing (`routed`/`unrouted` = "Not sure"), atomic `claim_document`, drafting only from the plan's own routed sources (`care_plan_source_fact_ids`); provenance, import, SOAP, ADR-review and MedWatch owner columns; recording-team stamping for medications, allergies and conditions; patient-controlled `conditions.is_sensitive` with an audited RPC and the `shared_clinical_summary` RPC; clinician-session RLS and the storage policy follow ownership; browser writes to conditions and allergies revoked. |
+| `086_cross_plan_publication.sql` | The only cross-plan comparison (`care_plan_cross_conflicts`), resolutions, review-item replies, `publish_care_plan_version` (authorization, patient advisory lock, idempotency record, current-state conflict check, exclusions carried to the next draft, per-plan supersession; publishing never deactivates another plan's activities); conversation activity context and review restricted to the conversation's own team. |
+| `087_care_team_notification_scope.sql` | Notification fan-out and "open an item" follow record ownership; critical results stay shared with a neutral copy for teams that do not hold the document. |
+
+Contract tests (disposable PostgreSQL 16, CI shard `care-team-plans`): 25 ownership and
+backfill, 35 shared core and records, 38 publication, 24 notification cases.
+
+### Lock order
+
+Authorization reads (no locks) -> patient fence (`private.lock_care_plan_evidence`, the
+patient-wide advisory lock used by documents and generation) -> idempotency record ->
+`care_plans` row -> `care_plan_versions` row -> items (item trigger) -> projections. Clinic
+and clinician locks are not taken by these functions. Adoption, retirement, claiming,
+resolutions and publication all follow this order, use the database clock and write ids,
+never clinical text, to logs.
+
+### Read-path audit (clinician reads of owned or sensitive data)
+
+Every path below has a unit test that fails if its check is removed; the SQL paths have
+Postgres tests. "Fixed" = it leaked before this PR.
+
+| Path | Result |
+| --- | --- |
+| Patient deep dive (conditions, other teams, SOAP, obligations, barriers, rates, documents) | Fixed |
+| Patient detail header, patient list, sent messages, email-to-patient | Already safe (demographics or own rows only) |
+| Timeline | Fixed (documents, visits, plans, ADR, facts, adherence by owner) |
+| Risk radar and score | Fixed (per clinician; other teams' adherence and acted-on ADR excluded) |
+| SOAP generation context and saved notes | Fixed (filtered context; stored with the team) |
+| ADR queue, detail, review; MedWatch list, preview, export, approve, discard, submission | Fixed (pending is shared, reviewed is the reviewing team's) |
+| Dashboard counts | Fixed |
+| Documents: list, get, source preview, retries, review queue, approve, reject, annotate | Fixed (unrouted must be claimed before approve or reject) |
+| Extracted facts and citations, reconciliation preview and apply, sensitive-condition match | Fixed |
+| FHIR/SMART: imports, facts, lineage, source, audit export, identity binding, medication reference, external-record workload | Fixed |
+| Notifications and email recipients, opening an item, read-through, acknowledge | Fixed in SQL (087); critical results stay shared |
+| Direct browser sessions (PostgREST): documents, facts, citations, provenance, SOAP, conditions, ADR, MedWatch, care-plan tables, stored files | Fixed (RLS and storage policy follow ownership) |
+| Care conversations, appointment offers | Already per link in SQL; the visit list rule is an open question below |
+| Search and export endpoints | None outside the paths above (the only `ilike` is the clinic join code) |
+
+### API contract (PR #210)
+
+All paths are under `/api/v1`. Errors use the existing envelope
+`{"error": {"code", "message", "details"?}}`. Types: `packages/shared/src/types/care-team-plans.ts`.
+A care plan is addressed by `care_plan_id`; the existing `{plan_id}` path segment of the
+version routes is the VERSION id (unchanged for compatibility).
+
+**Clinician: plans**
+
+- `GET /care-plans/clinician/patients/{patient_id}/plans` -> `{plans: ClinicianPlanListEntry[]}`.
+  Own plans carry `active_version_id`, `draft_version_id`, `generation`; another team's plan is
+  only `{owner, approved_at, is_mine:false}`; an unowned or unassigned plan lists
+  `adoptable_by_care_team_ids`.
+- `GET /care-plans/clinician/patients/{patient_id}`, `/review-context`, `/generation` and
+  `POST .../retry-generation` take optional `care_team_id` and `care_plan_id`. With two links
+  that both have plans and neither named: 422 `CARE_TEAM_REQUIRED`,
+  `details.options[{care_team_id, care_plan_id}]`.
+- `GET /care-plans/clinician/patients/{patient_id}/care-team-options` -> my exact active links.
+- `PUT .../{version_id}`, `.../items/{id}/translate`, `.../back-translate`,
+  `GET .../today-preview`: unchanged; another team's version is `404 NOT_FOUND`.
+
+**Clinician: publication and conflicts**
+
+- `GET .../{version_id}/cross-plan-review` -> `CrossPlanReview`: every conflict with both
+  instructions (`ours`, `theirs`: medication fields only; non-medication overlaps reveal only
+  the category), `other_plan` metadata (specialty, clinician, clinic, approval date,
+  ownership state), `acknowledged`, `acknowledged_reason`, `asked_other_team`, and
+  `interaction_coverage: "not_checked"` (interaction severity is never asserted).
+- `POST .../{version_id}/conflicts/{fingerprint}/resolution`
+  `{resolution: "keep_both"|"ask_other_team", reason}` (reason required, 1-2000). Tells the
+  other care team. A fingerprint binds both exact instructions: if either changes, 409
+  `CONFLICT_CHANGED` and a fresh review gives a new fingerprint. Change or remove an item with
+  the existing `PUT`; publish without an item with `excluded_item_ids`.
+- `POST .../{version_id}/approve` `{note, idempotency_key?, excluded_item_ids?}` ->
+  `PublishCarePlanResult`. Unresolved blockers: 409 `CROSS_PLAN_CONFLICT`,
+  `details: {conflicts, interaction_coverage}`; same key with a different request: 409
+  `IDEMPOTENCY_KEY_REUSED`; already published: 409 `CONFLICT`. Nothing is published on any
+  error. `warnings` lists non-blocking overlaps.
+- `GET /care-plans/clinician/review-items?status=open` -> `{items, clinic_items}`;
+  `POST .../review-items/{id}/reply` `{note?}` (a reply informs the asker; it never clears the
+  blocker).
+
+**Clinician: unowned plans**
+
+- `GET /care-plans/clinician/patients/{patient_id}/plans/{care_plan_id}/activities` (only for a
+  plan nobody owns), `POST /care-plans/clinician/plans/{care_plan_id}/adopt`
+  `{care_team_id, note}` (409 `PLAN_ALREADY_ADOPTED` for the loser), `POST .../retire-items`
+  `{care_team_id, item_ids, reason}`.
+
+**Clinician: shared core and documents**
+
+- `GET /care-team/clinician/patients/{patient_id}/shared-summary` -> `SharedClinicalSummary`
+  (`some_conditions_private` is the explicit marker; recording team on every record; other
+  care teams with plan metadata).
+- `GET /documents/claimable?patient_id=` (routing queue: my routed documents plus unrouted
+  ones, each with `needs_claim`, `claimable_care_team_ids`); `POST /documents/{id}/claim`
+  `{care_team_id}` (409 `DOCUMENT_ALREADY_CLAIMED`); `POST /documents/patients/{patient_id}`
+  takes optional `care_team_id` (required when I hold several links: 422 `CARE_TEAM_REQUIRED`).
+  Approve and reject of an unrouted document: 422 `DOCUMENT_CLAIM_REQUIRED`.
+- `care_team_id` is optional on SOAP generation, ADR review and MedWatch draft creation and is
+  required (422 `CARE_TEAM_REQUIRED`) when the clinician holds several links to the patient.
+
+**Patient**
+
+- `GET /documents/care-team-options` -> `UploadCareTeamOption[]`; `POST /documents/` takes
+  `care_team_id` or `not_sure: true` (two or more teams and neither: 422 `CARE_TEAM_REQUIRED`).
+- `GET /feed/today?care_team_id=<uuid|"unowned">` -> existing fields plus per task
+  `plan_owner`, `plan_owners`, `combined_item_ids`, and `care_team_filters`, `contact_clinic`
+  at the top level (`TodayTaskOwnership`, `TodayOwnershipSummary`). `plan_owner.unowned_notice`
+  drives "Prescribed by Dr. X, no longer on your care team. Ask your care team before changing
+  it."; `contact_clinic` is the "contact your clinic" state. Names are parts, not a label; the
+  portals compose "Specialty · Dr. Name · Clinic" with their i18n.
+- `GET /care-plans/patients/{patient_id}` -> the merged approved plans (`items[].plan_owner`,
+  `plans[]`); retired items are omitted.
+- `GET /care-team/patient/conditions`, `PUT /care-team/patient/conditions/{id}/sensitivity`
+  `{is_sensitive}` (own conditions only; anything else `404`).
+- Nora's context carries `plan` provenance on each medication and activity and a `care_plans`
+  list; she cites the plan owner.
+
+## Open questions (conservative behaviour chosen; please decide)
+
+1. **Visits within a clinic.** `AppointmentService` lets a colleague with a link at the same
+   clinic list, edit and export another team's visit (the October 17 decision). That conflicts
+   with "visit details are owned by one care team". Left unchanged; tell us to narrow it to
+   the visit's own link.
+2. **Confirmed-symptom hand-off** (071) messages every assigned clinician with the symptom
+   name and severity. Treated as shared safety information; confirm.
+3. **Nora chat, symptom reports and adherence rows** remain patient-wide tables. Clinician
+   reads of adherence for another team's activities are filtered in the API, not the table.
+4. **Orphaned documents** (owner link deleted) stay routed to nobody and are hidden from every
+   clinician; the evidence behind approved activities is not reachable. A re-route tool is out
+   of scope.
+5. **SMART launch for a clinician with two links to one patient** is refused
+   (`CARE_TEAM_REQUIRED`); `smart_launch_sessions` has no team column.
+6. **ADR review and MedWatch creation stamp the team in a second statement** (the older RPCs
+   cannot take it). Until it lands, or if it fails, the row is visible to its reviewer only
+   (ADR) or to all assigned teams (MedWatch draft, legacy rule).
+7. **Reminder dispatch** still reads per-item schedules; a combined Today entry shows one
+   reminder, but the dispatcher may still send one per underlying item. Follow-up.
+8. **Review items in the notification centre.** They have their own list endpoint; surfacing
+   them as receipts needs a decision on patient-less items.
+9. **Legacy documents** that cannot be attributed (patient with several teams) become
+   "Not sure" (visible to each team that could see them before) until claimed.
+10. **Portals** (picker, owner chips, conflict screens, adopt/retire, sensitive toggle, claim
+    queue) are the follow-up pass; this API is their contract.

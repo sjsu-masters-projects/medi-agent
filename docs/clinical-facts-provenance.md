@@ -120,3 +120,23 @@ ordinary list is clinical-language-first; original FHIR JSON or document evidenc
 available only through a separate, care-team-authorized source request. See
 [`smart-fhir-review-mapping.md`](smart-fhir-review-mapping.md) for the resource-to-field
 contract and the EHR-initiated versus standalone launch behavior.
+
+## Care-team ownership of evidence (PLAN-002)
+
+Evidence belongs to the care team that received it. A document is routed to one care team
+(`documents.care_team_id`, `routing_state = 'routed'`) or is "Not sure" (`unrouted`), in which
+case every active care team of the patient sees it in its queue until one clinician claims the
+whole document (`claim_document`: atomic, audited, one winner). A fact is visible to a
+clinician only if EVERY source behind it is: a source document routed to another team (or one
+that cannot be found) hides the fact. Sources that are not documents (clinician entries, FHIR
+imports) carry their own `source_provenances.care_team_id`; none recorded means they were as
+shared as before teams existed. A care plan drafts only from sources routed to its own team
+(`care_plan_source_fact_ids`); a routed document whose owner link is deleted stays routed to
+nobody and is hidden from every clinician.
+
+Approved medications, allergies and conditions stay one patient-wide record, each stamped with
+the recording care team and a display snapshot (`recorded_by`) so the label survives the link.
+A condition the patient marks sensitive (`set_condition_sensitivity`, audited without the name)
+is visible only to its recording team; other clinicians get `some_conditions_private`. A
+sensitive condition with no recorded team is visible to no clinician. Reconciliation never
+matches or updates a sensitive condition another team recorded.

@@ -746,3 +746,28 @@ extension on FHIR audit events record the clinic when an event concerns a link. 
 `069_clinic_scheduling_and_tags.sql` carries the SQL (applied October 17; the read-only
 `scripts/appointment-clinician-overlap-preflight.sql` returned 0 rows first). In a fresh or other
 environment run the preflight before applying if the migration reports overlaps.
+
+## Care plans per care team and the shared clinical core (PLAN-002, CLN-003 G/H)
+
+A care plan belongs to one care-team link (patient, clinician, clinic). Specification,
+decisions, lock order, read-path audit and the API contract:
+[PLAN-002](../.agent/specs/plan-002-care-plans-per-care-team.md).
+
+- **Migrations 084-087** (unapplied; never apply remote SQL without explicit authorization):
+  plan ownership and per-plan versions (084), owned records, routed documents and the shared
+  core (085), cross-plan publication (086), notification scoping (087). Each ends with a
+  verification block that fails if a grant or RLS setting is wrong.
+- **Ownership is enforced in Python** because the backend uses the service role. The rules are
+  in `services/care_team_access.py`; every clinician read of documents, facts, plans, SOAP
+  notes, reviewed ADR work, MedWatch drafts and FHIR imports goes through them (and
+  `clinician_record_gate.py`). A row that does not carry its owner columns is hidden. The same
+  rules are in the database for direct sessions (RLS and the storage policy).
+- **Publication** is `publish_care_plan_version`: one transaction under the patient-wide lock,
+  the only cross-plan comparison in SQL, idempotent per key. Interaction severity is never
+  asserted (`interaction_coverage: "not_checked"`, MED-001).
+- **Postgres contract tests** (`tests/integration/test_care_team_*_postgres.py`, harness
+  `care_team_plan_harness.py`, env `CARE_TEAM_PLANS_TEST_POSTGRES_DOCKER=1`, CI shard
+  `care-team-plans`) build template databases from the real ledger; run them with
+  `-o timeout=1200` locally if Docker is busy.
+- **Unit helpers**: `tests/unit/services/care_team_fake_db.py` is an in-memory client that
+  applies filters as sent, so a forgotten owner filter fails a test.
