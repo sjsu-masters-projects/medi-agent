@@ -1,4 +1,4 @@
-# Deployed portal recheck — October 11–19, 2026
+# Deployed portal recheck: October 11–19, 2026
 
 Synthetic Morgan Ellis (patient, `app.mediagent.live`) and Elena Park (clinician,
 `clinician.mediagent.live`) only, on main `8b93b48` (#149) as deployed. The requester
@@ -230,7 +230,7 @@ deployed in parallel and the older image took the traffic.
 - Email: Resend lists every recent send as Delivered.
 
 Defects found and their fixes are recorded in the
-[AI-005 spec](../.agent/specs/ai-005-agent-quality.md).
+[AI-005 spec](../../.agent/specs/ai-005-agent-quality.md).
 
 ## October 18 deployed-verification campaign
 
@@ -238,7 +238,7 @@ This campaign began on deployed `main` at `582c397` (#192). Main subsequently
 advanced to `ee49c17` (#191 merged); its deployed behavior is not assumed from
 the merge. The hosted ledger records `076_care_conversation_activity_review.sql`
 as applied at 2026-10-19 06:28 UTC. It covers the real `Verify deployed` rows in
-[the task board](../.agent/TASKS.md), with each observation tied to the build and
+[the task board](../../.agent/TASKS.md), with each observation tied to the build and
 state actually seen. All patient and clinician data used below remain synthetic.
 
 ### Evidence rules
@@ -298,7 +298,7 @@ Read-only Cloud Run request metadata (no URLs with patient identifiers, query st
 payloads or transcript text retained) confirmed **14 HTTP 502 notification GETs** on
 October 18 at 06:13, 06:38 and 06:44 UTC. They were list/summary reads, took
 8.18–8.95 seconds and ran on revisions `00156-6df`/`00157-9cj`, before the
-notification fix described in the [NOT-001 contract](../.agent/specs/not-001-notification-centre.md#production-fix-slow-reads-duplicate-polling-starved-chat-migration-075).
+notification fix described in the [NOT-001 contract](../../.agent/specs/not-001-notification-centre.md#production-fix-slow-reads-duplicate-polling-starved-chat-migration-075).
 This supports the notification-pool contention diagnosis; it does **not** by
 itself explain Morgan's Visits timezone or calendar-export failures.
 
@@ -481,7 +481,7 @@ survives the guard (`Do not take 1,000 mg or 2.5 mL without water` → `Take 1,0
 would reject correct translations, because the pair does not use negatives one-for-one. The
 narrow candidate fix — compare counts only when both texts are the same language, which is
 the back-translation comparison — is recorded as an open LOC-001 guard question in the
-[LOC-003 specification](../.agent/specs/loc-003-english-first-clinician-review.md). The
+[LOC-003 specification](../../.agent/specs/loc-003-english-first-clinician-review.md). The
 preflight prints it every run so it is not rediscovered.
 
 #### Deployed acceptance, once 080–082 and 088 are authorized/applied
@@ -1286,7 +1286,7 @@ intermittent failures; bounded logs found no reproduced transport failure.
 ## Post-208 grouped acceptance
 
 Scope: REC-001/002, NOT-003, MED-001, CLN-001/002. Contract:
-[workflow completion](../.agent/specs/expo-workflow-completion.md).
+[workflow completion](../../.agent/specs/expo-workflow-completion.md).
 Branch `codex/post-208-acceptance` starts from merged main `f235c278`.
 Formal model/provider evaluation is optional; synthetic functional verification,
 approval boundaries and automated safety/access tests remain required.

@@ -35,7 +35,7 @@ configuration.
 serve the updated code. Morgan's Spanish typed/mobile confirmation produced one
 canonical completed task and one exact clinician ADR draft, unlike the preserved
 pre-fix duplicate history. Saved region wording/reload and unchecked consent pass.
-See [live evidence](deployed-recheck-2026-10-11.md#october-20--post-202-live-acceptance).
+See [live evidence](evidence/deployed-recheck-2026-10-11.md#october-20--post-202-live-acceptance).
 Physical voice, forced outage and wider mobile/accessibility checks remain.
 
 ### October 19 authorized activation checkpoint
@@ -78,7 +78,7 @@ and a new single-task confirmation check. Candidate-2 remains unapproved.
    Require every result to pass. The default invocation without `--check-target`
    only validates the packaged library and prints required migration checksums.
    It neither contacts the target nor claims that a running service has the flags.
-5. Follow the [acceptance journey](pat-002-b-acceptance-2026-10-17.md) in patient and
+5. Follow the [acceptance journey](evidence/pat-002-b-acceptance-2026-10-17.md) in patient and
    assigned clinician portals. Confirm one report, one durable task, one notice,
    owned visibility, refresh recovery and the existing ADR draft for an exact
    active-list product. Exercise both languages and actual microphone playback/

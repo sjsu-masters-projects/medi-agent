@@ -3,7 +3,7 @@
 **Current acceptance:** The synthetic controlled-care core journey is verified,
 including Spanish publication, revision continuity and five-document consolidation.
 Use [TASKS.md](../TASKS.md) for current issue state and
-[acceptance evidence](../../docs/pat-005-final-acceptance-2026-10-10.md) for verification
+[acceptance evidence](../../docs/evidence/pat-005-final-acceptance-2026-10-10.md) for verification
 boundaries. Earlier staged rollout/pending notes below describe implementation
 history, not instructions to reopen accepted checks or reapply migrations.
 
@@ -134,7 +134,7 @@ Rollout: apply `044_care_plan_overlap_publication_guard.sql` with the existing m
 runner before deploying. Reload the existing draft, explicitly exclude imported proposals,
 review overlap groups, save, then verify publication/Today and historical adherence. Do not
 retry completed generation to clean up an existing draft. Full PAT-005 live proof is closed —
-see [final acceptance](../../docs/pat-005-final-acceptance-2026-10-10.md).
+see [final acceptance](../../docs/evidence/pat-005-final-acceptance-2026-10-10.md).
 
 When new documents register grounded facts, the approved version remains active while a newer
 draft is prepared. The assigned clinician needs both snapshots in one review: the current
@@ -246,7 +246,7 @@ recovery retries GET/HEAD once with 100–249 ms jitter, respects cancellation, 
 retries HTTP errors or writes. An unconfirmed response is not marked saved; refresh
 before manual retry. This is mitigation, not a verified transport root-cause fix.
 New deployed UI/chat/policy checks, full bilingual plan publication and live five-document
-worker timing are closed — see [final acceptance](../../docs/pat-005-final-acceptance-2026-10-10.md).
+worker timing are closed — see [final acceptance](../../docs/evidence/pat-005-final-acceptance-2026-10-10.md).
 
 ## Explicitly deferred
 

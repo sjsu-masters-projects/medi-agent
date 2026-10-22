@@ -1,48 +1,95 @@
-# Documentation map
+# Documentation
 
-This directory holds durable operating and product documents. Git history retains retired
-spikes, phase plans and market surveys; [`../meetings/`](../meetings/README.md) holds the
-spring-2026 meeting records. Neither is current implementation guidance.
+Start with the task you need to complete. Setup, operating procedures, product
+requirements and verification evidence have separate homes.
 
-## Read by purpose
+## Start here
 
-| Need | Source of truth |
+| Goal | Read |
 | --- | --- |
-| Product boundary, decisions, ownership, and active work | `../.agent/PROJECT.md`, `../.agent/TEAM.md`, and `../.agent/TASKS.md` |
-| Detailed task acceptance (required before coding) | [Backlog requirements](../.agent/specs/project-backlog-acceptance.md), or the issue's dedicated spec below |
-| Care-plan generation, review, approval and Today contract | [PAT-005 specification](../.agent/specs/pat-005-clinician-approved-today-feed-plan.md) and [patient-upload evidence gate](patient-upload-care-plan-review-gate.md) |
-| Advisor items from the October 13 checkpoint | [Multi-clinic clinicians (CLN-003)](../.agent/specs/clin-003-multi-clinic-clinicians.md), [care plans per care team (PLAN-002)](../.agent/specs/plan-002-care-plans-per-care-team.md) and [English-first review of Spanish content (LOC-003)](../.agent/specs/loc-003-english-first-clinician-review.md) |
-| Scheduling and addressed human messaging | [Scheduling specification](../.agent/specs/sch-001-appointment-scheduling.md) and [conversation specification](../.agent/specs/com-001-two-way-conversations.md) |
-| Patient-confirmed symptom intake implementation | [PAT-002-B plan](../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md) and [October 17 evidence](pat-002-b-acceptance-2026-10-17.md) and [rollout](pat-002-b-rollout.md); PAT-002-C timeline and ADR follow-up remain separate |
-| Latest prototype acceptance and pending presentation checks | [Deployed recheck, October 11–13](deployed-recheck-2026-10-11.md), [PAT-005 acceptance](pat-005-final-acceptance-2026-10-10.md), [portal UI/UX evidence](portal-ui-ux-review-2026-10-10.md) and [UX-002 overhaul verification](ux-002-overhaul-verification.md) |
-| Visual design and app icons | `../.agent/DESIGN_SYSTEM.md` and [app icons](brand-icons.md) |
-| Current implementation and delivery boundaries | `../.agent/ARCHITECTURE.md` |
-| Model routing, safety controls, and evaluation limits | [AI runtime decision](decisions/ai-runtime-2026-09.md) and the [AI-005 agent quality plan](../.agent/specs/ai-005-agent-quality.md) |
-| Nora's reference knowledge, document answers and conversations | [NORA-002 specification](../.agent/specs/nora-002-grounded-answers.md) and [durable recovery/document-focus contract, evidence and pending wording](../.agent/specs/pat-001-a-nora-turn-recovery.md) |
-| Patient locale continuity, activity-message review and bounded AI demo checks | [Combined acceptance contract](../.agent/specs/demo-care-loop-followups.md) and [repeatable evaluation guide](demo-ai-evaluation.md) |
-| In-app notifications, clinician Alerts and their database contract | [NOT-001 specification](../.agent/specs/not-001-notification-centre.md) |
-| Account recovery, email preferences, invitations and event email | [EMAIL-001 specification](../.agent/specs/email-001-email-flows.md) and [email templates](email-templates/README.md) |
-| Document ingestion design and Cloud Run Job operation | [Document intelligence decision](document-intelligence-assessment.md) and [worker guide](document-ingestion-worker.md) |
-| Supported upload formats, viewers and upload safety | [Document format policy](document-format-policy.md) |
-| Cloud Run service and Jobs, Cloud Scheduler triggers, run logs | [Cloud infrastructure and operations](../.agent/CLOUD_INFRASTRUCTURE_GUIDE.md) |
-| Environment limits, deploy ordering and known traps | [Session handoff](../.agent/HANDOFF.md) |
-| Database, RLS, migrations, and local setup | [Supabase setup](supabase_setup_guide.md) |
-| Synthetic demonstration setup and fixture scope | [Demo environment](demo-environment.md), [synthetic-data catalog](synthetic-data-catalog.md) and [PAT-005 synthetic scenario](pat-005-synthetic-scenario.md) |
-| Auth-account QA, linking and recovery | [Demo auth checklist](demo-environment.md#auth-account-qa) |
-| Deferred database advisor findings | [Database performance follow-up](deferred_database_performance_work.md); not an instruction to change staging |
-| FHIR/SMART provenance and review behaviour | [Clinical-fact provenance](clinical-facts-provenance.md) and [SMART review mapping](smart-fhir-review-mapping.md) |
-| Contributor and coding-environment workflow | [Contributor workflow](contributor-agent-workflow.md) |
+| Understand the product | [Project README](../README.md) and [product scope](../.agent/PROJECT.md) |
+| Run a local checkout | [Quick start](../README.md#run-locally) and [local development](development.md) |
+| Make a contribution | [Contributor guide](../CONTRIBUTING.md) and [coding standards](../.agent/CODING_STANDARDS.md) |
+| Find current work and acceptance gaps | [Task board](../.agent/TASKS.md) |
+| Understand service and data boundaries | [Architecture](../.agent/ARCHITECTURE.md) |
+| Maintain these documents | [Documentation maintenance](maintaining-docs.md) |
 
-Only update a decision record when a reviewed implementation or an explicit team decision
-changes it. Keep current status/owner/next step in `../.agent/TASKS.md`; keep detailed
-requirements in linked specs and reproducible acceptance evidence in linked reports.
-Do not create parallel trackers or append chronological work logs to the board.
+## Set up and operate
 
-## Retention rule
+| Guide | Covers |
+| --- | --- |
+| [Supabase setup and migrations](supabase_setup_guide.md) | Database recreation, ledger/checksum rules, RLS and Auth setup |
+| [Cloud infrastructure](../.agent/CLOUD_INFRASTRUCTURE_GUIDE.md) | Cloud Run, Jobs, Scheduler, deployment and logs |
+| [Nora worker setup](chat-worker-setup.md) | Queue, task authentication, runtime variables, least-privilege service accounts and rollback |
+| [Document ingestion worker](document-ingestion-worker.md) | Ingestion job operation, recovery and service boundaries |
+| [Symptom-intake rollout](pat-002-b-rollout.md) | Candidate eligibility, activation and safe rollout checks |
+| [Synthetic environment](demo-environment.md) | Fictional accounts, auth QA, fixtures and reset boundaries |
+| [Synthetic data catalog](synthetic-data-catalog.md) | Dataset scope, provenance and supported scenarios |
+| [Email templates](email-templates/README.md) | Template sources and Auth email constraints |
 
-Keep a document when it defines an active contract, repeatable runbook, unresolved
-decision, or acceptance evidence needed to judge a task. Being implemented does not
-make a specification obsolete. Consolidate duplicate checklists and completed work
-logs into their canonical guide/report, repair inbound links, and let Git preserve
-the removed material. The start-of-task workflow requires the selected spec or
-backlog acceptance section, so detailed requirements are not forgotten archives.
+Operating guides contain commands that may change external systems. Reading or
+merging a guide is not permission to run those commands.
+
+## Product and workflow contracts
+
+Read the task's linked specification before implementing a change. Specifications
+remain contracts after their implementation is merged.
+
+| Area | Canonical requirements |
+| --- | --- |
+| Approved plans and Today | [PAT-005](../.agent/specs/pat-005-clinician-approved-today-feed-plan.md), [upload evidence gate](patient-upload-care-plan-review-gate.md) |
+| Clinics and care-team plan ownership | [CLN-003](../.agent/specs/clin-003-multi-clinic-clinicians.md), [PLAN-002](../.agent/specs/plan-002-care-plans-per-care-team.md) |
+| Bilingual review | [LOC-001](../.agent/specs/loc-001-bilingual-approved-wording.md), [LOC-003](../.agent/specs/loc-003-english-first-clinician-review.md) |
+| Confirmed symptoms and follow-up | [PAT-002-B](../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md), [ADR loop](../.agent/specs/pv-001-c-adr-loop-gap-fixes/requirements.md) |
+| Nora and durable conversations | [Grounded answers](../.agent/specs/nora-002-grounded-answers.md), [recovery and document focus](../.agent/specs/pat-001-a-nora-turn-recovery.md), [voice](../.agent/specs/voice-001-voice-mode.md) |
+| Private human messages and visits | [Conversations](../.agent/specs/com-001-two-way-conversations.md), [scheduling](../.agent/specs/sch-001-appointment-scheduling.md) |
+| Alerts and selective email | [Notification centre](../.agent/specs/not-001-notification-centre.md), [email flows](../.agent/specs/email-001-email-flows.md) |
+| Records and reconciliation | [Workflow completion](../.agent/specs/expo-workflow-completion.md), [FHIR/SMART plan](../.agent/specs/int-002-003-interoperability-plan.md) |
+| Other task acceptance | [Backlog requirements](../.agent/specs/project-backlog-acceptance.md) |
+| Synthetic care-plan rehearsal | [Scenario](pat-005-synthetic-scenario.md), [grouped acceptance contract](../.agent/specs/demo-care-loop-followups.md) |
+
+## Technical reference and decisions
+
+| Topic | Reference |
+| --- | --- |
+| Backend packages, endpoints and test commands | [Backend README](../backend/README.md) |
+| Patient and clinician application setup | [Patient README](../apps/patient-portal/README.md), [clinician README](../apps/clinician-portal/README.md) |
+| Clinical-fact provenance and import review | [Provenance](clinical-facts-provenance.md), [FHIR mapping](smart-fhir-review-mapping.md) |
+| Upload types and safety | [Document format policy](document-format-policy.md) |
+| Document processing architecture | [Document intelligence decision](document-intelligence-assessment.md) |
+| Model routing, safety and evaluation limits | [Runtime decision](decisions/ai-runtime-2026-09.md), [quality requirements](../.agent/specs/ai-005-agent-quality.md), [repeatable evaluation](demo-ai-evaluation.md) |
+| Chat transport and workers | [Runtime decision](decisions/realtime-and-workers-2026-10.md), [worker contract](../.agent/specs/ops-006-workers-and-event-stream.md) |
+| Portal design and icons | [Design system](../.agent/DESIGN_SYSTEM.md), [icon integration](brand-icons.md) |
+| Deferred database optimization | [Performance follow-up](deferred_database_performance_work.md) |
+
+## Verification and history
+
+[Evidence index](evidence/README.md) groups deployed rechecks, symptom-intake
+acceptance, care-plan acceptance and UI review reports. Each report states what
+was tested and what was not. The task board owns the current verdict.
+
+[Meeting records](../meetings/README.md) are historical context, not current
+implementation instructions. Git history preserves removed duplicates and
+completed session notes. There is no separate archive or status tracker.
+
+## Directory layout
+
+```text
+docs/
+  README.md                 Find a guide by purpose
+  development.md            Configuration and local troubleshooting
+  maintaining-docs.md       Documentation rules and review checklist
+  decisions/                Architecture and runtime decisions
+  evidence/                 Dated verification reports and their index
+  email-templates/          Email HTML and template guidance
+  *.md                      Established operating guides and references
+
+.agent/
+  TASKS.md                  Current work and remaining acceptance
+  PROJECT.md                Product boundaries
+  ARCHITECTURE.md           System design and contracts
+  specs/                    Detailed feature requirements
+```
+
+Keep one source per subject. Link to it rather than copying its status, commands
+or variable defaults into another guide.

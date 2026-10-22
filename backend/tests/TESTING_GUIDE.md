@@ -337,4 +337,4 @@ repository root.
 - [Pytest Documentation](https://docs.pytest.org/)
 - [FastAPI Testing](https://fastapi.tiangolo.com/tutorial/testing/)
 - [Coverage.py Documentation](https://coverage.readthedocs.io/)
-- [Mock validation tests](./integration/test_mock_validation.py)
+- [Mock validation tests](integration/test_mock_validation.py)

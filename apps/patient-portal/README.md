@@ -104,10 +104,10 @@ Today's symptom shortcut opens Nora directly, without an intermediate timeline.
 The existing Symptoms URL remains a compact mobile-friendly handoff and explicitly
 says that patient symptom history is not connected; it must not display invented
 example reports or imply that opening chat saves or escalates a report.
-UI review evidence: `docs/portal-ui-ux-review-2026-10-10.md`.
+UI review evidence: `docs/evidence/portal-ui-ux-review-2026-10-10.md`.
 
 The reference-led patient redesign is tracked in
-[UX-002 verification](../../docs/ux-002-overhaul-verification.md) and the
+[UX-002 verification](../../docs/evidence/ux-002-overhaul-verification.md) and the
 [redesign spec](../../.agent/specs/ux-002-reference-redesign.md).
 It keeps clinical wording and service contracts unchanged; a confirmed completion
 may show brief visual feedback, while failed/uncertain saves and reduced motion
@@ -282,7 +282,7 @@ Approved `candidate-1` remains active. Revised `candidate-2` wording/applicabili
 pending genuine review and cannot activate yet. The checksum-pinned, applied
 `071_confirmed_symptom_handoff.sql` adds durable ADR and review notices; the existing
 retry worker must run. Follow the
-[October 17 verification record](../../docs/pat-002-b-acceptance-2026-10-17.md) and
+[October 17 verification record](../../docs/evidence/pat-002-b-acceptance-2026-10-17.md) and
 [coordinated rollout](../../docs/pat-002-b-rollout.md).
 The saved patient symptom timeline remains PAT-002-C.
 

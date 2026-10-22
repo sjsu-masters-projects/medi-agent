@@ -321,7 +321,7 @@ again when the worker later succeeds. Verify service-only RPC execution, browser
 denial, assignment changes, rollback/retry and operational alert deduplication
 on the authorized target. Disposable local SQL checks cover selected migrations
 and platform stubs, not that target's complete Supabase setup or grants. See
-[B2 evidence and reproduction commands](pat-002-b-acceptance-2026-10-10.md#b2-verification).
+[B2 evidence and reproduction commands](evidence/pat-002-b-acceptance-2026-10-10.md#b2-verification).
 
 Private drafts, explicit report confirmation and revoked browser report writes
 remain later work. Migration 027's service-role SELECT grant does not remove the
@@ -470,7 +470,7 @@ manifest selected `candidate-1`, matching eligibility metadata were published vi
 `set_symptom_question_eligibility`, and the local backend was restarted with
 `SYMPTOM_INTAKE_ENABLED=true`. An authenticated fictional patient confirmation and
 assigned-clinician summary then passed locally, as recorded in the
-[acceptance evidence](pat-002-b-acceptance-2026-10-12.md#approved-library-local-acceptance--october-12).
+[acceptance evidence](evidence/pat-002-b-acceptance-2026-10-12.md#approved-library-local-acceptance--october-12).
 The deployed backend setting and deployed acceptance remain separate.
 
 | Migration | SHA-256 |
@@ -497,7 +497,7 @@ substitute the disposable SQL fixtures' approval reference into a runtime manife
 
 Rollback disables intake and its ordinary writes while preserving drafts, confirmed
 reports and durable safety-alert retry. It must not restore automatic unconfirmed
-report insertion. See [the acceptance record](pat-002-b-acceptance-2026-10-12.md) for
+report insertion. See [the acceptance record](evidence/pat-002-b-acceptance-2026-10-12.md) for
 local SQL constraints, manual acceptance, dependency reproducibility and the C handoff.
 
 

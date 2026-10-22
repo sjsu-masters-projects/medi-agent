@@ -1,8 +1,8 @@
-# UX-002 — Reference overhaul verification
+# UX-002: Reference overhaul verification
 
 Scope: visual, layout and interaction polish for both portals against the
 approved reference (`MediAgent Redesign`, Profile & Clinic settings) and
-[the specification](../.agent/specs/ux-002-reference-redesign.md). Routes, API
+[the specification](../../.agent/specs/ux-002-reference-redesign.md). Routes, API
 calls, Redux state, handlers, approval gating, clinical text and safety copy are
 unchanged. Synthetic demo data only.
 
@@ -58,4 +58,4 @@ to the new presentation only.
 
 Resolved by LOC-001 (#145): care-plan wording is drafted and approved in en-US and
 es-MX together; see
-[the LOC-001 spec](../.agent/specs/loc-001-bilingual-approved-wording.md).
+[the LOC-001 spec](../../.agent/specs/loc-001-bilingual-approved-wording.md).

@@ -72,6 +72,6 @@ Approved content is immutable; later changes require a new version and review.
 1. Record the actual decision in `manifest.json`, with the approved version, canonical hash and reviewer/reference/date metadata. Select that approved version as `active_version`.
 2. Through an explicitly authorized rollout, publish matching `set_symptom_question_eligibility` metadata to the same synthetic database. Never substitute test-fixture approval metadata.
 3. Start the local backend with `SYMPTOM_INTAKE_ENABLED=true` only after file and database eligibility agree. Configuration files containing credentials must not be edited or copied into this review record.
-4. Follow [the authenticated acceptance journey](../../../../../docs/pat-002-b-acceptance-2026-10-12.md#remaining-prerequisites-and-authenticated-manual-journey): draft, recovery, unknown severity, review/correction, consent/confirm once, assigned clinician summary, cancellation and both locales.
+4. Follow [the authenticated acceptance journey](../../../../../docs/evidence/pat-002-b-acceptance-2026-10-12.md#activation-and-authenticated-manual-journey): draft, recovery, unknown severity, review/correction, consent/confirm once, assigned clinician summary, cancellation and both locales.
 
 Migration application alone does not approve this library or activate intake.

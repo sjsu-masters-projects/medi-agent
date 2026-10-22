@@ -11,7 +11,7 @@ Detailed requirements remain in [backlog acceptance](project-backlog-acceptance.
 #208 merged as `f235c278`; main CI, frontend CI and backend deployment succeeded.
 Backend `00177-xgh` serves 100% traffic. The new Timeline tab and both portal
 notification counts load after refresh. Follow-up branch
-`codex/post-208-acceptance` records the [grouped live campaign](../../docs/deployed-recheck-2026-10-11.md#post-208-grouped-acceptance).
+`codex/post-208-acceptance` records the [grouped live campaign](../../docs/evidence/deployed-recheck-2026-10-11.md#post-208-grouped-acceptance).
 Do not repeat PR-review gates or infer migration 079 from a successful image
 deployment. Formal provider evaluation is optional; functional/safety checks remain.
 
