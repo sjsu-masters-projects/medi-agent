@@ -414,6 +414,10 @@ Reviewed boundaries and corrections:
 - A clinician translation test asserted an asynchronous request before its effect
   ran. It now waits for that request; application behaviour is unchanged. The
   312-case evidence-label test passed with unchanged timeout on the bounded rerun.
+- Current-head CI exposed the same effect-ordering race in the private-question
+  read-aloud regression: rendered question text could precede the speech effect.
+  That assertion now waits for the existing read-aloud callback before testing
+  Spanish reply routing. No application timing, timeout or assertion was removed.
 
 Verification commands (from the owning app/backend directory):
 

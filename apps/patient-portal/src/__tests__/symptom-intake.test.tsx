@@ -185,7 +185,7 @@ it("routes spoken answers privately and never treats spoken assent as confirmati
     mutate.mockResolvedValue({ ...draft, revision: 1 });
     render(<Provider store={store}><SymptomIntakePanel locale="en-US" registerReply={register} onReadAloud={reader} handsFree /></Provider>);
     await screen.findByText("Type or speak your answer below. You can say “not sure” or “skip”.");
-    expect(reader).toHaveBeenCalledWith(expect.stringContaining("Choose your severity"), "en-US");
+    await waitFor(() => expect(reader).toHaveBeenCalledWith(expect.stringContaining("Choose your severity"), "en-US"));
     const handler = register.mock.calls.at(-1)?.[0];
     act(() => { expect(handler("cinco", "voice", "es-MX")).toBe("handled"); });
     await waitFor(() => expect(mutate).toHaveBeenCalled());
