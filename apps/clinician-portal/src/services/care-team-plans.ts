@@ -138,6 +138,10 @@ export function retireCarePlanItems(carePlanId: string, body: RetireItemsRequest
 
 // ── Shared clinical core and documents ───────────────────────────────────────────────────
 
+export function takeRecord(record: "adr_assessment" | "medwatch_draft", recordId: string, careTeamId: string): Promise<unknown> {
+    return api.post(`${plansRoot}/records/${record}/${encodeURIComponent(recordId)}/take`, { care_team_id: careTeamId }, { token: token() });
+}
+
 export function fetchSharedSummary(patientId: string): Promise<SharedClinicalSummary> {
     return api.get<SharedClinicalSummary>(
         `/api/v1/care-team/clinician/patients/${encodeURIComponent(patientId)}/shared-summary`,

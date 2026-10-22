@@ -236,6 +236,8 @@ export interface ADRReviewDecisionInput {
     action: ADRReviewAction;
     note?: string;
     requestedInformation?: string[];
+    /** PLAN-002: required when the clinician holds several links to the patient. */
+    careTeamId?: string;
 }
 
 export interface ADRReviewDecisionResult {
@@ -1255,6 +1257,7 @@ export async function reviewADRAssessment(
             action: input.action,
             note: input.note,
             requested_information: input.requestedInformation ?? [],
+            ...(input.careTeamId ? { care_team_id: input.careTeamId } : {}),
         }),
     });
     return {
@@ -1275,6 +1278,7 @@ export async function reviewADRAssessment(
 export async function createMedWatchDraft(
     assessmentId: string,
     reportabilityRationale: string,
+    careTeamId?: string,
 ): Promise<MedWatchDraft> {
     const result = await apiFetch<MedWatchDraftResponse>(
         `/api/v1/clinicians/me/adr-assessments/${assessmentId}/medwatch-draft`,
@@ -1283,6 +1287,7 @@ export async function createMedWatchDraft(
             body: JSON.stringify({
                 decision: "prepare_draft",
                 reportability_rationale: reportabilityRationale,
+                ...(careTeamId ? { care_team_id: careTeamId } : {}),
             }),
         },
     );
@@ -1774,10 +1779,11 @@ export async function retryClinicianCarePlanGeneration(
 export async function generateSoapNote(
     patientId: string,
     lookbackDays = 30,
+    careTeamId?: string,
 ): Promise<{ status: string; soap_note_id?: string; soap_note: SoapNoteResponse }> {
     return apiFetch(`/api/v1/clinicians/me/patients/${patientId}/soap-note`, {
         method: "POST",
-        body: JSON.stringify({ lookback_days: lookbackDays }),
+        body: JSON.stringify({ lookback_days: lookbackDays, ...(careTeamId ? { care_team_id: careTeamId } : {}) }),
     });
 }
 

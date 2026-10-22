@@ -6,7 +6,7 @@ import { ClinicChip } from "@/components/features/clinic-chip";
 import { InstructionLines } from "@/components/features/cross-plan-conflicts";
 import { AdoptPlanDialog, RetireItemsDialog } from "@/components/features/unowned-plan-dialogs";
 import { Icon } from "@/components/ui/icons";
-import { replyToReviewItem } from "@/services/care-team-plans";
+import { errorCode, replyToReviewItem, takeRecord } from "@/services/care-team-plans";
 import type { ClinicReviewItem, ConflictMedication, PlanReviewItem, ReviewItemKind } from "@/types";
 import { formatClinicianDateTime } from "@/utils/dates";
 
@@ -17,6 +17,7 @@ const KIND_TITLES: Record<ReviewItemKind, string> = {
     conflict_reply: "The other care team replied",
     unowned_plan: "A care plan has no care team",
     unassigned_legacy_plan: "A legacy care plan could not be assigned",
+    unowned_clinical_record: "A clinical record has no care team",
 };
 
 export function reviewKindTitle(kind: ReviewItemKind): string {
@@ -26,7 +27,7 @@ export function reviewKindTitle(kind: ReviewItemKind): string {
 const GROUPS: Array<{ id: string; title: string; kinds: ReviewItemKind[] }> = [
     { id: "conflicts", title: "Conflicts with other care teams", kinds: ["cross_plan_conflict", "conflict_reply"] },
     { id: "decisions", title: "Decisions you were told about", kinds: ["conflict_acknowledged", "conflict_published_without"] },
-    { id: "unowned", title: "Plans that need an owner", kinds: ["unowned_plan", "unassigned_legacy_plan"] },
+    { id: "unowned", title: "Plans that need an owner", kinds: ["unowned_plan", "unassigned_legacy_plan", "unowned_clinical_record"] },
 ];
 
 const REPLY_MAX = 2000;
@@ -48,7 +49,7 @@ function fromLabel(summary: Record<string, unknown>): string | null {
     return parts.length ? parts.join(" · ") : null;
 }
 
-type Outcome = { kind: "replied" | "adopted" | "lost" | "retired"; message: string };
+type Outcome = { kind: "replied" | "adopted" | "lost" | "retired" | "taken"; message: string };
 
 export function PlanReviewItemRow({ item, patientLabel, clinicName, highlighted, onChanged }: {
     item: PlanReviewItem; patientLabel?: string | null; clinicName?: string | null; highlighted?: boolean; onChanged: () => void;
@@ -73,7 +74,22 @@ export function PlanReviewItemRow({ item, patientLabel, clinicName, highlighted,
     const needsReply = item.kind === "cross_plan_conflict";
     const canAnswer = needsReply || item.kind === "conflict_acknowledged" || item.kind === "conflict_published_without";
     const unowned = item.kind === "unowned_plan" || item.kind === "unassigned_legacy_plan";
+    const record = item.kind === "unowned_clinical_record" ? (text(item.summary.record) === "medwatch_draft" ? "medwatch_draft" : text(item.summary.record) === "adr_assessment" ? "adr_assessment" : null) : null;
+    const recordId = text(item.summary.record_id);
+    const recordLabel = record === "medwatch_draft" ? "MedWatch draft" : "ADR review";
     const planHref = `/patients/${encodeURIComponent(item.patient_id)}?tab=care-plan`;
+
+    async function take() {
+        if (!record || !recordId || busy) return;
+        setBusy(true); setError(null);
+        try {
+            await takeRecord(record, recordId, item.target_care_team_id);
+            setOutcome({ kind: "taken", message: `You took this ${recordLabel}. It now belongs to your care team.` });
+        } catch (cause) {
+            if (errorCode(cause) === "RECORD_ALREADY_TAKEN") setOutcome({ kind: "lost", message: "Another care team took this record." });
+            else setError(cause instanceof Error ? cause.message : "Unable to take this record.");
+        } finally { setBusy(false); }
+    }
 
     async function answer() {
         if (busy || (needsReply && !reply.trim())) return;
@@ -114,7 +130,9 @@ export function PlanReviewItemRow({ item, patientLabel, clinicName, highlighted,
             </div>
             {item.reply_note ? <p className="text-sm text-ink-2"><span className="font-semibold text-ink">Reply: </span>{item.reply_note}</p> : null}
         </div> : (
-            <p className="mt-2 max-w-[80ch] text-sm text-ink-2">{item.kind === "unowned_plan"
+            item.kind === "unowned_clinical_record"
+            ? <p className="mt-2 max-w-[80ch] text-sm text-ink-2">An older {recordLabel} for this patient has no care team, so no clinician can see it yet. If you take it, it becomes your care team&apos;s record and the other care teams stop seeing it.</p>
+            : <p className="mt-2 max-w-[80ch] text-sm text-ink-2">{item.kind === "unowned_plan"
                 ? "The care team that wrote this plan has ended. The patient's approved activities and reminders continue unchanged. Adopt the plan to make it yours, or retire specific items. Nothing is removed automatically."
                 : "This plan could not be matched to one care team without guessing. The patient's approved activities and reminders continue unchanged. Adopt the plan to make it yours, or retire specific items."}</p>
         )}
@@ -134,6 +152,7 @@ export function PlanReviewItemRow({ item, patientLabel, clinicName, highlighted,
             <div className="flex flex-wrap items-center gap-2">
                 {canAnswer ? <button className="ma-press inline-flex h-8 items-center rounded-lg bg-primary px-3 text-[13px] font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-track disabled:text-[#94A3B8]" disabled={busy || (needsReply && !reply.trim())} onClick={() => void answer()} type="button">{busy ? "Saving…" : needsReply ? "Send reply" : "Mark as seen"}</button> : null}
                 {needsReply ? <Link className="ma-press inline-flex h-8 items-center rounded-lg border border-line-strong bg-surface px-3 text-[13px] font-medium text-ink-2 hover:bg-surface-2" href={planHref}>Adjust my plan</Link> : null}
+                {record && recordId ? <button className="ma-press inline-flex h-8 items-center rounded-lg bg-primary px-3 text-[13px] font-semibold text-white hover:bg-primary-hover disabled:opacity-60" disabled={busy} onClick={() => void take()} type="button">{busy ? "Taking…" : `Take this ${recordLabel}`}</button> : null}
                 {unowned && item.care_plan_id ? <>
                     <button className="ma-press inline-flex h-8 items-center rounded-lg bg-primary px-3 text-[13px] font-semibold text-white hover:bg-primary-hover" onClick={() => setDialog("adopt")} type="button">Adopt this plan</button>
                     <button className="ma-press inline-flex h-8 items-center rounded-lg border border-line-strong bg-surface px-3 text-[13px] font-medium text-ink-2 hover:bg-surface-2" onClick={() => setDialog("retire")} type="button">Retire items</button>

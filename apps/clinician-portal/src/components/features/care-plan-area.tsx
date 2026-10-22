@@ -104,11 +104,16 @@ export function CarePlanArea({ patientId, onPublished, reviewId }: { patientId: 
     // A scope is only needed (and only sent) when I hold several plans for this patient.
     const scope = mine.length >= 2 && selected ? { careTeamId: selected.care_team_id ?? undefined, carePlanId: selected.care_plan_id } : undefined;
     const panel = <CarePlanPanel key={scope?.carePlanId ?? "single"} onPublished={() => { onPublished?.(); void reload(); }} patientId={patientId} scope={scope} />;
-    if (!showOverview) return panel;
+    // A notification link names one review item; it may be resolved, or not addressed to me.
+    const missingReview = reviewId && !items.some((item) => item.id === reviewId)
+        ? <p className="flex items-start gap-2 rounded-xl border border-warn-line bg-warn-soft px-4 py-3 text-sm text-warn-ink" role="status"><Icon name="info" className="mt-0.5 h-4 w-4 shrink-0" />That review item is no longer open, or it is not addressed to your care team. Its outcome, if any, is in the plan below.</p>
+        : null;
+    if (!showOverview) return missingReview ? <div className="flex flex-col gap-4">{missingReview}{panel}</div> : panel;
 
     const adoptTeam = (plan: ClinicianPlanListEntry) => plan.adoptable_by_care_team_ids?.[0] ?? null;
 
     return <div className="flex flex-col gap-4">
+        {missingReview}
         <section aria-labelledby="care-plans-heading" className="rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">

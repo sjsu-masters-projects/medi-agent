@@ -20,6 +20,7 @@ import { OtherCareTeams, SharedAllergiesCard, SharedConditionsCard, recordedByTe
 import { SmartImportReviewPanel } from "@/components/features/smart-import-review-panel";
 import Link from "next/link";
 import { usePatientDetail } from "@/hooks/use-patient-detail";
+import { CareTeamSelect, useCareTeamChoice } from "@/components/features/care-team-select";
 import { usePatientReviewCount } from "@/hooks/use-patient-review-count";
 import type { RootState } from "@/store/store";
 import { PatientADRPanel } from "@/components/features/patient-adr-panel";
@@ -167,6 +168,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
     // PLAN-002: the shared clinical summary only changes this tab for a patient with several care teams
     // or private conditions; for everyone else the record looks exactly as before.
     const sharedSummary = useSharedSummary(patientId, enabled && activeTab === "profile");
+    const [soapPrompted, setSoapPrompted] = useState(false);
     const reviewCount = usePatientReviewCount(patientId, enabled);
     const crossTeam = sharedSummaryApplies(sharedSummary.summary) ? sharedSummary.summary : null;
 
@@ -180,8 +182,10 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
         element?.scrollIntoView?.({ block: "nearest" });
     }, [hasMounted, activeTab, patient]);
 
+    const soapTeam = useCareTeamChoice(patientId, enabled && activeTab === "soap");
     function handleGenerateSoap() {
-        void generateSoap();
+        if (soapTeam.missing) { setSoapPrompted(true); return; }
+        void generateSoap(soapTeam.careTeamId);
     }
 
 
@@ -619,6 +623,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                     AI-assisted draft based on available recent records · clinician review required.
                                 </p>
                             </div>
+                            <CareTeamSelect onChange={soapTeam.setValue} options={soapTeam.options} required={soapTeam.required} showRequired={soapPrompted} value={soapTeam.value} />
                             <button
                                 className="ma-press inline-flex h-[34px] items-center gap-2 rounded-[9px] bg-primary px-4 text-[13px] font-semibold text-white hover:bg-primary-hover disabled:cursor-wait disabled:bg-track disabled:text-[#94A3B8]"
                                 disabled={generatingSoap}

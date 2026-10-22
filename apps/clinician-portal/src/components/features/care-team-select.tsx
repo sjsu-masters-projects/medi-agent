@@ -53,8 +53,11 @@ export function useCareTeamChoice(patientId: string, enabled = true) {
         return true;
     }, [load]);
 
+    /** The server asked for a care team: show the select (loading the options if needed). */
+    const requireChoice = useCallback(() => { setRequired(true); void load(); }, [load]);
+
     return {
-        options, value, setValue, multiple, required: multiple || required, missing, failed, handleError, reload: load,
+        requireChoice, options, value, setValue, multiple, required: multiple || required, missing, failed, handleError, reload: load,
         /** The `care_team_id` to send, or undefined when none was needed or chosen. */
         careTeamId: value || undefined,
     };

@@ -107,12 +107,12 @@ function CaseContent() {
     );
 
     const prepare = useCallback(
-        async (id: string, rationale: string) => {
+        async (id: string, rationale: string, careTeamId?: string) => {
             if (pending.current) throw new Error("Busy");
             pending.current = true;
             setSubmitting(true);
             try {
-                const draft = await createMedWatchDraft(id, rationale);
+                const draft = await (careTeamId ? createMedWatchDraft(id, rationale, careTeamId) : createMedWatchDraft(id, rationale));
                 router.push(`/medwatch/${draft.id}`);
             } catch {
                 // The preparation form shows this failure once, inline.

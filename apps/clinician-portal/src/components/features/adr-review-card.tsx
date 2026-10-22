@@ -4,6 +4,7 @@ import { AiChip } from "@/components/ui/ai-chip";
 import { Icon } from "@/components/ui/icons";
 import { ADRReviewActions } from "@/components/features/adr-review-actions";
 import { queueTabOf, STATUS_LABELS, type QueueTab } from "@/components/features/adr-queue";
+import { CareTeamSelect, useCareTeamChoice } from "@/components/features/care-team-select";
 import { MedWatchPreparationAction } from "@/components/features/medwatch-preparation-action";
 import { formatReviewTimestamp } from "@/components/features/review-time";
 import { CausalityPill } from "@/components/features/work-list";
@@ -152,7 +153,7 @@ export function ADRReviewCard({
 }: {
     item: ADRReviewQueueItem;
     onReview: (assessmentId: string, input: ADRReviewDecisionInput) => Promise<void>;
-    onPrepareDraft: (assessmentId: string, rationale: string) => Promise<void>;
+    onPrepareDraft: (assessmentId: string, rationale: string, careTeamId?: string) => Promise<void>;
     submitting: boolean;
     /** The active MedWatch report for this case, when one exists. */
     medwatchDraftId?: string | null;
@@ -163,6 +164,7 @@ export function ADRReviewCard({
     const patientName = `${item.patientFirstName} ${item.patientLastName}`.trim();
     const tab = queueTabOf(item);
     const open = item.status === "draft";
+    const careTeam = useCareTeamChoice(item.patientId, open);
 
     return (
         <article className="ma-enter space-y-6">
@@ -336,15 +338,16 @@ export function ADRReviewCard({
                     <section aria-label="Case actions" className={`${cardClass} space-y-3`}>
                         {open ? (
                             <>
+                                <CareTeamSelect onChange={careTeam.setValue} options={careTeam.options} required={careTeam.required} value={careTeam.value} />
                                 <ADRReviewActions
                                     item={item}
-                                    onSubmit={(input) => onReview(item.id, input)}
-                                    submitting={submitting}
+                                    onSubmit={(input) => onReview(item.id, careTeam.careTeamId ? { ...input, careTeamId: careTeam.careTeamId } : input)}
+                                    submitting={submitting || careTeam.missing}
                                 />
                                 <div className="border-t border-line pt-3">
                                     <MedWatchPreparationAction
-                                        disabled={submitting}
-                                        onPrepare={(rationale) => onPrepareDraft(item.id, rationale)}
+                                        disabled={submitting || careTeam.missing}
+                                        onPrepare={(rationale) => careTeam.careTeamId ? onPrepareDraft(item.id, rationale, careTeam.careTeamId) : onPrepareDraft(item.id, rationale)}
                                     />
                                 </div>
                             </>
