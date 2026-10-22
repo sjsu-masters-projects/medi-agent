@@ -28,11 +28,12 @@ This implementation still requires a deployed language-switch recheck.
    one bounded retry, while any final failure produces no invented/stored note.
    Operational budgets are configured limits, never claimed measured clinical
    performance.
-3. **EVA-001:** reuse the existing synthetic evaluation framework with a bounded,
-   paired-locale demo suite for grounding, explanation, symptom classification,
-   unavailable responses and safety/approval boundaries. Keep raw final responses
-   and structured outcomes, never reasoning. Deterministic tests and dry runs are
-   not a live model evaluation or clinical validation; report them separately.
+3. **EVA-001 (optional research):** the existing paired-locale evaluation harness
+   is retained but formal real-provider campaigns and model comparisons are not
+   completion gates (requester decision October 21). If voluntarily run, retain
+   only raw final responses and structured outcomes, never reasoning; label mocks,
+   dry runs and actual calls separately. Bounded synthetic functional journeys
+   and automated safety/approval/access tests remain required in their feature tasks.
 4. **COM-002:** a patient explicitly attaches an existing approved care-plan activity
    to a private addressed conversation. The server checks ownership and current
    source state. The clinician sees source context and may open it in a draft via
@@ -89,7 +90,8 @@ This implementation still requires a deployed language-switch recheck.
 - Update TASKS with commands/outcomes and remaining live checks. Remote migration,
   deployment, merge and clinical publication need separate authorization.
 
-Professional adjudication and a 120-case study are not expo completion gates.
+Formal real-provider campaigns, professional adjudication and a 120-case study
+are not project-completion gates. No clinical-validation claim is made.
 No new cross-clinic sharing or implicit broadcast recipient behavior is introduced.
 
 ## COM-002 implementation and rollout contract
@@ -125,15 +127,20 @@ No new cross-clinic sharing or implicit broadcast recipient behavior is introduc
   The October 19 live message-to-draft check did not publish a plan. Its
   exact-item focus defect and remaining acceptance are in the deployed recheck.
 
-## Pending es-MX interface drafts
+## es-MX interface review
 
-New nonclinical activity-message copy remains **draft, awaiting bilingual review**:
+The following nonclinical activity-message copy passed an LLM English/es-MX
+meaning-and-safety review on October 20 (Pacific), using the requester's accepted
+expo review standard, not professional translation validation. Optional attachment,
+stale/current status, retry locking, preserved text, and the explicit requirement
+for team review/approval retain their English meaning; sending never changes a
+plan or reminders. Clinical activity text still requires existing approval.
 `Preguntar sobre una actividad del plan`, `Actividad sobre la que preguntas (opcional)`,
 `Cargando actividades…`, `Sin actividad adjunta`, `Actividad adjunta anteriormente`,
 `No se pudieron cargar las actividades.`, `Reintentar actividades`,
 `Actividad del plan adjunta`, `Esta actividad ya no pertenece al plan actual.`, and
 `Tu mensaje no cambia el plan ni los recordatorios. Tu equipo debe revisar y aprobar cualquier cambio.`
-Also draft: `Actividad adjunta: {título}` and `La actividad no se puede cambiar mientras se confirma o reintenta este mensaje.`
+Also reviewed: `Actividad adjunta: {título}` and `La actividad no se puede cambiar mientras se confirma o reintenta este mensaje.`
 Stale attachment recovery: `La actividad adjunta ya no está disponible. Conservamos tu texto. Quita la actividad o vuelve a cargar las actividades antes de enviar.`
 Document-import errors remain draft: `Vuelve a iniciar sesión antes de importar un documento clínico.`,
 `Tu sesión expiró. Vuelve a iniciar sesión antes de importar un documento clínico.` and
@@ -175,5 +182,7 @@ exercised and restored, with a transient mixed-language render after navigation.
 See the [deployed recheck](../../docs/deployed-recheck-2026-10-11.md#task-verdicts).
 Mobile 360/390/430 and clinician desktop screenshots, keyboard/reduced-motion
 journeys, approved-plan publication after handoff, actual provider responses and
-human bilingual review remain unrecorded; no task is marked Done from these
-partial checks.
+professional bilingual review remain unrecorded. COM-002's later audit, retry,
+authorization and unchanged-state acceptance and its accepted LLM demo wording
+review are recorded in the grouped closure evidence; these do not assert the
+other slices or an unperformed clinical publication complete.

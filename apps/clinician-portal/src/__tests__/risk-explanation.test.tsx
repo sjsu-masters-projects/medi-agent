@@ -1,0 +1,45 @@
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { RiskExplanationDialog } from "@/components/features/risk-explanation";
+import type { PatientRiskData } from "@/services/clinicians";
+
+const patient: PatientRiskData = {
+    patient_id: "synthetic", first_name: "Demo", last_name: "Patient", risk_level: "unknown",
+    adherence_score: 0, open_adr_count: 0, active_med_count: 0, recent_symptom_severity: null, last_activity: "",
+    risk_explanation: {
+        rule_version: "outpatient-review-priority-v1", calculated_at: "2026-10-21T12:00:00Z",
+        adherence_available: false, adherence_window_days: 30, symptom_window_days: 7, factors: ["Adherence unknown"],
+    },
+};
+
+describe("RiskExplanation source freshness", () => {
+    it("keeps old snapshots compatible and unknown", () => {
+        render(<RiskExplanationDialog patient={patient} onClose={vi.fn()} />);
+        expect(screen.getByText("Source freshness unknown for this snapshot.")).toBeInTheDocument();
+        expect(screen.getByText(/not the last clinical review/)).toBeInTheDocument();
+    });
+
+    it("distinguishes genuine source timestamps, missing data and failed reads", () => {
+        render(<RiskExplanationDialog patient={{ ...patient, risk_explanation: {
+            ...patient.risk_explanation!, source_freshness: [
+                { source: "adherence_logs", timestamp_field: "logged_at", latest_at: "2026-10-01T09:00:00Z", status: "available" },
+                { source: "symptom_reports", timestamp_field: "created_at", latest_at: null, status: "unknown" },
+                { source: "adr_assessments", timestamp_field: "updated_at", latest_at: null, status: "unavailable" },
+            ],
+        } }} onClose={vi.fn()} />);
+        expect(screen.getByText("Latest adherence response (30-day window)")).toBeInTheDocument();
+        expect(screen.getByText("Unknown — no dated source available")).toBeInTheDocument();
+        expect(screen.getByText("Source freshness unavailable — read failed")).toBeInTheDocument();
+        expect(document.querySelector('time[datetime="2026-10-01T09:00:00Z"]')).toBeInTheDocument();
+        expect(document.querySelector('time[datetime="2026-10-21T12:00:00Z"]')).toBeInTheDocument();
+        expect(screen.getByText(/not an atomic snapshot/)).toBeInTheDocument();
+        expect(screen.getByText(/not that it is clinically fresh or reviewed/)).toBeInTheDocument();
+    });
+
+    it("never substitutes calculation time for invalid source dates", () => {
+        render(<RiskExplanationDialog patient={{ ...patient, risk_explanation: {
+            ...patient.risk_explanation!, source_freshness: [{ source: "medications", timestamp_field: "created_at", latest_at: "invalid", status: "available" }],
+        } }} onClose={vi.fn()} />);
+        expect(screen.getByText("Unknown — no dated source available")).toBeInTheDocument();
+    });
+});

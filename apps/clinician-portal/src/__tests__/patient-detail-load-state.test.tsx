@@ -34,6 +34,20 @@ function deferred() {
 }
 
 describe("patient detail load states", () => {
+    it("keeps an unlisted confirmed product visible without creating approved medication", async () => {
+        mocks.tab = "symptoms";
+        mocks.fetch.mockResolvedValue({ ...patient(), symptom_reports: [
+            { id: "unlisted-report", patientId: "synthetic-a", symptom: "Synthetic symptom", severity: null,
+                confirmationState: "patient_confirmed", reportedProduct: { name: "Synthetic supplement", concern: true },
+                flaggedForAdr: false, createdAt: "2026-10-21T09:00:00Z" },
+        ] });
+        render(<PatientPage />);
+        expect(await screen.findByText("Patient-reported product: Synthetic supplement")).toBeInTheDocument();
+        expect(screen.getByText(/Not linked to a recorded medication/)).toBeInTheDocument();
+        expect(screen.getByText(/not a confirmed adverse reaction/)).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "Compare recorded medication list" })).toHaveAttribute("href", "/patients/synthetic-a?tab=profile");
+        expect(screen.queryByText("ADR Flagged")).not.toBeInTheDocument();
+    });
     it("distinguishes confirmed testimony, unknown severity and legacy history", async () => {
         mocks.tab = "symptoms";
         mocks.fetch.mockResolvedValue({ ...patient(), symptom_reports: [
@@ -51,6 +65,24 @@ describe("patient detail load states", () => {
         fireEvent.click(screen.getByText("Confirmed patient summary"));
         expect(screen.getByText("Corrected patient testimony")).toBeVisible();
         expect(screen.queryByText("0/10")).not.toBeInTheDocument();
+    });
+    it("opens a source-linked older report beyond the ten-row preview without another patient's data", async () => {
+        const previous = window.location.href;
+        window.history.replaceState(null, "", "/patients/synthetic-a?tab=symptoms#symptom-report-11");
+        mocks.tab = "symptoms";
+        mocks.fetch.mockResolvedValue({ ...patient(), symptom_reports: Array.from({ length: 12 }, (_, index) => ({
+            id: `report-${index}`, patientId: "synthetic-a", symptom: `Synthetic symptom ${index}`,
+            severity: null, confirmationState: "patient_confirmed", flaggedForAdr: false,
+            createdAt: "2026-10-21T09:00:00Z",
+        })) });
+        try {
+            render(<PatientPage />);
+            const selected = await screen.findByText("Synthetic symptom 11");
+            expect(selected.closest("#symptom-report-11")).toHaveFocus();
+            expect(screen.queryByText("Synthetic symptom 10")).not.toBeInTheDocument();
+        } finally {
+            window.history.replaceState(null, "", previous);
+        }
     });
     it("shows SOAP draft review context without exposing provider names or changing stored provenance", async () => {
         mocks.tab = "soap";

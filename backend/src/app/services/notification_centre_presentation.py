@@ -1,6 +1,7 @@
 """Deterministic bilingual copy and allowlisted destinations, never model-written alerts."""
 
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -177,6 +178,19 @@ def _name(value: Any) -> str | None:
 
 Destination = tuple[str | None, str, str]
 
+_SOURCE_LABELS = {
+    "care_conversation_messages": "Private care-team conversation",
+    "appointments": "Appointment record",
+    "care_plan_versions": "Care-plan version",
+    "documents": "Document workflow",
+    "adherence_logs": "Patient-recorded activity response",
+    "adr_assessments": "ADR review candidate",
+    "adr_information_requests": "ADR information request",
+    "symptom_reports": "Confirmed patient symptom report",
+    "clinician_messages": "Earlier operational notice",
+    "notifications": "Reminder or earlier notification",
+}
+
 
 def _metadata(row: dict[str, Any]) -> dict[str, Any]:
     return cast(dict[str, Any], row["metadata"]) if isinstance(row.get("metadata"), dict) else {}
@@ -225,6 +239,9 @@ def _reminder_link(row: dict[str, Any], role: str) -> Destination:
 
 def _safety_link(row: dict[str, Any], role: str) -> Destination:
     patient, source = _identifier(row.get("patient_id")), _identifier(row.get("source_id"))
+    if row.get("source_type") == "symptom_reports":
+        link = f"/patients/{patient}?tab=symptoms#symptom-{source}" if patient and source else None
+        return (link, "Review reported product", "Revisar producto reportado")
     if row["event_type"] == "critical_result":
         link = (
             f"/patients/{patient}?tab=documents#document-{source}" if patient and source else None
@@ -288,6 +305,13 @@ def _questions(row: dict[str, Any], spanish: bool) -> str:
 
 def _display_copy(row: dict[str, Any], role: str, spanish: bool) -> tuple[str, str]:
     kind = str(row["event_type"])
+    if kind == "safety_flag" and row.get("source_type") == "symptom_reports":
+        # Clinician-only source, so no patient notification or generated translation.
+        return (
+            "Patient-reported product needs review",
+            "A confirmed symptom report names a product not uniquely linked to the recorded "
+            "medication list. Review identity before linking or adding. This is not a confirmed ADR.",
+        )
     if kind == "appointment_changed" and _metadata(row).get("status") == "cancelled":
         kind = "appointment_cancelled"
     copy = _COPY.get(
@@ -336,4 +360,8 @@ def present_item(row: dict[str, Any], role: str, locale: str) -> CentreItem:
         patient_name=_name(row.get("patient_name")) if role == "clinician" else None,
         clinic_name=_name(row.get("clinic_name")),
         clinic_id=_identifier(row.get("clinic_id")) if role == "clinician" else None,
+        source_label=_SOURCE_LABELS.get(str(row.get("source_type")))
+        if role == "clinician"
+        else None,
+        state_checked_at=datetime.now(UTC) if role == "clinician" else None,
     )

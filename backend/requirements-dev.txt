@@ -47,7 +47,7 @@ catalogue==2.0.10
     #   spacy
     #   srsly
     #   thinc
-certifi==2026.7.22
+certifi==2026.10.19
     # via
     #   google-cloud-aiplatform
     #   httpcore
@@ -343,7 +343,7 @@ pglast==8.4
     # via -r requirements-dev.in
 phonenumbers==9.0.37
     # via presidio-analyzer
-pillow==12.3.0
+pillow==13.0.0
     # via
     #   -r requirements.in
     #   pytesseract
@@ -441,7 +441,7 @@ pymupdf==1.28.2
     # via -r requirements.in
 pyparsing==3.3.2 ; python_full_version < '3.14'
     # via httplib2
-pypdf==6.20.1
+pypdf==6.21.1
     # via -r requirements.in
 pytesseract==0.3.13
     # via -r requirements.in

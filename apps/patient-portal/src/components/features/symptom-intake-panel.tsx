@@ -97,15 +97,16 @@ export function SymptomIntakePanel({ locale: appLocale, sourceMessageId, session
         }
     }, [active, handsFree, disabled, draft?.intake_id, draft?.revision, draft?.preview_hash, question?.id, locale, prompt]);
 
-    return <section className="space-y-3 break-words rounded-2xl border border-line bg-surface-2 p-4" aria-label={copy.title} lang={locale}>
+    const title = draft?.status === "confirmed" ? copy.saved : draft?.status === "cancelled" ? copy.cancelled
+        : draft?.status === "interrupted_safety" ? copy.interrupted : copy.title;
+    return <section className="space-y-3 break-words rounded-2xl border border-line bg-surface-2 p-4" aria-label={title} lang={locale}>
         {intake.busy && <p role="status">{copy.loading}</p>}
         {intake.error && <div role="alert"><p>{intakeErrorCopy(String(intake.error), locale)}</p><button className={button} disabled={intake.busy} onClick={() => void intake.reload()}>{copy.reload}</button></div>}
         {intake.pending && <button className={button} disabled={intake.busy} onClick={intake.retry}>{copy.retry}</button>}
         {(!draft || !active) && !intake.busy && !intake.error && <button className={button} disabled={!sourceMessageId || intake.pending}
             onClick={() => sourceMessageId && void intake.start(sourceMessageId)}>{copy.start}</button>}
         {draft && <>
-            <h2 className="text-base font-semibold text-ink">{draft.status === "confirmed" ? copy.saved : draft.status === "cancelled" ? copy.cancelled
-                : draft.status === "interrupted_safety" ? copy.interrupted : copy.title}</h2>
+            <h2 className="text-base font-semibold text-ink">{title}</h2>
             {active && <p className="text-sm text-ink-2">{copy.intro}</p>}
             {draft.existing_draft && active && <p role="status">{copy.existingDraft}</p>}
             {draft.review_requested && <p role="status" className="rounded-xl bg-note-tint p-3 text-note-ink">{copy.urgentReview}</p>}

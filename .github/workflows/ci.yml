@@ -392,6 +392,15 @@ jobs:
           - name: email-scheduling-and-grants
             files: tests/integration/test_email_postgres.py tests/integration/test_clinic_scheduling_postgres.py tests/integration/test_public_grants_postgres.py
             minimums: test_email_postgres=31 test_clinic_scheduling_postgres=19 test_public_grants_postgres=4
+          - name: clinical-review-and-timeline
+            files: tests/integration/test_unlisted_product_review_postgres.py tests/integration/test_patient_timeline_postgres.py
+            minimums: test_unlisted_product_review_postgres=10 test_patient_timeline_postgres=6
+          - name: reconciliation-lifecycle
+            files: tests/integration/test_reconciliation_postgres.py
+            minimums: test_reconciliation_postgres=44
+          - name: external-record-reviews
+            files: tests/integration/test_external_record_reviews_postgrest.py
+            minimums: test_external_record_reviews_postgrest=1
           - name: adr-and-medwatch
             files: tests/integration/test_adr_loop_postgres.py tests/integration/test_medwatch_3500_postgres.py
             minimums: test_adr_loop_postgres=38 test_medwatch_3500_postgres=14
@@ -426,6 +435,9 @@ jobs:
         run: pip install -r requirements-dev.txt
       - name: Pull the PostgreSQL image
         run: docker pull ${{ matrix.image || 'postgres:16' }}
+      - name: Pull the PostgREST contract image
+        if: matrix.name == 'external-record-reviews'
+        run: docker pull postgrest/postgrest:v14.1
       - name: Run the contract suites
         env:
           SUPABASE_URL: "https://test.supabase.co"
@@ -438,6 +450,7 @@ jobs:
           CHAT_TURN_TEST_POSTGRES_DOCKER: "1"
           SYMPTOM_INTAKE_TEST_POSTGRES: "1"
           CHAT_SAFETY_TEST_POSTGRES_DOCKER: "1"
+          EXTERNAL_REVIEW_TEST_POSTGREST_DOCKER: "1"
         run: |
           mkdir -p test-results
           pytest ${{ matrix.files }} -v -rs --tb=short --no-cov --junitxml=test-results/postgres-${{ matrix.name }}.xml

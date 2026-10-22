@@ -81,6 +81,26 @@ describe("Dashboard presentation", () => {
         expect(screen.queryByText("2 Pending")).not.toBeInTheDocument();
         expect(screen.getByText(/share of recorded responses/)).toHaveTextContent("last 30 days");
     });
+    it("explains versioned priority without presenting missing adherence as zero", () => {
+        mocks.state.dashboard.patients[0] = {
+            ...mocks.state.dashboard.patients[0], risk_level: "high", open_adr_count: 1,
+            risk_explanation: { rule_version: "outpatient-review-priority-v1", calculated_at: "2026-10-21T09:00:00Z", adherence_available: false, adherence_window_days: 30, symptom_window_days: 7,
+                factors: ["No recorded adherence responses; completion is unknown.", "1 ADR candidate awaiting review; not a confirmed adverse reaction.", "No confirmed symptom rating; severity is unknown."] },
+        };
+        render(<DashboardPage />);
+        expect(screen.queryByText("0%")).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Explain review priority for Synthetic Patient" }));
+        expect(screen.getByRole("dialog")).toHaveTextContent("outpatient-review-priority-v1");
+        expect(screen.getByRole("dialog")).toHaveTextContent("not a diagnosis");
+        expect(screen.getByRole("dialog")).toHaveTextContent("not the last clinical review");
+    });
+
+    it("does not invent a versioned explanation for an older snapshot", () => {
+        render(<DashboardPage />);
+        fireEvent.click(screen.getByRole("button", { name: "Explain review priority for Synthetic Patient" }));
+        expect(screen.getByRole("dialog")).toHaveTextContent("Versioned explanation is unavailable");
+    });
+
     it("disables dashboard refresh while loading", () => {
         mocks.state.dashboard.loading = true;
         render(<DashboardPage />);

@@ -35,7 +35,7 @@ const {
     fetchChatConversations: vi.fn(),
     fetchChatHistory: vi.fn(),
     getVoiceCapabilities: vi.fn(() => ({ recording: false, recognition: false, synthesis: false })),
-    playAssistantVoiceResponse: vi.fn((_options: { onEnd?: () => void; onStart?: () => void }) => null),
+    playAssistantVoiceResponse: vi.fn<(options: { onEnd?: () => void; onStart?: () => void }) => null>(() => null),
     replace: vi.fn(),
     setConversationOpen: vi.fn(),
     shell: { conversationOpen: false },
@@ -120,6 +120,7 @@ class MockWebSocket {
     onopen: ((event?: Event) => void) | null = null;
     readyState = 1;
     sent: string[] = [];
+    respondToPings = true;
     url: string;
 
     constructor(url: string) {
@@ -145,6 +146,7 @@ class MockWebSocket {
 
     send(data: string) {
         this.sent.push(data);
+        if (this.respondToPings && JSON.parse(data).type === "ping") this.emitMessage({ type: "pong" });
     }
 }
 
@@ -1278,6 +1280,37 @@ describe("Patient chat page", () => {
         expect(MockWebSocket.instances).toHaveLength(1);
     });
 
+    it.each([
+        [Language.EN, "CHAT_DOCUMENT_UNAVAILABLE"], [Language.ES, "CHAT_DOCUMENT_UNAVAILABLE"],
+        [Language.EN, "CHAT_DOCUMENT_CHANGED"], [Language.ES, "CHAT_DOCUMENT_CHANGED"],
+    ] as const)("explains rejected attached context and preserves the unsent question (%s, %s)", async (locale, code) => {
+        profile.preferredLanguage = locale;
+        searchParamsValue = new URLSearchParams("document=stale-document");
+        storePendingChatDocumentContext({ documentId: "stale-document", documentName: "Synthetic lab.pdf",
+            documentType: "lab_report", preferredLanguage: locale, provider: "Care team",
+            suggestedQuestion: "Synthetic source question", summary: "Synthetic summary" });
+        renderPage();
+        await screen.findByText("Synthetic lab.pdf");
+        const socket = MockWebSocket.instances[0];
+        await act(async () => { socket.emitOpen(); });
+        const controls = getChatControlsCopy(locale);
+        fireEvent.click(screen.getByRole("button", { name: controls.send }));
+        const sent = socket.sent.map((frame) => JSON.parse(frame)).find((frame) => frame.type === "user_message");
+        await act(async () => { socket.emitMessage({ type: "error", code, message: "Document context rejected",
+            client_message_id: sent.client_message_id }); });
+        expect(await screen.findByText(controls.documentUnavailable)).toBeInTheDocument();
+        expect(screen.queryByText(controls.chatError)).not.toBeInTheDocument();
+        expect(screen.queryByText(controls.recordContext)).not.toBeInTheDocument();
+        expect(screen.getByRole("textbox", { name: controls.message })).toHaveValue("Synthetic source question");
+        expect(screen.getByRole("button", { name: controls.send })).toBeDisabled();
+        expect(screen.getAllByRole("button", { name: controls.dismiss })).toHaveLength(1);
+        fireEvent.click(screen.getByRole("button", { name: controls.dismiss }));
+        expect(screen.queryByText(controls.chatError)).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: controls.send })).toBeEnabled();
+        expect(socket.sent.map((frame) => JSON.parse(frame)).filter((frame) => frame.type === "user_message")).toHaveLength(1);
+        expect(socket.sent.map((frame) => JSON.parse(frame))).toContainEqual({ type: "document_focus", document_id: null });
+    });
+
     it("shows the unavailable-document note in Spanish", async () => {
         profile.preferredLanguage = Language.ES;
         renderPage();
@@ -1423,6 +1456,97 @@ describe("Patient chat page", () => {
         fireEvent.click(screen.getByRole("button", { name: "Mensajes del equipo clínico" }));
         expect(screen.getByRole("button", { name: "Mensajes históricos del equipo clínico (1)" })).toBeInTheDocument();
         expect(screen.getByText(/Mensajes anteriores de solo lectura/)).toBeInTheDocument();
+    });
+
+    it("pauses reconnects offline and restores the saved reply online without resending", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        const first = MockWebSocket.instances[0];
+        await act(async () => { first.emitOpen(); });
+        fireEvent.change(screen.getByRole("textbox", { name: "Message to Nora" }), { target: { value: "Synthetic offline question" } });
+        fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+        const request = JSON.parse(first.sent[0]);
+        const ownTurn = (status: string) => turnRow(status, { client_message_id: request.client_message_id,
+            user_message: { ...turnRow(status).user_message, content: "Synthetic offline question" } });
+        await act(async () => {
+            first.emitMessage({ type: "user_message_saved", message: ownTurn("processing").user_message });
+            first.emitMessage({ type: "chat_turns", turns: [ownTurn("processing")] });
+        });
+        vi.useFakeTimers();
+        try {
+            await act(async () => { window.dispatchEvent(new Event("offline")); });
+            expect(store.getState().chat.connectionStatus).toBe("disconnected");
+            expect(first.readyState).toBe(3);
+            await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+            expect(MockWebSocket.instances).toHaveLength(1);
+            expect(screen.getByText("Synthetic offline question")).toBeInTheDocument();
+            await act(async () => { window.dispatchEvent(new Event("online")); });
+            expect(MockWebSocket.instances).toHaveLength(2);
+            const next = MockWebSocket.instances[1];
+            await act(async () => {
+                next.emitOpen();
+                next.emitMessage({ type: "chat_history", messages: [ownTurn("completed").user_message, savedReply] });
+                next.emitMessage({ type: "chat_turns", turns: [ownTurn("completed")] });
+            });
+            expect(screen.getAllByText("Your results are stable.")).toHaveLength(1);
+            expect(screen.queryByText("Nora is typing...")).not.toBeInTheDocument();
+            expect(next.sent.map((text) => JSON.parse(text).type)).not.toContain("user_message");
+        } finally { vi.useRealTimers(); }
+    });
+
+    it("keeps full-chat icon controls at 44px without changing their actions", async () => {
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        for (const name of ["Back to messages", "Care team messages", "New chat", "Turn on hands-free mode", "Tap to speak"]) {
+            expect(screen.getByRole("button", { name })).toHaveClass("h-11", "w-11");
+        }
+    });
+
+    it("reconnects a silent OPEN socket when the heartbeat is not answered", async () => {
+        vi.useFakeTimers();
+        renderPage();
+        await act(async () => {});
+        const first = MockWebSocket.instances[0];
+        first.respondToPings = false;
+        await act(async () => { first.emitOpen(); });
+        try {
+            await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+            expect(first.readyState).toBe(3);
+            await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+            expect(MockWebSocket.instances).toHaveLength(2);
+            expect(first.sent.map((text) => JSON.parse(text).type)).toEqual(["ping"]);
+        } finally { vi.useRealTimers(); }
+    });
+
+    it("renews a healthy quiet socket at 3500 seconds without clearing history", async () => {
+        vi.useFakeTimers();
+        renderPage();
+        await act(async () => {});
+        const first = MockWebSocket.instances[0];
+        await act(async () => { first.emitOpen(); first.emitMessage({ type: "chat_history", messages: [savedReply] }); });
+        try {
+            await act(async () => { await vi.advanceTimersByTimeAsync(3_499_000); });
+            expect(MockWebSocket.instances).toHaveLength(1);
+            await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+            expect(MockWebSocket.instances).toHaveLength(2);
+            expect(screen.getByText("Your results are stable.")).toBeInTheDocument();
+            expect(first.readyState).toBe(3);
+        } finally { vi.useRealTimers(); }
+    });
+
+    it("does not mistake hidden-page timer throttling for a dead socket", async () => {
+        const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+        vi.useFakeTimers();
+        try {
+            renderPage();
+            await act(async () => {});
+            const first = MockWebSocket.instances[0];
+            first.respondToPings = false;
+            await act(async () => { first.emitOpen(); await vi.advanceTimersByTimeAsync(120_000); });
+            expect(first.readyState).toBe(1);
+            expect(first.sent).toEqual([]);
+            expect(MockWebSocket.instances).toHaveLength(1);
+        } finally { visibility.mockRestore(); vi.useRealTimers(); }
     });
 
     it("reconnects the chat websocket after a transient close", async () => {
@@ -1662,6 +1786,35 @@ describe("Patient chat page", () => {
             expect(vi.mocked(mutateIntake).mock.calls[0][2]).toBe("reply");
             expect(vi.mocked(mutateIntake).mock.calls[0][3]).toMatchObject({ text: transcript, input_mode: "voice", question_id: "severity", locale: spokenLocale });
             expect(chatSocket.sent.some((frame) => JSON.parse(frame).type === "user_message")).toBe(false);
+        }
+    });
+
+    it.each([
+        [Language.EN, false], [Language.ES, false],
+        [Language.EN, true], [Language.ES, true],
+    ] as const)("keeps typed input usable after microphone denial (%s, private=%s)", async (locale, privateIntake) => {
+        if (privateIntake) vi.mocked(fetchActiveIntake).mockResolvedValue(privateDraft);
+        getVoiceCapabilities.mockReturnValue({ recording: true, recognition: false, synthesis: true });
+        const getUserMedia = vi.fn().mockRejectedValue(new DOMException("Permission denied", "NotAllowedError"));
+        vi.stubGlobal("navigator", { ...window.navigator, mediaDevices: { getUserMedia } });
+        vi.stubGlobal("MediaRecorder", class { static isTypeSupported = () => true; });
+        renderPage();
+        await screen.findByText(/I can help explain results/i);
+        await act(async () => { MockWebSocket.instances[0].emitOpen(); });
+        changePreferredLanguage(locale);
+        const controls = getChatControlsCopy(locale);
+        fireEvent.click(screen.getByRole("button", { name: controls.speak }));
+        await waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
+        expect(await screen.findByRole("alert")).toHaveTextContent(controls.voiceError);
+        const input = screen.getByRole("textbox", { name: controls.message });
+        expect(input).toBeEnabled();
+        fireEvent.change(input, { target: { value: "Synthetic typed fallback" } });
+        expect(input).toHaveValue("Synthetic typed fallback");
+        expect(screen.getByRole("button", { name: controls.send })).toBeEnabled();
+        expect(mutateIntake).not.toHaveBeenCalled();
+        for (const socket of MockWebSocket.instances) {
+            const frames = socket.sent.map((frame) => JSON.parse(frame));
+            expect(frames.some((frame) => ["user_message", "audio_start", "audio_chunk"].includes(frame.type))).toBe(false);
         }
     });
 
@@ -1910,16 +2063,20 @@ describe("Patient chat page", () => {
                 .toHaveAttribute("href", "/chat?view=follow-up");
         });
     });
-it("keeps private replies usable while the ordinary Nora turn awaits completion", async () => {
+it.each(["queued", "processing"])("keeps private replies usable while the ordinary Nora turn is %s", async (status) => {
+    getVoiceCapabilities.mockReturnValue({ recording: false, recognition: true, synthesis: false });
     vi.mocked(fetchActiveIntake).mockResolvedValue(privateDraft);
     renderPage();
     await screen.findAllByText("Choose your severity");
     const socket = MockWebSocket.instances[0];
     await act(async () => {
         socket.emitOpen();
-        socket.emitMessage({ type: "chat_turns", turns: [{ client_message_id: "pending-source-turn", status: "processing",
+        socket.emitMessage({ type: "chat_turns", turns: [{ client_message_id: "pending-source-turn", status,
             retryable: false, attempt: 1, document_id: null }] });
     });
+    const microphone = screen.getByRole("button", { name: /Tap to speak/i });
+    expect(microphone).toBeEnabled();
+    expect(microphone).toHaveClass("h-11", "w-11");
     fireEvent.change(screen.getByRole("textbox", { name: "Message to Nora" }), { target: { value: "five" } });
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));
     await waitFor(() => expect(mutateIntake).toHaveBeenCalled());

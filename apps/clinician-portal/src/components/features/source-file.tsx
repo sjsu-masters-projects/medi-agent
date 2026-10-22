@@ -1,5 +1,16 @@
 import { Icon } from "@/components/ui/icons";
 
+/** Clinician controls use the grounded English label; retain the original evidence filename. */
+export function sourceDocumentLabel(source: {
+    file_name?: string | null;
+    display_title?: Partial<Record<"en-US" | "es-MX", string>> | null;
+}): string {
+    const fileName = source.file_name?.trim();
+    const title = source.display_title?.["en-US"]?.trim();
+    if (title) return fileName && title !== fileName ? `${title} (${fileName})` : title;
+    return fileName || "Uploaded document";
+}
+
 function fileKind(name?: string | null) {
     const extension = name?.split(".").pop()?.toLowerCase() ?? "";
     if (extension === "pdf") return { label: "PDF", tone: "bg-risk-tint text-risk-ink" };

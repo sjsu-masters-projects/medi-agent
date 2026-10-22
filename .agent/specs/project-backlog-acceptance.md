@@ -18,18 +18,19 @@ Do not execute historical migrations, seeds or remote actions merely because a
 requirement mentions them; use the current operator guide and explicit approval.
 
 
-## CI-001 — Prove and enable selective backend test execution
+## CI-001 — Selective backend execution evidence
 
-- Keep Acquit in `canary` mode and record nine additional eligible selective PR
-  observations, including the report result, selected test files, and full-suite outcome.
-- Classify expected run-all changes (migrations, dependency manifests, pytest/CI
-  configuration, and broad backend foundations) separately from avoidable blockers.
-- For each avoidable blocker, add only a policy-verified configuration declaration or
-  remove the underlying import side effect; do not use blanket waivers for R008/R019.
-- Add CI evidence that shows Acquit's candidate selection beside the test commands that
-  actually ran, so a reviewer can distinguish canary analysis from the retained full coverage run.
-- After ten safe selective observations, propose a reviewed enforcement design: use the
-  selected tests for PR feedback while retaining full coverage on `main` and a scheduled run.
+October 21 reconciliation: the current workflow already runs Acquit in `enforce`
+mode with fail-closed run-all and retained full coverage. The earlier canary and
+ten-observation prerequisite describe a superseded rollout, not an instruction
+to disable current enforcement.
+
+- Record verified selection versus actually executed test files on an eligible
+  narrow PR, alongside retained full coverage results.
+- Classify expected run-all changes (migrations, dependencies, pytest/CI and broad
+  backend foundations) separately from avoidable blockers.
+- Keep run-all on policy findings, analysis errors or tree mismatches. Do not use
+  blanket waivers or weaken safety/coverage gates to obtain a selective result.
 
 ## INT-002 — FHIR R4 validation and mapping
 
@@ -98,9 +99,17 @@ requirement mentions them; use the current operator guide and explicit approval.
 
 ## MED-001 — Multi-source medication reconciliation
 
+Requester-approved October 21 expo scope: source-based review, not a
+comprehensive drug–drug interaction or therapeutic-equivalence engine. Retain
+unlisted patient-reported products as unreviewed evidence; never create an
+approved medication merely to attach an ADR. Show coverage limitations explicitly.
+
 - Normalize medication identity using RxNorm when possible.
 - Combine patient, clinician, document, and FHIR medication sources.
-- Detect duplicate therapy, dose change, missing medication, status conflict, and allergy conflict.
+- Flag supported possible duplicate identity, recorded dose/status differences,
+  missing medication and exact recorded allergen-name matches for clinician review.
+  Do not equate different text with a clinically confirmed dose conflict or claim
+  unchecked interaction/allergy/therapeutic-equivalence coverage is safe.
 - Attach DailyMed/RxNorm evidence and freshness.
 - Display uncertainty instead of fabricating resolution.
 - Require clinician approval for the canonical medication list.
@@ -252,7 +261,10 @@ requirement mentions them; use the current operator guide and explicit approval.
 
 ## CLN-001 — Consolidated review workspace
 
-- Combine document, medication, symptom, adherence, ADR, and pending-action queues.
+- Alerts is the unified cross-workflow action inbox (requester approved October
+  21); the Patient Upload Review Queue stays dedicated to source approval. Do not
+  duplicate clinical approval controls: open the exact existing authorized review
+  destination for document, medication, symptom, adherence, ADR or pending action.
 - Add explainable priority, age, source, freshness, and assignment filters.
 - Support approve, reject, amend, defer, dismiss, and request-information decisions.
 - Update queue and patient deep dive without manual refresh.
@@ -328,6 +340,12 @@ requirement mentions them; use the current operator guide and explicit approval.
 - The completed clinic care loop works through normal authorized application paths.
 
 ## EVA-001 — Internal model and safety evaluation
+
+October 21 requester decision: this formal campaign is optional research, not a
+completion gate. Retain the implemented harness; do not manufacture results or
+require professional recruitment. Actual synthetic software journeys, automated
+safety/access/approval tests and truthful failure states remain required under
+their feature tasks, not a model benchmark or medical-validity claim.
 
 - Define a repeatable rubric and synthetic cases covering the tasks actually shown: grounded extraction, simple explanations, symptom capture, unavailable responses and safety boundaries.
 - Inspect raw model responses as well as structured output; compare English and Spanish, provenance, omitted/invented details and provider failures.

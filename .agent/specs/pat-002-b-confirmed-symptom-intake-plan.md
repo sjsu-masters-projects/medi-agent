@@ -2,7 +2,7 @@
 
 **Prepared:** October 10, 2026
 
-**State:** B1–B11 implemented; requester-reported question approval, matching eligibility and authenticated local synthetic acceptance recorded October 12. PR #159 remains in review; no deploy or merge.
+**State:** Base B1–B11 merged through #159 and activated; current acceptance is tracked in TASKS.md. PR #193 contains residual integration fixes, not a second intake implementation. Historical slice receipts below retain their original scope and dates.
 
 **Task:** PAT-002-B in [TASKS.md](../TASKS.md)
 
@@ -1232,3 +1232,25 @@ Requester-reported manual acceptance stays tied to its original implementation.
 Candidate-2 remains inactive; genuine peer/safety review and separately authorized
 merge/deployment remain prerequisites. The full intake and ADR work merged through
 #159 is base behavior, not newly implemented scope for #193.
+
+## 29. October 21 current-main review
+
+Review #193 against merged #209 (`36972470`) in an isolated checkout; do not mix
+the separate records/continuity work or G/H plan implementation into this PR.
+Resolve the board in favour of current accepted evidence, retain main's 44px
+microphone target and existing PostgreSQL/PostgREST CI jobs, and use the current
+report-keyed task identity in the real-worker test adapter.
+
+Acceptance: a replacement draft never displays the preceding draft's unsaved
+answer or correction selection; private replies and the microphone remain usable
+during queued/processing ordinary turns; spoken locale reaches the private reply
+API; a rejected durable action fence cannot open an intake. Confirmation still
+requires the explicit patient checkbox/button, with no report or ADR creation
+from private draft answers. Candidate-2 activation remains out of scope.
+
+The intake/handoff matrix must run all 17/8 SQL cases without skips. Run patient,
+backend and clinician regressions, lint/type checks, migration validation and
+portal builds; record exact final results in the dated acceptance document and
+on #193. Resolve existing code-quality comments without broad refactoring. No
+migration bytes, library selection, hosted configuration, deployment or merge
+is authorized by this review. Physical audio/device acceptance remains VOI-001-M.

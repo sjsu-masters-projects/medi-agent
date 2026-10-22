@@ -46,7 +46,8 @@ def build_document_catalog_reply(documents: list[dict[str, Any]], language: Lang
         return _empty_catalog_reply(language)
 
     document_lines = "\n".join(
-        f"• {_document_name(document)} ({_document_type(document)})" for document in documents
+        f"• {_document_name(document, language)} ({_document_type(document)})"
+        for document in documents
     )
     return (
         _catalog_intro(len(documents), language)
@@ -57,8 +58,13 @@ def build_document_catalog_reply(documents: list[dict[str, Any]], language: Lang
     )
 
 
-def _document_name(document: dict[str, Any]) -> str:
+def _document_name(document: dict[str, Any], language: Language) -> str:
     name = " ".join(str(document.get("file_name") or "").split())
+    titles = document.get("display_title")
+    title = titles.get(language.value) if isinstance(titles, dict) else None
+    if isinstance(title, str) and title.strip():
+        title = " ".join(title.split())
+        return f"{title} ({name})" if name and title != name else title
     return name or "Untitled document"
 
 

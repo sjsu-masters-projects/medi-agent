@@ -429,10 +429,19 @@ async def test_a_replaced_lease_still_refuses_the_old_reply(turn_runtime):
 
 
 @pytest.mark.asyncio
-async def test_durable_symptom_turn_opens_owned_draft_after_action_fence(monkeypatch, turn_runtime):
+@pytest.mark.parametrize("action_accepted", [True, False])
+async def test_durable_symptom_turn_opens_owned_draft_after_action_fence(
+    monkeypatch, turn_runtime, action_accepted
+):
     from app.models.auth import CurrentUser
 
     turns, service, socket, context, record, _ = turn_runtime
+    original_call = turns.call.side_effect
+    turns.call.side_effect = lambda action, payload=None, **kwargs: (
+        {"accepted": False}
+        if action == "actions" and not action_accepted
+        else original_call(action, payload, **kwargs)
+    )
 
     async def stream(**_kwargs):
         yield {
@@ -471,11 +480,15 @@ async def test_durable_symptom_turn_opens_owned_draft_after_action_fence(monkeyp
     )
     direct_save = AsyncMock(side_effect=AssertionError("No automatic report insertion"))
     monkeypatch.setattr(ChatService, "save_symptom_report", direct_save)
-    await run_turn(
-        socket, service, context, {"client_message_id": record["client_message_id"]}
-    )
-    start_mock.assert_awaited_once()
+    await run_turn(socket, service, context, {"client_message_id": record["client_message_id"]})
     direct_save.assert_not_awaited()
+    if not action_accepted:
+        start_mock.assert_not_awaited()
+        events = [call.args[0].get("type") for call in socket.send_json.call_args_list]
+        assert "symptom_intake_updated" not in events
+        assert "symptom_intake_unavailable" in events
+        return
+    start_mock.assert_awaited_once()
     assert any(call.args[0] == "complete" for call in turns.call.call_args_list)
     assert any(
         call.args[0].get("type") == "symptom_intake_updated"

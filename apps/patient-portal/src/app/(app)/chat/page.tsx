@@ -169,14 +169,14 @@ export default function ChatPage() {
         }
     }, [assistantDraft, isTyping, messages, assistantThread, sessionId, loading, intakeComposer, pendingId, showTyping, showSlowNote]);
 
-    const iconButton = "ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-ink-2 hover:bg-surface-2 disabled:opacity-50";
+    const iconButton = "ma-press flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-surface text-ink-2 hover:bg-surface-2 disabled:opacity-50";
     if (followUpMode) {
         const followUpCopy = getADRFollowUpCopy(locale);
         const careTeamCopy = getConversationCopy(locale);
         const leaveFollowUp = () => { setInbox(true); setCareTeamOpened(true); router.replace("/chat?view=care-team"); };
         return <div className="flex min-h-dvh w-full flex-col gap-3 px-4 pb-[calc(env(safe-area-inset-bottom)+24px)] text-ink" lang={locale}>
             <header className="sticky top-0 z-20 -mx-4 flex items-center gap-2.5 bg-background/90 px-3 pt-3 pb-2.5 backdrop-blur-md">
-                <button type="button" className="ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-ink hover:bg-surface" aria-label={back} onClick={leaveFollowUp}><Icon name="back" className="h-[22px] w-[22px]" /></button>
+                <button type="button" className="ma-press flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-ink hover:bg-surface" aria-label={back} onClick={leaveFollowUp}><Icon name="back" className="h-[22px] w-[22px]" /></button>
                 <div className="min-w-0 flex-1">
                     <h1 ref={headingRef} tabIndex={-1} className="break-words text-base font-semibold leading-tight outline-none">{followUpCopy.entry.title}</h1>
                 </div>
@@ -187,7 +187,7 @@ export default function ChatPage() {
     }
     return <div className={`flex w-full flex-col text-ink ${assistantThread ? "h-dvh min-h-0 overflow-hidden" : threadOpen ? "min-h-dvh" : "min-h-[calc(100dvh-110px)]"} ${assistantThread ? "gap-3 px-4 pb-0" : humanThreadId ? "gap-4 px-4 pt-4 pb-0" : "gap-4 px-4 pt-4 pb-6"}`} lang={locale}>
         <header hidden={Boolean(humanThreadId)} className={inbox ? "flex items-center justify-between gap-3 px-1.5" : "shrink-0 sticky top-0 z-20 -mx-4 flex items-center gap-2.5 bg-background/90 px-3 pt-3 pb-2.5 backdrop-blur-md"}>
-            {!inbox && <button type="button" className="ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-ink hover:bg-surface disabled:opacity-50" aria-label={back} disabled={voiceBusy} onClick={() => { setInbox(true); setCareTeamOpened(true); }}><Icon name="back" className="h-[22px] w-[22px]" /></button>}
+            {!inbox && <button type="button" className="ma-press flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-ink hover:bg-surface disabled:opacity-50" aria-label={back} disabled={voiceBusy} onClick={() => { setInbox(true); setCareTeamOpened(true); }}><Icon name="back" className="h-[22px] w-[22px]" /></button>}
             {!inbox && conversation === "assistant" && <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-deep text-gold"><Icon name="spark" className="h-[18px] w-[18px]" /></span>}
             <div className="min-w-0 flex-1">
             <h1 ref={headingRef} tabIndex={-1} className={inbox ? "break-words pt-0 text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] outline-none" : "break-words text-base font-semibold leading-tight outline-none"}>{inbox ? "Chat" : conversation === "assistant" ? CARE_ASSISTANT_NAME : copy.careTeamLabel}</h1>
@@ -241,7 +241,7 @@ export default function ChatPage() {
                     followLatestRef.current = container.scrollHeight - container.clientHeight - container.scrollTop <= 80;
                 }} className="min-h-0 flex-1 space-y-3 overflow-y-auto">
             <p className="flex items-start gap-2 rounded-2xl bg-danger-tint px-3.5 py-2.5 text-[13px] leading-snug text-danger-ink"><Icon name="alert" className="mt-px h-4 w-4 shrink-0" />{controls.caution}</p>
-            {documentContext && <section className="flex items-start gap-3 rounded-[22px] bg-brand-tint p-3.5">
+            {documentContext && !documentUnavailable && <section className="flex items-start gap-3 rounded-[22px] bg-brand-tint p-3.5">
                 <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-brand"><Icon name="note" className="h-5 w-5" /></span>
                 <div className="min-w-0 flex-1">
                     <p className="text-xs font-semibold text-brand-ink">{controls.recordContext}</p>
@@ -250,8 +250,8 @@ export default function ChatPage() {
                 </div>
                 <button className="ma-press min-h-11 shrink-0 rounded-xl px-3 text-sm font-semibold text-brand-ink hover:bg-surface/70" onClick={dismissDocumentContext} type="button">{controls.dismiss}</button>
             </section>}
-            {!documentContext && documentUnavailable && <div className="rounded-2xl bg-surface px-3.5 py-2.5 text-[13px] text-ink-2" role="status"><p>{controls.documentUnavailable}</p><button type="button" className="min-h-11 px-3 font-semibold text-brand-ink" onClick={dismissDocumentContext}>{controls.dismiss}</button></div>}
-            {error && <div className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">
+            {documentUnavailable && <div className="rounded-2xl bg-surface px-3.5 py-2.5 text-[13px] text-ink-2" role="status"><p>{controls.documentUnavailable}</p><button type="button" className="min-h-11 px-3 font-semibold text-brand-ink" onClick={dismissDocumentContext}>{controls.dismiss}</button></div>}
+            {error && !documentUnavailable && <div className="rounded-2xl bg-danger-tint p-3.5 text-sm text-danger-ink" role="alert">
                 <p>{error === "CHAT_TURN_BUSY" ? recoveryCopy.busy : error === "CHAT_TURN_EXPIRED" ? recoveryCopy.expired : error === "CHAT_STARTUP_UNAVAILABLE" ? recoveryCopy.unavailable : controls.chatError}</p>
                 {error === "CHAT_STARTUP_UNAVAILABLE" && <button type="button" className="mt-2 min-h-11 rounded-xl bg-surface px-3 font-semibold" onClick={reconnectChat}>{recoveryCopy.reconnect}</button>}
             </div>}
@@ -292,7 +292,7 @@ export default function ChatPage() {
                             }
                         }}
                         placeholder={voiceStatus === "listening" ? controls.listening : voiceStatus === "processing" ? controls.transcribing : copy.inputPlaceholder} value={input} />
-                    <button className={`ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-full disabled:opacity-40 ${voiceStatus === "listening" ? "bg-danger-ink text-white" : "bg-surface-2 text-ink-2 hover:bg-line-strong"}`} aria-label={voiceStatus === "listening" ? controls.stopVoice : voiceStatus === "playing" ? controls.interrupt : controls.speak} aria-pressed={voiceStatus === "listening"}
+                    <button className={`ma-press flex h-11 w-11 shrink-0 items-center justify-center rounded-full disabled:opacity-40 ${voiceStatus === "listening" ? "bg-danger-ink text-white" : "bg-surface-2 text-ink-2 hover:bg-line-strong"}`} aria-label={voiceStatus === "listening" ? controls.stopVoice : voiceStatus === "playing" ? controls.interrupt : controls.speak} aria-pressed={voiceStatus === "listening"}
                         disabled={(!intakeComposer.active && (turnBusy || documentUnavailable)) || voiceStatus === "unsupported" || voiceStatus === "processing" || intakeComposer.busy || !profile} onClick={handleMicClick} type="button">
                         {voiceStatus === "listening" ? <HiStop aria-hidden className="h-5 w-5" /> : voiceStatus === "processing" ? <ProcessingDots /> : <Icon name="mic" className="h-5 w-5" />}
                     </button>

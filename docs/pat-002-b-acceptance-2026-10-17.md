@@ -383,3 +383,66 @@ its named prior implementation. No new authenticated deployed journey is claimed
 for this integration. Candidate-1 stays active; candidate-2 remains pending actual
 wording review. Genuine peer/safety review is still required. No remote migration,
 seed/reset, service configuration, deployment or merge is performed by this step.
+
+## October 21 — PR #193 review against merged #209
+
+Integrated `origin/main` at `36972470` without rewriting shared history. Resolved
+four conflicts: retain current task-board acceptance, main's 44px microphone
+target, all existing PostgreSQL/PostgREST CI lanes, and current report-keyed worker
+identity. The new confirmed-symptoms lane still requires 17 intake and eight
+handoff cases, with XML verification rejecting skipped/failed/missing cases.
+No migration file differs from main; no hosted SQL/configuration or deployment.
+
+Reviewed boundaries and corrections:
+
+- Unsaved answer display is bound to intake, question and revision; correction
+  selection is bound to the intake. New drafts cannot display the preceding
+  draft's pending answer or edit question at the same revision.
+- Private REST replies use their own busy/retry state while an ordinary Nora
+  turn is queued or processing. Tests also check the microphone remains enabled
+  on a supported mocked device and retains its 44px target. Unsupported devices
+  correctly remain disabled; no physical microphone acceptance is inferred.
+- The page forwards the recognizer locale to the private reply. Typed/voice
+  replies do not confirm a report: explicit preview/consent/button remain required.
+- Source-bound intake creation checks the durable action fence first. Added the
+  negative case: a rejected fence does not call intake start or direct report save.
+- Fixed the two existing code-quality comments: duplicate regex character removed
+  without changing its accepted character set, and the test DB dependency uses a
+  named zero-argument factory. Passing MagicMock directly is not equivalent in
+  FastAPI because its callable signature becomes dependency parameters; owning
+  router tests caught that intermediate attempt, and the named factory passes.
+- A clinician translation test asserted an asynchronous request before its effect
+  ran. It now waits for that request; application behaviour is unchanged. The
+  312-case evidence-label test passed with unchanged timeout on the bounded rerun.
+
+Verification commands (from the owning app/backend directory):
+
+- `PYTHONPATH=src .../python -m pytest tests/unit tests/integration/routers --no-cov -q`:
+  **4,033 passed**. Synthetic CI settings only; no configured live credentials.
+- Final owning rerun after small review fixes:
+  `pytest tests/integration/routers/test_chat_turn_recovery.py tests/integration/routers/test_symptom_intake_api.py tests/unit/intake --no-cov -q`:
+  **99 passed**.
+- `SYMPTOM_INTAKE_TEST_POSTGRES=1 CHAT_SAFETY_TEST_POSTGRES_DOCKER=1 pytest tests/integration/test_symptom_intake_postgres.py tests/integration/test_symptom_handoff_postgres.py --no-cov -q --junitxml=...`:
+  **25 passed**, XML verified **17/8, zero skips/failures/errors**. Disposable,
+  network-isolated PostgreSQL containers only. Initial missing synthetic settings
+  prevented collection; a concurrent-load setup later hit the unchanged 30-second
+  timeout. The completed rerun passed without increasing timeouts or weakening SQL.
+- Clinician `NODE_OPTIONS=--no-experimental-webstorage npm test -- --reporter=dot --maxWorkers=2`:
+  **680 passed / 76 files**. The first concurrent run had the async assertion race
+  above and an evidence-test timeout; both pass on the corrected bounded run.
+- Final patient `NODE_OPTIONS=--no-experimental-webstorage npm test -- --reporter=dot --maxWorkers=2`:
+  **839 passed / 75 files**, including the final 137-case focused intake/chat run.
+  Both portals' `npm run lint`, `npm run typecheck` and normal `npm run build`
+  pass with synthetic public configuration. Local dependency copies avoid the
+  isolated-checkout external-symlink restriction; no application build workaround.
+  Existing React act warnings, Sentry deprecation warnings and jsdom navigation
+  notices remain non-failing. Hosted CI is a separate receipt on the current PR.
+  Do not infer new deployed or device acceptance.
+- Changed Python Ruff/format pass, source mypy passes for router/intake/preflight,
+  and parser validation passes **95 migrations**. Applied 071 remains unchanged.
+
+Candidate-1 remains active; candidate-2 remains gated. VOI-001-M physical audio,
+wider deployed private-intake UI acceptance, and PAT-002-C history/detail remain
+separate tasks. This is a software integration review, not clinical validation or
+the repository's required independent peer/safety approval. No remote write or
+clinical-state mutation was performed during this review.

@@ -23,6 +23,7 @@ import {
 } from "@/types";
 import { readStoredSession } from "@/services/auth-session";
 import { ApiClientError } from "@/services/api";
+import { reportedProduct } from "@/utils/reported-product";
 import type {
     MedWatchFormDataV2,
     MedWatchGateIssue,
@@ -93,6 +94,20 @@ export interface PatientRiskData {
     active_med_count: number;
     recent_symptom_severity: number | null;
     last_activity: string;
+    risk_explanation?: {
+        rule_version: string;
+        calculated_at: string;
+        adherence_available: boolean;
+        adherence_window_days: number;
+        symptom_window_days: number;
+        factors: string[];
+        source_freshness?: Array<{
+            source: string;
+            timestamp_field: string;
+            latest_at: string | null;
+            status: "available" | "unknown" | "unavailable";
+        }> | null;
+    } | null;
     /** The clinic of the clinician's link to this patient. */
     clinic_id?: string | null;
     clinic_name?: string | null;
@@ -106,6 +121,66 @@ export interface DashboardResponse {
     low_risk: number;
     pending_adr_reviews: number;
     medwatch_pending: number;
+}
+
+export interface PatientTimelineEvent {
+    id: string;
+    domain: string;
+    source_table: string;
+    source_id: string;
+    occurred_at: string;
+    timestamp_label: string;
+    title: string;
+    details: Record<string, string | null>;
+    source_href: string;
+    destination_href: string | null;
+}
+
+export interface PatientTimelineResponse {
+    patient_id: string;
+    retrieved_at: string;
+    events: PatientTimelineEvent[];
+    sources: Array<{
+        source: string;
+        status: "available" | "unavailable";
+        returned: number;
+        limit: number;
+        has_more: boolean | null;
+        omitted_invalid: number;
+        conversation_limit: number | null;
+        conversations_truncated: boolean | null;
+    }>;
+}
+
+export function fetchPatientTimeline(patientId: string): Promise<PatientTimelineResponse> {
+    return apiFetch(`/api/v1/clinicians/me/patients/${encodeURIComponent(patientId)}/timeline`);
+}
+
+export interface ExternalRecordReviewsResponse {
+    items: Array<{
+        patient_id: string;
+        patient_name: string;
+        clinic_id: string | null;
+        clinic_name: string | null;
+        pending_count: number;
+        inspected_candidates: number;
+        oldest_source_captured_at: string | null;
+        source_times_complete: boolean;
+    }>;
+    retrieved_at: string;
+    page: number;
+    page_size: number;
+    assigned_patients: number;
+    patients_examined: number;
+    has_more: boolean;
+    candidate_limit: number;
+    citation_limit: number;
+}
+
+export function fetchExternalRecordReviews(page: number, clinicId?: string | null): Promise<ExternalRecordReviewsResponse> {
+    const params = new URLSearchParams({ page: String(page) });
+    if (clinicId) params.set("clinic_id", clinicId);
+    return apiFetch(`/api/v1/clinicians/me/external-record-reviews?${params}`);
 }
 
 export interface ADRReviewEvidence {
@@ -751,6 +826,7 @@ export interface CarePlanItem {
         upload_review_status?: string | null;
         document_id?: string;
         file_name?: string | null;
+        display_title?: Partial<Record<CarePlanLocale, string>> | null;
         excerpt?: string;
         location?: { page?: number };
     } | null;
@@ -758,6 +834,7 @@ export interface CarePlanItem {
         upload_review_status?: string | null;
         document_id?: string;
         file_name?: string | null;
+        display_title?: Partial<Record<CarePlanLocale, string>> | null;
         excerpt?: string;
         location?: { page?: number };
     }>;
@@ -947,6 +1024,7 @@ function normalizeSymptomReport(raw: Record<string, unknown>): SymptomReport {
         severity: typeof raw.severity === "number" ? raw.severity : null,
         confirmationState: raw.confirmation_state === "patient_confirmed" ? "patient_confirmed" : "legacy_unconfirmed",
         confirmedAt: typeof raw.confirmed_at === "string" ? raw.confirmed_at : undefined,
+        reportedProduct: reportedProduct(raw),
         confirmedSummary: typeof (raw.confirmed_content as Record<string, unknown> | undefined)?.summary === "string"
             ? String((raw.confirmed_content as Record<string, unknown>).summary) : undefined,
         onset: typeof raw.onset === "string" ? raw.onset : undefined,

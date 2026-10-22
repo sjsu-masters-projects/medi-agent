@@ -61,6 +61,7 @@ import {
 const MAX_RECOVERY_POLLS = 60;
 /** The API service caps a websocket at 3600 s; reconnect quietly a little before that. */
 const SOCKET_RENEW_MS = 3_500_000;
+const SOCKET_HEALTH_MS = 15_000;
 const HANDS_FREE_STORAGE_KEY = "patient-portal.chat.handsFree";
 const FALLBACK_DOCUMENT_NAME = "medical record";
 
@@ -868,6 +869,8 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         durableReadyRef.current = false;
         let durableReady = false;
         let handshakeTimedOut = false;
+        let networkLost = false;
+        let pingSentAt: number | null = null;
         // Same conversation, so the screen, draft and typing state are kept; the server replays the draft.
         const renewTimer = window.setTimeout(() => { if (isMounted) setReconnectSignal((current) => current + 1); }, SOCKET_RENEW_MS);
         const handshakeTimer = window.setTimeout(() => {
@@ -878,6 +881,39 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                 socket.close();
             }
         }, 15000);
+
+        // TCP may stay OPEN through a Wi-Fi interruption. A stale OPEN socket
+        // must not strand a completed server turn behind a typing indicator.
+        const healthTimer = window.setInterval(() => {
+            if (!isMounted || networkLost || !durableReady || socket.readyState !== WebSocket.OPEN
+                || document.visibilityState !== "visible") { pingSentAt = null; return; }
+            if (pingSentAt !== null) {
+                if (Date.now() - pingSentAt >= SOCKET_HEALTH_MS) socket.close();
+                return;
+            }
+            pingSentAt = Date.now();
+            try { socket.send(JSON.stringify({ type: "ping" })); } catch { socket.close(); }
+        }, SOCKET_HEALTH_MS);
+        const wentOffline = () => {
+            if (!isMounted) return;
+            networkLost = true;
+            clearChatReconnectTimer();
+            clearChatStabilityTimer();
+            durableReadyRef.current = false;
+            dispatch(setConnectionStatus("disconnected"));
+            voiceRefs.current.autoPlayNextAssistantMessage = false;
+            setVoiceStatus((previous) => previous === "processing" || previous === "playing" ? "idle" : previous);
+            socket.close();
+        };
+        const cameOnline = () => {
+            if (!isMounted || !networkLost) return;
+            networkLost = false;
+            reconnectRef.current.attempts = 0;
+            clearChatReconnectTimer();
+            setReconnectSignal((current) => current + 1);
+        };
+        window.addEventListener("offline", wentOffline);
+        window.addEventListener("online", cameOnline);
 
         socket.onopen = () => {
             if (!isMounted) {
@@ -912,6 +948,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             if (!isChatSocketEvent(payload)) {
                 return;
             }
+            pingSentAt = null;
 
             switch (payload.type) {
                 case "chat_turn": receiveTurns([payload.turn]); return;
@@ -1115,6 +1152,10 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
 
             durableReadyRef.current = false;
             clearChatStabilityTimer();
+            if (networkLost) {
+                dispatch(setConnectionStatus("disconnected"));
+                return;
+            }
             // The server replays drafts for established conversations. Before the first
             // durable handshake, retry transient closes but stop after an actual timeout.
             if (!durableReady && !everReadyRef.current) {
@@ -1146,6 +1187,9 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
             window.clearTimeout(handshakeTimer);
             clearChatStabilityTimer();
             window.clearTimeout(renewTimer);
+            window.clearInterval(healthTimer);
+            window.removeEventListener("offline", wentOffline);
+            window.removeEventListener("online", cameOnline);
             durableReadyRef.current = false;
             stopSpeechRecognition();
             stopAssistantPlayback();
@@ -1179,6 +1223,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     }, []);
 
     function dismissDocumentContext(): void {
+        if (documentUnavailable) dispatch(setChatError(null));
         setActiveDocumentId(null);
         setDocumentContext(null);
         setDocumentDismissed(true);

@@ -124,6 +124,9 @@ def test_readable_output_is_one_plain_line():
 
 
 def test_configure_logging_picks_json_on_cloud_run(monkeypatch, capsys):
+    # Test automatic selection, not operator-provided format/job overrides.
+    monkeypatch.delenv("LOG_FORMAT", raising=False)
+    monkeypatch.delenv("CLOUD_RUN_JOB", raising=False)
     monkeypatch.setenv("K_SERVICE", "mediagent-backend")
     root = logging.getLogger()
     before = list(root.handlers)

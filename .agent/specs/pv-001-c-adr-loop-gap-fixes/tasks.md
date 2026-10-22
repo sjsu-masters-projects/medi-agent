@@ -644,7 +644,7 @@ required evidence (V3, V5, V6, V10), so none is marked optional.
 - **Requester verification (not executable tasks):**
   - V12: authenticated manual checks with synthetic accounts and screenshots per R1.19 (patient en-US / es-MX at 320,
     360 and 430 px; clinician at 1024, 1280 and 1536 px; keyboard, 200% zoom, reduced motion, safe areas).
-  - V13 / D9: Spanish-fluent sign-off of the es-MX question, caution, confirmation and notification wording.
+  - V13 / D9: completed October 19 under the requester's revised criterion: LLM-assisted meaning-and-safety review of en-US/es-MX question, caution, confirmation and notification wording for the synthetic demo; no professional translation validation claimed.
   - V14: applying 063 to any remote environment, which needs explicit authorization naming that action.
   - D1, the clinician-deletion policy, stays open.
 - No new dependencies. The properties run as exhaustive or table-driven tests, because neither Hypothesis nor

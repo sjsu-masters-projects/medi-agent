@@ -29,6 +29,28 @@ configuration.
 
 ## Release order
 
+### October 20 post-202 acceptance
+
+#202 merged/deployed automatically; backend `00173-t5q` and worker `00016-29q`
+serve the updated code. Morgan's Spanish typed/mobile confirmation produced one
+canonical completed task and one exact clinician ADR draft, unlike the preserved
+pre-fix duplicate history. Saved region wording/reload and unchecked consent pass.
+See [live evidence](deployed-recheck-2026-10-11.md#october-20--post-202-live-acceptance).
+Physical voice, forced outage and wider mobile/accessibility checks remain.
+
+### October 19 authorized activation checkpoint
+
+Candidate-1, exact migration checksums, trigger and browser-write restrictions
+passed read-only preflight. The requester authorized only the intake flag update:
+backend revision `mediagent-backend-00172-vp5` and chat-worker revision
+`mediagent-chat-worker-00015-65j` now set `SYMPTOM_INTAKE_ENABLED=true`.
+Both services need the flag: Nora intake executes in the chat worker as well as
+the API. Do not alter other flags, images or SQL as part of activation.
+Morgan's confirmation reached Elena's exact review case, but revealed duplicate
+handoff keys (DV-015). PR #202's canonical-key reuse fix needs merge/deployment
+and a new single-task confirmation check. Candidate-2 remains unapproved.
+
+
 1. Verify the selected synthetic database ledger against the exact 071 filename and
    checksum above. If it already matches, run no SQL and do not rewrite the ledger. For a
    fresh or missing environment, obtain explicit authorization before applying the exact

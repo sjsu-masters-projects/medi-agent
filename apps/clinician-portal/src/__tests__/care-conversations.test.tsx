@@ -52,7 +52,7 @@ describe("non-blocking message translation", () => {
     await open();
     expect(await screen.findByText("Tomo 5 mg al dia")).toBeInTheDocument();
     expect(screen.getByText("Translating…")).toBeInTheDocument();
-    expect(careConversations.translate).toHaveBeenCalledWith("synthetic-token", "thread-one", "m1");
+    await waitFor(() => expect(careConversations.translate).toHaveBeenCalledWith("synthetic-token", "thread-one", "m1"));
     await act(async () => finish(result("m1")));
     await screen.findByText("I take 5 mg daily");
     expect(screen.queryByText("Translating…")).not.toBeInTheDocument();

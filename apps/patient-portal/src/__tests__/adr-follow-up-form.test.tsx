@@ -99,7 +99,7 @@ describe("ADR follow-up form", () => {
 
         const { onClosed, onSent } = renderForm(makeRequest());
 
-        expect(screen.getByText(/A few questions about dizziness/i)).toBeInTheDocument();
+        expect(screen.getByText('Reported symptom (original wording): “dizziness”')).toBeInTheDocument();
         expect(screen.getByText(/Do not restart, stop, or change/i)).toBeInTheDocument();
         expect(screen.queryByText(/placebo/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/objective evidence/i)).not.toBeInTheDocument();
@@ -170,8 +170,8 @@ describe("ADR follow-up form", () => {
 
             expect(container.firstElementChild).toHaveAttribute("lang", "es-MX");
             expect(screen.getByText("Seguimiento de tu equipo de atención")).toBeInTheDocument();
-            expect(screen.getByText("Unas preguntas sobre dizziness")).toBeInTheDocument();
-            expect(screen.getByText("Reportado con lisinopril.")).toBeInTheDocument();
+            expect(screen.getByText("Síntoma reportado (texto original): «dizziness»")).toBeInTheDocument();
+            expect(screen.getByText("Medicamento (nombre registrado): lisinopril.")).toBeInTheDocument();
             expect(screen.getByText("Mensaje de tu equipo de atención")).toBeInTheDocument();
             expect(screen.getByText(/^Responde solo con lo que ya pasó/)).toBeInTheDocument();
             expect(screen.getByText(/^Antes de esta solicitud, ¿el síntoma cambió/)).toBeInTheDocument();

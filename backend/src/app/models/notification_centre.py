@@ -27,6 +27,8 @@ class CentreItem(BaseModel):
     patient_name: str | None = None
     clinic_name: str | None = None
     clinic_id: UUID | None = None
+    source_label: str | None = None
+    state_checked_at: datetime | None = None
 
 
 class CentrePage(BaseModel):

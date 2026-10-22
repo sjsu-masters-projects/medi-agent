@@ -209,7 +209,9 @@ async def test_get_document_catalog_returns_only_safe_document_metadata(mock_db)
     catalog = await ChatService(mock_db).get_document_catalog(patient_id)
 
     assert catalog == rows
-    assert mock_db.table().select.call_args.args == ("id, file_name, document_type, created_at",)
+    assert mock_db.table().select.call_args.args == (
+        "id, file_name, document_type, display_title, created_at",
+    )
 
 
 @pytest.mark.asyncio
