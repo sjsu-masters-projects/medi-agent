@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { HiStop } from "react-icons/hi2";
 import { useSelector } from "react-redux";
@@ -81,7 +81,7 @@ export default function ChatPage() {
     const updateIntakeComposer = useCallback((next: IntakeComposerState) => {
         setIntakeComposer((previous) => previous.active === next.active && previous.busy === next.busy && previous.revision === next.revision && previous.locale === next.locale && previous.accepting === next.accepting ? previous : next);
     }, []);
-    const { assistantDraft, assistantDraftStartedAt, canPlayAssistantAudio, connectionStatus,
+    const { assistantDraft, assistantDraftMeta, assistantDraftStartedAt, canPlayAssistantAudio, connectionStatus,
         dismissDocumentContext, dismissSafetyNotice, documentContext, documentUnavailable, error, handleHandsFreeToggle,
         handleMicClick, handlePlayAssistantMessage, handleSend, handsFreeMode, input,
         isTyping, loading, messages, openConversation, safetyNotice, sessionId, setInput,
@@ -94,9 +94,14 @@ export default function ChatPage() {
             intakeComposer.revision,
         );
     const { accessToken, user } = useSelector((state: RootState) => state.auth);
+    const voiceDraft = useMemo(
+        () => assistantDraft ? { text: assistantDraft, ...assistantDraftMeta } : null,
+        [assistantDraft, assistantDraftMeta],
+    );
     const voiceMode = useVoiceMode({
         patientId: user?.id ?? null, accessToken: accessToken ?? null, scope: sessionId, locale,
         sendUtterance: sendVoiceUtterance, reply: lastAssistantReply, chatError: error,
+        draft: voiceDraft,
     });
     const voiceCopy = getVoiceModeCopy(locale);
     const voiceSupported = useSyncExternalStore(() => () => undefined, voiceAudioSupported, () => false);

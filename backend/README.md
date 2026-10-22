@@ -779,6 +779,14 @@ decisions, lock order, read-path audit and the API contract:
 - **Unit helpers**: `tests/unit/services/care_team_fake_db.py` is an in-memory client that
   applies filters as sent, so a forgotten owner filter fails a test.
 
+## AI availability counters (AI-003)
+
+`GET /api/v1/ops/ai-availability?hours=24` (clinic admins) returns per workload and model attempt
+counts by outcome (success, timeout, 429, 5xx, circuit open, fallback) and p50/p95/p99 latency over
+a rolling window, from `ai_availability_buckets` (migration 090). Counters hold no patient data or
+text. Settings: `AI_AVAILABILITY_ENABLED`, `AI_AVAILABILITY_FLUSH_SECONDS`. See the AI runtime
+decision record.
+
 ## Reviewed care-handoff summaries (CON-001)
 
 A clinician drafts, edits, approves and exports a handoff summary for one of their

@@ -146,6 +146,8 @@ function mapLoadedDocumentContext(
 interface PatientChatSessionState {
     assistantDraft: string;
     assistantDraftStartedAt: string | null;
+    /** What the draft is (from the turn's classification) and a counter that changes whenever the draft restarts. */
+    assistantDraftMeta: AssistantDraftMeta;
     receivingStream: boolean;
     canPlayAssistantAudio: boolean;
     connectionStatus: RootState["chat"]["connectionStatus"];
@@ -173,6 +175,13 @@ interface PatientChatSessionState {
 }
 
 type AssistantAudioInput = Pick<ChatMessage, "content" | "language"> & Partial<Pick<ChatMessage, "id" | "audioUrl">>;
+
+export interface AssistantDraftMeta {
+    intent: string;
+    urgency: string;
+    /** Bumped by every assistant_start and assistant_reset, so a consumer can tell a restarted draft from a longer one. */
+    generation: number;
+}
 
 export interface AssistantReplyEvent {
     seq: number;
@@ -240,6 +249,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
     );
     const [assistantDraft, setAssistantDraft] = useState("");
     const [assistantDraftStartedAt, setAssistantDraftStartedAt] = useState<string | null>(null);
+    const [assistantDraftMeta, setAssistantDraftMeta] = useState<AssistantDraftMeta>({ intent: "general", urgency: "routine", generation: 0 });
     const [handsFreeMode, setHandsFreeMode] = useState<boolean>(resolveInitialHandsFree);
     const [voiceError, setVoiceError] = useState<string | null>(null);
     // The latest completed Nora reply, numbered so live voice mode can speak each one once.
@@ -1105,6 +1115,19 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
                     setReceivingStream(true);
                     resetAssistantDraft();
                     setAssistantDraftStartedAt(new Date().toISOString());
+                    setAssistantDraftMeta((previous) => ({
+                        intent: payload.intent ?? "general",
+                        urgency: payload.urgency ?? "routine",
+                        generation: previous.generation + 1,
+                    }));
+                    dispatch(setTyping(true));
+                    return;
+                case "assistant_reset":
+                    // The text shown so far is withdrawn; whatever follows replaces it.
+                    socketDraftAtRef.current = Date.now();
+                    setReceivingStream(true);
+                    setAssistantDraft("");
+                    setAssistantDraftMeta((previous) => ({ ...previous, generation: previous.generation + 1 }));
                     dispatch(setTyping(true));
                     return;
                 case "assistant_chunk":
@@ -1554,6 +1577,7 @@ export function usePatientChatSession(selectedLanguage: ChatLocale = DEFAULT_LOC
         dismissTurn: recovery.dismiss,
         assistantDraft,
         assistantDraftStartedAt,
+        assistantDraftMeta,
         receivingStream,
         canPlayAssistantAudio,
         connectionStatus,

@@ -52,6 +52,7 @@ from app.adk.agents.care_coordinator import (
     route_for_intent,
 )
 from app.adk.grounding import (
+    StreamingReplyFilter,
     cited_sources,
     plain_reply,
     source_line,
@@ -59,7 +60,7 @@ from app.adk.grounding import (
     unsupported_doses,
     without_source_lines,
 )
-from app.adk.models.resilient import ResilientLlm
+from app.adk.models.resilient import DRAFT_RESET_KEY, ResilientLlm
 from app.adk.plugins import LOCALE_STATE_KEY
 from app.adk.runner import build_runner
 from app.adk.tools import (
@@ -115,6 +116,11 @@ def _text_of(event: Any) -> str:
     content = getattr(event, "content", None)
     parts = getattr(content, "parts", None) or []
     return "".join(part.text or "" for part in parts if getattr(part, "text", None))
+
+
+def _is_draft_reset(event: Any) -> bool:
+    metadata = getattr(event, "custom_metadata", None)
+    return isinstance(metadata, dict) and bool(metadata.get(DRAFT_RESET_KEY))
 
 
 def _decision_from(event: Any) -> dict[str, Any] | None:
@@ -213,6 +219,11 @@ class CareCoordinatorRuntime:
         classified = floor is not None
         answer = ""
         streamed = False
+        # What the patient sees while the reply is written is already in its final form: source
+        # lines and Markdown marks are removed as the text arrives, not afterwards, so a draft
+        # (and any sentence spoken from it) is a prefix of the saved reply.
+        reply_filter = StreamingReplyFilter()
+        shown: list[str] = []
         sources: list[dict[str, Any]] = []
         tool_results: list[str] = []
 
@@ -258,6 +269,16 @@ class CareCoordinatorRuntime:
                         classified = True
                         yield _classification(intent, urgency, reason, escalate)
 
+                    if _is_draft_reset(event):
+                        # The model failed after text was shown and the backup is answering
+                        # from the start: withdraw what was shown, then stream the new reply.
+                        reply_filter = StreamingReplyFilter()
+                        if shown:
+                            yield {"type": "chunk_reset"}
+                        shown.clear()
+                        streamed = False
+                        continue
+
                     used = sources_from_event(event)
                     if used is not None:
                         sources = used
@@ -281,8 +302,11 @@ class CareCoordinatorRuntime:
                         )
 
                     if getattr(event, "partial", False):
-                        streamed = True
-                        yield {"type": "chunk", "content": body}
+                        visible = reply_filter.feed(body)
+                        if visible:
+                            streamed = True
+                            shown.append(visible)
+                            yield {"type": "chunk", "content": visible}
                     else:
                         # The final event repeats the whole answer rather than the remainder,
                         # so it becomes the authoritative text and is not re-sent as a chunk.
@@ -298,17 +322,31 @@ class CareCoordinatorRuntime:
             )
             if not classified:
                 yield _classification("general", "routine", "Model unavailable", False)
-            if not streamed:
-                unavailable = localized["service_unavailable"]
-                yield {"type": "chunk", "content": unavailable}
-                yield {"type": "complete", "response_text": unavailable, "fallback_used": True}
+            if answer:
+                yield {
+                    "type": "complete",
+                    "response_text": plain_reply(without_source_lines(answer)),
+                    "fallback_used": True,
+                }
                 return
-            yield {"type": "complete", "response_text": answer, "fallback_used": True}
+            unavailable = localized["service_unavailable"]
+            if streamed:
+                # Text the patient already saw is not a finished answer: it is withdrawn and the
+                # reviewed message replaces it (viewers and any audio stop and use this).
+                yield {"type": "chunk_reset"}
+            yield {"type": "chunk", "content": unavailable}
+            yield {"type": "complete", "response_text": unavailable, "fallback_used": True}
             return
 
         model_end("ok")
         if not classified:
             yield _classification("general", "routine", "Model unavailable", False)
+
+        held = reply_filter.finish()  # the end of a reply that ended mid-line
+        if held:
+            streamed = True
+            shown.append(held)
+            yield {"type": "chunk", "content": held}
 
         if not answer and not streamed:
             # Nothing was produced at all. The patient is told so rather than handed an
@@ -335,6 +373,17 @@ class CareCoordinatorRuntime:
                 if streamed:
                     yield {"type": "chunk", "content": f"\n\n{line}"}
                 answer = f"{answer}\n\n{line}"
+        if streamed and not answer.startswith("".join(shown).strip()):
+            # The reply changed after it was shown: viewers replace it with this one. Counts
+            # only, never the text.
+            log_event(
+                logger,
+                "chat_model.draft_replaced",
+                level=logging.WARNING,
+                message="The saved reply differs from the draft shown while it was written",
+                draft_chars=len("".join(shown)),
+                reply_chars=len(answer),
+            )
         unsupported = unsupported_doses(answer, *tool_results)
         if unsupported:
             # Measured before it is allowed to block: the count, never the text.

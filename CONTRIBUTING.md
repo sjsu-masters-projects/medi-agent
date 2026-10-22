@@ -53,6 +53,8 @@ Validate:
 | `CHAT_TURN_TIMEOUT_SECONDS` | Hard ceiling for the complete coordinator-and-responder chat turn |
 | `MODEL_CIRCUIT_BREAKER_COOLDOWN_SECONDS` | How long MaaS is bypassed after a timeout or retriable provider failure |
 | `MODEL_MAX_CONCURRENCY`, `MODEL_MIN_START_INTERVAL_SECONDS` | Per-process model-call concurrency and start spacing |
+| `MODEL_ADMISSION_WAIT_SECONDS`, `REPLY_FALLBACK_MIN_SECONDS` | Longest an interactive model call waits for a slot before it is shed; minimum reply budget left to try the backup model after text was shown |
+| `AI_AVAILABILITY_ENABLED`, `AI_AVAILABILITY_FLUSH_SECONDS` | Bounded model availability counters (migration 090) |
 | `CRON_AUTH_TOKEN` | Shared token for Cloud Scheduler calls to the backend cron endpoints |
 | `DEEPGRAM_API_KEY` | Voice STT/TTS |
 | `RESEND_API_KEY` | Backend transactional email (addressed invitations, contact verification and opted-in event notices); Supabase Auth SMTP is configured separately |
