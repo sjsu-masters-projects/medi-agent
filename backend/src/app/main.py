@@ -19,39 +19,9 @@ from app.core.log_redaction import install_credential_redaction
 from app.core.request_context import RequestContextMiddleware
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.core.structured_logging import configure_logging
-from app.routers import (
-    adherence,
-    appointments,
-    auth,
-    care_conversations,
-    care_plans,
-    care_team_records,
-    chat,
-    chat_turns,
-    clinicians,
-    clinics,
-    cron,
-    documents,
-    email_preferences,
-    feed,
-    handoff_summaries,
-    internal_tasks,
-    medications,
-    mfa,
-    notification_centre,
-    notifications,
-    obligations,
-    ops,
-    patients,
-    reminders,
-    smart,
-    staff,
-    symptom_intakes,
-    voice,
-)
 from app.services.a2a_retry_worker import A2ARetryWorker
 from app.services.chat_turn_events import TurnWatchSet
-from app.services.chat_turn_queue import TurnDispatcher
+from app.services.chat_turn_queue import TurnDispatcher, warm_dispatcher
 from app.services.chat_turn_runner import turn_runner
 
 logger = logging.getLogger(__name__)
@@ -121,14 +91,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         logger.info("A2A retry worker enabled")
 
     sweep_task: asyncio.Task[None] | None = None
+    warm_task: asyncio.Task[None] | None = None
     if settings.chat_turns_via_worker:
         sweep_task = asyncio.get_running_loop().create_task(_startup_dispatch_sweep())
+        # The first enqueue on a new process measured 2.1-6.3 s (client, credentials, TLS);
+        # do that work now, off the request path.
+        warm_task = asyncio.get_running_loop().create_task(warm_dispatcher())
 
     yield  # app is running
 
-    if sweep_task is not None:
-        sweep_task.cancel()
-        await asyncio.gather(sweep_task, return_exceptions=True)
+    for background in (sweep_task, warm_task):
+        if background is not None:
+            background.cancel()
+    await asyncio.gather(
+        *(t for t in (sweep_task, warm_task) if t is not None), return_exceptions=True
+    )
     # Viewers of worker turns only read; they end with the process.
     await TurnWatchSet.close_all()
 
@@ -145,6 +122,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 def create_worker_app() -> FastAPI:
     """The worker service: the same image with ``WORKER_MODE=true``. It exposes ``/health`` and
     the OIDC-protected task endpoint only: no user API, no websockets, no cron."""
+    # Only what a task needs is imported here; the user API's routers load only in the API
+    # process, which keeps the worker's cold start short.
+    from app.routers import internal_tasks
+
     install_credential_redaction()
     configure_logging()
     application = FastAPI(
@@ -172,6 +153,37 @@ def create_app() -> FastAPI:
     """Build and configure the FastAPI application."""
     if settings.worker_mode:
         return create_worker_app()
+
+    from app.routers import (
+        adherence,
+        appointments,
+        auth,
+        care_conversations,
+        care_plans,
+        care_team_records,
+        chat,
+        chat_turns,
+        clinicians,
+        clinics,
+        cron,
+        documents,
+        email_preferences,
+        feed,
+        handoff_summaries,
+        medication_confirmations,
+        medications,
+        mfa,
+        notification_centre,
+        notifications,
+        obligations,
+        ops,
+        patients,
+        reminders,
+        smart,
+        staff,
+        symptom_intakes,
+        voice,
+    )
 
     # Installed before anything can serve a request. The access log writes whole request
     # paths, so a credential that reaches a query string is published to the log the first
@@ -263,6 +275,16 @@ def create_app() -> FastAPI:
     application.include_router(staff.router, prefix=f"{api}/staff", tags=["Staff"])
     application.include_router(ops.router, prefix=f"{api}/ops", tags=["Operations"])
     application.include_router(smart.router, prefix=f"{api}/smart", tags=["SMART on FHIR"])
+    application.include_router(
+        medication_confirmations.clinician_router,
+        prefix=f"{api}/smart",
+        tags=["Medication confirmations"],
+    )
+    application.include_router(
+        medication_confirmations.patient_router,
+        prefix=f"{api}/patients/me",
+        tags=["Medication confirmations"],
+    )
     application.add_api_websocket_route("/ws/chat/{patient_id}", chat.chat_websocket_endpoint)
     application.add_api_websocket_route("/ws/voice/{patient_id}", voice.voice_websocket_endpoint)
 

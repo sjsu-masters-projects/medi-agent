@@ -430,19 +430,17 @@ async def test_a_replaced_lease_still_refuses_the_old_reply(turn_runtime):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("action_accepted", [True, False])
-async def test_durable_symptom_turn_opens_owned_draft_after_action_fence(
-    monkeypatch, turn_runtime, action_accepted
+@pytest.mark.parametrize(
+    ("message", "offered"),
+    [("Synthetic dizziness since yesterday", True), ("What medications am I taking?", False)],
+)
+async def test_durable_symptom_turn_offers_but_never_opens_a_draft(
+    monkeypatch, turn_runtime, message, offered
 ):
     from app.models.auth import CurrentUser
 
     turns, service, socket, context, record, _ = turn_runtime
-    original_call = turns.call.side_effect
-    turns.call.side_effect = lambda action, payload=None, **kwargs: (
-        {"accepted": False}
-        if action == "actions" and not action_accepted
-        else original_call(action, payload, **kwargs)
-    )
+    monkeypatch.setattr(chat.settings, "symptom_intake_enabled", True)
 
     async def stream(**_kwargs):
         yield {
@@ -451,48 +449,35 @@ async def test_durable_symptom_turn_opens_owned_draft_after_action_fence(
             "urgency": "routine",
             "route": "symptom",
         }
+        yield {"type": "complete", "response_text": "Synthetic grounded reply"}
 
     coordinator = MagicMock()
     coordinator.process_stream = stream
     context.update(
+        incoming=context["incoming"].model_copy(update={"content": message}),
         current_user=CurrentUser(
             id=context["patient_id"], email="synthetic@invalid.test", role="patient"
         ),
         patient_context={},
         care_coordinator=coordinator,
     )
-    draft_id = str(uuid4())
+    started = AsyncMock(side_effect=AssertionError("An offer must not open a draft"))
+    from app.services.symptom_intake_service import SymptomIntakeService
 
-    async def start(_self, data):
-        assert any(call.args[0] == "actions" for call in turns.call.call_args_list)
-        assert str(data.source_message_id) == turns.begin.return_value["user_message"]["id"]
-        assert data.session_id == context["session_id"]
-        return {"intake_id": draft_id, "revision": 0}
-
-    start_mock = AsyncMock(side_effect=start)
-
-    # A real method wrapper preserves self while the call remains inspectable.
-    async def start_draft(self, data):
-        return await start_mock(self, data)
-
-    monkeypatch.setattr(chat.SymptomIntakeService, "start", start_draft)
+    monkeypatch.setattr(SymptomIntakeService, "start", started)
     monkeypatch.setattr(
         chat, "_persist_conversation_state_with_retry", AsyncMock(return_value={"turn_count": 1})
     )
     direct_save = AsyncMock(side_effect=AssertionError("No automatic report insertion"))
     monkeypatch.setattr(ChatService, "save_symptom_report", direct_save)
     await run_turn(socket, service, context, {"client_message_id": record["client_message_id"]})
+    started.assert_not_awaited()
     direct_save.assert_not_awaited()
-    if not action_accepted:
-        start_mock.assert_not_awaited()
-        events = [call.args[0].get("type") for call in socket.send_json.call_args_list]
-        assert "symptom_intake_updated" not in events
-        assert "symptom_intake_unavailable" in events
-        return
-    start_mock.assert_awaited_once()
-    assert any(call.args[0] == "complete" for call in turns.call.call_args_list)
-    assert any(
-        call.args[0].get("type") == "symptom_intake_updated"
-        and call.args[0].get("intake_id") == draft_id
-        for call in socket.send_json.call_args_list
-    )
+    finish = next(call for call in turns.call.call_args_list if call.args[0] == "complete")
+    attachments = finish.args[1].get("attachments") or []
+    offers = [item for item in attachments if item.get("type") == "symptom_intake_offer"]
+    assert bool(offers) is offered
+    if offered:
+        assert offers[0]["source_message_id"] == turns.begin.return_value["user_message"]["id"]
+    events = [call.args[0].get("type") for call in socket.send_json.call_args_list]
+    assert "symptom_intake_updated" not in events

@@ -50,7 +50,7 @@ export type {
     UploadCareTeamOption,
 } from "../../../../packages/shared/src/types/care-team-plans";
 
-export type { ChatAttachment, ChatDocumentResultsAttachment } from "./chat-attachments";
+export type { ChatAttachment, ChatDocumentResultsAttachment, ChatSymptomOfferAttachment } from "./chat-attachments";
 
 /** A chat message as the patient portal shows it, with any server-built cards under it. */
 export interface ChatMessage extends SharedChatMessage {

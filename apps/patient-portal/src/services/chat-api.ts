@@ -184,6 +184,10 @@ function toChatAttachment(item: unknown): ChatAttachment | null {
         return null;
     }
     const raw = item as Record<string, unknown>;
+    if (raw.type === "symptom_intake_offer") {
+        const sourceMessageId = optionalText(raw.source_message_id);
+        return sourceMessageId ? { type: "symptom_intake_offer", sourceMessageId } : null;
+    }
     const documentId = optionalText(raw.document_id);
     if (raw.type !== "document_results" || !documentId || !Array.isArray(raw.results)) {
         return null;

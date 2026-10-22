@@ -19,7 +19,7 @@ env:
   # Fallback runtime identity for the services and jobs. The API and chat worker services use
   # the least-privilege accounts named by the repository variables CLOUD_RUN_API_RUNTIME_SA and
   # CLOUD_RUN_WORKER_RUNTIME_SA once those are set (see docs/chat-worker-setup.md); until then
-  # they keep running as this account. The two jobs stay on this account.
+  # they keep running as this account. The two jobs use CLOUD_RUN_JOBS_RUNTIME_SA the same way.
   RUNTIME_SERVICE_ACCOUNT: github-actions-deployer@medi-agent-490106.iam.gserviceaccount.com
 
 permissions:
@@ -54,6 +54,7 @@ jobs:
           CHAT_TURNS_VIA_WORKER: ${{ vars.CHAT_TURNS_VIA_WORKER }}
           CLOUD_RUN_API_RUNTIME_SA: ${{ vars.CLOUD_RUN_API_RUNTIME_SA }}
           CLOUD_RUN_WORKER_RUNTIME_SA: ${{ vars.CLOUD_RUN_WORKER_RUNTIME_SA }}
+          CLOUD_RUN_JOBS_RUNTIME_SA: ${{ vars.CLOUD_RUN_JOBS_RUNTIME_SA }}
         run: |
           missing=0
           for name in CLOUD_TASKS_PROJECT CLOUD_TASKS_LOCATION CLOUD_TASKS_QUEUE CHAT_WORKER_URL CHAT_WORKER_INVOKER_SA CHAT_TURNS_VIA_WORKER; do
@@ -70,7 +71,7 @@ jobs:
             echo "::error::CHAT_WORKER_URL must be an https URL with no path or trailing slash."
             missing=1
           fi
-          for name in CLOUD_RUN_API_RUNTIME_SA CLOUD_RUN_WORKER_RUNTIME_SA; do
+          for name in CLOUD_RUN_API_RUNTIME_SA CLOUD_RUN_WORKER_RUNTIME_SA CLOUD_RUN_JOBS_RUNTIME_SA; do
             if [ -n "${!name}" ] && ! [[ "${!name}" =~ ^[a-z0-9-]+@${PROJECT_ID}\.iam\.gserviceaccount\.com$ ]]; then
               echo "::error::${name} must be a service account email in project ${PROJECT_ID}."
               missing=1
@@ -167,13 +168,20 @@ jobs:
           # --no-cpu-throttling keeps CPU allocated outside requests. A Nora reply is a
           # server-owned task that keeps running after its websocket closes, and a
           # throttled instance would stall it. Main service only; the jobs are unchanged.
+          #
+          # --min-instances 1 keeps one instance warm so the first message after idle does not
+          # pay a cold start plus the first Cloud Tasks call (measured 2.1-6.3 s on a new
+          # process). With CPU always allocated this instance is billed continuously (about one
+          # vCPU and 2 GiB); the cost is accepted for chat latency. --cpu-boost gives extra CPU
+          # while a new instance starts. See docs/chat-worker-setup.md, "Latency and cost".
           gcloud run deploy ${SERVICE_NAME} \
             --image $IMAGE_PATH \
             --region ${REGION} \
             --cpu 1 \
             --no-cpu-throttling \
             --memory 2Gi \
-            --min-instances 0 \
+            --min-instances 1 \
+            --cpu-boost \
             --max-instances 2 \
             --allow-unauthenticated \
             "${SA_FLAG[@]}" \
@@ -190,6 +198,8 @@ jobs:
       # inside its task request, so no CPU is needed between requests. See
       # docs/chat-worker-setup.md for the one-time resources this step expects (the invoker
       # service account, the queue and the repository variable CHAT_WORKER_INVOKER_SA).
+      # --min-instances 1 keeps one worker warm: an idle instance on request-based CPU is billed
+      # at the low idle rate, while a cold worker measured 30 s from dispatch to the first task.
       - name: Deploy chat worker service
         if: ${{ vars.DEPLOY_CHAT_WORKER == 'true' }}
         env:
@@ -215,7 +225,8 @@ jobs:
             --cpu 1 \
             --cpu-throttling \
             --memory 2Gi \
-            --min-instances 0 \
+            --min-instances 1 \
+            --cpu-boost \
             --max-instances 3 \
             --concurrency 4 \
             --timeout 300 \
@@ -234,6 +245,8 @@ jobs:
           echo "Worker URL (use it as CHAT_WORKER_URL on the API service): ${WORKER_URL}"
 
       - name: Deploy document-ingestion job
+        env:
+          CLOUD_RUN_JOBS_RUNTIME_SA: ${{ vars.CLOUD_RUN_JOBS_RUNTIME_SA }}
         run: |
           IMAGE_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${SERVICE_NAME}:latest"
 
@@ -254,11 +267,13 @@ jobs:
             --parallelism 1 \
             --task-timeout 1800s \
             --max-retries 0 \
-            --service-account ${RUNTIME_SERVICE_ACCOUNT} \
+            --service-account ${CLOUD_RUN_JOBS_RUNTIME_SA:-${RUNTIME_SERVICE_ACCOUNT}} \
             --set-env-vars ENVIRONMENT=production,GOOGLE_PROJECT_ID=${PROJECT_ID},VERTEX_AI_LOCATION=global,GEMINI_VERTEX_AI_LOCATION=global,GEMINI_TRIAGE_MODEL=gemini-3.5-flash-lite,GEMINI_FLASH_MODEL=gemini-3.8-flash,GEMINI_FALLBACK_MODEL=gemini-3.5-flash,GEMINI_PRO_MODEL=gemini-3.1-pro-preview,DOCUMENT_INGESTION_BATCH_SIZE=5 \
             --set-secrets SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest
 
       - name: Deploy health-knowledge refresh job
+        env:
+          CLOUD_RUN_JOBS_RUNTIME_SA: ${{ vars.CLOUD_RUN_JOBS_RUNTIME_SA }}
         run: |
           IMAGE_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${SERVICE_NAME}:latest"
 
@@ -277,6 +292,6 @@ jobs:
             --parallelism 1 \
             --task-timeout 1800s \
             --max-retries 0 \
-            --service-account ${RUNTIME_SERVICE_ACCOUNT} \
+            --service-account ${CLOUD_RUN_JOBS_RUNTIME_SA:-${RUNTIME_SERVICE_ACCOUNT}} \
             --set-env-vars ENVIRONMENT=production,GOOGLE_PROJECT_ID=${PROJECT_ID} \
             --set-secrets SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest

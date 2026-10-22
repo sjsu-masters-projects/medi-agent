@@ -110,7 +110,7 @@ gh variable set DEPLOY_CHAT_WORKER --body true
 
 The next deploy of `main` (or a manual run of the workflow) creates `$WORKER_SERVICE` with
 `WORKER_MODE=true`, `--no-allow-unauthenticated`, request-based CPU, `--concurrency 4`,
-`--timeout 300`, `--min-instances 0`, then sets `CHAT_WORKER_URL` and `CHAT_WORKER_OIDC_AUDIENCE`
+`--timeout 300`, `--min-instances 1`, `--cpu-boost`, then sets `CHAT_WORKER_URL` and `CHAT_WORKER_OIDC_AUDIENCE`
 on the worker to its own URL and prints it. The worker uses the same four Supabase secrets as the
 ingestion job; if the API reports errors to Sentry and you want the worker to as well, add
 `BACKEND_SENTRY_DSN` to the `--update-secrets` list in the workflow step.
@@ -257,8 +257,19 @@ queue does, as the invoker account), Artifact Registry (the platform pulls the i
 metric writers (Cloud Run ships container stdout without them; Sentry uses its DSN). If you want
 them explicit anyway, run the script with `--with-observability-writers`.
 
-The jobs (`mediagent-document-ingestion`, `mediagent-health-knowledge-refresh`) and any Scheduler
-caller are not changed and keep the deployer account. Moving them is a separate change.
+The two Cloud Run Jobs get their own account, `mediagent-jobs-runtime`, in the same script run:
+
+| Account | Role | Scope | Why (derived from the code) |
+| --- | --- | --- | --- |
+| `mediagent-jobs-runtime` | `roles/aiplatform.user` | project | `document_ingestion` runs the Gemini extraction and summary services; `health_knowledge_refresh` does not call Vertex but shares the account |
+| | `roles/secretmanager.secretAccessor` | the 4 Supabase secrets, each individually | Both jobs inject exactly `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET` |
+| `github-actions-deployer` (unchanged) | `roles/iam.serviceAccountUser` | on `mediagent-jobs-runtime` | `gcloud run jobs deploy --service-account` needs actAs |
+
+Cloud Scheduler needs no new account: the two job triggers already use dedicated invoker-only
+accounts (`mediagent-doc-ingest-sched`, `mediagent-knowledge-sched`, each `run.invoker` on its
+own job and nothing project-wide), and the reminder and Nora dispatch triggers authenticate with
+the `X-Cron-Auth` secret. Deployment sets the job identity from the repository variable
+`CLOUD_RUN_JOBS_RUNTIME_SA`; unset keeps the deployer.
 
 The requester runs, in order:
 
@@ -267,6 +278,7 @@ scripts/setup-runtime-service-accounts.sh            # dry run: prints every com
 scripts/setup-runtime-service-accounts.sh --apply    # creates the accounts and grants the roles above
 gh variable set CLOUD_RUN_API_RUNTIME_SA --body mediagent-api-runtime@medi-agent-490106.iam.gserviceaccount.com
 gh variable set CLOUD_RUN_WORKER_RUNTIME_SA --body mediagent-worker-runtime@medi-agent-490106.iam.gserviceaccount.com
+gh variable set CLOUD_RUN_JOBS_RUNTIME_SA --body mediagent-jobs-runtime@medi-agent-490106.iam.gserviceaccount.com
 ```
 
 The accounts and grants come first (they are inert); the variables are what switch the next deploy
@@ -279,7 +291,18 @@ for s in "$API_SERVICE" "$WORKER_SERVICE"; do
 done
 ```
 
-Then send one synthetic Nora message in both portals and follow the turn in Cloud Logging. A
+For the jobs (read-only), after the deploy:
+
+```bash
+for j in mediagent-document-ingestion mediagent-health-knowledge-refresh; do
+  gcloud run jobs describe "$j" --project "$PROJECT" --region "$REGION" \
+    --format 'value(name,spec.template.spec.template.spec.serviceAccountName)'
+done
+```
+
+Then run each job once from the Scheduler console (or wait for the next tick) and confirm
+`status="success"` in Cloud Logging; `PERMISSION_DENIED` on a secret or on Vertex means a grant is
+missing. Then send one synthetic Nora message in both portals and follow the turn in Cloud Logging. A
 `PERMISSION_DENIED` naming a role means a grant is missing; for Vertex AI add
 `roles/serviceusage.serviceUsageConsumer` to the affected account only if the error says so.
 
@@ -294,10 +317,25 @@ Then send one synthetic Nora message in both portals and follow the turn in Clou
    `gcloud iam service-accounts delete <email> --project "$PROJECT"`. The bindings the script made
    on the queue, secrets and invoker account disappear with the account's principal (stale `deleted:`
    entries can be cleaned with `remove-iam-policy-binding`).
-4. Optional hardening after a week of clean traffic, with explicit authorization: remove
-   `aiplatform.user`, project-wide `secretmanager.secretAccessor`, `ml.admin` and the queue and
-   invoker bindings from `github-actions-deployer` if no job still needs them. The two Cloud Run
-   Jobs still run as it today, so keep `secretAccessor` and `aiplatform.user` until they move.
+4. Jobs: delete `CLOUD_RUN_JOBS_RUNTIME_SA` and re-run the workflow, or immediately
+   `gcloud run jobs update <job> --service-account github-actions-deployer@medi-agent-490106.iam.gserviceaccount.com --project "$PROJECT" --region "$REGION"`.
+   The deployer's bindings are untouched until step 5.
+5. Trimming the deployer, last and only with explicit authorization, after the three variables are
+   set, a deploy succeeded, a Nora turn, an ingestion run and a knowledge refresh passed, and a
+   week of clean traffic:
+
+   ```bash
+   scripts/setup-runtime-service-accounts.sh --trim-deployer           # dry run: preconditions, live identity check, removals
+   scripts/setup-runtime-service-accounts.sh --trim-deployer --apply   # refuses while anything still runs as the deployer
+   ```
+
+   It removes project-wide `secretmanager.secretAccessor`, `aiplatform.user`, `ml.admin`,
+   `run.developer` (subset of `run.admin`) and `artifactregistry.writer` (subset of
+   `artifactregistry.admin`). Kept: `run.admin`, `artifactregistry.admin`/`repoAdmin`,
+   `iam.serviceAccountUser` (actAs, and needed for rollback), `serviceusage.serviceUsageConsumer`
+   and `iam.serviceAccountTokenCreator` (purpose not established; review separately). Each removal
+   prints its own rollback, the matching `gcloud projects add-iam-policy-binding ... --role <role>
+   --condition=None`. Re-run Deploy Backend once afterwards to prove deploying still works.
 
 ## Rollback
 
@@ -330,3 +368,42 @@ Repository variables that feed these settings are listed under "Repository varia
 A required status check for the new `Backend PostgreSQL contracts (chat-turns)` CI job must be
 added in the repository's branch protection by the requester if the previous
 `care-conversations` check was required to cover the Nora turn suite.
+
+
+## Latency and cost (October 22 measurements)
+
+One patient message on a cold path measured (Cloud Run logs, no message text):
+
+| Step | Measured | Cause |
+| --- | --- | --- |
+| `chat_turn.begin` to `chat_turn.dispatched` | 6.5 s (earlier turns: 2.1-3.0 s; warm: 0.14 s) | The first Cloud Tasks call on a new API process built the client, fetched credentials and opened the TLS channel inside the request. |
+| `chat_turn.dispatched` to `chat_turn.worker_task` | 30 s (warm worker: 0.1 s) | The worker had scaled to zero. The container took about 30 s from "Starting new instance" to "Started server process" (image load plus importing the application). |
+| Model | 11-24 s | Unchanged by this work. |
+
+Changes:
+
+- The API warms the Cloud Tasks client at startup (`warm_dispatcher`): client creation, credential
+  fetch and gRPC channel connect run on the bounded dispatch pool, off the request path. The log
+  event `chat_turn.dispatcher_warm` carries `duration_ms`. `chat_turn.dispatched` now carries
+  `client_ms` (time to obtain the client; large only on a cold process) and the new
+  `chat_turn.submit_timing` event carries `begin_ms`, `saved_notice_ms`, `dispatch_ms` and
+  `begin_to_dispatch_ms`. None of them contains message text.
+- The conversation title is saved after the enqueue, not before it.
+- A failed enqueue on the send path is retried at once, up to three times with jitter and inside a
+  20 s budget (`dispatch_with_retry`). Only if all fail does the turn wait for the sweep, which runs
+  every minute, so a transient Cloud Tasks error no longer costs up to a minute.
+- Both services deploy with `--min-instances 1` and `--cpu-boost` (startup CPU boost). The worker
+  uses request-based CPU, so its idle warm instance is billed at the low idle rate (memory and a
+  small CPU share), a few dollars a month. The API uses always-allocated CPU (a Nora reply keeps
+  running after its socket closes), so its warm instance is billed continuously (about one vCPU and
+  2 GiB, tens of dollars a month); that is the price of a warm API. Set `--min-instances 0` in the
+  workflow to go back, accepting the cold starts above.
+- The worker app imports only the task router instead of every user-API router, and the image
+  byte-compiles the application at build time (`PYTHONDONTWRITEBYTECODE` is set, so otherwise each
+  cold start recompiled it). Locally this removes about 300 of 2,160 imported modules; the large
+  remaining cost is the model library stack the first turn needs, so a warm instance is the real
+  fix.
+
+Check after a deploy: send a message after 10 minutes idle and read `chat_turn.submit_timing`
+(`begin_to_dispatch_ms` should be under about 1000) and the gap from `chat_turn.dispatched` to
+`chat_turn.worker_task` (should be under about 1 s with a warm worker).

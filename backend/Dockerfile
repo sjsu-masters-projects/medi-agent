@@ -16,6 +16,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source code
 COPY src/ ./src/
 
+# PYTHONDONTWRITEBYTECODE is set below, so without this every cold start recompiles the
+# application's own modules. Compile once at build time.
+RUN python -m compileall -q src
+
 # Set Python path so `app` package is importable
 ENV PYTHONPATH=/app/src
 ENV PYTHONDONTWRITEBYTECODE=1

@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import random
 import threading
 import time
 from collections.abc import Awaitable, Callable
@@ -40,6 +41,13 @@ ENQUEUE_TIMEOUT_SECONDS = 10  # one Cloud Tasks call
 DISPATCH_MARGIN_SECONDS = 30
 SWEEP_MIN_AGE_SECONDS = 15  # let the original request finish enqueueing before the sweep acts
 SWEEP_BATCH = 25
+# Immediate retries of a failed enqueue by the send path, with jitter, inside a bounded budget
+# (rule: no unbounded retry). Beyond it the turn stays queued and the sweep (cron, every minute)
+# picks it up, so a failed first attempt costs about a second instead of up to a minute.
+DISPATCH_RETRY_ATTEMPTS = 3
+DISPATCH_RETRY_BUDGET_SECONDS = 20.0
+DISPATCH_RETRY_BASE_SECONDS = 0.25
+WARM_CHANNEL_TIMEOUT_SECONDS = 8
 
 
 def task_id(turn_id: str, attempt: int) -> str:
@@ -172,11 +180,14 @@ class TurnDispatcher:
             },
         }
 
-    def _create(self, turn_id: str, attempt: int) -> str:
-        """Blocking; runs on the dispatch pool. Returns 'created' or 'exists'."""
+    def _create(self, turn_id: str, attempt: int) -> tuple[str, int]:
+        """Blocking; runs on the dispatch pool. Returns ('created' | 'exists', client_ms) where
+        client_ms is the time spent obtaining the client (large only on the first, cold call)."""
         from google.api_core import exceptions as gax
 
+        client_started = time.monotonic()
         client = _client()
+        client_ms = int((time.monotonic() - client_started) * 1000)
         parent = client.queue_path(
             self.project(),
             settings.cloud_tasks_location.strip(),
@@ -188,15 +199,15 @@ class TurnDispatcher:
                 timeout=ENQUEUE_TIMEOUT_SECONDS,
             )
         except gax.AlreadyExists:
-            return "exists"
-        return "created"
+            return "exists", client_ms
+        return "created", client_ms
 
     async def dispatch(self, turn_id: str, attempt: int) -> bool:
         """Enqueue after the turn's transaction committed. Never raises: a failure leaves the
         turn queued and undispatched for the sweep. True when the queue holds the task."""
         started = time.monotonic()
         try:
-            result = await asyncio.wait_for(
+            result, client_ms = await asyncio.wait_for(
                 run_dispatch(lambda: self._create(turn_id, attempt)),
                 timeout=ENQUEUE_TIMEOUT_SECONDS + 2,
             )
@@ -223,6 +234,7 @@ class TurnDispatcher:
             attempt=attempt,
             outcome=result,
             queue=settings.cloud_tasks_queue,
+            client_ms=client_ms,
             duration_ms=int((time.monotonic() - started) * 1000),
         )
         try:
@@ -230,6 +242,19 @@ class TurnDispatcher:
         except Exception:  # the task exists; the sweep's repeat is a no-op and marks it
             logger.warning("Chat turn dispatch mark failed; the sweep will mark it")
         return True
+
+    async def dispatch_with_retry(self, turn_id: str, attempt: int) -> bool:
+        """The send path's enqueue: :meth:`dispatch`, retried at once with jitter inside a
+        bounded budget. Never raises. False leaves the turn to the sweep."""
+        deadline = time.monotonic() + DISPATCH_RETRY_BUDGET_SECONDS
+        for number in range(1, DISPATCH_RETRY_ATTEMPTS + 1):
+            if await self.dispatch(turn_id, attempt):
+                return True
+            pause = DISPATCH_RETRY_BASE_SECONDS * number * (0.5 + random.random())  # noqa: S311
+            if number == DISPATCH_RETRY_ATTEMPTS or time.monotonic() + pause >= deadline:
+                break
+            await asyncio.sleep(pause)
+        return False
 
     # -- the outbox sweep ----------------------------------------------------------------
     async def sweep(
@@ -275,8 +300,65 @@ def _client() -> Any:
         if _client_singleton is None:
             from google.cloud import tasks_v2
 
-            _client_singleton = tasks_v2.CloudTasksClient()
+            _client_singleton = tasks_v2.CloudTasksClient(credentials=_fresh_credentials())
         return _client_singleton
+
+
+def _fresh_credentials() -> Any:
+    """Application default credentials with the first token already fetched, so the first
+    ``create_task`` does not pay the metadata-server round trip. Falls back to the client's own
+    lookup when anything here fails (tests, local development without credentials)."""
+    try:
+        import google.auth
+        from google.auth.transport.requests import Request
+
+        credentials, _ = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        credentials.refresh(Request())  # type: ignore[no-untyped-call]
+        return credentials
+    except Exception as exc:  # the type only
+        logger.warning("Cloud Tasks credentials were not pre-fetched: %s", type(exc).__name__)
+        return None
+
+
+def warm_client() -> int:
+    """Blocking. Create the client, fetch its credentials and open the gRPC channel before the
+    first patient message needs them. Measured on October 21-22: the first enqueue on a new
+    process took 2.1-6.3 s (client, credentials, TLS), later ones 0.14 s. Returns elapsed ms."""
+    started = time.monotonic()
+    client = _client()
+    try:
+        import grpc  # type: ignore[import-untyped]
+
+        channel = client.transport.grpc_channel
+        grpc.channel_ready_future(channel).result(timeout=WARM_CHANNEL_TIMEOUT_SECONDS)
+    except Exception as exc:  # warming is best effort; the first real call connects anyway
+        logger.warning("Cloud Tasks channel warm-up did not finish: %s", type(exc).__name__)
+    return int((time.monotonic() - started) * 1000)
+
+
+async def warm_dispatcher() -> None:
+    """One bounded warm-up on the dispatch pool at API startup. Never raises."""
+    if not TurnDispatcher.configured():
+        return
+    try:
+        elapsed = await asyncio.wait_for(
+            run_dispatch(warm_client), timeout=WARM_CHANNEL_TIMEOUT_SECONDS + 7
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.warning("Cloud Tasks warm-up failed: %s", type(exc).__name__)
+        return
+    log_event(
+        logger,
+        "chat_turn.dispatcher_warm",
+        message="Cloud Tasks client warmed",
+        operation="warm",
+        outcome="ok",
+        duration_ms=elapsed,
+    )
 
 
 async def submit_turn(
@@ -309,18 +391,41 @@ async def submit_turn(
     from app.services.chat_turn_service import ChatTurnService
 
     turns = ChatTurnService(db, patient_id, session_id)
+    begun = time.monotonic()
     result = await turns.begin(
         {**request, "language": language}, settings.chat_turn_queue_seconds, queued=True
     )
+    begin_ms = int((time.monotonic() - begun) * 1000)
     result["dispatched"] = False
     record = result.get("turn") or {}
+    saved_ms = 0
     if on_saved is not None:
+        saved_started = time.monotonic()
         try:
             await on_saved(result)
         except Exception as exc:  # showing the message must never stop the turn
             logger.warning("Chat turn saved-state notice failed: %s", type(exc).__name__)
+        saved_ms = int((time.monotonic() - saved_started) * 1000)
     if result.get("execute") and result.get("user_message"):
-        try:  # label the conversation now so an unfinished first turn is findable
+        # Enqueue first: the label is a convenience and its database round trip must not sit
+        # between the commit and the task (rule 6 keeps the outbox row authoritative anyway).
+        dispatch_started = time.monotonic()
+        result["dispatched"] = await TurnDispatcher(db).dispatch_with_retry(
+            str(record["id"]), int(record.get("attempt") or 1)
+        )
+        log_event(
+            logger,
+            "chat_turn.submit_timing",
+            message="Chat turn handed to the queue",
+            operation="submit",
+            turn_id=record.get("id"),
+            outcome="dispatched" if result["dispatched"] else "undispatched",
+            begin_ms=begin_ms,
+            saved_notice_ms=saved_ms,
+            dispatch_ms=int((time.monotonic() - dispatch_started) * 1000),
+            begin_to_dispatch_ms=int((time.monotonic() - begun) * 1000) - begin_ms,
+        )
+        try:  # label the conversation so an unfinished first turn is findable
             await ChatService(db).set_conversation_title(
                 patient_id,
                 session_id,
@@ -328,7 +433,4 @@ async def submit_turn(
             )
         except Exception as exc:  # a missing label must never fail the turn
             logger.warning("Nora conversation title was not saved: %s", type(exc).__name__)
-        result["dispatched"] = await TurnDispatcher(db).dispatch(
-            str(record["id"]), int(record.get("attempt") or 1)
-        )
     return result

@@ -447,15 +447,55 @@ def test_self_harm_keeps_the_crisis_line(client, override_db, patient_id, monkey
 def test_routine_symptom_cannot_auto_save_when_intake_unavailable(
     client, override_db, patient_id, monkeypatch
 ) -> None:
-    """An unavailable intake never falls back to the retired direct save."""
+    """An unavailable intake neither offers a note nor falls back to the retired direct save."""
     _patch_chat_runtime(monkeypatch, patient_id)
     _bland_symptom_worker(monkeypatch)
     _routine_symptom_classification(monkeypatch)
+    monkeypatch.setattr("app.routers.chat.settings.symptom_intake_enabled", False)
 
     result = _run_turn(client, patient_id, "I have a mild headache today")
 
     assert result["start"]["urgency"] != "emergency"
-    assert "No symptom report was saved" in result["complete"]["message"]["content"]
+    assert not result["complete"]["message"].get("attachments")
+
+
+@pytest.mark.parametrize(
+    ("message", "language", "offered"),
+    [
+        ("I have a mild headache today", "en-US", True),
+        ("Me siento mareado desde ayer", "es-MX", True),
+        ("What medications am I taking?", "en-US", False),
+        ("¿Cuándo es mi próxima cita?", "es-MX", False),
+    ],
+)
+def test_only_a_reportable_symptom_gets_a_note_offer(
+    client, override_db, patient_id, monkeypatch, message: str, language: str, offered: bool
+) -> None:
+    _patch_chat_runtime(monkeypatch, patient_id)
+    _bland_symptom_worker(monkeypatch)
+    _routine_symptom_classification(monkeypatch)
+    monkeypatch.setattr("app.routers.chat.settings.symptom_intake_enabled", True)
+
+    result = _run_turn(client, patient_id, message, language=language)
+
+    attachments = result["complete"]["message"].get("attachments") or []
+    assert [item["type"] for item in attachments] == (["symptom_intake_offer"] if offered else [])
+    if offered and language == "es-MX":
+        assert "equipo de atención" in result["complete"]["message"]["content"]
+
+
+@pytest.mark.parametrize("message", ["I have crushing chest pain", "quiero morir"])
+def test_an_emergency_never_gets_a_note_offer(
+    client, override_db, patient_id, monkeypatch, message: str
+) -> None:
+    _patch_chat_runtime(monkeypatch, patient_id)
+    _bland_symptom_worker(monkeypatch)
+    monkeypatch.setattr("app.routers.chat.settings.symptom_intake_enabled", True)
+
+    result = _run_turn(client, patient_id, message)
+
+    assert result["start"]["urgency"] == "emergency"
+    assert not result["complete"]["message"].get("attachments")
 
 
 @pytest.mark.parametrize(
@@ -517,30 +557,30 @@ def test_a_spanish_emergency_is_still_escalated_to_the_care_team(
     assert result["start"]["urgency"] == "emergency"
 
 
-def test_non_emergency_starts_private_draft_without_report(
+def test_non_emergency_offers_a_note_without_starting_a_draft_or_report(
     client, override_db, patient_id, monkeypatch
 ):
     _patch_chat_runtime(monkeypatch, patient_id)
     _routine_symptom_classification(monkeypatch)
-    start = AsyncMock(return_value={"intake_id": str(uuid4()), "revision": 0})
+    monkeypatch.setattr("app.routers.chat.settings.symptom_intake_enabled", True)
+    start = AsyncMock(side_effect=AssertionError("An offer must not open a draft"))
     save = AsyncMock(side_effect=AssertionError("No direct report save"))
-    monkeypatch.setattr("app.routers.chat.SymptomIntakeService.start", start)
+    monkeypatch.setattr("app.services.symptom_intake_service.SymptomIntakeService.start", start)
     monkeypatch.setattr("app.routers.chat.ChatService.save_symptom_report", save)
     result = _run_turn(client, patient_id, "I have a mild headache today")
-    assert "private draft is open" in result["complete"]["message"]["content"]
-    start.assert_awaited_once()
+    message = result["complete"]["message"]
+    assert "Nothing is shared" in message["content"]
+    assert message["attachments"][0]["type"] == "symptom_intake_offer"
+    start.assert_not_awaited()
     save.assert_not_awaited()
 
 
-def test_urgent_symptom_keeps_care_team_escalation_when_draft_starts(
+def test_urgent_symptom_keeps_care_team_escalation_alongside_the_offer(
     client, override_db, patient_id, monkeypatch
 ) -> None:
     _patch_chat_runtime(monkeypatch, patient_id)
     _urgent_symptom_classification(monkeypatch)
-    monkeypatch.setattr(
-        "app.routers.chat.SymptomIntakeService.start",
-        AsyncMock(return_value={"intake_id": str(uuid4()), "revision": 0}),
-    )
+    monkeypatch.setattr("app.routers.chat.settings.symptom_intake_enabled", True)
 
     result = _run_turn(client, patient_id, "I have severe dizziness")
 

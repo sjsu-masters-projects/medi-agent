@@ -1,6 +1,9 @@
 import { resolveLocaleResource, type Locale, type LocaleResourceMap } from "@/types";
 
+// Offer and private-tag wording is a draft pending LOC-001 bilingual approval; it is not approved copy.
 const en = {
+    offerPrompt: "Would you like me to note this for your care team? I’ll ask a few quick questions here.", offerYes: "Yes, let’s do it", offerNo: "Not now",
+    privateTag: "Private until you confirm", offerStarting: "Opening your private note…",
     title: "Draft — not submitted", start: "Start a symptom draft", intro: "Your answers here remain private until you confirm. Your initial Nora message remains in chat history.",
     answerPrompt: "Type or speak your answer below. You can say “not sure” or “skip”.",
     suggestion: "From your message", useSuggestion: "Use this answer", detailEntry: "Enter detailed fields instead",
@@ -22,6 +25,8 @@ const en = {
     states: { answered: "Answered", unknown: "Unknown", declined: "Declined", not_asked: "Not asked", not_applicable: "Not applicable" },
 };
 const es: typeof en = {
+    offerPrompt: "¿Quieres que lo anote para tu equipo de atención? Te haré unas preguntas rápidas aquí.", offerYes: "Sí, hagámoslo", offerNo: "Ahora no",
+    privateTag: "Privado hasta que confirmes", offerStarting: "Abriendo tu nota privada…",
     title: "Borrador — no enviado", start: "Iniciar un borrador de síntomas", intro: "Tus respuestas aquí son privadas hasta que confirmes. Tu mensaje inicial a Nora permanece en el historial del chat.",
     answerPrompt: "Escribe o di tu respuesta abajo. Puedes decir “no sé” o “prefiero no responder”.",
     suggestion: "De tu mensaje", useSuggestion: "Usar esta respuesta", detailEntry: "Ingresar campos detallados",
@@ -68,4 +73,16 @@ export function intakeValueCopy(value: unknown, locale: Locale): string {
         return Object.entries(value).map(([key, item]) => `${labels[key] ?? key}: ${intakeValueCopy(item, locale)}`).join("; ");
     }
     return String(value ?? "");
+}
+
+const yes = new Set(["yes", "yeah", "yep", "sure", "ok", "okay", "yes please", "please", "yes lets do it", "lets do it", "sure lets do it",
+    "si", "claro", "vale", "por favor", "si por favor", "si hagamoslo", "hagamoslo", "adelante"]);
+const no = new Set(["no", "nope", "not now", "no thanks", "no thank you", "later", "ahora no", "no gracias", "por ahora no", "no por ahora"]);
+function normalizeReply(text: string) {
+    return text.toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/['’]/g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+/** A short typed or spoken answer to the symptom-note offer; anything longer is an ordinary message. */
+export function offerAnswer(text: string): "yes" | "no" | null {
+    const normalized = normalizeReply(text);
+    return yes.has(normalized) ? "yes" : no.has(normalized) ? "no" : null;
 }

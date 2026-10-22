@@ -97,8 +97,13 @@ it("binds recovery and manual start to the selected Nora conversation", async ()
     active.mockResolvedValue(null);
     start.mockResolvedValue(draft);
     render(panel("en-US", "nora-thread-A"));
-    fireEvent.click(await screen.findByText("Start a symptom draft"));
+    await waitFor(() => expect(active).toHaveBeenCalled());
+    // Nothing starts or shows until the patient answers a server-issued offer.
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(start).not.toHaveBeenCalled();
+    act(() => window.dispatchEvent(new CustomEvent("symptom-intake-start", { detail: { sourceMessageId: "source-turn" } })));
     await waitFor(() => expect(start).toHaveBeenCalled());
+    expect(start.mock.calls[0][1]).toBe("source-turn");
     expect(active.mock.calls[0][1]).toBe("nora-thread-A");
     expect(start.mock.calls[0][2]).toBe("nora-thread-A");
 });
@@ -161,14 +166,14 @@ it("distinguishes a failed initial read from a save and clears its error while r
     render(panel());
     await screen.findByText(/We could not load symptom drafts/);
     expect(screen.queryByText(/We could not verify this action/)).not.toBeInTheDocument();
-    expect(screen.queryByText("Start a symptom draft")).not.toBeInTheDocument();
     let resolve: (result: SymptomIntake | null) => void = () => {};
     active.mockImplementationOnce(() => new Promise<SymptomIntake | null>((done) => { resolve = done; }));
     fireEvent.click(screen.getByRole("button", { name: "Reload saved state" }));
     expect(screen.getByText("Loading your draft…")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     await act(async () => resolve(null));
-    expect(await screen.findByText("Start a symptom draft")).toBeEnabled();
+    await waitFor(() => expect(screen.queryByText("Loading your draft…")).not.toBeInTheDocument());
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(start).not.toHaveBeenCalled();
 });
 
@@ -261,4 +266,49 @@ it("blocks a spoken confirm reply and hides internal identifiers in the preview"
     expect(screen.getByText("Confirm and share with my care team")).toBeDisabled();
     expect(screen.queryByText(/private-source-uuid|private-fact-uuid|private-source-turn/)).not.toBeInTheDocument();
     expect(screen.getByText(/amount: 5 mg/)).toBeInTheDocument();
+});
+
+it("shows no start control or placeholder on an ordinary chat with no draft", async () => {
+    active.mockResolvedValue(null);
+    const { container } = render(panel());
+    await waitFor(() => expect(active).toHaveBeenCalled());
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText("Start a symptom draft")).not.toBeInTheDocument();
+});
+
+it.each([
+    ["en-US", "yes", "yes"], ["en-US", "Yes, let’s do it!", "yes"], ["es-MX", "Sí", "yes"], ["es-MX", "sí, hagámoslo", "yes"],
+    ["en-US", "Not now", "no"], ["es-MX", "Ahora no", "no"],
+] as const)("answers the note offer by typed or spoken %s reply %s", async (locale, text, answer) => {
+    active.mockResolvedValue(null); start.mockResolvedValue({ ...draft, locale });
+    const register = vi.fn(); const answered = vi.fn();
+    render(<Provider store={store}><SymptomIntakePanel locale={locale} offerSourceId="source-turn" registerReply={register} onOfferAnswered={answered} /></Provider>);
+    await waitFor(() => expect(active).toHaveBeenCalled());
+    await act(async () => { await Promise.resolve(); });
+    const handler = register.mock.calls.filter(([fn]) => fn).at(-1)![0];
+    let result = "";
+    await act(async () => { result = handler(text, "voice", locale); });
+    expect(result).toBe("handled");
+    if (answer === "yes") { await waitFor(() => expect(start).toHaveBeenCalledWith("patient-A", "source-turn", "default", expect.anything())); }
+    else expect(start).not.toHaveBeenCalled();
+    await waitFor(() => expect(answered).toHaveBeenCalledWith("source-turn"));
+});
+
+it("leaves ordinary messages alone while an offer is pending", async () => {
+    active.mockResolvedValue(null);
+    const register = vi.fn();
+    render(<Provider store={store}><SymptomIntakePanel locale="en-US" offerSourceId="source-turn" registerReply={register} /></Provider>);
+    await waitFor(() => expect(active).toHaveBeenCalled());
+    await act(async () => { await Promise.resolve(); });
+    const handler = register.mock.calls.filter(([fn]) => fn).at(-1)![0];
+    expect(handler("When is my appointment?", "typed")).toBe("unhandled");
+    expect(handler("yes I also have a cough since Monday", "typed")).toBe("unhandled");
+    expect(start).not.toHaveBeenCalled();
+});
+
+it("keeps the conversation questions inside chat bubbles with a private tag", async () => {
+    render(<Provider store={store}><SymptomIntakePanel locale="en-US" registerReply={vi.fn()} /></Provider>);
+    expect((await screen.findAllByText("Choose your severity")).length).toBeGreaterThan(0);
+    expect(screen.getByText("Private until you confirm")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Draft — not submitted" }).className).not.toMatch(/bg-surface-2|border/);
 });

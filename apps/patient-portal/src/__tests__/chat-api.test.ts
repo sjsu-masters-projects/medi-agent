@@ -72,6 +72,12 @@ describe("chat API helpers", () => {
         });
     });
 
+    it("maps the symptom note offer and drops one without a source message", () => {
+        expect(mapChatMessageFromApi({ ...ASSISTANT_ROW, attachments: [
+            { type: "symptom_intake_offer", source_message_id: "user-1" }, { type: "symptom_intake_offer" },
+        ] }).attachments).toEqual([{ type: "symptom_intake_offer", sourceMessageId: "user-1" }]);
+    });
+
     it("maps a server-built results card and leaves messages without one unchanged", () => {
         expect(mapChatMessageFromApi({ ...ASSISTANT_ROW, attachments: [RESULTS_ATTACHMENT] }).attachments).toEqual([
             {

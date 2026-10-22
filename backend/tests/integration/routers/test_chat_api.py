@@ -736,7 +736,7 @@ class TestChatWebSocket:
             assert context_event["type"] == "chat_context_loaded"
             assert context_event["document"]["id"] == document_id
 
-    def test_websocket_symptom_never_starts_adr_before_confirmation(
+    def test_websocket_symptom_offers_note_and_never_starts_adr_or_draft(
         self,
         client,
         override_db,
@@ -763,6 +763,7 @@ class TestChatWebSocket:
         monkeypatch.setattr(
             CareCoordinatorRuntime, "process_stream", _make_stream_mock(triage_output)
         )
+        monkeypatch.setattr("app.routers.chat.settings.symptom_intake_enabled", True)
         start = AsyncMock(return_value={"intake_id": str(uuid4()), "revision": 0})
         monkeypatch.setattr(SymptomIntakeService, "start", start)
         adr = AsyncMock()
@@ -792,7 +793,11 @@ class TestChatWebSocket:
                 events.append(event)
                 if event["type"] == "assistant_complete":
                     break
-            assert any(event["type"] == "symptom_intake_updated" for event in events)
+            complete = events[-1]
+            assert [item["type"] for item in complete["message"]["attachments"]] == [
+                "symptom_intake_offer"
+            ]
+            assert not any(event["type"] == "symptom_intake_updated" for event in events)
             assert not any(event["type"] == "a2a_task_status" for event in events)
-        start.assert_awaited_once()
+        start.assert_not_awaited()
         adr.assert_not_awaited()
