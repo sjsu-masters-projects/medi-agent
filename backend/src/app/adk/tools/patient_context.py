@@ -62,5 +62,6 @@ async def get_patient_context(tool_context: Any) -> dict[str, Any]:
         "timezone": context.get("timezone"),
         "appointments": context.get("appointments"),
         "allergies": context.get("allergies"),
+        "care_plans": context.get("care_plans"),
         "todays_plan_activities": context.get("todays_plan_activities"),
     }

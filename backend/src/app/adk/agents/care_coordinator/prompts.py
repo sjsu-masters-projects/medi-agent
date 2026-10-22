@@ -65,6 +65,10 @@ change or cancel a visit.
 exactly what the Today screen shows) are part of the record. Note them when relevant. A \
 `todays_plan_activities` of null means they could not be read, not that there are none; \
 an allergy list that is empty means none are recorded, not that there are none.
+- Each medication and plan activity carries `plan` (specialty, clinician, clinic, \
+`ownership_state`); say which plan an instruction comes from. When `ownership_state` is \
+"unowned" or "unassigned_legacy", say the prescriber is no longer on the patient's care \
+team and the patient should ask their care team before changing it. Add no medical advice.
 - Call `get_active_document_context` when the patient asks about the document selected in \
 this chat. It returns only the source-bounded summary of that one document; do not assume \
 it contains findings that are absent from the summary.

@@ -28,10 +28,22 @@ OTHER_CLINIC = "cccccccc-cccc-4ccc-8ccc-ccccccccccc2"
 def standard_links() -> list[dict[str, Any]]:
     """Cardiology (CLINICIAN) and orthopaedics (OTHER) both treat PATIENT; THIRD treats nobody."""
     return [
-        {"id": TEAM, "patient_id": PATIENT, "clinician_id": CLINICIAN, "clinic_id": CLINIC,
-         "status": "active", "role": "specialist"},
-        {"id": OTHER_TEAM, "patient_id": PATIENT, "clinician_id": OTHER, "clinic_id": OTHER_CLINIC,
-         "status": "active", "role": "specialist"},
+        {
+            "id": TEAM,
+            "patient_id": PATIENT,
+            "clinician_id": CLINICIAN,
+            "clinic_id": CLINIC,
+            "status": "active",
+            "role": "specialist",
+        },
+        {
+            "id": OTHER_TEAM,
+            "patient_id": PATIENT,
+            "clinician_id": OTHER,
+            "clinic_id": OTHER_CLINIC,
+            "status": "active",
+            "role": "specialist",
+        },
     ]
 
 
@@ -45,6 +57,7 @@ class FakeQuery:
         self._order: list[tuple[str, bool]] = []
         self._limit: int | None = None
         self._single = False
+        self._range: tuple[int, int] | None = None
         self._write: tuple[str, Any] | None = None
         self.selected: str | None = None
 
@@ -55,6 +68,10 @@ class FakeQuery:
 
     def _add(self, kind: str, column: str, value: Any, test: Callable[[dict[str, Any]], bool]):
         self.described.append((kind, column, value))
+        if "." in column:
+            # Filters on an embedded resource are not simulated; the row passes.
+            self._negate = False
+            return self
         negate, self._negate = self._negate, False
         self.filters.append((lambda row: not test(row)) if negate else test)
         return self
@@ -79,6 +96,9 @@ class FakeQuery:
     def lte(self, column: str, value: Any) -> FakeQuery:
         return self._add("lte", column, value, lambda row: str(row.get(column)) <= str(value))
 
+    def lt(self, column: str, value: Any) -> FakeQuery:
+        return self._add("lt", column, value, lambda row: str(row.get(column)) < str(value))
+
     @property
     def not_(self) -> FakeQuery:
         self._negate = True
@@ -88,8 +108,13 @@ class FakeQuery:
         self._order.append((column, desc))
         return self
 
-    def limit(self, count: int) -> FakeQuery:
-        self._limit = count
+    def limit(self, count: int, **kwargs: Any) -> FakeQuery:
+        if not kwargs:  # a limit on an embedded resource does not limit these rows
+            self._limit = count
+        return self
+
+    def range(self, start: int, end: int) -> FakeQuery:
+        self._range = (start, end)
         return self
 
     def single(self) -> FakeQuery:
@@ -113,8 +138,9 @@ class FakeQuery:
 
     def execute(self) -> Any:
         rows = self.db.tables.setdefault(self.table_name, [])
-        self.db.queries.append((self.table_name, self._write[0] if self._write else "select",
-                                list(self.described)))
+        self.db.queries.append(
+            (self.table_name, self._write[0] if self._write else "select", list(self.described))
+        )
         if self._write and self._write[0] == "insert":
             payload = self._write[1]
             batch = payload if isinstance(payload, list) else [payload]
@@ -131,12 +157,15 @@ class FakeQuery:
             return SimpleNamespace(data=matched)
         for column, desc in reversed(self._order):
             matched = sorted(matched, key=lambda row: str(row.get(column)), reverse=desc)
+        total = len(matched)
+        if self._range is not None:
+            matched = matched[self._range[0] : self._range[1] + 1]
         if self._limit is not None:
             matched = matched[: self._limit]
         data: Any = [copy.deepcopy(row) for row in matched]
         if self._single:
             data = data[0] if data else None
-        return SimpleNamespace(data=data)
+        return SimpleNamespace(data=data, count=total)
 
 
 class FakeRpc:
@@ -166,4 +195,6 @@ class FakeDB:
         return FakeRpc(self, name, params or {})
 
     def reads_of(self, table: str) -> list[list[tuple[str, str, Any]]]:
-        return [filters for name, kind, filters in self.queries if name == table and kind == "select"]
+        return [
+            filters for name, kind, filters in self.queries if name == table and kind == "select"
+        ]

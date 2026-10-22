@@ -51,6 +51,23 @@ TITLE_CHARS = 80
 _TURN_SCAN_LIMIT = 500
 
 
+def plan_provenance(owner: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The plan fields Nora may cite; ownership_state 'unowned' means the prescriber left."""
+    if not owner:
+        return None
+    return _plan_fields(owner)
+
+
+def _plan_fields(owner: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "care_plan_id": owner.get("care_plan_id"),
+        "specialty": owner.get("specialty"),
+        "clinician_name": owner.get("clinician_name"),
+        "clinic_name": owner.get("clinic_name"),
+        "ownership_state": owner.get("ownership_state"),
+    }
+
+
 def _is_past(value: Any, now: datetime) -> bool:
     try:
         moment = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
@@ -363,7 +380,16 @@ class ChatService:
             "care_teams": care_teams,
             "document": document_context,
         }
+        plan_by_item, care_plans = (
+            await self._fetch_plan_provenance(patient_id) if include_schedule else ({}, None)
+        )
+        for medication in medications:
+            # Which approved plan a medication came from; None for older records.
+            item_id = medication.pop("care_plan_item_id", None)
+            if include_schedule:
+                medication["plan"] = plan_by_item.get(str(item_id)) if item_id else None
         if include_schedule:
+            context["care_plans"] = care_plans
             timezone = await self._fetch_patient_timezone(patient_id)
             context["timezone"] = timezone
             context["appointments"] = await self._fetch_upcoming_appointments(patient_id, timezone)
@@ -554,7 +580,7 @@ class ChatService:
     async def _fetch_active_medications(self, patient_id: str) -> list[dict[str, Any]]:
         result = await self._execute(
             self.db.table("medications")
-            .select("id, name, generic_name, rxcui, dosage, frequency, route")
+            .select("id, name, generic_name, rxcui, dosage, frequency, route, care_plan_item_id")
             .eq("patient_id", patient_id)
             .eq("is_active", True)
             .order("created_at", desc=True)
@@ -680,6 +706,40 @@ class ChatService:
         )
         return [row for row in (result.data or []) if isinstance(row, dict)]
 
+    async def _fetch_plan_provenance(
+        self, patient_id: str
+    ) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]] | None]:
+        """Plan owner of each approved plan item, and the patient's approved plans.
+
+        Patient-facing, so every plan is shown, including those of sensitive conditions.
+        ``None`` for the plan list when it cannot be read.
+        """
+        from app.services.feed_service import FeedService
+
+        db = self.db
+
+        def read() -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+            async def load() -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+                feed = FeedService(db)
+                items = await feed._get_approved_plan_items(UUID(patient_id))
+                owners = await feed._get_plan_owners(UUID(patient_id))
+                by_item = {
+                    item_id: _plan_fields(owners[str(item["care_plan_id"])])
+                    for item_id, item in items.items()
+                    if item.get("care_plan_id") and str(item["care_plan_id"]) in owners
+                }
+                approved = {str(item["care_plan_id"]) for item in items.values()}
+                plans = [_plan_fields(o) for pid, o in owners.items() if pid in approved]
+                return by_item, plans
+
+            return asyncio.run(load())
+
+        try:
+            return await asyncio.to_thread(read)
+        except Exception as exc:
+            logger.warning("Care-plan provenance was not readable: %s", type(exc).__name__)
+            return {}, None
+
     async def _fetch_todays_plan_activities(self, patient_id: str) -> list[dict[str, Any]] | None:
         """Today's tasks exactly as the portal's Today builds them (approved plan items only).
 
@@ -707,6 +767,7 @@ class ChatService:
                 "scheduled_time": task.get("scheduled_time"),
                 "status": task.get("status"),
                 "from_care_plan": bool(task.get("care_plan_item_id")),
+                "plan": plan_provenance(task.get("plan_owner")),
             }
             for task in tasks[:PLAN_ACTIVITY_CONTEXT_LIMIT]
         ]
