@@ -28,11 +28,12 @@ This implementation still requires a deployed language-switch recheck.
    one bounded retry, while any final failure produces no invented/stored note.
    Operational budgets are configured limits, never claimed measured clinical
    performance.
-3. **EVA-001:** reuse the existing synthetic evaluation framework with a bounded,
-   paired-locale demo suite for grounding, explanation, symptom classification,
-   unavailable responses and safety/approval boundaries. Keep raw final responses
-   and structured outcomes, never reasoning. Deterministic tests and dry runs are
-   not a live model evaluation or clinical validation; report them separately.
+3. **EVA-001 (optional research):** the existing paired-locale evaluation harness
+   is retained but formal real-provider campaigns and model comparisons are not
+   completion gates (requester decision October 21). If voluntarily run, retain
+   only raw final responses and structured outcomes, never reasoning; label mocks,
+   dry runs and actual calls separately. Bounded synthetic functional journeys
+   and automated safety/approval/access tests remain required in their feature tasks.
 4. **COM-002:** a patient explicitly attaches an existing approved care-plan activity
    to a private addressed conversation. The server checks ownership and current
    source state. The clinician sees source context and may open it in a draft via
@@ -89,7 +90,8 @@ This implementation still requires a deployed language-switch recheck.
 - Update TASKS with commands/outcomes and remaining live checks. Remote migration,
   deployment, merge and clinical publication need separate authorization.
 
-Professional adjudication and a 120-case study are not expo completion gates.
+Formal real-provider campaigns, professional adjudication and a 120-case study
+are not project-completion gates. No clinical-validation claim is made.
 No new cross-clinic sharing or implicit broadcast recipient behavior is introduced.
 
 ## COM-002 implementation and rollout contract

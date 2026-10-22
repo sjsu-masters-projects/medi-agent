@@ -79,6 +79,25 @@ async def test_authorized_name_only_lookup_preserves_source_dates_and_never_writ
 
 
 @pytest.mark.asyncio
+async def test_english_clinician_references_first_without_dropping_spanish(setup):
+    service, actor, patient, fact = setup
+    spanish = reference(
+        locale="es-MX",
+        title="Referencia",
+        url="https://medlineplus.gov/spanish/druginfo/meds/a696005.html",
+    )
+    english = reference()
+    service.knowledge.medication.return_value = Knowledge(
+        status="found", references=[spanish, english]
+    )
+    result = await service.get_reference(actor, patient_id=patient, fact_id=fact)
+    assert [item.locale for item in result.references] == ["en-US", "es-MX"]
+    assert result.references[1].title == spanish.title
+    assert result.references[1].checked_at == spanish.checked_at
+    service.db.table.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_assignment_denial_precedes_fact_and_external_lookup(setup):
     service, actor, patient, fact = setup
     service.memberships.link_scope.return_value = set()

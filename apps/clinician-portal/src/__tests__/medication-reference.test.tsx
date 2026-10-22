@@ -27,6 +27,20 @@ async function openPreview() {
 }
 
 describe("Medication reference in reconciliation preview", () => {
+  it("returns focus to Review changes after an asynchronous preview closes", async () => {
+    let resolve!: (value: typeof preview) => void;
+    get.mockImplementation((url: string) => url.endsWith("/reconciliation-preview") ? new Promise((done) => { resolve = done; }) : Promise.resolve(review));
+    render(<SmartImportReviewPanel patientId="patient-1" />);
+    const opener = await screen.findByRole("button", { name: /review changes/i });
+    opener.focus();
+    fireEvent.click(opener);
+    opener.blur();
+    await act(async () => { resolve(preview); });
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(opener).toHaveFocus();
+    expect(post).not.toHaveBeenCalled();
+  });
   it("looks up only on explicit click, shows dates without timezone shifting and never applies fields", async () => {
     render(<SmartImportReviewPanel patientId="patient-1" />);
     const panel = await openPreview();

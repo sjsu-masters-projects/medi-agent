@@ -430,6 +430,7 @@ export function SmartImportReviewPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyFactId, setBusyFactId] = useState<string | null>(null);
+  const reconciliationTrigger = useRef<HTMLButtonElement | null>(null);
   const [rejecting, setRejecting] = useState<ReviewFact | null>(null);
   const [correcting, setCorrecting] = useState<ReviewFact | null>(null);
   const [reconciling, setReconciling] = useState<{
@@ -517,8 +518,9 @@ export function SmartImportReviewPanel({
     }
   }
 
-  async function openReconciliation(fact: ReviewFact) {
+  async function openReconciliation(fact: ReviewFact, trigger: HTMLButtonElement) {
     if (!token) return;
+    reconciliationTrigger.current = trigger;
     setBusyFactId(fact.id);
     setError(null);
     try {
@@ -819,8 +821,13 @@ export function SmartImportReviewPanel({
             {stateLabel(reviewState)} imported facts
           </h3>
           <p className="text-[13px] text-muted">
-            <span className="font-mono">{total}</span> facts in this review state. Source data remains synthetic
-            and read-only.
+            {loading ? (
+              "Loading imported fact count…"
+            ) : error ? (
+              "Imported fact count unavailable."
+            ) : (
+              <><span className="font-mono">{total}</span> {total === 1 ? "fact" : "facts"} in this review state.</>
+            )} Source data remains synthetic and read-only.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3 border-b border-line bg-surface-2 px-5 py-3">
@@ -1015,7 +1022,7 @@ export function SmartImportReviewPanel({
                           <button
                             className={PRIMARY_BUTTON}
                             disabled={busyFactId === fact.id}
-                            onClick={() => void openReconciliation(fact)}
+                            onClick={(event) => void openReconciliation(fact, event.currentTarget)}
                             type="button"
                           >
                             <Icon name="history" className="h-4 w-4" /> Review
@@ -1164,6 +1171,7 @@ export function SmartImportReviewPanel({
         }}
         open={Boolean(reconciling)}
         title="Reconcile imported record"
+        returnFocusRef={reconciliationTrigger}
       >
         {reconciling && (
           <div className="space-y-5">
