@@ -1,5 +1,12 @@
 # Demo AI evaluation operator guide
 
+**Optional research tool, not a completion gate.** Requester decision October 21:
+no formal real-provider campaign, model comparison or professional clinical
+adjudication is required. Keep this implemented harness for voluntary future use.
+Normal synthetic end-to-end feature checks against the configured service and
+automated safety/authorization/approval tests still apply; those establish software
+behaviour, not clinical validity. No clinician recruitment is needed.
+
 Use this guide to validate synthetic fixtures and review final-answer reports for
 AI-006 / EVA-001. The harness does not seed accounts or approve clinical actions.
 Use synthetic data only. Dry runs and offline replay require no credentials,

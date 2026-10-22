@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
 
@@ -13,6 +13,8 @@ interface ModalProps {
     title: string;
     children: ReactNode;
     contentClassName?: string;
+    /** Explicit opener for dialogs mounted after an asynchronous preview. */
+    returnFocusRef?: RefObject<HTMLElement | null>;
     /**
      * "side" is a right-hand panel: about 440px wide on desktop and full screen below 640px.
      * Its children fill the panel under the title (own scroll area and sticky footer).
@@ -20,7 +22,7 @@ interface ModalProps {
     placement?: "center" | "side";
 }
 
-export function Modal({ children, contentClassName, onClose, open, placement = "center", title }: ModalProps) {
+export function Modal({ children, contentClassName, onClose, open, placement = "center", title, returnFocusRef }: ModalProps) {
     const titleId = useId();
     const dialogRef = useRef<HTMLDivElement>(null);
     const closeRef = useRef(onClose);
@@ -29,7 +31,7 @@ export function Modal({ children, contentClassName, onClose, open, placement = "
         if (!open) return;
         const id = Symbol("modal");
         openModals.push(id);
-        const previousFocus = document.activeElement;
+        const previousFocus = returnFocusRef?.current ?? document.activeElement;
         const previousOverflow = document.body.style.overflow;
         document.body.style.overflow = "hidden";
         const focusable = () => [...(dialogRef.current?.querySelectorAll<HTMLElement>(
@@ -63,7 +65,7 @@ export function Modal({ children, contentClassName, onClose, open, placement = "
             document.body.style.overflow = previousOverflow;
             if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
         };
-    }, [open]);
+    }, [open, returnFocusRef]);
     if (!open) {
         return null;
     }
