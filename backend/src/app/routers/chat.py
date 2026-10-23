@@ -231,6 +231,14 @@ async def _send_safety_turn(
             **delivery,
         }
     )
+    # SAFE-002: the per-turn audit also covers floor halts (best effort, after the patient has
+    # every event). Idempotent per turn id, so a redelivered turn cannot add a second row.
+    await service.record_floor_audit_safely(
+        options["patient_id"],
+        str(record["alert_id"]),
+        decision.verdict.safety_rule,
+        decision.verdict.urgency,
+    )
     return record
 
 

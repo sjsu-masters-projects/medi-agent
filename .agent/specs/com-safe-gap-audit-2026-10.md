@@ -149,3 +149,22 @@ environment was contacted. Portal UI was searched by keyword only, not read in f
   text) written by `record_chat_turn_safety_audit`, idempotent per turn, best-effort with one retry, only when
   `apply_safety_override` raised urgency or the model escalated. Clean turns are not recorded. This is a separate RPC
   because `record_chat_safety_turn` creates the turn's messages. Voice, intake and document-chat paths are not retrofitted.
+
+## Update 2026-10-22: SAFE-002 closure (migration 098, not applied)
+
+- Coverage of `chat_turn_safety_audits`: typed chat and document chat (same `_process_chat_message`, also
+  the worker path) audit raised or model-escalated turns; floor halts on the chat socket audit in
+  `_send_safety_turn`; symptom intake audits `start` (keyed by the source message) and `interrupt` (keyed by
+  the intake id); a spoken floor hit calls the `on_safety_floor` hook in `voice_live`, which `routers/voice.py`
+  turns into an audit keyed by a stable id of patient and utterance. Floor halts are recorded with model
+  urgency `routine`, the verdict urgency as final urgency and outcome `urgency_raised`. Rows hold rule id and
+  version, urgencies and outcome only. Writes are idempotent per turn id, best effort (one retry, 5s bound)
+  and run after the patient has every event, or in a background task for intake and voice.
+- `tests/unit/safety/test_floor_audit_paths.py` lists every source file that calls the floor or an
+  override and how it is audited; a new call site fails the test until it is added.
+- Retention: rows older than 365 days from `evaluated_at` are deleted by `purge_chat_turn_safety_audits`
+  (at most 500 per call, `FOR UPDATE SKIP LOCKED`). It runs after each audit write and is callable by
+  `service_role`. UPDATE stays forbidden; DELETE is allowed only for rows past 365 days inside that
+  function. `chat_safety_alerts` is unchanged. The "needs retention decision" gap is closed by this rule.
+- Still open: apply 098 (requester step), recorded bilingual wording review, and the peer safety review
+  (Ganesh) of these changes. This is not a clinical-validation claim.

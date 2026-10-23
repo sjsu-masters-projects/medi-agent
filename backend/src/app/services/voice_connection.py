@@ -69,8 +69,10 @@ class VoiceConnection:
         live_connector: Connector = deepgram_live_connector,
         speak_connector: Connector = deepgram_speak_connector,
         owner: str = "",
+        on_safety_floor: Callable[[str, str, str], None] | None = None,
     ) -> None:
         self._send = send
+        self._on_safety_floor = on_safety_floor
         self.owner = owner
         _CONNECTIONS.add(self)
         self._live_connector = live_connector
@@ -127,6 +129,7 @@ class VoiceConnection:
             connector=self._live_connector,
             language_hint=payload.get("language") or Language.EN,
             on_speech_started=self._barge_in,
+            on_safety_floor=self._on_safety_floor,
         )
         try:
             await session.start()

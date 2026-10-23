@@ -279,9 +279,11 @@ def _urgent_symptom_classification(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(CareCoordinatorRuntime, "process_stream", _process_stream)
 
 
-def _run_turn(client, patient_id, message: str, language: str = "en") -> dict[str, Any]:
+def _run_turn(
+    client, patient_id, message: str, language: str = "en", query: str = ""
+) -> dict[str, Any]:
     with client.websocket_connect(
-        f"/ws/chat/{patient_id}", subprotocols=["bearer", "test-token"]
+        f"/ws/chat/{patient_id}{query}", subprotocols=["bearer", "test-token"]
     ) as websocket:
         assert websocket.receive_json()["type"] == "chat_history"
         websocket.send_json({"type": "user_message", "content": message, "language": language})
@@ -709,3 +711,115 @@ def test_a_clean_turn_is_not_audited(client, override_db, patient_id, monkeypatc
     _run_turn(client, patient_id, "What time does the clinic open?")
 
     audit.assert_not_awaited()
+
+
+def test_a_floor_halt_is_audited_with_rule_urgency_and_no_text(
+    client, override_db, patient_id, monkeypatch
+) -> None:
+    """SAFE-002: the floor's own answer is audited, not only a raised model verdict."""
+    _patch_chat_runtime(monkeypatch, patient_id)
+    monkeypatch.setattr(
+        "app.routers.chat.ChatSafetyService.deliver_pending",
+        AsyncMock(return_value=[{"delivery_state": "delivered", "clinicians_notified": 1}]),
+    )
+    audit = AsyncMock(return_value=True)
+    monkeypatch.setattr("app.routers.chat.ChatSafetyService.record_audit_safely", audit)
+
+    _run_turn(client, patient_id, "I took my metformin twice")
+
+    audit.assert_awaited_once()
+    _patient, turn_id, payload = audit.await_args.args
+    assert turn_id
+    assert payload == {
+        "safety_rule": "urgent_medication_error",
+        "rule_version": "triage-floor/1",
+        "model_urgency": "routine",
+        "final_urgency": "urgent",
+        "outcome": "urgency_raised",
+        "escalation_required": True,
+    }
+
+
+def test_a_floor_halt_still_answers_when_the_audit_is_unavailable(
+    client, override_db, patient_id, monkeypatch
+) -> None:
+    _patch_chat_runtime(monkeypatch, patient_id)
+    monkeypatch.setattr(
+        "app.routers.chat.ChatSafetyService.deliver_pending",
+        AsyncMock(return_value=[{"delivery_state": "delivered", "clinicians_notified": 1}]),
+    )
+    monkeypatch.setattr(
+        "app.routers.chat.ChatSafetyService.record_audit_safely",
+        AsyncMock(return_value=False),
+    )
+
+    result = _run_turn(client, patient_id, "I cannot breathe")
+
+    assert result["complete"]["urgency"] == "emergency"
+    assert result["complete"]["safety_rule"] == "emergency_symptom_keyword"
+
+
+def _focus_a_document(monkeypatch: pytest.MonkeyPatch, document_id: str) -> None:
+    document = {
+        "id": document_id,
+        "file_name": "lab.pdf",
+        "document_type": "lab_report",
+        "summary": "Synthetic summary.",
+        "parse_status": "completed",
+    }
+
+    async def _get_document_context(_self, _patient_id, _document_id):
+        return document
+
+    async def _set_document_context(_self, _patient_id, _session_id, _document):
+        return None
+
+    monkeypatch.setattr("app.routers.chat.ChatService.get_document_context", _get_document_context)
+    monkeypatch.setattr("app.routers.chat.ChatService.set_document_context", _set_document_context)
+
+
+def test_a_document_chat_turn_with_a_raised_urgency_is_audited(
+    client, override_db, patient_id, monkeypatch
+) -> None:
+    """Document chat shares the typed-chat pipeline, so it writes the same audit."""
+    _patch_chat_runtime(monkeypatch, patient_id)
+    document_id = str(uuid4())
+    _focus_a_document(monkeypatch, document_id)
+    _stub_classification(
+        monkeypatch,
+        urgency="urgent",
+        model_urgency="routine",
+        override_rule="adverse_effect_signal",
+        escalation_required=True,
+    )
+    audit = AsyncMock(return_value=True)
+    monkeypatch.setattr("app.routers.chat.ChatSafetyService.record_audit_safely", audit)
+
+    _run_turn(
+        client,
+        patient_id,
+        "My ankle feels a bit odd after this lab",
+        query=f"?context=doc:{document_id}",
+    )
+
+    audit.assert_awaited_once()
+    assert audit.await_args.args[2]["safety_rule"] == "adverse_effect_signal"
+
+
+def test_a_document_chat_floor_halt_is_audited(
+    client, override_db, patient_id, monkeypatch
+) -> None:
+    _patch_chat_runtime(monkeypatch, patient_id)
+    document_id = str(uuid4())
+    _focus_a_document(monkeypatch, document_id)
+    monkeypatch.setattr(
+        "app.routers.chat.ChatSafetyService.deliver_pending",
+        AsyncMock(return_value=[{"delivery_state": "delivered", "clinicians_notified": 1}]),
+    )
+    audit = AsyncMock(return_value=True)
+    monkeypatch.setattr("app.routers.chat.ChatSafetyService.record_audit_safely", audit)
+
+    _run_turn(client, patient_id, "I want to kill myself", query=f"?context=doc:{document_id}")
+
+    audit.assert_awaited_once()
+    assert audit.await_args.args[2]["safety_rule"] == "emergency_mental_health_keyword"

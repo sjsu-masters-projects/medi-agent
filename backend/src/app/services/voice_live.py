@@ -37,6 +37,7 @@ from app.adk.grounding import StreamingReplyFilter, without_source_lines
 from app.config import settings
 from app.core.structured_logging import log_event
 from app.models.enums import Language, coerce_locale
+from app.safety import deterministic_safety_floor
 from app.services.chat_turn_service import floor_guidance
 from app.utils.localization import written_language
 
@@ -228,12 +229,14 @@ class LiveSttSession:
         connector: Connector = deepgram_live_connector,
         language_hint: object = Language.EN,
         on_speech_started: Callable[[], Awaitable[None]] | None = None,
+        on_safety_floor: Callable[[str, str, str], None] | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._emit = emit
         self._connector = connector
         self._language_hint = language_hint
         self._on_speech_started = on_speech_started
+        self._on_safety_floor = on_safety_floor
         self._clock = clock
         self._assembler = UtteranceAssembler(
             max_chars=settings.voice_live_max_utterance_chars, language_hint=language_hint
@@ -387,6 +390,16 @@ class LiveSttSession:
             return
         self.utterances += 1
         guidance = floor_guidance(utterance.text, utterance.language)
+        if guidance and self._on_safety_floor is not None:
+            verdict = deterministic_safety_floor(utterance.text)
+            if verdict is not None:
+                try:
+                    # SAFE-002: (rule, urgency, utterance id) only, never the transcript.
+                    self._on_safety_floor(
+                        verdict.safety_rule, verdict.urgency, utterance.utterance_id
+                    )
+                except Exception:
+                    logger.warning("Voice safety audit hook failed; utterance unaffected")
         log_event(
             logger,
             "voice.utterance",
