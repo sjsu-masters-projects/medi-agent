@@ -135,7 +135,7 @@ def _patch_chat_runtime(monkeypatch: pytest.MonkeyPatch, patient_id: Any) -> Non
         lambda _token: CurrentUser(id=patient_id, email="patient@test.com", role="patient"),
     )
 
-    async def _history(_self, patient_id, limit=50, before=None, session_id=None):
+    async def _history(_self, patient_id, limit=50, before=None, session_id=None, **_kw):
         return []
 
     async def _context(_self, patient_id, document_id=None):

@@ -184,8 +184,14 @@ class ChatService:
         limit: int = 50,
         before: str | None = None,
         session_id: str | None = None,
+        *,
+        with_evidence: bool = False,
     ) -> list[dict[str, Any]]:
-        """The newest ``limit`` messages, oldest first, optionally for one conversation."""
+        """The newest ``limit`` messages, oldest first, optionally for one conversation.
+
+        ``with_evidence`` adds ``has_evidence`` to assistant messages from one batched,
+        patient-scoped read for the whole page (shown to the patient, never fed to a model).
+        """
         query = (
             self.db.table("chat_messages")
             .select(_HISTORY_COLUMNS + ", attachments")
@@ -206,11 +212,39 @@ class ChatService:
             if not _missing_attachments_column(exc):
                 raise
             # Before migration 062 there are no attachments to read.
-            return await self._history_without_attachments(
+            rows = await self._history_without_attachments(
                 patient_id, limit=limit, before=before, session_id=session_id
             )
+            return await self._with_evidence_flags(patient_id, rows) if with_evidence else rows
         rows = [row for row in (result.data or []) if isinstance(row, dict)]
-        return list(reversed(rows))
+        rows.reverse()
+        return await self._with_evidence_flags(patient_id, rows) if with_evidence else rows
+
+    async def _with_evidence_flags(
+        self, patient_id: str, rows: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """One query for the page. A failed read (for example before migration 094) means no
+        flag, never a failed history."""
+        from app.adk.evidence import evidence_is_shown
+
+        ids = [str(r["id"]) for r in rows if r.get("role") == "assistant" and r.get("id")]
+        shown: set[str] = set()
+        if ids:
+            try:
+                result = await self._execute(
+                    self.db.table("chat_reply_evidence")
+                    .select("message_id, evidence")
+                    .eq("patient_id", patient_id)
+                    .in_("message_id", ids)
+                )
+                shown = {
+                    str(r["message_id"])
+                    for r in (result.data or [])
+                    if isinstance(r, dict) and evidence_is_shown(r.get("evidence"))
+                }
+            except Exception as exc:
+                logger.warning("Reply evidence flags not readable: %s", type(exc).__name__)
+        return [{**r, "has_evidence": str(r.get("id")) in shown} for r in rows]
 
     async def _history_without_attachments(
         self, patient_id: str, *, limit: int, before: str | None, session_id: str | None

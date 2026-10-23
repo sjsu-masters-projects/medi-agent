@@ -300,7 +300,7 @@ export default function ChatPage() {
                     offer={pendingOffer?.messageId === message.id ? <SymptomOffer locale={locale}
                         onYes={() => window.dispatchEvent(new CustomEvent("symptom-intake-start", { detail: { sourceMessageId: pendingOffer.sourceMessageId } }))}
                         onNo={() => dismissOffer(pendingOffer.sourceMessageId)} /> : undefined}
-                    sources={message.role === ChatRole.ASSISTANT && user?.id && accessToken && UUID_PATTERN.test(message.id)
+                    sources={message.role === ChatRole.ASSISTANT && message.hasEvidence && user?.id && accessToken && UUID_PATTERN.test(message.id)
                         ? <ReplySources patientId={user.id} messageId={message.id} accessToken={accessToken} locale={locale} /> : undefined}
                     delivery={message.delivery} onRetrySend={message.clientMessageId ? () => retryUnsentMessage(message.clientMessageId!) : undefined}
                     onRemoveUnsent={message.clientMessageId ? () => removeUnsentMessage(message.clientMessageId!) : undefined}

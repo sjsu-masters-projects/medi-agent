@@ -20,6 +20,8 @@ export interface ChatMessageApi {
     created_at: string;
     /** Server-built cards under the message; missing or null on older messages. */
     attachments?: unknown[] | null;
+    /** True when saved evidence backs this Nora reply (the Sources line is offered). */
+    has_evidence?: boolean;
 }
 
 export interface ChatTurnApi {
@@ -237,6 +239,7 @@ export function mapChatMessageFromApi(message: ChatMessageApi): ChatMessage {
         role: message.role,
         // Only set when there is a card, so a message without one is unchanged.
         ...(attachments.length ? { attachments } : {}),
+        ...(message.has_evidence === true ? { hasEvidence: true } : {}),
     };
 }
 

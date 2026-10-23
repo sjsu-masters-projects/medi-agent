@@ -27,6 +27,8 @@ class ChatMessage(BaseModel):
     created_at: str
     # Server-built cards under a reply, e.g. the results of a document the reply cited.
     attachments: list[dict[str, Any]] = Field(default_factory=list)
+    # True when a saved evidence row backs this reply (see GET /chat/evidence); assistant only.
+    has_evidence: bool = False
 
 
 class ChatConversation(BaseModel):

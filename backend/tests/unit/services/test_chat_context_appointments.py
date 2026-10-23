@@ -325,3 +325,52 @@ async def test_a_team_without_a_name_or_specialty_stays_unknown_not_guessed() ->
 def test_the_prompts_name_the_team_when_known_and_never_guess() -> None:
     assert "never guess or pick a team" in " ".join(CARE_COORDINATOR_INSTRUCTION.split())
     assert "never guess a team or clinician" in " ".join(CARE_RESPONDER_INSTRUCTION.split())
+
+
+@pytest.mark.asyncio
+async def test_history_flags_replies_with_evidence_in_one_patient_scoped_query() -> None:
+    a1, a2, a3, u1 = (str(uuid4()) for _ in range(4))
+
+    def message(mid: str, role: str, stamp: str, patient: str = PATIENT_A) -> dict[str, Any]:
+        return {
+            "id": mid,
+            "patient_id": patient,
+            "session_id": "s",
+            "role": role,
+            "created_at": stamp,
+        }
+
+    chat, db = service(
+        {
+            "chat_messages": [
+                message(u1, "user", "2099-01-01"),
+                message(a1, "assistant", "2099-01-02"),
+                message(a2, "assistant", "2099-01-03"),
+                message(a3, "assistant", "2099-01-04"),
+            ],
+            "chat_reply_evidence": [
+                {
+                    "patient_id": PATIENT_A,
+                    "message_id": a1,
+                    "evidence": {"sources": [{"kind": "document"}]},
+                },
+                {
+                    "patient_id": PATIENT_A,
+                    "message_id": a2,
+                    "evidence": {"sources": [], "tools": []},
+                },
+                {
+                    "patient_id": PATIENT_B,
+                    "message_id": a3,
+                    "evidence": {"sources": [{"kind": "document"}]},
+                },
+            ],
+        }
+    )
+    rows = await chat.get_history(PATIENT_A, with_evidence=True)
+    flags = {r["id"]: r.get("has_evidence") for r in rows}
+    assert flags == {u1: False, a1: True, a2: False, a3: False}
+    reads = [filters for name, filters in db.reads if name == "chat_reply_evidence"]
+    assert len(reads) == 1 and ("eq", "patient_id", PATIENT_A) in reads[0]
+    plain = await chat.get_history(PATIENT_A)
+    assert all("has_evidence" not in r for r in plain)
