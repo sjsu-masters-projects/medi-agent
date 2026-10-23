@@ -28,7 +28,7 @@ and documentation links. Deliver through a separate branch from merged #222.
 ## Outcome recorded October 22
 
 The [dated review](../../docs/evidence/spanish-interface-wording-2026-10-22.md)
-records a project-scope wording pass after corrections: 553 paired inventory
+records a project-scope wording pass after corrections: 553 paired inventory at the first pass, 648 after later addenda
 entries, representing 460 distinct source locations across 11 files. The
 machine-checkable receipt binds acceptance to all source checksums and the
 paired-entry fingerprint. A changed/missing receipt or snapshot fails CI's

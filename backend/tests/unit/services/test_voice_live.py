@@ -236,6 +236,43 @@ async def test_the_safety_floor_runs_on_the_transcript_text(text: str, language:
 
 
 @pytest.mark.asyncio
+async def test_a_spoken_floor_hit_reports_rule_urgency_and_id_but_not_the_transcript() -> None:
+    seen: list[tuple[str, str, str]] = []
+    session, connector, sink = await live(
+        language_hint="en-US", on_safety_floor=lambda *args: seen.append(args)
+    )
+    connector.connection.push(result("I have chest pain and I am sweating", speech_final=True))
+    await settle(12)
+    [final] = sink.of("utterance_final")
+    assert seen == [("emergency_symptom_keyword", "emergency", final["utterance_id"])]
+    assert "chest" not in str(seen)
+    await session.stop("client")
+
+
+@pytest.mark.asyncio
+async def test_a_failing_audit_hook_never_blocks_the_utterance() -> None:
+    def boom(*_args: str) -> None:
+        raise RuntimeError("synthetic")
+
+    session, connector, sink = await live(language_hint="en-US", on_safety_floor=boom)
+    connector.connection.push(result("I have chest pain and I am sweating", speech_final=True))
+    await settle(12)
+    [final] = sink.of("utterance_final")
+    assert final["safety_guidance"]
+    await session.stop("client")
+
+
+@pytest.mark.asyncio
+async def test_an_ordinary_utterance_reports_nothing_to_audit() -> None:
+    seen: list[tuple[str, str, str]] = []
+    session, connector, _sink = await live(on_safety_floor=lambda *args: seen.append(args))
+    connector.connection.push(result("What time is my appointment", speech_final=True))
+    await settle(12)
+    assert seen == []
+    await session.stop("client")
+
+
+@pytest.mark.asyncio
 async def test_stop_closes_the_provider_drains_tasks_and_is_idempotent() -> None:
     session, connector, sink = await live()
     await session.stop("client")

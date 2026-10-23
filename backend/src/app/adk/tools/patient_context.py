@@ -27,6 +27,24 @@ def _service(db: Any | None = None) -> ChatService:
     return ChatService(db if db is not None else get_admin_client())
 
 
+def _care_teams(rows: Any) -> list[dict[str, Any]]:
+    """Active care teams as the patient knows them: who, which specialty, which clinic.
+
+    Only these four fields: raw clinician and clinic identifiers are not for the model.
+    ``care_team_id`` matches the one on each medication's and activity's `plan`.
+    """
+    return [
+        {
+            "care_team_id": row.get("id"),
+            "clinician_name": row.get("clinician_name"),
+            "specialty": row.get("specialty"),
+            "clinic_name": row.get("clinic_name"),
+        }
+        for row in rows or []
+        if isinstance(row, dict)
+    ]
+
+
 async def get_patient_context(tool_context: Any) -> dict[str, Any]:
     """Get this patient's medications, conditions, symptoms, care team, appointments,
     allergies and today's care-plan activities.
@@ -58,7 +76,7 @@ async def get_patient_context(tool_context: Any) -> dict[str, Any]:
         "conditions": context.get("conditions", []),
         "recent_symptoms": context.get("recent_symptoms", []),
         "recent_symptoms_available": context.get("recent_symptoms_available", True),
-        "care_teams": context.get("care_teams", []),
+        "care_teams": _care_teams(context.get("care_teams")),
         "timezone": context.get("timezone"),
         "appointments": context.get("appointments"),
         "allergies": context.get("allergies"),

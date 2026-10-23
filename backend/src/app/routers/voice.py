@@ -14,8 +14,10 @@ from app.adk.grounding import without_source_lines
 from app.clients.deepgram_client import STT_LANGUAGE, transcribe_audio_bytes_async
 from app.config import settings
 from app.core.exceptions import ValidationError
+from app.db.connection import get_db
 from app.models.enums import Language
 from app.routers.chat import _authenticate_ws_patient, negotiated_subprotocol
+from app.services.chat_safety_service import ChatSafetyService, utterance_audit_turn_id
 from app.services.voice_connection import VoiceConnection, voice_limits
 from app.services.voice_service import VoiceService, VoiceStreamTranscript
 from app.utils.localization import written_language
@@ -48,7 +50,22 @@ async def voice_websocket_endpoint(
             **voice_limits(),
         }
     )
-    connection = VoiceConnection(websocket.send_json, owner=str(patient_id))
+
+    def audit_floor(safety_rule: str, urgency: str, utterance_id: str) -> None:
+        """SAFE-002: a spoken floor hit is audited without waiting for the typed turn."""
+        try:
+            ChatSafetyService(get_db()).schedule_floor_audit(
+                str(patient_id),
+                utterance_audit_turn_id(str(patient_id), utterance_id),
+                safety_rule,
+                urgency,
+            )
+        except Exception:
+            logger.warning("Voice safety audit unavailable; utterance unaffected")
+
+    connection = VoiceConnection(
+        websocket.send_json, owner=str(patient_id), on_safety_floor=audit_floor
+    )
 
     stream_active = False
     stream_private = False

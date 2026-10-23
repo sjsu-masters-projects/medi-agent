@@ -56,6 +56,8 @@ export type { ChatAttachment, ChatDocumentResultsAttachment, ChatSymptomOfferAtt
 export interface ChatMessage extends SharedChatMessage {
     /** Absent for messages that carry no card, including every older message. */
     attachments?: ChatAttachment[];
+    /** Saved evidence backs this Nora reply, so the Sources line is shown. */
+    hasEvidence?: boolean;
     /** Set on a message this tab has sent but the server has not yet confirmed (see `delivery`). */
     clientMessageId?: string;
     /** `pending`: shown the instant it was sent; `failed`: the send was rejected, text kept for retry. */

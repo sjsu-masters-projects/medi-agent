@@ -6,13 +6,41 @@ import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import Any, cast
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from supabase import Client
 
 from app.core.exceptions import ExternalServiceError
 
 logger = logging.getLogger(__name__)
+
+AUDIT_RULE_VERSION = "triage-floor/1"
+_BACKGROUND_AUDITS: set[asyncio.Task[Any]] = set()
+
+
+def floor_audit_payload(safety_rule: str, urgency: str) -> dict[str, Any]:
+    """SAFE-002 audit body for a turn the deterministic floor answered. The floor ran before
+    any model, so the model's urgency is `routine`. Rule id, version, urgencies and outcome
+    only; never message text."""
+    return {
+        "safety_rule": safety_rule,
+        "rule_version": AUDIT_RULE_VERSION,
+        "model_urgency": "routine",
+        "final_urgency": urgency,
+        "outcome": "urgency_raised",
+        "escalation_required": True,
+    }
+
+
+def utterance_audit_turn_id(patient_id: str, utterance_id: str) -> str:
+    """A voice utterance has no chat turn yet; a stable id keeps the audit idempotent."""
+    return str(uuid5(NAMESPACE_URL, f"mediagent:voice-utterance:{patient_id}:{utterance_id}"))
+
+
+async def drain_background_audits() -> None:
+    """Lets tests (and shutdown) wait for audits scheduled with `schedule_floor_audit`."""
+    if _BACKGROUND_AUDITS:
+        await asyncio.gather(*list(_BACKGROUND_AUDITS), return_exceptions=True)
 
 
 class ChatSafetyService:
@@ -83,6 +111,24 @@ class ChatSafetyService:
             except Exception:
                 logger.warning("Safety audit persistence unavailable; turn answer unaffected")
         return False
+
+    async def record_floor_audit_safely(
+        self, patient_id: str, turn_id: str, safety_rule: str, urgency: str
+    ) -> bool:
+        """The audit for a floor halt on a path that does not go through the chat turn."""
+        return await self.record_audit_safely(
+            patient_id, turn_id, floor_audit_payload(safety_rule, urgency)
+        )
+
+    def schedule_floor_audit(
+        self, patient_id: str, turn_id: str, safety_rule: str, urgency: str
+    ) -> None:
+        """Fire and forget: the caller's response never waits for, or fails on, the audit."""
+        task = asyncio.get_running_loop().create_task(
+            self.record_floor_audit_safely(patient_id, turn_id, safety_rule, urgency)
+        )
+        _BACKGROUND_AUDITS.add(task)
+        task.add_done_callback(_BACKGROUND_AUDITS.discard)
 
     async def deliver_safely(self, record: dict[str, Any]) -> dict[str, Any]:
         if record["persistence_status"] != "saved":

@@ -40,13 +40,16 @@ for (const file of process.argv.slice(2)) {
     const line = source.getLineAndCharacterOfPosition(unwrap(es).getStart(source)).line + 1;
     rows.push({ file, line, key, en: text(en), es: text(es) });
   }
-  function collect(node) {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) variables.set(node.name.text, node.initializer);
-    ts.forEachChild(node, collect);
+  // Copy tables are file-level declarations. Collecting nested ones too let a local such as
+  // `const es = locale === "es-MX"` shadow the top-level Spanish table and drop every pair.
+  for (const statement of source.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (ts.isIdentifier(declaration.name) && declaration.initializer) variables.set(declaration.name.text, declaration.initializer);
+    }
   }
-  collect(source);
   const english = variables.get('english') ?? variables.get('en');
-  const spanish = variables.get('spanish') ?? variables.get('es');
+  const spanish = variables.get('spanish') ?? variables.get('es') ?? variables.get('esMX');
   if (properties(english) && properties(spanish)) pair(english, spanish, 'copy');
   function visit(node) {
     if (ts.isObjectLiteralExpression(node)) {

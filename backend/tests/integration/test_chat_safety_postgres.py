@@ -216,6 +216,7 @@ def sql(postgres):
         "051_health_knowledge_and_chat_sessions.sql",
         "059_chat_safety_alerts.sql",
         "097_medication_error_safety_persistence.sql",
+        "098_safety_audit_retention.sql",
     ):
         execute((MIGRATIONS / name).read_text())
     execute(f"""
@@ -512,3 +513,70 @@ def test_migration_097_reapplies_cleanly_without_losing_alerts(sql):
     assert sql("SELECT safety_rule || '/' || urgency FROM chat_safety_alerts;") == (
         "urgent_medication_error/urgent"
     )
+
+
+def _seed_audits(sql, *, age: str, count: int) -> None:
+    sql(
+        f"INSERT INTO chat_turn_safety_audits(turn_id, patient_id, safety_rule, rule_version,"
+        f" model_urgency, final_urgency, outcome, escalation_required, evaluated_at)"
+        f" SELECT gen_random_uuid(), '{PATIENT}', 'adverse_effect_signal', 'triage-floor/1',"
+        f" 'routine', 'urgent', 'urgency_raised', true, clock_timestamp() - interval '{age}'"
+        f" FROM generate_series(1, {count});"
+    )
+
+
+def _purge(sql, limit=500):
+    return sql(f"SET ROLE service_role; SELECT public.purge_chat_turn_safety_audits({limit});")
+
+
+def test_retention_deletes_only_rows_older_than_365_days(sql):
+    _seed_audits(sql, age="400 days", count=3)
+    _seed_audits(sql, age="364 days", count=1)
+    _seed_audits(sql, age="1 day", count=1)
+    assert _purge(sql) == "3"
+    assert sql("SELECT count(*) FROM chat_turn_safety_audits;") == "2"
+    assert _purge(sql) == "0"
+
+
+def test_retention_deletes_in_batches_of_at_most_500(sql):
+    _seed_audits(sql, age="400 days", count=501)
+    assert _purge(sql) == "500"
+    assert sql("SELECT count(*) FROM chat_turn_safety_audits;") == "1"
+    assert _purge(sql) == "1"
+    for bad in ("0", "501", "NULL"):
+        sql(
+            f"SET ROLE service_role; SELECT public.purge_chat_turn_safety_audits({bad});",
+            succeeds=False,
+        )
+
+
+def test_retention_does_not_loosen_immutability_or_grants(sql):
+    _seed_audits(sql, age="400 days", count=1)
+    # Even an expired row cannot be deleted or edited outside the purge function.
+    sql("DELETE FROM chat_turn_safety_audits;", succeeds=False)
+    sql("UPDATE chat_turn_safety_audits SET final_urgency='emergency';", succeeds=False)
+    for role in ("anon", "authenticated"):
+        sql(f"SET ROLE {role}; SELECT public.purge_chat_turn_safety_audits(1);", succeeds=False)
+        sql(f"SET ROLE {role}; DELETE FROM chat_turn_safety_audits;", succeeds=False)
+    sql("SET ROLE service_role; DELETE FROM chat_turn_safety_audits;", succeeds=False)
+    assert sql("SELECT count(*) FROM chat_turn_safety_audits;") == "1"
+    # The flag is transaction-local: a purge does not leave later deletes unlocked.
+    _seed_audits(sql, age="400 days", count=1)
+    assert _purge(sql, 1) == "1"
+    sql("DELETE FROM chat_turn_safety_audits;", succeeds=False)
+    assert sql("SELECT count(*) FROM chat_turn_safety_audits;") == "1"
+
+
+def test_a_new_audit_write_runs_the_retention_pass_and_stays_idempotent(sql):
+    _seed_audits(sql, age="400 days", count=2)
+    first = json.loads(sql(audit_sql()))
+    assert first["safety_rule"] == "adverse_effect_signal"
+    assert sql("SELECT count(*) FROM chat_turn_safety_audits;") == "1"
+    json.loads(sql(audit_sql()))
+    assert sql("SELECT count(*) FROM chat_turn_safety_audits;") == "1"
+
+
+def test_migration_098_reapplies_cleanly(sql):
+    sql(audit_sql())
+    sql((MIGRATIONS / "098_safety_audit_retention.sql").read_text())
+    assert sql("SELECT count(*) FROM chat_turn_safety_audits;") == "1"

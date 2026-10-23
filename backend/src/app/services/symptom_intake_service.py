@@ -144,6 +144,7 @@ class SymptomIntakeService:
                     **self._safety(decision),
                 },
             )
+            self._audit_floor(str(source["id"]), decision)
             return {
                 "status": "interrupted_safety",
                 "safety": self._safety(decision),
@@ -308,10 +309,21 @@ class SymptomIntakeService:
             "response_text": decision.response_text,
         }
 
+    def _audit_floor(self, turn_id: str, decision: IntakeSafetyDecision) -> None:
+        """SAFE-002 audit of a floor halt (rule, version, urgency; no text). Keyed by the
+        source message (start) or the intake (interrupt), so a repeat adds no row."""
+        ChatSafetyService(self.db).schedule_floor_audit(
+            str(self.actor.id),
+            turn_id,
+            decision.verdict.safety_rule,
+            decision.verdict.urgency,
+        )
+
     async def interrupt(
         self, row: dict[str, Any], request: dict[str, Any], decision: IntakeSafetyDecision
     ) -> dict[str, Any]:
         safety = self._safety(decision)
+        self._audit_floor(str(row["id"]), decision)
         payload = {
             "intake_id": row["id"],
             "expected_revision": request.get("expected_revision", row["revision"]),

@@ -1,7 +1,7 @@
 import type { MedicationAnswer, MedicationAnswerErrorClass } from "@/services/medication-confirmations";
 import { resolveLocaleResource, type Locale, type LocaleResourceMap } from "@/types";
 
-// New Spanish wording is a draft pending LOC-001 review. Do not mark it approved.
+// es-MX wording reviewed under LOC-001-R (model-assisted meaning-and-safety review, closure addendum).
 
 export interface MedicationConfirmationCopy {
   eyebrow: string;

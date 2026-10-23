@@ -125,6 +125,14 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
         "Tu equipo de atención revisó tu reporte de síntomas",
         "Consulta tu reporte de síntomas.",
     ),
+    # MED-002 follow-up (099). Patient only; the question itself is on Today. The Spanish is a
+    # draft pending LOC-001 review.
+    "medication_confirmation_asked": (
+        "Your care team asked about one of your medicines",
+        "Open Today to answer. Your answer does not change any medicine or reminder.",
+        "Tu equipo de atención te preguntó sobre uno de tus medicamentos",
+        "Abre Hoy para responder. Tu respuesta no cambia ningún medicamento ni recordatorio.",
+    ),
     "critical_result": (
         "Critical test result reported",
         "A patient's document reports a result the laboratory marked critical. Open the document to review it.",
@@ -382,6 +390,9 @@ def destination(row: dict[str, Any], role: str) -> Destination:
             "View report",
             "Ver reporte",
         )
+    if row["event_type"] == "medication_confirmation_asked":
+        # Patient-only: the question card is on Today.
+        return ("/today" if role == "patient" else None, "Open Today", "Abrir Hoy")
     if row["event_type"] == "handoff_shared":
         share = _identifier(row.get("source_id"))
         link = f"/handoff-shared/{share}" if share else "/handoff-shared"
@@ -434,6 +445,17 @@ def _review_notice_copy(row: dict[str, Any], spanish: bool) -> tuple[str, str]:
     )
 
 
+def _question_notice_copy(row: dict[str, Any], spanish: bool) -> tuple[str, str]:
+    """Who asked, from the saved event. The medicine and question stay on the Today card."""
+    name = _name(_metadata(row).get("clinician_name"))
+    body = _COPY["medication_confirmation_asked"][3 if spanish else 1]
+    if spanish:
+        who = f"Dr. {name}" if name else "Tu equipo de atención"
+        return (f"{who} te preguntó sobre uno de tus medicamentos", body)
+    who = f"Dr. {name}" if name else "Your care team"
+    return (f"{who} asked about one of your medicines", body)
+
+
 def _display_copy(row: dict[str, Any], role: str, spanish: bool) -> tuple[str, str]:
     kind = str(row["event_type"])
     if kind == "safety_flag" and row.get("source_type") == "symptom_reports":
@@ -452,6 +474,8 @@ def _display_copy(row: dict[str, Any], role: str, spanish: bool) -> tuple[str, s
         )
     if kind == "symptom_report_reviewed":
         return _review_notice_copy(row, spanish)
+    if kind == "medication_confirmation_asked":
+        return _question_notice_copy(row, spanish)
     if kind == "handoff_shared" and _name(_metadata(row).get("actor_name")):
         author = _name(_metadata(row).get("actor_name"))
         return (f"{author} shared a handoff summary", _COPY["handoff_shared"][1])

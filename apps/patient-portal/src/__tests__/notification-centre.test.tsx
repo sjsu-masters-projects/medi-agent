@@ -42,6 +42,21 @@ describe("patient notification centre", () => {
     render(<NotificationProvider><NotificationCentre /></NotificationProvider>);
     expect(await screen.findByRole("link", { name: "Ver" })).toHaveAttribute("href", `/symptoms/${report}`);
   });
+  it("opens Today from a medication question notice, in both languages", async () => {
+    const asked = (title: string, label: string): PatientNotification => ({ ...item("question"), event_type: "medication_confirmation_asked", category: "follow_up", title, body: "", action_url: "/today", action_label: label, actionable: true });
+    vi.mocked(notifications.list).mockResolvedValue(page([asked("Dr. Elena Park asked about one of your medicines", "Open Today")]));
+    render(<NotificationProvider><NotificationCentre /></NotificationProvider>);
+    expect(await screen.findByRole("link", { name: "Open Today" })).toHaveAttribute("href", "/today");
+    cleanup();
+    session.profile.preferredLanguage = "es-MX";
+    vi.mocked(notifications.list).mockResolvedValue(page([asked("Dr. Elena Park te preguntó sobre uno de tus medicamentos", "Abrir Hoy")]));
+    render(<NotificationProvider><NotificationCentre /></NotificationProvider>);
+    expect(await screen.findByRole("link", { name: "Abrir Hoy" })).toHaveAttribute("href", "/today");
+  });
+  it("allows Today and refuses a foreign or look-alike destination for a question notice", () => {
+    expect(notificationDestination("/today")).toBe("/today");
+    for (const bad of ["//evil.invalid/today", "https://evil.invalid/today", "/today/../admin", "/todayx"]) expect(notificationDestination(bad)).toBeNull();
+  });
   it("never links a malformed or foreign symptoms path", async () => {
     for (const bad of ["/symptoms/abc", "//evil.invalid/symptoms/11111111-2222-4333-8444-555555555555"]) {
       expect(notificationDestination(bad)).toBeNull();

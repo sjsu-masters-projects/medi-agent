@@ -119,6 +119,13 @@ def _reference(item: dict[str, Any]) -> dict[str, Any] | None:
     return entry
 
 
+def evidence_is_shown(evidence: Any) -> bool:
+    """Whether a stored evidence object has anything the patient's Sources line lists."""
+    if not isinstance(evidence, dict):
+        return False
+    return bool(evidence.get("sources")) or RECORD_TOOL in (evidence.get("tools") or [])
+
+
 def build_evidence(
     *, tools: list[str], cited: list[dict[str, Any]], care_plan_ids: list[str]
 ) -> dict[str, Any]:
