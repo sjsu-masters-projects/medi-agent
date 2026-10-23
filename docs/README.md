@@ -11,6 +11,7 @@ requirements and verification evidence have separate homes.
 | Run a local checkout | [Quick start](../README.md#run-locally) and [local development](development.md) |
 | Make a contribution | [Contributor guide](../CONTRIBUTING.md) and [coding standards](../.agent/CODING_STANDARDS.md) |
 | Find current work and acceptance gaps | [Task board](../.agent/TASKS.md) |
+| Verify deployed work, log bugs and sign off | [QA handoff](qa-handoff-2026-10.md) |
 | Understand service and data boundaries | [Architecture](../.agent/ARCHITECTURE.md) |
 | Maintain these documents | [Documentation maintenance](maintaining-docs.md) |
 

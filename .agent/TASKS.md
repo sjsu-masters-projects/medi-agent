@@ -3,6 +3,8 @@
 > **Active plan:** deployed acceptance of the October 22 completion work (#210–#224), then DEMO-001 and REL-001/002/003 before the December 4 feature freeze. Planned expo scope is code-complete; open work is deployed checks, the SAFE-002 peer review, the COM-001/SAFE-001 gaps in the [code-level audit](specs/com-safe-gap-audit-2026-10.md), and release preparation.
 > **Delivery:** main is #224 (`8e56385b`). Migrations 080–097 are applied in production (requester). Backend, worker and jobs run as `mediagent-api-runtime`, `mediagent-worker-runtime` and `mediagent-jobs-runtime`. **Portals:** Vercel's Hobby rate limit blocked builds after #220 (patient last deployed) and #221 (clinician last deployed); redeploy the latest `main` in both projects once it resets. Every portal-facing "Verify deployed" check from #221, #223 and #224 is also blocked on that redeploy.
 >
+> **QA handoff:** step-by-step deployed checks, bug logging and sign-off for every Verify deployed row are in [docs/qa-handoff-2026-10.md](../docs/qa-handoff-2026-10.md).
+>
 > **Updated:** October 22, 2026 · **Feature freeze:** December 4, 2026
 >
 > **Target:** A working, polished university-expo master's project using fictional patient and clinician accounts. No real-patient or real-clinician recruitment, VC pitch, or production qualification is required.
