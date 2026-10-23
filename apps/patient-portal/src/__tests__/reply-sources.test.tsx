@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReplySources } from "@/components/features/reply-sources";
 
@@ -41,10 +41,15 @@ describe("ReplySources", () => {
         fetchReplyEvidence.mockRejectedValueOnce(new Error("boom")).mockResolvedValue({ message_id: "m1", evidence: { sources: [{ kind: "reference", source: "MedlinePlus", title: "Metformin" }] } });
         render(<ReplySources {...props} locale="en-US" />);
         const details = document.querySelector("details")!;
-        details.open = true; fireEvent(details, new Event("toggle"));
-        expect(await screen.findByText(/could not be loaded/)).toBeTruthy();
-        details.open = false; fireEvent(details, new Event("toggle"));
-        details.open = true; fireEvent(details, new Event("toggle"));
-        expect(await screen.findByText("Metformin")).toBeTruthy();
+        const toggle = async (open: boolean) => {
+            // Inside act so React settles the toggle and the (rejected) fetch before we look.
+            await act(async () => { details.open = open; fireEvent(details, new Event("toggle")); });
+        };
+        await toggle(true);
+        expect(await screen.findByText(/could not be loaded/, undefined, { timeout: 3000 })).toBeTruthy();
+        await toggle(false);
+        await toggle(true);
+        expect(await screen.findByText("Metformin", undefined, { timeout: 3000 })).toBeTruthy();
+        expect(fetchReplyEvidence).toHaveBeenCalledTimes(2);
     });
 });
