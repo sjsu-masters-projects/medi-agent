@@ -223,8 +223,30 @@ rebuilt.
   open to answered or open to expired transition. Data API roles reach nothing.
 - Lock order: lock-free authorization, patient advisory lock, request row. No locks across calls.
 
-Not built: a notification-centre or email alert for the question (the patient finds it on Today
-within a minute; a push is a follow-up), clinician cancel, and a clinician list of all open
+### Patient alert (migration 099)
+
+- Asking writes one notification-centre item for the patient in the request's own transaction
+  (an `AFTER INSERT` trigger on the request table; the 093 function is unchanged). Event type
+  `medication_confirmation_asked`, category `follow_up`, source `medication_confirmation_requests`,
+  event key `medication_confirmation:<request id>`: a replayed ask returns the stored request
+  before any insert, and a repeated capture converges on the same event, delivery and receipt.
+  A fresh ask after expiry is a new request and tells the patient again. Requests asked before
+  099 are not replayed.
+- Copy: "Dr. {name} asked about one of your medicines" / es-MX "Dr. {name} te preguntó sobre uno
+  de tus medicamentos" (draft pending LOC-001), body pointing to Today and repeating that the
+  answer changes nothing. The link is `/today`. The event stores the clinician's name,
+  specialty and care-team id only: no medicine, dose, answer or note.
+- Actionable while the request is open and unexpired on the database clock; answering or expiry
+  ends it with no worker and the item stays as History. Visible only to the asked patient
+  while the asking care-team link is active. Patient only; no email category
+  (`private.email_preference` is NULL for it).
+- The 096 ledger wrappers are extended, not replaced: they are kept as `*_handoff` and the new
+  wrappers handle this event first, so handoff-share and symptom-review items are unchanged.
+- Evidence: 10 PostgreSQL cases (`test_medication_question_alert_postgres.py`, shard
+  `medication-confirmations`), including handoff-share and symptom-review regressions, 3
+  presentation and 6 migration-text unit tests, 2 patient-portal tests.
+
+Not built: an email or push alert for the question, clinician cancel, and a clinician list of all open
 questions (they are read per fact in the reconcile modal).
 
 Evidence: 21 router/service tests, 17 PostgreSQL contract cases (CI shard
