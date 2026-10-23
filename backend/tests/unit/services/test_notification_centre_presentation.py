@@ -706,3 +706,48 @@ def test_a_shared_handoff_item_names_the_author_links_the_share_and_carries_no_c
     assert "Lisinopril" not in shown.model_dump_json()
     nameless = present_item({**raw, "metadata": {}}, "clinician", "en-US")
     assert nameless.title == "A colleague shared a handoff summary"
+
+
+def question_item(**changes: Any) -> dict[str, Any]:
+    fields: dict[str, Any] = {
+        "event_type": "medication_confirmation_asked",
+        "category": "follow_up",
+        "source_type": "medication_confirmation_requests",
+        "actionable": True,
+        "metadata": {
+            "care_team_id": str(uuid4()),
+            "clinician_name": "Elena Park",
+            "specialty": "Cardiology",
+        },
+    }
+    return item(**{**fields, **changes})
+
+
+def test_question_notice_names_the_clinician_links_today_and_carries_no_medicine():
+    raw = question_item()
+    english = present_item(raw, "patient", "en-US")
+    spanish = present_item(raw, "patient", "es-MX")
+    assert english.title == "Dr. Elena Park asked about one of your medicines"
+    assert spanish.title == "Dr. Elena Park te preguntó sobre uno de tus medicamentos"
+    assert english.action_url == spanish.action_url == "/today"
+    assert english.action_label == "Open Today" and spanish.action_label == "Abrir Hoy"
+    assert "does not change any medicine" in english.body
+    assert "no cambia ningún medicamento" in spanish.body
+    assert english.actionable and not english.can_acknowledge
+    assert english.category == "follow_up"
+
+
+def test_question_notice_is_view_only_once_answered_and_clinicians_get_no_link():
+    done = present_item(question_item(actionable=False), "patient", "es-MX")
+    assert done.actionable is False and done.action_label == "Ver" and done.action_url == "/today"
+    assert destination(question_item(), "clinician")[0] is None
+
+
+def test_question_notice_without_a_usable_name_falls_back_to_the_care_team():
+    raw = question_item(metadata={"clinician_name": str(uuid4()), "specialty": None})
+    assert present_item(raw, "patient", "en-US").title == (
+        "Your care team asked about one of your medicines"
+    )
+    assert present_item(raw, "patient", "es-MX").title == (
+        "Tu equipo de atención te preguntó sobre uno de tus medicamentos"
+    )

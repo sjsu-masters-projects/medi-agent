@@ -437,9 +437,11 @@ jobs:
             minimums: test_symptom_intake_postgres=17 test_symptom_handoff_postgres=8 test_symptom_report_history_postgres=11
           - name: medication-confirmations
             # Patient medication confirmation requests (093): care-team ownership, patient
-            # testimony that applies nothing, idempotency, expiry, immutability, grants.
-            files: tests/integration/test_medication_confirmations_postgres.py
-            minimums: test_medication_confirmations_postgres=17
+            # testimony that applies nothing, idempotency, expiry, immutability, grants; and
+            # the patient notification-centre alert for a question (099), including that the
+            # handoff-share (096) and symptom-review (095) items still work through the wrappers.
+            files: tests/integration/test_medication_confirmations_postgres.py tests/integration/test_medication_question_alert_postgres.py
+            minimums: test_medication_confirmations_postgres=17 test_medication_question_alert_postgres=10
           - name: symptom-review-notifications
             # The patient notice when a care team reviews a confirmed report and the report id
             # on the hand-off message (095), on the whole ledger. Disposable containers.
