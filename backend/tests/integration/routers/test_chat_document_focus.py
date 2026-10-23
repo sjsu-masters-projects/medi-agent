@@ -45,7 +45,7 @@ class _FakeChatStore:
     def install(self, monkeypatch: pytest.MonkeyPatch) -> None:
         store = self
 
-        async def _get_history(_self, patient_id, limit=50, before=None, session_id=None):
+        async def _get_history(_self, patient_id, limit=50, before=None, session_id=None, **_kw):
             return []
 
         async def _get_recent_clinician_messages(_self, patient_id, limit=20):

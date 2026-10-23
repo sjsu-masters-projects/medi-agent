@@ -14,6 +14,7 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
+from app.adk.evidence import evidence_is_shown
 from app.core.exceptions import ValidationError
 from app.core.structured_logging import log_event, set_turn_id
 from app.models import ChatMessage
@@ -140,7 +141,7 @@ async def report_turn_failure(
             # The reply was committed although its confirmation was lost (for example a
             # timed-out completion call): deliver it from the saved history.
             history = await service.get_history(
-                str(context["patient_id"]), session_id=context["session_id"]
+                str(context["patient_id"]), session_id=context["session_id"], with_evidence=True
             )
             await emit_shared(
                 {
@@ -276,7 +277,14 @@ async def execute_turn(
                 staged.pending_state_version,
             )
         event = emitter.complete_event or {"type": "assistant_complete"}
-        await send({**event, "message": serialize_chat_message(saved)})
+        await send(
+            {
+                **event,
+                "message": serialize_chat_message(
+                    {**saved, "has_evidence": evidence_is_shown(staged.evidence)}
+                ),
+            }
+        )
         await send({"type": "chat_turn", "turn": public_turn({**record, "status": "completed"})})
         log_event(
             logger,

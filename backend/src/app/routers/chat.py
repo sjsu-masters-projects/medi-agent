@@ -673,7 +673,7 @@ async def get_chat_history(
 ) -> Any:
     await _ensure_chat_access(current_user, patient_id, service.db)
     history = await service.get_history(
-        str(patient_id), limit=limit, before=before, session_id=session_id
+        str(patient_id), limit=limit, before=before, session_id=session_id, with_evidence=True
     )
     return [ChatMessage.model_validate(message) for message in history]
 
@@ -1353,7 +1353,9 @@ async def _serve_chat_socket(
         session_id = _read_session_id(websocket)
         set_actor(patient_id, session_id)
         durable_protocol = websocket.query_params.get("turn_protocol") == "1"
-        history = await service.get_history(str(patient_id), limit=50, session_id=session_id)
+        history = await service.get_history(
+            str(patient_id), limit=50, session_id=session_id, with_evidence=True
+        )
         conversation_history = [_serialize_chat_message(item) for item in history]
         await websocket.send_json({"type": "chat_history", "messages": conversation_history})
         if durable_protocol:
@@ -1507,7 +1509,9 @@ async def _serve_chat_socket(
                         if event_type == "dismiss_turn"
                         else "socket_recover",
                     )
-                    history = await service.get_history(str(patient_id), session_id=session_id)
+                    history = await service.get_history(
+                        str(patient_id), session_id=session_id, with_evidence=True
+                    )
                 except Exception as exc:
                     if _closed_websocket_error(exc):
                         raise

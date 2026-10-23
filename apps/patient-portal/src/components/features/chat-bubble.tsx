@@ -23,11 +23,13 @@ interface ChatBubbleProps {
     onRemoveUnsent?: () => void;
     /** A conversational offer shown inside Nora's reply, under its text. */
     offer?: ReactNode;
+    /** The collapsed "Sources" line of a saved Nora reply. */
+    sources?: ReactNode;
 }
 
 export function ChatBubble({
     attachments, clinicianLabel = "Care team messages", content, isStreaming = false,
-    delivery, language, locale = DEFAULT_LOCALE, offer, onPlayAudio, onRemoveUnsent, onRetrySend, role, timestamp,
+    delivery, language, locale = DEFAULT_LOCALE, offer, onPlayAudio, onRemoveUnsent, onRetrySend, role, sources, timestamp,
 }: ChatBubbleProps) {
     const isUser = role === ChatRole.USER;
     const isClinician = role === ChatRole.CLINICIAN;
@@ -65,6 +67,7 @@ export function ChatBubble({
             {offer}
             {cards?.map((attachment, index) => <ChatResultsCard key={`${attachment.documentId}-${index}`}
                 attachment={attachment} language={language} locale={locale} />)}
+            {!isStreaming && sources}
             <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2.5 text-xs text-muted">
                 {isStreaming
                     ? <span role="status" className="inline-flex items-center gap-2 text-brand-ink">{copy.live}<ProcessingDots className="bg-brand" /></span>

@@ -235,3 +235,13 @@ describe("isChatSocketEvent", () => {
         expect(isChatSocketEvent(null)).toBe(false);
     });
 });
+
+describe("has_evidence", () => {
+    const base = { id: "m", patient_id: "p", content: "hi", role: "assistant" as const, language: "en-US" as const, created_at: "2099-01-01T00:00:00Z" };
+    it("maps true to hasEvidence and leaves false or missing unset", async () => {
+        const { mapChatMessageFromApi } = await import("@/services/chat-api");
+        expect(mapChatMessageFromApi({ ...base, has_evidence: true }).hasEvidence).toBe(true);
+        expect(mapChatMessageFromApi({ ...base, has_evidence: false }).hasEvidence).toBeUndefined();
+        expect(mapChatMessageFromApi(base).hasEvidence).toBeUndefined();
+    });
+});

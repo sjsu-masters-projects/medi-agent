@@ -292,6 +292,20 @@ describe("Patient chat page", () => {
         expect(screen.getByText(/Original language: English/)).toBeInTheDocument();
     });
 
+    it("offers the Sources line only under a reply the server says has evidence", async () => {
+        const reply = (id: string, content: string, hasEvidence?: boolean) => ({
+            id, patientId: "patient-1", role: ChatRole.ASSISTANT, content, createdAt: "2026-04-17T10:00:00Z",
+            language: Language.EN, ...(hasEvidence ? { hasEvidence } : {}),
+        });
+        fetchChatHistory.mockResolvedValue([
+            reply("11111111-1111-4111-8111-111111111111", "Reply with sources", true),
+            reply("22222222-2222-4222-8222-222222222222", "Reply without sources"),
+        ]);
+        renderPage();
+        await screen.findByText("Reply without sources");
+        expect(screen.getAllByText("Sources")).toHaveLength(1);
+    });
+
     it("plays the displayed welcome text and locale after the patient language changes", async () => {
         renderPage();
         await screen.findByText(getPatientChatCopy(Language.EN).welcomeMessage);

@@ -1,4 +1,4 @@
-import { api } from "@/services/api";
+import { api, ApiClientError } from "@/services/api";
 import { toDocumentResult, type DocumentResult } from "@/services/documents";
 import {
     normalizeLocale,
@@ -20,6 +20,8 @@ export interface ChatMessageApi {
     created_at: string;
     /** Server-built cards under the message; missing or null on older messages. */
     attachments?: unknown[] | null;
+    /** True when saved evidence backs this Nora reply (the Sources line is offered). */
+    has_evidence?: boolean;
 }
 
 export interface ChatTurnApi {
@@ -237,6 +239,7 @@ export function mapChatMessageFromApi(message: ChatMessageApi): ChatMessage {
         role: message.role,
         // Only set when there is a card, so a message without one is unchanged.
         ...(attachments.length ? { attachments } : {}),
+        ...(message.has_evidence === true ? { hasEvidence: true } : {}),
     };
 }
 
@@ -270,6 +273,34 @@ export async function fetchChatHistory(
     });
 
     return response.map(mapChatMessageFromApi);
+}
+
+/** One source a Nora reply used, as stored (documents with pages, reference pages). */
+export interface ReplySourceApi {
+    kind?: string;
+    file_name?: string;
+    title?: string | Partial<Record<Locale, string>>;
+    pages?: number[];
+    source?: string;
+}
+
+export interface ReplyEvidenceApi {
+    message_id: string;
+    evidence: { tools?: string[]; sources?: ReplySourceApi[] };
+}
+
+/** The saved evidence of one Nora reply; null when none was saved (404). */
+export async function fetchReplyEvidence(
+    patientId: string,
+    messageId: string,
+    token: string,
+): Promise<ReplyEvidenceApi | null> {
+    try {
+        return await api.get<ReplyEvidenceApi>(`/api/v1/chat/evidence/${patientId}/${messageId}`, { token });
+    } catch (error) {
+        if (error instanceof ApiClientError && error.status === 404) return null;
+        throw error;
+    }
 }
 
 export interface TurnEventsApi {

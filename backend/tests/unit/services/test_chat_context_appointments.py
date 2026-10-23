@@ -247,3 +247,130 @@ async def test_the_connection_handshake_context_does_not_read_the_schedule() -> 
     context = await chat.get_context(PATIENT_A)
     assert "appointments" not in context
     assert not [name for name, _ in db.reads if name in {"appointments", "allergies"}]
+
+
+TEAM_A = "11111111-1111-1111-1111-111111111111"
+
+
+def team_row(patient: str, team_id: str, first: str, last: str, **changes: Any) -> dict[str, Any]:
+    return {
+        "id": team_id,
+        "patient_id": patient,
+        "status": "active",
+        "clinician_id": str(uuid4()),
+        "clinic_id": str(uuid4()),
+        "role": "primary",
+        "specialty_context": "Cardiology",
+        "clinics": {"display_name": "Cedar Grove"},
+        "clinicians": {"first_name": first, "last_name": last, "specialty": "Internal medicine"},
+        **changes,
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("locale", ["en-US", "es-MX"])
+async def test_the_tool_names_care_teams_and_the_plan_team_without_ids_or_other_patients(
+    locale: str,
+) -> None:
+    # Locale does not change the record; the model answers in it. The data is the same.
+    clinic = "Clinica Cedro" if locale == "es-MX" else "Cedar Grove"
+    chat, db = service(
+        {
+            "care_teams": [
+                team_row(PATIENT_A, TEAM_A, "Elena", "Park", clinics={"display_name": clinic}),
+                team_row(PATIENT_B, str(uuid4()), "Other", "Doctor"),
+            ]
+        }
+    )
+
+    async def plan(self: ChatService, patient_id: str) -> list[dict[str, Any]]:
+        return [{"name": "Walk", "plan": {"care_team_id": TEAM_A, "clinician_name": "Elena Park"}}]
+
+    async def provenance(self: ChatService, patient_id: str) -> Any:
+        owner = {"care_plan_id": "p1", "care_team_id": TEAM_A, "clinician_name": "Elena Park"}
+        return {}, [owner]
+
+    with (
+        patch.object(patient_context_module, "_service", return_value=chat),
+        patch.object(ChatService, "_fetch_todays_plan_activities", plan),
+        patch.object(ChatService, "_fetch_plan_provenance", provenance),
+        patch.object(patient_context_module, "require_patient_id", return_value=PATIENT_A),
+    ):
+        result = await get_patient_context(object())
+    assert result["care_teams"] == [
+        {
+            "care_team_id": TEAM_A,
+            "clinician_name": "Elena Park",
+            "specialty": "Cardiology",
+            "clinic_name": clinic,
+        }
+    ]
+    assert "Other" not in json.dumps(result)
+    assert "clinician_id" not in json.dumps(result["care_teams"])
+    reads = [filters for name, filters in db.reads if name == "care_teams"]
+    assert ("eq", "patient_id", PATIENT_A) in reads[0]
+    assert result["care_plans"][0]["care_team_id"] == TEAM_A
+
+
+@pytest.mark.asyncio
+async def test_a_team_without_a_name_or_specialty_stays_unknown_not_guessed() -> None:
+    row = team_row(PATIENT_A, TEAM_A, "", "", specialty_context=None, role=None)
+    row["clinicians"] = {"first_name": None, "last_name": None, "specialty": None}
+    chat, _ = service({"care_teams": [row]})
+    teams = await chat._fetch_active_care_teams(PATIENT_A)
+    assert teams[0]["clinician_name"] is None
+    assert teams[0]["specialty"] is None
+
+
+def test_the_prompts_name_the_team_when_known_and_never_guess() -> None:
+    assert "never guess or pick a team" in " ".join(CARE_COORDINATOR_INSTRUCTION.split())
+    assert "never guess a team or clinician" in " ".join(CARE_RESPONDER_INSTRUCTION.split())
+
+
+@pytest.mark.asyncio
+async def test_history_flags_replies_with_evidence_in_one_patient_scoped_query() -> None:
+    a1, a2, a3, u1 = (str(uuid4()) for _ in range(4))
+
+    def message(mid: str, role: str, stamp: str, patient: str = PATIENT_A) -> dict[str, Any]:
+        return {
+            "id": mid,
+            "patient_id": patient,
+            "session_id": "s",
+            "role": role,
+            "created_at": stamp,
+        }
+
+    chat, db = service(
+        {
+            "chat_messages": [
+                message(u1, "user", "2099-01-01"),
+                message(a1, "assistant", "2099-01-02"),
+                message(a2, "assistant", "2099-01-03"),
+                message(a3, "assistant", "2099-01-04"),
+            ],
+            "chat_reply_evidence": [
+                {
+                    "patient_id": PATIENT_A,
+                    "message_id": a1,
+                    "evidence": {"sources": [{"kind": "document"}]},
+                },
+                {
+                    "patient_id": PATIENT_A,
+                    "message_id": a2,
+                    "evidence": {"sources": [], "tools": []},
+                },
+                {
+                    "patient_id": PATIENT_B,
+                    "message_id": a3,
+                    "evidence": {"sources": [{"kind": "document"}]},
+                },
+            ],
+        }
+    )
+    rows = await chat.get_history(PATIENT_A, with_evidence=True)
+    flags = {r["id"]: r.get("has_evidence") for r in rows}
+    assert flags == {u1: False, a1: True, a2: False, a3: False}
+    reads = [filters for name, filters in db.reads if name == "chat_reply_evidence"]
+    assert len(reads) == 1 and ("eq", "patient_id", PATIENT_A) in reads[0]
+    plain = await chat.get_history(PATIENT_A)
+    assert all("has_evidence" not in r for r in plain)
