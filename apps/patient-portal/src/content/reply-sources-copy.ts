@@ -1,6 +1,6 @@
 import { resolveLocaleResource, type Locale, type LocaleResourceMap } from "@/types";
 
-// Sources-line wording is a draft pending LOC-001 bilingual approval; it is not approved copy.
+// es-MX wording reviewed under LOC-001-R (model-assisted meaning-and-safety review, closure addendum).
 const en = {
     summary: "Sources",
     loading: "Loading sources…",

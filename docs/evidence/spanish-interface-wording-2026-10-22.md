@@ -84,6 +84,30 @@ synthetic project). All other differences at this snapshot are moved line number
 
 The receipt below was regenerated after this review, not to silence the gate.
 
+## Addendum: code closure (October 22)
+
+Three patient copy files were marked draft but were not in the inventory, so their pairs
+were never reviewed: `symptom-intake-copy.ts` (the #221 conversational offer and private
+intake), `medication-confirmation-copy.ts` (MED-002) and `reply-sources-copy.ts` (Nora's
+Sources line). The extractor also missed files whose Spanish table is named `esMX`, or
+that declare a local `es` inside a function, which shadowed the file-level table; it now
+reads only file-level declarations (output for the previously covered files is byte-identical).
+
+All 91 new pairs (62 intake, 21 MED-002, 6 Sources, 2 new notification) received the same
+model-assisted meaning-and-safety review on the requester's authority. Inventory: 553 at
+the first pass, 557 after the batch-2 addendum, 648 now.
+
+| Source/key | Review | Accepted Spanish |
+| --- | --- | --- |
+| Intake `saved` | **Corrected.** "Informe" → "Reporte", matching "reporte de síntomas" used elsewhere | Reporte guardado para revisión del equipo clínico |
+| Intake `pendingAnswer` | **Corrected.** Awkward passive | Tu respuesta — aún no confirmamos que se guardó |
+| Intake `unavailable`, `reload`, and the two in-function stale/terminal errors | **Corrected.** "Carga…" made consistent with `error` ("Vuelve a cargar…") | Vuelve a cargar el estado guardado… / Volver a cargar el estado guardado |
+| Intake `confirm`, `consent`, `summary` | Kept "equipo clínico": the term is used across the patient portal (messages, sign-in, care conversations) and was accepted with "equipo de atención" in the first pass | unchanged |
+| Intake offer (`offerPrompt`, `offerYes`, `offerNo`, `privateTag`) | Accurate; tú register; consent stays explicit | unchanged |
+| MED-002 question card and errors | Accurate; "No, lo dejé" / "Cambió" / "No lo sé"; "venció" is the Mexican usage for expiry; the privacy line keeps "does not change your medicines or reminders" | unchanged |
+| Sources (`summary`, `record`, `page`) | Accurate; "expediente" for the record | unchanged |
+| Notification `medication_confirmation_asked` | Accurate; names no medicine | unchanged |
+
 ## Durable acceptance
 
 The receipt stores every source SHA-256, the full paired-entry fingerprint and row

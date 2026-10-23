@@ -42,15 +42,18 @@ Install the clinician portal's locked dependencies first for the TypeScript pars
 | [apps/patient-portal/src/content/care-team-copy.ts](../apps/patient-portal/src/content/care-team-copy.ts) | `043b9a1eb79c7803a2f2e581463ac018fbf5917a34dc15713cdc6d8247eaedd9` |
 | [apps/patient-portal/src/content/symptom-history-copy.ts](../apps/patient-portal/src/content/symptom-history-copy.ts) | `ba6a78638dd125919467d021b4a3cc35168937b84dee74c4c523353309a4f02e` |
 | [apps/patient-portal/src/content/visits-copy.ts](../apps/patient-portal/src/content/visits-copy.ts) | `f757d83730909d6a74f3ec372db59a018d9c522e7b351680042f53e4e3efca41` |
+| [apps/patient-portal/src/content/symptom-intake-copy.ts](../apps/patient-portal/src/content/symptom-intake-copy.ts) | `33d153f8b24540b8b1a32b926188aa840fabe420ee5de81b2de9f2b52c92edc8` |
+| [apps/patient-portal/src/content/medication-confirmation-copy.ts](../apps/patient-portal/src/content/medication-confirmation-copy.ts) | `eeea959753c65c6c5efdec12daf9eb2a72070fce236c42deebbdb40138c8756c` |
+| [apps/patient-portal/src/content/reply-sources-copy.ts](../apps/patient-portal/src/content/reply-sources-copy.ts) | `4c51318bbb6d181aa343bf8f496feedacb58032f5870fce18179d6fb2a824fda` |
 | [apps/patient-portal/src/app/(app)/profile/profile-copy.ts](../apps/patient-portal/src/app/%28app%29/profile/profile-copy.ts) | `a8df7495058e93e633c6adb8f75bc7958c7226dbe72820d7734f70ba1a0e2bcc` |
 | [apps/patient-portal/src/components/features/nora-conversations.tsx](../apps/patient-portal/src/components/features/nora-conversations.tsx) | `017df3a9f82e7ff9eaf1910f08129969133aba6e8cd7e0f03a85558f14a9d3c9` |
 | [packages/shared/src/utils/care-conversations.ts](../packages/shared/src/utils/care-conversations.ts) | `283f87a82d5ba91f6e0430b1a9a37e25f874197105661317a8089f798b6010b5` |
-| [backend/src/app/services/notification_centre_presentation.py](../backend/src/app/services/notification_centre_presentation.py) | `95a29b933d63c6754728004b664387d38d1258093b13845da02541b7acf73817` |
+| [backend/src/app/services/notification_centre_presentation.py](../backend/src/app/services/notification_centre_presentation.py) | `78770fee8f5abb1e46893a1f6e919af768de592040221d54271c715a2864b479` |
 | [backend/src/app/services/symptom_report_presenter.py](../backend/src/app/services/symptom_report_presenter.py) | `0933ef4a7c4ad8b67120be941b9661105f081b01696f82c8c6e3ccefc00284f6` |
 | [backend/src/app/services/appointment_calendar.py](../backend/src/app/services/appointment_calendar.py) | `321826d7839e1e15f867e02cebfc8555c71a95cf9ff030825f5ea4d7ed7bb569` |
 | [backend/src/app/services/email_service.py](../backend/src/app/services/email_service.py) | `8ff3f52ed394057bfb4e9121b2fb65523939ec5cc5a18de97b0770a049b328bb` |
 
-## Review list (557 paired rows)
+## Review list (648 paired rows)
 
 Every listed pair is covered by the matching project-scope review receipt.
 Use the source key to identify duplicate declaration/accessor entries
@@ -341,6 +344,95 @@ across screens; do not infer that similar strings have the same clinical context
 | apps/patient-portal/src/content/visits-copy.ts:207 / `copy.compose.cancel.label` | Reason for cancelling (optional) | Motivo de la cancelación (opcional) |
 | apps/patient-portal/src/content/visits-copy.ts:208 / `copy.compose.cancel.placeholder` | Let your care team know why | Explica el motivo a tu equipo de atención |
 | apps/patient-portal/src/content/visits-copy.ts:209 / `copy.compose.cancel.confirm` | Confirm cancellation | Confirmar cancelación |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:28 / `copy.offerPrompt` | Would you like me to note this for your care team? I’ll ask a few quick questions here. | ¿Quieres que lo anote para tu equipo de atención? Te haré unas preguntas rápidas aquí. |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:28 / `copy.offerYes` | Yes, let’s do it | Sí, hagámoslo |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:28 / `copy.offerNo` | Not now | Ahora no |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:29 / `copy.privateTag` | Private until you confirm | Privado hasta que confirmes |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:29 / `copy.offerStarting` | Opening your private note… | Abriendo tu nota privada… |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:30 / `copy.title` | Draft — not submitted | Borrador — no enviado |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:30 / `copy.start` | Start a symptom draft | Iniciar un borrador de síntomas |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:30 / `copy.intro` | Your answers here remain private until you confirm. Your initial Nora message remains in chat history. | Tus respuestas aquí son privadas hasta que confirmes. Tu mensaje inicial a Nora permanece en el historial del chat. |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:31 / `copy.answerPrompt` | Type or speak your answer below. You can say “not sure” or “skip”. | Escribe o di tu respuesta abajo. Puedes decir “no sé” o “prefiero no responder”. |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:32 / `copy.suggestion` | From your message | De tu mensaje |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:32 / `copy.useSuggestion` | Use this answer | Usar esta respuesta |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:32 / `copy.detailEntry` | Enter detailed fields instead | Ingresar campos detallados |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:33 / `copy.listen` | Listen | Escuchar |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:33 / `copy.reviewFirst` | Review the summary, then use the confirmation controls to share. A spoken reply cannot submit it. | Revisa el resumen y usa los controles de confirmación para compartirlo. Una respuesta hablada no lo envía. |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:34 / `copy.productReported` | Products reported by you — unverified; not added to your medication list | Productos reportados por ti — sin verificar; no se agregaron a tu lista de medicamentos |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:35 / `copy.recordSource` | Approved record source | Fuente aprobada del expediente |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:35 / `copy.excerptSource` | Source document | Documento fuente |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:35 / `copy.pendingAnswer` | Your answer — not yet verified as saved | Tu respuesta — aún no confirmamos que se guardó |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:36 / `copy.editReply` | Edit this response | Editar esta respuesta |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:36 / `copy.existingDraft` | You have an unfinished draft in this conversation. Continue or cancel it before starting another. | Tienes un borrador sin terminar en esta conversación. Continúalo o cancélalo antes de iniciar otro. |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:37 / `copy.urgentReview` | Your high-severity answer has been queued for care-team review. This does not mean someone has read it. Messages are not continuously monitored. | Tu respuesta de alta intensidad está en espera de revisión por tu equipo de atención. Esto no significa que alguien la haya leído. Los mensajes no se supervisan continuamente. |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:38 / `copy.loading` | Loading your draft… | Cargando tu borrador… |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:38 / `copy.unavailable` | Guided intake is unavailable. Reload the saved state to check any prior action. | La captura guiada no está disponible. Vuelve a cargar el estado guardado para verificar una acción anterior. |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:39 / `copy.error` | We could not verify this action. Reload the saved state before retrying. | No pudimos verificar esta acción. Vuelve a cargar el estado guardado antes de reintentar. |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:39 / `copy.reload` | Reload saved state | Volver a cargar el estado guardado |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:39 / `copy.retry` | Retry the same action | Reintentar la misma acción |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:40 / `copy.save` | Save answer | Guardar respuesta |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:40 / `copy.unknown` | I don’t know | No sé |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:40 / `copy.declined` | Prefer not to answer | Prefiero no responder |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:40 / `copy.edit` | Edit | Editar |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:40 / `copy.review` | Review before sharing | Revisar antes de compartir |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:40 / `copy.cancel` | Cancel draft | Cancelar borrador |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:41 / `copy.confirm` | Confirm and share with my care team | Confirmar y compartir con mi equipo clínico |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:41 / `copy.consent` | I reviewed this preview and want to share it with my care team. | Revisé esta vista previa y quiero compartirla con mi equipo clínico. |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:42 / `copy.reported` | What you reported | Lo que reportaste |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:42 / `copy.context` | Relevant information from your record | Información relevante de tu expediente |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:42 / `copy.summary` | Summary for your care team | Resumen para tu equipo clínico |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:42 / `copy.emptyContext` | No relevant record context was used. | No se usó información relevante del expediente. |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:43 / `copy.saved` | Report saved for care-team review | Reporte guardado para revisión del equipo clínico |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:43 / `copy.cancelled` | Draft cancelled. Your chat history was not deleted. | Borrador cancelado. No se eliminó tu historial del chat. |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:44 / `copy.interrupted` | Intake interrupted for safety | Captura interrumpida por seguridad |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:44 / `copy.pending` | The safety save could not be verified. | No se pudo verificar el guardado de seguridad. |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:45 / `copy.timezone` | Saved patient timezone | Zona horaria guardada del paciente |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:45 / `copy.fallback` | UTC fallback — saved timezone unavailable | Se usa UTC porque la zona horaria guardada no está disponible |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:45 / `copy.progress` | Questions resolved | Preguntas resueltas |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:45 / `copy.value` | Your answer | Tu respuesta |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:46 / `copy.yes` | Yes | Sí |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:46 / `copy.no` | No | No |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:46 / `copy.productConcern` | I am concerned about a medicine or other product | Me preocupa algún medicamento u otro producto |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:46 / `copy.name` | Product name | Nombre del producto |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:46 / `copy.strength` | Strength | Concentración |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:46 / `copy.dose` | Dose | Dosis |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:46 / `copy.route` | Route | Vía |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:47 / `copy.indication` | Reason for use | Motivo de uso |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:47 / `copy.startDate` | Started (your words) | Inicio (tus palabras) |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:47 / `copy.stop` | Stopped (your words) | Suspensión (tus palabras) |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:47 / `copy.change` | Changed (your words) | Cambio (tus palabras) |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:48 / `copy.states.answered` | Answered | Respondida |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:48 / `copy.states.unknown` | Unknown | No sé |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:48 / `copy.states.declined` | Declined | Prefiero no responder |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:48 / `copy.states.not_asked` | Not asked | No preguntada |
+| apps/patient-portal/src/content/symptom-intake-copy.ts:48 / `copy.states.not_applicable` | Not applicable | No aplica |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:55 / `copy.eyebrow` | A question about your medicine | Una pregunta sobre tu medicamento |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:56 / `copy.from` | (clinician, specialty) =&gt; (specialty ? `From ${clinician}, ${specialty}` : `From ${clinician}`) | (clinician, specialty) =&gt; (specialty ? `De ${clinician}, ${specialty}` : `De ${clinician}`) |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:57 / `copy.question` | (description) =&gt; `Are you still taking ${description}?` | (description) =&gt; `¿Sigues tomando ${description}?` |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:59 / `copy.answers.yes` | Yes | Sí |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:60 / `copy.answers.stopped` | No, I stopped | No, lo dejé |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:61 / `copy.answers.changed` | It changed | Cambió |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:62 / `copy.answers.unsure` | Not sure | No lo sé |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:64 / `copy.changedLabel` | What changed? | ¿Qué cambió? |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:65 / `copy.changedHint` | For example, a different amount or time of day. | Por ejemplo, otra cantidad u otra hora del día. |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:66 / `copy.characters` | (used, max) =&gt; `${used} of ${max} characters` | (used, max) =&gt; `${used} de ${max} caracteres` |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:68 / `copy.privacy` | Your answer goes to your care team. It does not change your medicines or your reminders. Keep taking your medicines as prescribed until your care team tells you otherwise. | Tu respuesta llega a tu equipo de atención. No cambia tus medicamentos ni tus recordatorios. Sigue tomando tus medicamentos como te los recetaron hasta que tu equipo de atención te indique otra cosa. |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:69 / `copy.send` | Send answer | Enviar respuesta |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:70 / `copy.sending` | Sending… | Enviando… |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:71 / `copy.thanks` | Thank you | Gracias |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:72 / `copy.thanksDetail` | Your care team will see your answer. | Tu equipo de atención verá tu respuesta. |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:74 / `copy.errors.answered` | This question was already answered. | Esta pregunta ya se respondió. |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:75 / `copy.errors.expired` | This question has expired. Your care team can ask again. | Esta pregunta venció. Tu equipo de atención puede volver a preguntar. |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:76 / `copy.errors.notFound` | This question is no longer available. | Esta pregunta ya no está disponible. |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:77 / `copy.errors.unavailable` | We could not send your answer. Check your connection and try again. | No pudimos enviar tu respuesta. Revisa tu conexión e inténtalo de nuevo. |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:78 / `copy.errors.other` | We could not send your answer. Try again in a moment. | No pudimos enviar tu respuesta. Inténtalo de nuevo en un momento. |
+| apps/patient-portal/src/content/medication-confirmation-copy.ts:80 / `copy.group` | (medicine) =&gt; `Your answer about ${medicine}` | (medicine) =&gt; `Tu respuesta sobre ${medicine}` |
+| apps/patient-portal/src/content/reply-sources-copy.ts:14 / `copy.summary` | Sources | Fuentes |
+| apps/patient-portal/src/content/reply-sources-copy.ts:15 / `copy.loading` | Loading sources… | Cargando fuentes… |
+| apps/patient-portal/src/content/reply-sources-copy.ts:16 / `copy.failed` | Sources could not be loaded. Close and open to try again. | No se pudieron cargar las fuentes. Cierra y vuelve a abrir para intentarlo otra vez. |
+| apps/patient-portal/src/content/reply-sources-copy.ts:17 / `copy.page` | (pages: number[]) =&gt; (pages.length === 1 ? `page ${pages[0]}` : `pages ${pages.join(", ")}`) | (pages: number[]) =&gt; (pages.length === 1 ? `página ${pages[0]}` : `páginas ${pages.join(", ")}`) |
+| apps/patient-portal/src/content/reply-sources-copy.ts:18 / `copy.record` | Your health record in this app | Tu expediente de salud en esta app |
+| apps/patient-portal/src/content/reply-sources-copy.ts:19 / `copy.untitled` | Document | Documento |
 | apps/patient-portal/src/app/(app)/profile/profile-copy.ts:74 / `copy.title` | Profile | Perfil |
 | apps/patient-portal/src/app/(app)/profile/profile-copy.ts:75 / `copy.subtitle` | Manage your account and linked clinics. | Administra tu cuenta y las clínicas vinculadas. |
 | apps/patient-portal/src/app/(app)/profile/profile-copy.ts:76 / `copy.loadTitle` | Unable to load your profile | No se pudo cargar tu perfil |
@@ -561,6 +653,8 @@ across screens; do not infer that similar strings have the same clinical context
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.adr_information_answered.1` | A patient sent answers to follow-up questions. Review the updated evidence; this is not a clinical decision. | Un paciente envió respuestas a preguntas de seguimiento. Revisa la evidencia actualizada; esto no es una decisión clínica. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.symptom_report_reviewed.0` | Your care team reviewed your symptom report | Tu equipo de atención revisó tu reporte de síntomas |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.symptom_report_reviewed.1` | See your symptom report. | Consulta tu reporte de síntomas. |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.medication_confirmation_asked.0` | Your care team asked about one of your medicines | Tu equipo de atención te preguntó sobre uno de tus medicamentos |
+| backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.medication_confirmation_asked.1` | Open Today to answer. Your answer does not change any medicine or reminder. | Abre Hoy para responder. Tu respuesta no cambia ningún medicamento ni recordatorio. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.critical_result.0` | Critical test result reported | Resultado crítico de laboratorio reportado |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.critical_result.1` | A patient's document reports a result the laboratory marked critical. Open the document to review it. | Un documento del paciente informa un resultado que el laboratorio marcó como crítico. Ábrelo para revisarlo. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.care_plan_review.0` | Care-team work item | Tarea del equipo de atención |
@@ -573,9 +667,9 @@ across screens; do not infer that similar strings have the same clinical context
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.med_reminder.1` | It's on your Today list. | Está en tu lista de Hoy. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.obligation_reminder.0` | Care-plan reminder | Recordatorio del plan de cuidado |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.obligation_reminder.1` | It's on your Today list. | Está en tu lista de Hoy. |
-| backend/src/app/services/notification_centre_presentation.py:170 / `_QUESTION_WORDING.reappeared_on_rechallenge.0` | Whether the symptom came back after restarting this medicine | Si el síntoma volvió después de reiniciar este medicamento |
-| backend/src/app/services/notification_centre_presentation.py:170 / `_QUESTION_WORDING.dose_response.0` | Whether the symptom changed after a dose change your clinician directed | Si el síntoma cambió después de un cambio de dosis indicado por tu profesional de salud |
-| backend/src/app/services/notification_centre_presentation.py:170 / `_QUESTION_WORDING.similar_previous_reaction.0` | Whether you have had a similar reaction to this medicine before | Si has tenido antes una reacción similar a este medicamento |
+| backend/src/app/services/notification_centre_presentation.py:178 / `_QUESTION_WORDING.reappeared_on_rechallenge.0` | Whether the symptom came back after restarting this medicine | Si el síntoma volvió después de reiniciar este medicamento |
+| backend/src/app/services/notification_centre_presentation.py:178 / `_QUESTION_WORDING.dose_response.0` | Whether the symptom changed after a dose change your clinician directed | Si el síntoma cambió después de un cambio de dosis indicado por tu profesional de salud |
+| backend/src/app/services/notification_centre_presentation.py:178 / `_QUESTION_WORDING.similar_previous_reaction.0` | Whether you have had a similar reaction to this medicine before | Si has tenido antes una reacción similar a este medicamento |
 | backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.description` | What happened | Qué pasó |
 | backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.location` | Where | Dónde |
 | backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.onset` | When it started | Cuándo empezó |

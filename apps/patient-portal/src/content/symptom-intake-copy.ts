@@ -1,6 +1,6 @@
 import { resolveLocaleResource, type Locale, type LocaleResourceMap } from "@/types";
 
-// Offer and private-tag wording is a draft pending LOC-001 bilingual approval; it is not approved copy.
+// es-MX wording reviewed under LOC-001-R (model-assisted meaning-and-safety review, closure addendum).
 const en = {
     offerPrompt: "Would you like me to note this for your care team? I’ll ask a few quick questions here.", offerYes: "Yes, let’s do it", offerNo: "Not now",
     privateTag: "Private until you confirm", offerStarting: "Opening your private note…",
@@ -32,15 +32,15 @@ const es: typeof en = {
     suggestion: "De tu mensaje", useSuggestion: "Usar esta respuesta", detailEntry: "Ingresar campos detallados",
     listen: "Escuchar", reviewFirst: "Revisa el resumen y usa los controles de confirmación para compartirlo. Una respuesta hablada no lo envía.",
     productReported: "Productos reportados por ti — sin verificar; no se agregaron a tu lista de medicamentos",
-    recordSource: "Fuente aprobada del expediente", excerptSource: "Documento fuente", pendingAnswer: "Tu respuesta — aún no se ha verificado el guardado",
+    recordSource: "Fuente aprobada del expediente", excerptSource: "Documento fuente", pendingAnswer: "Tu respuesta — aún no confirmamos que se guardó",
     editReply: "Editar esta respuesta", existingDraft: "Tienes un borrador sin terminar en esta conversación. Continúalo o cancélalo antes de iniciar otro.",
     urgentReview: "Tu respuesta de alta intensidad está en espera de revisión por tu equipo de atención. Esto no significa que alguien la haya leído. Los mensajes no se supervisan continuamente.",
-    loading: "Cargando tu borrador…", unavailable: "La captura guiada no está disponible. Carga el estado guardado para verificar una acción anterior.",
-    error: "No pudimos verificar esta acción. Vuelve a cargar el estado guardado antes de reintentar.", reload: "Cargar el estado guardado", retry: "Reintentar la misma acción",
+    loading: "Cargando tu borrador…", unavailable: "La captura guiada no está disponible. Vuelve a cargar el estado guardado para verificar una acción anterior.",
+    error: "No pudimos verificar esta acción. Vuelve a cargar el estado guardado antes de reintentar.", reload: "Volver a cargar el estado guardado", retry: "Reintentar la misma acción",
     save: "Guardar respuesta", unknown: "No sé", declined: "Prefiero no responder", edit: "Editar", review: "Revisar antes de compartir", cancel: "Cancelar borrador",
     confirm: "Confirmar y compartir con mi equipo clínico", consent: "Revisé esta vista previa y quiero compartirla con mi equipo clínico.",
     reported: "Lo que reportaste", context: "Información relevante de tu expediente", summary: "Resumen para tu equipo clínico", emptyContext: "No se usó información relevante del expediente.",
-    saved: "Informe guardado para revisión del equipo clínico", cancelled: "Borrador cancelado. No se eliminó tu historial del chat.",
+    saved: "Reporte guardado para revisión del equipo clínico", cancelled: "Borrador cancelado. No se eliminó tu historial del chat.",
     interrupted: "Captura interrumpida por seguridad", pending: "No se pudo verificar el guardado de seguridad.",
     timezone: "Zona horaria guardada del paciente", fallback: "Se usa UTC porque la zona horaria guardada no está disponible", progress: "Preguntas resueltas", value: "Tu respuesta",
     yes: "Sí", no: "No", productConcern: "Me preocupa algún medicamento u otro producto", name: "Nombre del producto", strength: "Concentración", dose: "Dosis", route: "Vía",
@@ -57,9 +57,9 @@ export function intakeErrorCopy(code: string, locale: Locale) {
         : "We could not load symptom drafts. Reload to try again.";
     if (code === "INTAKE_LIBRARY_UNAVAILABLE") return getSymptomIntakeCopy(locale).unavailable;
     if (["INTAKE_REVISION_CONFLICT", "INTAKE_MUTATION_CONFLICT", "INTAKE_PREVIEW_STALE"].includes(code)) return es
-        ? "El borrador cambió. Carga el estado guardado y revisa una nueva vista previa."
+        ? "El borrador cambió. Vuelve a cargar el estado guardado y revisa una nueva vista previa."
         : "The draft changed. Reload the saved state and review a new preview.";
-    if (code === "INTAKE_TERMINAL") return es ? "Esta captura ya terminó. Carga el estado guardado." : "This intake has ended. Reload the saved state.";
+    if (code === "INTAKE_TERMINAL") return es ? "Esta captura ya terminó. Vuelve a cargar el estado guardado." : "This intake has ended. Reload the saved state.";
     if (code === "INTAKE_ANSWER_INVALID") return es ? "Revisa tu respuesta e intenta de nuevo." : "Check your answer and try again.";
     if (code === "INTAKE_REPLY_AMBIGUOUS") return es ? "No pude interpretar esa respuesta. Di un número del 1 al 10 para intensidad, o el nombre del producto si corresponde. También puedes decir no sé o prefiero no responder." : "I could not interpret that answer. Use a number from 1 to 10 for severity, or name the product when asked. You can also say not sure or skip.";
     return getSymptomIntakeCopy(locale).error;
