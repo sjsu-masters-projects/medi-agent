@@ -207,7 +207,7 @@ async def test_the_clinical_context_is_returned() -> None:
             "medications": [{"name": "Metformin"}],
             "conditions": [{"name": "Type 2 diabetes"}],
             "recent_symptoms": [{"symptom": "fatigue"}],
-            "care_teams": [{"clinician_name": "Dr Reyes"}],
+            "care_teams": [{"id": "t1", "clinician_id": "c1", "clinician_name": "Dr Reyes"}],
         }
     )
 
@@ -215,7 +215,9 @@ async def test_the_clinical_context_is_returned() -> None:
         result = await get_patient_context(_context())
 
     assert result["medications"] == [{"name": "Metformin"}]
-    assert result["care_teams"] == [{"clinician_name": "Dr Reyes"}]
+    assert result["care_teams"] == [
+        {"care_team_id": "t1", "clinician_name": "Dr Reyes", "specialty": None, "clinic_name": None}
+    ]
 
 
 @pytest.mark.asyncio

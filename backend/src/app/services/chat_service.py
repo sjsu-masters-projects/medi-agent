@@ -61,6 +61,7 @@ def plan_provenance(owner: dict[str, Any] | None) -> dict[str, Any] | None:
 def _plan_fields(owner: dict[str, Any]) -> dict[str, Any]:
     return {
         "care_plan_id": owner.get("care_plan_id"),
+        "care_team_id": owner.get("care_team_id"),
         "specialty": owner.get("specialty"),
         "clinician_name": owner.get("clinician_name"),
         "clinic_name": owner.get("clinic_name"),
@@ -687,7 +688,7 @@ class ChatService:
             self.db.table("care_teams")
             .select(
                 "id, clinician_id, role, specialty_context, clinic_id, "
-                "clinics(display_name), clinicians(first_name, last_name)"
+                "clinics(display_name), clinicians(first_name, last_name, specialty)"
             )
             .eq("patient_id", patient_id)
             .eq("status", "active")
@@ -698,6 +699,26 @@ class ChatService:
             # The clinic of each link, so Nora can tell a patient's clinics apart (CLN-003).
             clinic = team.pop("clinics", None)
             team["clinic_name"] = clinic.get("display_name") if isinstance(clinic, dict) else None
+            person = team.get("clinicians")
+            person = person if isinstance(person, dict) else {}
+            name = " ".join(
+                str(part).strip()
+                for part in (person.get("first_name"), person.get("last_name"))
+                if part and str(part).strip()
+            )
+            team["clinician_name"] = name or None
+            team["specialty"] = next(
+                (
+                    str(value).strip()
+                    for value in (
+                        team.get("specialty_context"),
+                        person.get("specialty"),
+                        team.get("role"),
+                    )
+                    if value and str(value).strip()
+                ),
+                None,
+            )
         return teams
 
     async def _fetch_patient_timezone(self, patient_id: str) -> str:

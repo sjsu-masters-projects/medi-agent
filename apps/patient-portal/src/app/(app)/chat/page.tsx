@@ -13,6 +13,7 @@ import { CareConversations } from "@/components/features/care-conversations";
 import { NoraConversations } from "@/components/features/nora-conversations";
 import { NotificationBell } from "@/components/features/notification-centre";
 import { SymptomIntakePanel, type IntakeComposerState } from "@/components/features/symptom-intake-panel";
+import { ReplySources } from "@/components/features/reply-sources";
 import { SymptomOffer } from "@/components/features/symptom-offer";
 import { useSymptomOfferDismissals } from "@/hooks/use-symptom-offer-dismissals";
 import { ADRFollowUpEntryRow } from "@/components/features/adr-follow-up-entry-row";
@@ -33,6 +34,8 @@ import { ChatRole, DEFAULT_LOCALE } from "@/types";
 
 const RECONNECT_QUIET_MS = 3000;
 const SLOW_TURN_MS = 15_000;
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function ChatPage() {
     const profile = usePatientProfile();
@@ -297,6 +300,8 @@ export default function ChatPage() {
                     offer={pendingOffer?.messageId === message.id ? <SymptomOffer locale={locale}
                         onYes={() => window.dispatchEvent(new CustomEvent("symptom-intake-start", { detail: { sourceMessageId: pendingOffer.sourceMessageId } }))}
                         onNo={() => dismissOffer(pendingOffer.sourceMessageId)} /> : undefined}
+                    sources={message.role === ChatRole.ASSISTANT && user?.id && accessToken && UUID_PATTERN.test(message.id)
+                        ? <ReplySources patientId={user.id} messageId={message.id} accessToken={accessToken} locale={locale} /> : undefined}
                     delivery={message.delivery} onRetrySend={message.clientMessageId ? () => retryUnsentMessage(message.clientMessageId!) : undefined}
                     onRemoveUnsent={message.clientMessageId ? () => removeUnsentMessage(message.clientMessageId!) : undefined}
                     timestamp={message.createdAt} onPlayAudio={message.role === ChatRole.ASSISTANT && (Boolean(message.audioUrl) || canPlayAssistantAudio) ? () => handlePlayAssistantMessage(message) : undefined} />)}

@@ -296,6 +296,7 @@ def test_nora_context_carries_plan_provenance_for_each_plan() -> None:
     meds = {m["name"]: m for m in context["medications"]}
     assert meds["Atenolol"]["plan"] == {
         "care_plan_id": CARDIO_PLAN,
+        "care_team_id": TEAM,
         "specialty": "Cardiology",
         "clinician_name": "Elena Park",
         "clinic_name": "Cedar Grove",
