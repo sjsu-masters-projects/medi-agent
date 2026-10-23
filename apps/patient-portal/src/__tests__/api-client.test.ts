@@ -1,5 +1,5 @@
 import { ApiClientError, api } from "@/services/api";
-import { ApiTransportError, fetchWithReadRecovery, getTransportErrorMessage } from "../../../../packages/shared/src/utils/api-transport";
+import { ApiTransportError, READ_ATTEMPT_TIMEOUT_MS, fetchWithReadRecovery, getTransportErrorMessage } from "../../../../packages/shared/src/utils/api-transport";
 import { waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -48,11 +48,65 @@ describe("patient API client error mapping", () => {
         expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
-    it.each([401, 403, 404, 503])("does not replay an HTTP %s response", async (status) => {
+    it.each([401, 403, 404, 500])("does not replay an HTTP %s response", async (status) => {
         const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status, headers: { "Content-Type": "application/json" } }));
         vi.stubGlobal("fetch", fetchMock);
         await expect(api.get("/api/v1/test")).rejects.toMatchObject({ status });
         expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([502, 503, 504])("replays a read once after a gateway %s and returns the recovered result", async (status) => {
+        const fetchMock = vi.fn()
+            .mockResolvedValueOnce(new Response("", { status }))
+            .mockResolvedValueOnce(new Response('{"ok":true}', { headers: { "Content-Type": "application/json" } }));
+        vi.stubGlobal("fetch", fetchMock);
+        await expect(api.get("/api/v1/test")).resolves.toEqual({ ok: true });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("surfaces a persistent gateway error after one replay and never replays a write", async () => {
+        const fetchMock = vi.fn().mockImplementation(async () => new Response("{}", { status: 502, headers: { "Content-Type": "application/json" } }));
+        vi.stubGlobal("fetch", fetchMock);
+        await expect(api.get("/api/v1/test")).rejects.toMatchObject({ status: 502 });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        fetchMock.mockClear();
+        await expect(api.post("/api/v1/test")).rejects.toMatchObject({ status: 502 });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("times out a hung read, replays it once, then reports a connection error instead of loading forever", async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn().mockImplementation(
+            (_url: string, init: RequestInit) =>
+                new Promise((_resolve, reject) => {
+                    init.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+                }),
+        );
+        vi.stubGlobal("fetch", fetchMock);
+        const pending = api.get("/api/v1/test");
+        const assertion = expect(pending).rejects.toMatchObject({ name: "ApiTransportError", outcomeUnknown: false, retryCount: 1 });
+        await vi.advanceTimersByTimeAsync(READ_ATTEMPT_TIMEOUT_MS + 300);
+        await vi.advanceTimersByTimeAsync(READ_ATTEMPT_TIMEOUT_MS + 300);
+        await assertion;
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("recovers when the first read hangs through a cold start but the retry answers", async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn()
+            .mockImplementationOnce(
+                (_url: string, init: RequestInit) =>
+                    new Promise((_resolve, reject) => {
+                        init.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+                    }),
+            )
+            .mockResolvedValueOnce(new Response('{"ok":true}', { headers: { "Content-Type": "application/json" } }));
+        vi.stubGlobal("fetch", fetchMock);
+        const pending = api.get("/api/v1/test");
+        await vi.advanceTimersByTimeAsync(READ_ATTEMPT_TIMEOUT_MS + 300);
+        await expect(pending).resolves.toEqual({ ok: true });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
     it("never retries an aborted request", async () => {
