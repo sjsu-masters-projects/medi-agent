@@ -87,12 +87,14 @@ backfilled; its stored answers and evidence are untouched until someone answers 
 
 ## Spanish wording
 
-Eight new es-MX strings need the requester's acceptance before merge: six patient follow-up
-strings (label, prompt and evidence hint for each new question) and two notification question
-strings. The two notification strings are in the receipt-gated inventory, so CI's
-`build_spanish_review_pack.py --check --require-reviewed` fails until they are accepted and the
-receipt is renewed through normal review. The proposed wording and its review notes are in the
-[wording evidence addendum](../../docs/evidence/spanish-interface-wording-2026-10-22.md#proposed-addendum-pv-001-d-naranjo-answer-coverage-october-28).
+Eight new es-MX strings: six patient follow-up strings (label, prompt and evidence hint for each
+new question) and two notification question strings. The requester accepted them on October 28
+after the same model-assisted meaning-and-safety review as earlier passes (two wording
+corrections were made first; see the
+[wording evidence addendum](../../docs/evidence/spanish-interface-wording-2026-10-22.md#addendum-pv-001-d-naranjo-answer-coverage-october-28)).
+The two notification strings are in the receipt-gated inventory (650 rows), so the receipt was
+regenerated with the project's own `snapshot()` after the corrections; the six follow-up strings
+sit outside the inventory and are not bound by the receipt. Not professional translation.
 
 ## Verification (local, October 28)
 
@@ -106,7 +108,7 @@ receipt is renewed through normal review. The proposed wording and its review no
 | Patient portal `npm run lint`, `typecheck`, `test -- --run`, `build` | Pass; 1,009 tests in 92 files |
 | Clinician portal `npm run lint`, `typecheck`, `test -- --run`, `build` | Pass; 834 tests in 87 files |
 | `build_spanish_review_pack.py --check` | Pack matches its source snapshot |
-| `build_spanish_review_pack.py --check --require-reviewed` | Fails as expected: receipt pending requester acceptance |
+| `build_spanish_review_pack.py --check --require-reviewed` | Pass (receipt renewed after the October 28 acceptance; 650 rows) |
 | `node scripts/check-docs.mjs` | 0 link or fence errors |
 
 The 70 combined-run failures come from running both PostgreSQL fixtures in one pytest session,
@@ -123,7 +125,7 @@ and `backend/tests/TESTING_GUIDE.md` now says to keep the two groups in separate
 
 ## Remaining before Done
 
-- Requester applies migration 100; requester accepts the Spanish wording and the receipt is renewed.
+- Requester applies migration 100 (Spanish wording accepted October 28).
 - Peer and safety review (PV-001 owner).
 - Deployed acceptance: Elena requests all five patient questions for Morgan; Morgan answers in
   en-US and es-MX; Elena records clinician answers with a basis; the score, evidence attribution,

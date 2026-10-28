@@ -5,8 +5,8 @@
   "scope": "exact paired interface copy only; no professional translation or clinical validation",
   "evidence": "spanish-interface-wording-2026-10-22.md",
   "snapshot": {
-    "row_count": 648,
-    "pairs_sha256": "ea8136a07042343038f47e5177d04b61a4d42b659a65e66537e6fd37b1c0cef3",
+    "row_count": 650,
+    "pairs_sha256": "c2131acc123c5e5b09ead5b45622c04654d4d72d16f7fd6a0b9fb9672650cf48",
     "source_sha256": {
       "apps/patient-portal/src/content/chat-copy.ts": "68a36cfc9b2fd6a4724fb0f60b3f29ae0f66d83bc367d332363db6192af39d9a",
       "apps/patient-portal/src/content/care-team-copy.ts": "043b9a1eb79c7803a2f2e581463ac018fbf5917a34dc15713cdc6d8247eaedd9",
@@ -18,7 +18,7 @@
       "apps/patient-portal/src/app/(app)/profile/profile-copy.ts": "a8df7495058e93e633c6adb8f75bc7958c7226dbe72820d7734f70ba1a0e2bcc",
       "apps/patient-portal/src/components/features/nora-conversations.tsx": "017df3a9f82e7ff9eaf1910f08129969133aba6e8cd7e0f03a85558f14a9d3c9",
       "packages/shared/src/utils/care-conversations.ts": "283f87a82d5ba91f6e0430b1a9a37e25f874197105661317a8089f798b6010b5",
-      "backend/src/app/services/notification_centre_presentation.py": "78770fee8f5abb1e46893a1f6e919af768de592040221d54271c715a2864b479",
+      "backend/src/app/services/notification_centre_presentation.py": "41387d20c93bc080df0e7bcfd048e9818c74782678c9533778d917c3ed3f89bd",
       "backend/src/app/services/symptom_report_presenter.py": "0933ef4a7c4ad8b67120be941b9661105f081b01696f82c8c6e3ccefc00284f6",
       "backend/src/app/services/appointment_calendar.py": "321826d7839e1e15f867e02cebfc8555c71a95cf9ff030825f5ea4d7ed7bb569",
       "backend/src/app/services/email_service.py": "8ff3f52ed394057bfb4e9121b2fb65523939ec5cc5a18de97b0770a049b328bb"
@@ -33,6 +33,11 @@
     {
       "date": "2026-10-22",
       "scope": "code closure: three previously uninventoried copy files (symptom intake, MED-002, Sources) and one notification; 91 pairs; five corrections",
+      "method": "requester_accepted_model_assisted_bilingual_meaning_and_safety_review"
+    },
+    {
+      "date": "2026-10-28",
+      "scope": "PV-001-D Naranjo answer coverage: two notification question pairs in the inventory (event_after_drug, improved_on_dechallenge) and six patient follow-up strings in adr-follow-up-copy.ts (outside the inventory); two wording corrections",
       "method": "requester_accepted_model_assisted_bilingual_meaning_and_safety_review"
     }
   ]

@@ -108,23 +108,28 @@ the first pass, 557 after the batch-2 addendum, 648 now.
 | Sources (`summary`, `record`, `page`) | Accurate; "expediente" for the record | unchanged |
 | Notification `medication_confirmation_asked` | Accurate; names no medicine | unchanged |
 
-## Proposed addendum: PV-001-D Naranjo answer coverage (October 28)
+## Addendum: PV-001-D Naranjo answer coverage (October 28)
 
-**Status: awaiting requester acceptance. Not accepted; the receipt is unchanged.** PV-001-D
-(branch `feature/adr-naranjo-answer-coverage`) adds two retrospective ADR follow-up questions.
-The two notification strings below are in the receipt-gated inventory (650 rows at this
-snapshot), so `--require-reviewed` fails until they are accepted and a new receipt is recorded.
-The six follow-up strings live in `adr-follow-up-copy.ts`, outside the inventory, under the
-PV-001-C wording decision; they need the same acceptance. The review notes below are proposed
-for that decision.
+PV-001-D adds two retrospective ADR follow-up questions. Two notification strings are in
+the receipt-gated inventory (650 rows now, 648 before); six patient follow-up strings are in
+`adr-follow-up-copy.ts`, which is outside the inventory and under the PV-001-C wording decision,
+so the receipt does not bind them. All eight received the same model-assisted
+meaning-and-safety review, accepted on the requester's instruction (Jeevan, October 28). No
+human bilingual reviewer is involved, as for every earlier pass; this is not professional
+translation or clinical validation.
 
-| Source/key | Proposed review | Proposed Spanish |
+Two corrections were made during review. "comenzaste este medicamento" and "empezaste el
+medicamento" read as calques of the English; Mexican usage is "comenzaste / empezaste a tomar".
+The notification string and the evidence prompt were changed to match the patient prompt, which
+already said "a tomar", and the receipt was regenerated after the change, not before it.
+
+| Source/key | Review | Accepted Spanish |
 | --- | --- | --- |
-| Notification `_QUESTION_WORDING.event_after_drug.0` | Accurate; "comenzaste" keeps the tú register; names no medicine | Si el síntoma empezó después de que comenzaste este medicamento |
+| Notification `_QUESTION_WORDING.event_after_drug.0` | **Corrected** ("comenzaste este medicamento" to "comenzaste a tomar este medicamento"); tú register; names no medicine | Si el síntoma empezó después de que comenzaste a tomar este medicamento |
 | Notification `_QUESTION_WORDING.improved_on_dechallenge.0` | Accurate; impersonal "se suspendió o pausó" does not imply the patient stopped it alone | Si el síntoma mejoró después de que se suspendió o pausó este medicamento |
 | Follow-up `event_after_drug.label` | Accurate | Cuándo empezó el síntoma |
 | Follow-up `event_after_drug.prompt` | Accurate; "por primera vez" keeps "first start" | ¿Este síntoma empezó por primera vez después de que comenzaste a tomar este medicamento? |
-| Follow-up `event_after_drug.evidencePrompt` | Accurate | Describe cuándo empezaste el medicamento y cuándo empezó el síntoma. |
+| Follow-up `event_after_drug.evidencePrompt` | **Corrected** ("empezaste el medicamento" to "empezaste a tomar el medicamento") | Describe cuándo empezaste a tomar el medicamento y cuándo empezó el síntoma. |
 | Follow-up `improved_on_dechallenge.label` | Accurate; follows the accepted "Qué pasó al reiniciarlo antes" pattern | Qué pasó al suspenderlo o pausarlo antes |
 | Follow-up `improved_on_dechallenge.prompt` | Accurate; keeps "Antes de esta solicitud" and the explicit do-not-stop caution, as the accepted rechallenge and dose prompts do | Antes de esta solicitud, ¿el síntoma mejoró después de que se suspendió o pausó este medicamento? No lo suspendas ni lo omitas para responder. |
 | Follow-up `improved_on_dechallenge.evidencePrompt` | Accurate | Describe cuándo se suspendió o pausó y qué pasó. |

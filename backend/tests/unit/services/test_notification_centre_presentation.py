@@ -203,7 +203,7 @@ QUESTION_WORDING = {
         "similar_previous_reaction": "Whether you have had a similar reaction to this medicine before",
     },
     "es-MX": {
-        "event_after_drug": "Si el síntoma empezó después de que comenzaste este medicamento",
+        "event_after_drug": "Si el síntoma empezó después de que comenzaste a tomar este medicamento",
         "improved_on_dechallenge": (
             "Si el síntoma mejoró después de que se suspendió o pausó este medicamento"
         ),

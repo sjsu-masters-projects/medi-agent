@@ -197,7 +197,7 @@ const ES: ADRFollowUpCopy = {
       label: "Cuándo empezó el síntoma",
       prompt:
         "¿Este síntoma empezó por primera vez después de que comenzaste a tomar este medicamento?",
-      evidencePrompt: "Describe cuándo empezaste el medicamento y cuándo empezó el síntoma.",
+      evidencePrompt: "Describe cuándo empezaste a tomar el medicamento y cuándo empezó el síntoma.",
     },
     improved_on_dechallenge: {
       label: "Qué pasó al suspenderlo o pausarlo antes",

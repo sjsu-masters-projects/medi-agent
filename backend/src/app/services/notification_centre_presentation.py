@@ -178,7 +178,7 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
 _QUESTION_WORDING: dict[str, tuple[str, str]] = {
     "event_after_drug": (
         "Whether the symptom started after you began this medicine",
-        "Si el síntoma empezó después de que comenzaste este medicamento",
+        "Si el síntoma empezó después de que comenzaste a tomar este medicamento",
     ),
     "improved_on_dechallenge": (
         "Whether the symptom got better after this medicine was stopped or paused",
