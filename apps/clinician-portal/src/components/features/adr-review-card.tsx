@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Badge } from "@/components/ui";
 import { AiChip } from "@/components/ui/ai-chip";
 import { Icon } from "@/components/ui/icons";
+import { ADRClinicianAnswers } from "@/components/features/adr-clinician-answers";
+import { questionLabel } from "@/components/features/adr-questions";
 import { ADRReviewActions } from "@/components/features/adr-review-actions";
 import { EvidenceGlossLine, glossFor, useEvidenceGlosses, type GlossMap } from "@/components/features/evidence-gloss";
 import { queueTabOf, STATUS_LABELS, type QueueTab } from "@/components/features/adr-queue";
@@ -10,27 +12,11 @@ import { MedWatchPreparationAction } from "@/components/features/medwatch-prepar
 import { formatReviewTimestamp } from "@/components/features/review-time";
 import { CausalityPill } from "@/components/features/work-list";
 import type {
+    ADRClinicianAnswerInput,
     ADRReviewDecisionInput,
     ADRReviewEvidence,
     ADRReviewQueueItem,
 } from "@/services/clinicians";
-
-const QUESTION_LABELS: Record<string, string> = {
-    alternative_causes: "Alternative causes",
-    dose_response: "Dose-response relationship",
-    event_after_drug: "Event followed medication",
-    improved_on_dechallenge: "Improved after stopping",
-    objective_evidence: "Objective evidence",
-    previous_reports: "Previous conclusive reports",
-    reappeared_on_rechallenge: "Reappeared after restarting",
-    reappeared_with_placebo: "Reappeared with placebo",
-    similar_previous_reaction: "Similar previous reaction",
-    toxic_drug_concentration: "Toxic drug concentration",
-};
-
-function questionLabel(question: string) {
-    return QUESTION_LABELS[question] ?? question.replaceAll("_", " ");
-}
 
 const STATUS_VARIANT: Record<QueueTab, "warning" | "info" | "success" | "neutral"> = {
     awaiting: "warning",
@@ -39,11 +25,12 @@ const STATUS_VARIANT: Record<QueueTab, "warning" | "info" | "success" | "neutral
     dismissed: "neutral",
 };
 
-type EvidenceProvenance = "ai" | "patient" | "other";
+type EvidenceProvenance = "ai" | "patient" | "clinician" | "other";
 
 /** Where an evidence entry came from, based only on what the stored entry records. */
 function provenance(entry: ADRReviewEvidence): EvidenceProvenance {
     if (entry.source === "patient_follow_up") return "patient";
+    if (entry.source === "clinician_entry") return "clinician";
     if (entry.source === undefined || entry.source === null) return "ai";
     return "other";
 }
@@ -58,6 +45,21 @@ function ProvenanceLabel({
     const kind = provenance(entry);
     if (kind === "ai") return <AiChip>AI-extracted</AiChip>;
     if (kind === "other") return <Badge variant="neutral">Other source</Badge>;
+    if (kind === "clinician") {
+        return (
+            <>
+                <Badge variant="info">Clinician-entered</Badge>
+                {entry.recorded_at ? (
+                    <span className="text-xs text-muted">
+                        Recorded{" "}
+                        <time className="font-mono" dateTime={entry.recorded_at}>
+                            {formatReviewTimestamp(entry.recorded_at)}
+                        </time>
+                    </span>
+                ) : null}
+            </>
+        );
+    }
 
     // Only date the answer when it belongs to the request the response time describes.
     const answeredAt =
@@ -98,7 +100,7 @@ function EvidenceList({ item, glosses }: { item: ADRReviewQueueItem; glosses: Gl
     if (item.evidence.length === 0) {
         return (
             <p className="rounded-xl border border-dashed border-line-strong bg-surface-2 px-4 py-3 text-sm text-muted">
-                No patient-grounded evidence was captured.
+                No Naranjo evidence has been recorded yet.
             </p>
         );
     }
@@ -151,6 +153,7 @@ export function ADRReviewCard({
     item,
     onReview,
     onPrepareDraft,
+    onRecordAnswers,
     submitting,
     medwatchDraftId = null,
     backHref = "/adr-reviews",
@@ -158,6 +161,12 @@ export function ADRReviewCard({
     item: ADRReviewQueueItem;
     onReview: (assessmentId: string, input: ADRReviewDecisionInput) => Promise<void>;
     onPrepareDraft: (assessmentId: string, rationale: string, careTeamId?: string) => Promise<void>;
+    /** PV-001-D: record clinician Naranjo answers while the case is open. */
+    onRecordAnswers?: (
+        assessmentId: string,
+        answers: ADRClinicianAnswerInput[],
+        careTeamId?: string,
+    ) => Promise<void>;
     submitting: boolean;
     /** The active MedWatch report for this case, when one exists. */
     medwatchDraftId?: string | null;
@@ -227,7 +236,7 @@ export function ADRReviewCard({
 
                     <section>
                         <h2 className="mb-3 text-sm font-semibold text-ink">
-                            Patient-grounded Naranjo evidence
+                            Naranjo evidence
                         </h2>
                         <EvidenceList glosses={glosses} item={item} />
                     </section>
@@ -271,6 +280,18 @@ export function ADRReviewCard({
                                 ))}
                             </ul>
                         </section>
+                    ) : null}
+
+                    {open && onRecordAnswers ? (
+                        <ADRClinicianAnswers
+                            answers={item.naranjoAnswers}
+                            disabled={submitting || careTeam.missing}
+                            onRecord={(answers) =>
+                                careTeam.careTeamId
+                                    ? onRecordAnswers(item.id, answers, careTeam.careTeamId)
+                                    : onRecordAnswers(item.id, answers)
+                            }
+                        />
                     ) : null}
 
                     {item.lastReviewAction === "request_information" ? (

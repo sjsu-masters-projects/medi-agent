@@ -57,7 +57,7 @@ function renderCard(overrides: Partial<ADRReviewQueueItem>) {
 /** The rendered evidence entries, in order. */
 function evidenceEntries(container: HTMLElement) {
     const heading = within(container).getByRole("heading", {
-        name: "Patient-grounded Naranjo evidence",
+        name: "Naranjo evidence",
     });
     const section = heading.closest("section")!;
     return within(section).queryAllByRole("listitem");
@@ -73,7 +73,7 @@ function approvalSeals(root: HTMLElement) {
     return root.querySelectorAll(".bg-ok");
 }
 
-const LABELS = ["AI-extracted", "Patient-confirmed", "Other source"] as const;
+const LABELS = ["AI-extracted", "Patient-confirmed", "Clinician-entered", "Other source"] as const;
 
 function labelsIn(entry: HTMLElement) {
     return LABELS.flatMap((label) =>
@@ -88,6 +88,42 @@ afterEach(() => {
 });
 
 describe("ADR review card evidence provenance", () => {
+    it("labels a clinician-entered answer with its recorded time (PV-001-D)", () => {
+        const recordedAt = "2026-10-27T14:00:00Z";
+        const { container } = renderCard({
+            evidence: [
+                aiEntry,
+                {
+                    question: "alternative_causes",
+                    answer: "no",
+                    evidence: "No other medicine or condition explains it.",
+                    source: "clinician_entry",
+                    recorded_at: recordedAt,
+                },
+            ],
+        });
+        const entries = evidenceEntries(container);
+        expect(labelsIn(entries[0])).toEqual(["AI-extracted"]);
+        expect(labelsIn(entries[1])).toEqual(["Clinician-entered"]);
+        expect(entries[1]).toHaveTextContent("Alternative causes");
+        expect(entries[1].querySelector("time")).toHaveAttribute("dateTime", recordedAt);
+    });
+
+    it("shows the clinician answers panel only while the case is open and a handler is given", () => {
+        const onRecordAnswers = vi.fn();
+        const { rerender } = render(
+            <ADRReviewCard item={baseItem} onPrepareDraft={vi.fn()} onRecordAnswers={onRecordAnswers} onReview={vi.fn()} submitting={false} />,
+        );
+        expect(screen.getByRole("heading", { name: "Clinician answers" })).toBeInTheDocument();
+        rerender(
+            <ADRReviewCard item={{ ...baseItem, status: "reviewed" }} onPrepareDraft={vi.fn()} onRecordAnswers={onRecordAnswers} onReview={vi.fn()} submitting={false} />,
+        );
+        expect(screen.queryByRole("heading", { name: "Clinician answers" })).toBeNull();
+        cleanup();
+        renderCard({});
+        expect(screen.queryByRole("heading", { name: "Clinician answers" })).toBeNull();
+    });
+
     it("distinguishes repeated patient answers by request without discarding evidence or inventing dates", () => {
         const { container } = renderCard({
             evidence: [

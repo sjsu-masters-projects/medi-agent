@@ -188,10 +188,15 @@ export function fetchExternalRecordReviews(page: number, clinicId?: string | nul
 export interface ADRReviewEvidence {
     answer: string;
     evidence?: string | null;
-    /** Absent for AI extraction; `patient_follow_up` for a patient-confirmed answer. */
+    /**
+     * Absent for AI extraction; `patient_follow_up` for a patient-confirmed answer;
+     * `clinician_entry` for an answer an assigned clinician recorded (PV-001-D).
+     */
     source?: string | null;
     /** The information request a patient-confirmed answer responded to. */
     information_request_id?: string | null;
+    /** When a clinician-entered answer was recorded. */
+    recorded_at?: string | null;
     question: string;
 }
 
@@ -1284,6 +1289,39 @@ export async function reviewADRAssessment(
         dismissReason: result.dismiss_reason,
         updatedAt: result.updated_at,
     };
+}
+
+export interface ADRClinicianAnswerInput {
+    question: string;
+    answer: "yes" | "no" | "do_not_know";
+    /** Required for Yes or No; at most 500 characters. */
+    basis?: string;
+}
+
+/**
+ * Record clinician answers to the Naranjo questions a patient is never asked. The server
+ * rescores with the shared deterministic rules and writes an audit event (PV-001-D).
+ */
+export async function recordADRClinicianAnswers(
+    assessmentId: string,
+    answers: ADRClinicianAnswerInput[],
+    careTeamId?: string,
+): Promise<{ naranjoScore: number; causality: NaranjoCausality }> {
+    const result = await apiFetch<{ naranjo_score: number; causality: NaranjoCausality }>(
+        `/api/v1/clinicians/me/adr-assessments/${encodeURIComponent(assessmentId)}/naranjo-answers`,
+        {
+            method: "POST",
+            body: JSON.stringify({
+                answers: answers.map((item) => ({
+                    question: item.question,
+                    answer: item.answer,
+                    ...(item.basis ? { basis: item.basis } : {}),
+                })),
+                ...(careTeamId ? { care_team_id: careTeamId } : {}),
+            }),
+        },
+    );
+    return { naranjoScore: result.naranjo_score, causality: result.causality };
 }
 
 /** Convert a reviewed ADR decision into an editable, never-submitted MedWatch draft. */

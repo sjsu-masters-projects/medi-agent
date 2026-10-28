@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ADRCasePage from "@/app/(dashboard)/adr-reviews/[assessmentId]/page";
 import { makeDraft } from "./fixtures/medwatch";
@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
     createMedWatchDraft: vi.fn(),
     fetchADRAssessment: vi.fn(),
     fetchMedWatchDrafts: vi.fn(),
+    recordADRClinicianAnswers: vi.fn(),
     reviewADRAssessment: vi.fn(),
     push: vi.fn(),
 }));
@@ -21,6 +22,7 @@ vi.mock("@/services/clinicians", async (importOriginal) => ({
     createMedWatchDraft: mocks.createMedWatchDraft,
     fetchADRAssessment: mocks.fetchADRAssessment,
     fetchMedWatchDrafts: mocks.fetchMedWatchDrafts,
+    recordADRClinicianAnswers: mocks.recordADRClinicianAnswers,
     reviewADRAssessment: mocks.reviewADRAssessment,
 }));
 
@@ -270,5 +272,36 @@ describe("ADR case page", () => {
         expect(screen.queryByText("private provider diagnostic")).not.toBeInTheDocument();
         expect(screen.getByLabelText(/clinical rationale/i)).toHaveValue("Clinically significant new event.");
         expect(mocks.push).not.toHaveBeenCalled();
+    });
+
+    it("records clinician answers, reloads the rescored case and keeps them when saving fails (PV-001-D)", async () => {
+        mocks.fetchADRAssessment.mockResolvedValue(assessment);
+        mocks.recordADRClinicianAnswers
+            .mockRejectedValueOnce(new Error("private provider diagnostic"))
+            .mockResolvedValueOnce({ naranjoScore: 5, causality: "Probable" });
+        render(<ADRCasePage />);
+
+        const group = await screen.findByRole("radiogroup", { name: "Alternative causes" });
+        fireEvent.click(within(group).getByLabelText("No"));
+        fireEvent.change(screen.getByLabelText(/Basis for alternative causes/), {
+            target: { value: "No other medicine or condition explains it." },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Save clinician answers" }));
+        expect(await screen.findByRole("alert")).toHaveTextContent(
+            "Unable to save the clinician answers. Your answers are retained. Try again.",
+        );
+        expect(screen.queryByText("private provider diagnostic")).not.toBeInTheDocument();
+        expect(screen.getByLabelText(/Basis for alternative causes/)).toHaveValue(
+            "No other medicine or condition explains it.",
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "Save clinician answers" }));
+
+        await waitFor(() => expect(mocks.recordADRClinicianAnswers).toHaveBeenCalledTimes(2));
+        expect(mocks.recordADRClinicianAnswers).toHaveBeenLastCalledWith("adr-1", [
+            { question: "alternative_causes", answer: "no", basis: "No other medicine or condition explains it." },
+        ]);
+        expect(await screen.findByText("Clinician answers saved and audited. The score was recalculated.")).toBeInTheDocument();
+        expect(mocks.fetchADRAssessment).toHaveBeenCalledTimes(2);
     });
 });

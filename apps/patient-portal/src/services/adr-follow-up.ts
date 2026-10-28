@@ -2,6 +2,8 @@ import { ApiTransportError } from "../../../../packages/shared/src/utils/api-tra
 import { api, ApiClientError } from "@/services/api";
 
 export type PatientADRQuestion =
+    | "event_after_drug"
+    | "improved_on_dechallenge"
     | "reappeared_on_rechallenge"
     | "dose_response"
     | "similar_previous_reaction";

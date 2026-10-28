@@ -82,6 +82,18 @@ const EN: ADRFollowUpCopy = {
   caution:
     "Answer only from what has already happened. Do not restart, stop, or change a medicine just to answer these questions.",
   questions: {
+    event_after_drug: {
+      label: "When the symptom started",
+      prompt:
+        "Did this symptom first start after you began taking this medicine?",
+      evidencePrompt: "Describe when you started the medicine and when the symptom began.",
+    },
+    improved_on_dechallenge: {
+      label: "What happened after a past stop or pause",
+      prompt:
+        "Before this request, did the symptom get better after this medicine was stopped or paused? Do not stop or skip it to answer.",
+      evidencePrompt: "Describe when it was stopped or paused and what happened.",
+    },
     reappeared_on_rechallenge: {
       label: "What happened after a past restart",
       prompt:
@@ -181,6 +193,18 @@ const ES: ADRFollowUpCopy = {
   caution:
     "Responde solo con lo que ya pasó. No reinicies, suspendas ni cambies un medicamento solo para responder estas preguntas.",
   questions: {
+    event_after_drug: {
+      label: "Cuándo empezó el síntoma",
+      prompt:
+        "¿Este síntoma empezó por primera vez después de que comenzaste a tomar este medicamento?",
+      evidencePrompt: "Describe cuándo empezaste el medicamento y cuándo empezó el síntoma.",
+    },
+    improved_on_dechallenge: {
+      label: "Qué pasó al suspenderlo o pausarlo antes",
+      prompt:
+        "Antes de esta solicitud, ¿el síntoma mejoró después de que se suspendió o pausó este medicamento? No lo suspendas ni lo omitas para responder.",
+      evidencePrompt: "Describe cuándo se suspendió o pausó y qué pasó.",
+    },
     reappeared_on_rechallenge: {
       label: "Qué pasó al reiniciarlo antes",
       prompt:

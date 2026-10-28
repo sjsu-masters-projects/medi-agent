@@ -452,6 +452,54 @@ describe("ADR follow-up form", () => {
     });
 });
 
+// ── PV-001-D: the two new retrospective questions ────────────
+
+describe("ADRFollowUpForm with all five patient questions", () => {
+    beforeEach(() => respond.mockReset());
+
+    it.each<Locale>(["en-US", "es-MX"])(
+        "renders every requested question with its own wording in %s",
+        (locale) => {
+            const all: PatientADRQuestion[] = [
+                "event_after_drug",
+                "improved_on_dechallenge",
+                "reappeared_on_rechallenge",
+                "dose_response",
+                "similar_previous_reaction",
+            ];
+            const { copy } = renderForm(makeRequest({ requestedInformation: all }), locale);
+            const fieldsets = screen.getAllByRole("group");
+            expect(fieldsets).toHaveLength(5);
+            all.forEach((question, index) => {
+                expect(within(fieldsets[index]).getByText(copy.questions[question].prompt)).toBeInTheDocument();
+            });
+            expect(screen.queryByText(/placebo/i)).not.toBeInTheDocument();
+        },
+    );
+
+    it("sends answers to the new questions in request order", async () => {
+        respond.mockResolvedValue({ status: "answered" });
+        renderForm(makeRequest({ requestedInformation: ["event_after_drug", "improved_on_dechallenge"] }));
+
+        const fieldsets = screen.getAllByRole("group");
+        fireEvent.click(within(fieldsets[0]).getByLabelText("Yes"));
+        fireEvent.change(within(fieldsets[0]).getByRole("textbox"), {
+            target: { value: "It began two days after I started it." },
+        });
+        fireEvent.click(within(fieldsets[1]).getByLabelText("I’m not sure"));
+        fireEvent.click(screen.getByRole("button", { name: "Review answers" }));
+        fireEvent.click(screen.getByRole("checkbox"));
+        fireEvent.click(screen.getByRole("button", { name: "Send to care team" }));
+
+        await waitFor(() =>
+            expect(respond).toHaveBeenCalledWith("access-token", "request-1", [
+                { question: "event_after_drug", answer: "yes", evidence: "It began two days after I started it." },
+                { question: "improved_on_dechallenge", answer: "do_not_know", evidence: undefined },
+            ]),
+        );
+    });
+});
+
 // ── Property 5 ──────────────────────────────────────────────
 
 // Fixed, non-alphabetical order so the payload order is the request order.

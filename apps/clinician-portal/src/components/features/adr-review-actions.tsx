@@ -2,6 +2,7 @@
 
 import { useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui";
+import { PATIENT_ANSWERABLE_QUESTIONS, questionLabel } from "@/components/features/adr-questions";
 import type {
     ADRReviewAction,
     ADRReviewDecisionInput,
@@ -14,16 +15,6 @@ const ACTION_LABELS: Record<ADRReviewAction, string> = {
     request_information: "Request information",
 };
 const MAX_NOTE_LENGTH = 2000;
-
-function humanizeQuestion(value: string) {
-    return value.replaceAll("_", " ");
-}
-
-const PATIENT_ANSWERABLE_QUESTIONS = new Set([
-    "reappeared_on_rechallenge",
-    "dose_response",
-    "similar_previous_reaction",
-]);
 
 export function ADRReviewActions({
     item,
@@ -146,7 +137,7 @@ export function ADRReviewActions({
                                     onChange={() => toggleQuestion(question)}
                                     type="checkbox"
                                 />
-                                {humanizeQuestion(question)}
+                                {questionLabel(question)}
                             </label>
                         ))}
                     </div>
