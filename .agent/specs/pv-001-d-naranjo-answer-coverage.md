@@ -44,10 +44,14 @@ questions and are defined once in `app.pharmacovigilance.models`.
 4. **Score.** Each save merges the new answers with the stored ones and recalculates the score
    with the existing deterministic `score_naranjo`. The score supports the clinician's review; it
    is not a verdict. Recording answers does not review, close or take ownership of the case.
-5. **Evidence and audit.** Each save appends one evidence entry per answer (`source:
+5. **Evidence and audit.** Each save appends one evidence entry per changed answer (`source:
    "clinician_entry"`, basis, recorder, care team, time); earlier entries are kept. One
    `clinician_naranjo_answers_recorded` audit event records the questions, previous and new
    answers, previous and new score and causality. The basis text is not copied into the audit.
+   An answer that is already recorded with the same basis as the clinician's latest entry is
+   skipped, so a repeated or retried save adds no evidence and no audit event; when every answer
+   in a save is unchanged the case is returned as it stands. The same answer with a new basis,
+   or an answer that so far came only from the patient or extraction, is recorded.
 6. **Concurrent saves.** Patient and clinician answers can arrive at the same time. Both database
    functions compare the payload with the locked row and refuse a stale one (SQLSTATE 40001).
    The backend rereads and retries once, then returns 409 `ADR_ASSESSMENT_CHANGED` to the
@@ -72,7 +76,12 @@ questions and are defined once in `app.pharmacovigilance.models`.
   patient questions.
 - Patient portal: two new follow-up questions in `adr-follow-up-copy.ts`.
 - Clinician portal: Clinician answers panel on the ADR case (`adr-clinician-answers.tsx`); shared
-  labels and question sets in `adr-questions.ts`; evidence shows "Clinician-entered".
+  labels and question sets in `adr-questions.ts`; evidence shows "Clinician-entered". A recorded
+  question shows its answer, its latest basis and its points, with Change answer; only questions
+  not yet recorded, or being changed, show the Yes / No / Not known choice. In the evidence list a
+  clinician answer replaced by a later clinician answer for the same question moves under
+  "Earlier clinician answers (N)" with a Replaced label; every entry is kept and patient and
+  extracted evidence is never regrouped.
 
 ## Rollout and rollback
 
