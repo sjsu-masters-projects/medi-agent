@@ -18,6 +18,7 @@ from app.models.medwatch_form_3500 import (
     SubmissionMethod,
 )
 from app.pharmacovigilance import (
+    CLINICIAN_ANSWERABLE_NARANJO_QUESTIONS,
     PATIENT_ANSWERABLE_NARANJO_QUESTIONS,
     NaranjoAnswer,
     NaranjoQuestion,
@@ -172,7 +173,9 @@ class ADRInformationAnswer(BaseModel):
 class ADRInformationResponseRequest(BaseModel):
     """Patient-confirmed answers to one pending clinician information request."""
 
-    answers: list[ADRInformationAnswer] = Field(..., min_length=1, max_length=3)
+    answers: list[ADRInformationAnswer] = Field(
+        ..., min_length=1, max_length=len(PATIENT_ANSWERABLE_NARANJO_QUESTIONS)
+    )
     confirmed: bool
 
     @model_validator(mode="after")
@@ -183,6 +186,54 @@ class ADRInformationResponseRequest(BaseModel):
         if len(questions) != len(set(questions)):
             raise ValueError("Each requested question may be answered once")
         return self
+
+
+class ADRClinicianAnswer(BaseModel):
+    """One clinician-recorded answer to a Naranjo question a patient is never asked."""
+
+    question: NaranjoQuestion
+    answer: NaranjoAnswer
+    basis: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_clinician_answer(self) -> "ADRClinicianAnswer":
+        if self.question not in CLINICIAN_ANSWERABLE_NARANJO_QUESTIONS:
+            raise ValueError("This question is answered through the patient follow-up")
+        self.basis = self.basis.strip() if self.basis else None
+        if self.answer is not NaranjoAnswer.DO_NOT_KNOW and not self.basis:
+            raise ValueError("Give the basis for a yes or no answer")
+        return self
+
+
+class ADRClinicianAnswersRequest(BaseModel):
+    """Clinician answers to record on an open ADR assessment."""
+
+    answers: list[ADRClinicianAnswer] = Field(
+        ..., min_length=1, max_length=len(CLINICIAN_ANSWERABLE_NARANJO_QUESTIONS)
+    )
+    # Required only when the clinician holds several care-team links to the patient.
+    care_team_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_unique_questions(self) -> "ADRClinicianAnswersRequest":
+        questions = [item.question for item in self.answers]
+        if len(questions) != len(set(questions)):
+            raise ValueError("Each question may be answered once")
+        return self
+
+
+class ADRClinicianAnswersResponse(BaseModel):
+    """The assessment after clinician answers were recorded and rescored."""
+
+    id: UUID
+    patient_id: UUID
+    status: ADRStatus
+    naranjo_score: int = Field(..., ge=-4, le=13)
+    causality: NaranjoCausality
+    naranjo_answers: dict[str, str] = Field(default_factory=dict)
+    naranjo_assessment: dict[str, Any] = Field(default_factory=dict)
+    evidence: list[dict[str, Any]] = Field(default_factory=list)
+    updated_at: str
 
 
 class ADRInformationRequestRead(BaseModel):

@@ -215,6 +215,21 @@ inspected, and no model call, deployment or remote change was performed by this
 audit. Config/ADK/provider/client/worker focused tests: **54 passed**. Configuration
 agreement and mocked tests do not establish current provider availability.
 
+## Naranjo answer coverage (PV-001-D)
+
+Every Naranjo question has one answer path. Request information asks the patient up to five
+retrospective questions (`PATIENT_ANSWERABLE_NARANJO_QUESTIONS`); an assigned clinician on the
+acting care team records the other five (`CLINICIAN_ANSWERABLE_NARANJO_QUESTIONS`) with
+`POST /api/v1/clinicians/me/adr-assessments/{id}/naranjo-answers`
+(`{answers: [{question, answer, basis?}], care_team_id?}`; Yes or No needs a basis of at most 500
+characters). The service merges the answers, rescores with `score_naranjo` and calls
+`public.record_adr_clinician_answers`, which appends `clinician_entry` evidence and one audit
+event; it does not review or close the case. A save that races a patient answer is retried once,
+then 409 `ADR_ASSESSMENT_CHANGED`. Another team's case is the same 404 as an unknown id; a
+completed review or invalid answers are 422. `100_adr_naranjo_answer_coverage.sql` must be applied
+before this backend; until then the route returns 503. Detail:
+[PV-001-D](../.agent/specs/pv-001-d-naranjo-answer-coverage.md).
+
 ## MedWatch Form 3500 drafts (PV-001-C)
 
 Assigned clinicians prepare an evidence-attributed **Form FDA 3500 (09/2025)** draft from a

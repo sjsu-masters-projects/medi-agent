@@ -72,9 +72,13 @@ These run real migrations against disposable PostgreSQL 16 and skip unless enabl
 | `integration/test_public_grants_postgres.py` | `NOTIFICATION_CENTRE_TEST_POSTGRES_DOCKER=1` (same fixture) |
 | `integration/test_email_postgres.py` | `EMAIL_TEST_POSTGRES_DOCKER=1` (same fixture) |
 | `integration/test_care_plan_postgres.py` | `CARE_PLAN_TEST_POSTGRES=1` (local `initdb`/`pg_ctl`), plus `CARE_PLAN_TEST_POSTGRES_DOCKER=1` to use Docker instead |
-| `integration/test_appointment_offer_transactions.py` | Runs when PostgreSQL server binaries are on `PATH`; skips otherwise |
+| `integration/test_care_team_*_postgres.py`, `integration/test_care_handoff_*_postgres.py`, `integration/test_adr_naranjo_answers_postgres.py` and the other suites that load `care_team_plan_harness` | `CARE_TEAM_PLANS_TEST_POSTGRES_DOCKER=1` (whole migration ledger) |
+| `integration/test_appointment_offer_transactions.py` | Runs when PostgreSQL server binaries are on `PATH`; skips otherwise (on macOS with PostgreSQL 18, set `LC_ALL=en_US.UTF-8` or the server refuses to start) |
 
 Run them for any migration with functions or triggers; mocked RPC tests cannot see SQL bugs.
+The notification-centre and care-team fixtures both register a global `sql` fixture, so run
+suites from the two groups in separate pytest sessions, as the CI shards do; one combined
+session gives some files the other fixture's database.
 
 Every suite starts from hosted Supabase's default grants (`integration/supabase_roles.py`): new
 `public` tables, sequences and functions are granted to `anon`, `authenticated` and `service_role`,

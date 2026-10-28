@@ -143,6 +143,28 @@ describe("ADR follow-up copy", () => {
     expect(esCopy.caution).toContain("No reinicies, suspendas ni cambies");
   });
 
+  it("asks the two new questions retrospectively in both locales (PV-001-D)", () => {
+    const enCopy = getADRFollowUpCopy("en-US");
+    expect(enCopy.questions.improved_on_dechallenge.prompt).toContain(
+      "Do not stop or skip it to answer",
+    );
+    expect(enCopy.questions.improved_on_dechallenge.prompt).toMatch(/^Before this request/);
+    expect(enCopy.questions.event_after_drug.prompt).toContain("first start after you began");
+
+    const esCopy = getADRFollowUpCopy("es-MX");
+    expect(esCopy.questions.improved_on_dechallenge.prompt).toContain(
+      "No lo suspendas ni lo omitas para responder",
+    );
+    expect(esCopy.questions.improved_on_dechallenge.prompt).toMatch(/^Antes de esta solicitud/);
+    expect(esCopy.questions.event_after_drug.prompt).toContain("empezó por primera vez");
+    for (const copy of [enCopy, esCopy]) {
+      for (const question of Object.values(copy.questions)) {
+        expect(question.label.trim()).not.toBe("");
+        expect(question.evidencePrompt.trim()).not.toBe("");
+      }
+    }
+  });
+
   it("falls back to en-US for an unsupported locale", () => {
     expect(getADRFollowUpCopy("fr-FR" as Locale)).toBe(
       getADRFollowUpCopy("en-US"),

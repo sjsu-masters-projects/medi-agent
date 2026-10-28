@@ -4,6 +4,8 @@ import pytest
 from pydantic import ValidationError as PydanticValidationError
 
 from app.models.adr import (
+    ADRClinicianAnswer,
+    ADRClinicianAnswersRequest,
     ADRFollowUpOverviewRead,
     ADRFollowUpRequestRead,
     ADRInformationAnswer,
@@ -11,7 +13,12 @@ from app.models.adr import (
     ADRReviewAction,
     ADRReviewDecisionRequest,
 )
-from app.pharmacovigilance import NaranjoAnswer, NaranjoQuestion
+from app.pharmacovigilance import (
+    CLINICIAN_ANSWERABLE_NARANJO_QUESTIONS,
+    PATIENT_ANSWERABLE_NARANJO_QUESTIONS,
+    NaranjoAnswer,
+    NaranjoQuestion,
+)
 
 
 def test_clinician_can_request_only_patient_answerable_questions() -> None:
@@ -118,3 +125,74 @@ def test_follow_up_overview_bounds_recent_history() -> None:
     }
     with pytest.raises(PydanticValidationError):
         ADRFollowUpOverviewRead(recent=[item] * 6)
+
+
+def test_every_naranjo_question_has_exactly_one_answerer() -> None:
+    """PV-001-D: patient and clinician sets partition the ten questions."""
+    assert PATIENT_ANSWERABLE_NARANJO_QUESTIONS.isdisjoint(CLINICIAN_ANSWERABLE_NARANJO_QUESTIONS)
+    every_question = set(NaranjoQuestion)
+    assert (
+        every_question
+        == PATIENT_ANSWERABLE_NARANJO_QUESTIONS | CLINICIAN_ANSWERABLE_NARANJO_QUESTIONS
+    )
+    assert {
+        NaranjoQuestion.EVENT_AFTER_DRUG,
+        NaranjoQuestion.IMPROVED_ON_DECHALLENGE,
+    } <= PATIENT_ANSWERABLE_NARANJO_QUESTIONS
+
+
+def test_clinician_can_request_all_five_patient_questions() -> None:
+    decision = ADRReviewDecisionRequest(
+        action=ADRReviewAction.REQUEST_INFORMATION,
+        note="Please tell us what happened.",
+        requested_information=sorted(PATIENT_ANSWERABLE_NARANJO_QUESTIONS),
+    )
+    assert set(decision.requested_information) == PATIENT_ANSWERABLE_NARANJO_QUESTIONS
+
+
+def test_patient_can_answer_the_new_retrospective_questions() -> None:
+    answers = [
+        ADRInformationAnswer(question=question, answer=NaranjoAnswer.DO_NOT_KNOW)
+        for question in sorted(PATIENT_ANSWERABLE_NARANJO_QUESTIONS)
+    ]
+    response = ADRInformationResponseRequest(answers=answers, confirmed=True)
+    assert len(response.answers) == 5
+    with pytest.raises(PydanticValidationError, match="patient follow-up"):
+        ADRInformationAnswer(question=NaranjoQuestion.ALTERNATIVE_CAUSES, answer="no")
+
+
+@pytest.mark.parametrize("question", sorted(CLINICIAN_ANSWERABLE_NARANJO_QUESTIONS))
+def test_clinician_answer_accepts_each_clinical_question(question: NaranjoQuestion) -> None:
+    answer = ADRClinicianAnswer(question=question, answer="yes", basis="  Chart review.  ")
+    assert answer.basis == "Chart review."
+
+
+@pytest.mark.parametrize("question", sorted(PATIENT_ANSWERABLE_NARANJO_QUESTIONS))
+def test_clinician_cannot_record_a_patient_question(question: NaranjoQuestion) -> None:
+    with pytest.raises(PydanticValidationError, match="patient follow-up"):
+        ADRClinicianAnswer(question=question, answer="do_not_know")
+
+
+def test_clinician_yes_or_no_needs_a_basis_but_not_known_does_not() -> None:
+    for answer in ("yes", "no"):
+        with pytest.raises(PydanticValidationError, match="basis"):
+            ADRClinicianAnswer(question="objective_evidence", answer=answer, basis="   ")
+    assert ADRClinicianAnswer(question="objective_evidence", answer="do_not_know").basis is None
+    with pytest.raises(PydanticValidationError):
+        ADRClinicianAnswer(question="objective_evidence", answer="no", basis="x" * 501)
+
+
+def test_clinician_answers_request_is_bounded_and_unique() -> None:
+    one = {"question": "previous_reports", "answer": "yes", "basis": "Labelled reaction."}
+    with pytest.raises(PydanticValidationError, match="answered once"):
+        ADRClinicianAnswersRequest(answers=[one, one])
+    with pytest.raises(PydanticValidationError):
+        ADRClinicianAnswersRequest(answers=[])
+    request = ADRClinicianAnswersRequest(
+        answers=[
+            {"question": question.value, "answer": "do_not_know"}
+            for question in sorted(CLINICIAN_ANSWERABLE_NARANJO_QUESTIONS)
+        ]
+    )
+    assert len(request.answers) == 5
+    assert request.care_team_id is None

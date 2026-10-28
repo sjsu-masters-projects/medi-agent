@@ -48,6 +48,8 @@ _ADR_FOLLOW_UP_COLUMNS = (
 
 _ADR_REQUEST_CLOSED = "ADR_REQUEST_CLOSED"
 _ADR_RESPONSE_INVALID = "ADR_RESPONSE_INVALID"
+# One read and save, then one repeat when a clinician answer changed the assessment.
+_ADR_RESPONSE_ATTEMPTS = 2
 _ADR_REQUEST_CLOSED_MESSAGE = "This information request is no longer awaiting answers"
 _ADR_ALLOWED_QUESTIONS = frozenset(
     question.value for question in PATIENT_ANSWERABLE_NARANJO_QUESTIONS
@@ -452,7 +454,27 @@ class PatientService:
         request_id: UUID,
         response: ADRInformationResponseRequest,
     ) -> dict[str, Any]:
-        """Validate confirmed patient evidence, rescore, and save it atomically."""
+        """Validate confirmed patient evidence, rescore, and save it atomically.
+
+        A clinician may record answers on the same assessment (PV-001-D). The database
+        refuses a payload built on answers or evidence that changed after this read (40001);
+        the read is repeated once, then the patient is asked to try again.
+        """
+        for _ in range(_ADR_RESPONSE_ATTEMPTS):
+            saved = await self._respond_to_adr_information_request_once(
+                patient_id, request_id, response
+            )
+            if saved is not None:
+                return saved
+        raise ExternalServiceError("Supabase", "ADR follow-up is unavailable")
+
+    async def _respond_to_adr_information_request_once(
+        self,
+        patient_id: UUID,
+        request_id: UUID,
+        response: ADRInformationResponseRequest,
+    ) -> dict[str, Any] | None:
+        """One read, rescore and save; None when the assessment changed in between."""
         try:
             request_result = await execute_async(
                 self,
@@ -533,6 +555,8 @@ class PatientService:
             )
         except APIError as exc:
             # Map only the SQLSTATE. Never log PostgREST details: they can echo answers.
+            if exc.code == "40001":
+                return None
             if exc.code == "P0002":
                 raise NotFoundError("ADR information request", str(request_id)) from None
             if exc.code == "23514":

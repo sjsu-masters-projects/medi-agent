@@ -1293,3 +1293,47 @@ async def test_list_drafts_tags_the_links_clinic_and_filters_by_clinic() -> None
 
 CLINIC_A = "00000000-0000-0000-0000-00000000000a"
 CLINIC_B = "00000000-0000-0000-0000-00000000000b"
+
+
+def test_clinician_entered_answers_are_attributed_to_the_clinician() -> None:
+    """PV-001-D: a clinician answer is never labelled patient-confirmed or AI-extracted."""
+    assessment = {
+        **_sources().assessment,
+        "evidence": [
+            {
+                "question": "alternative_causes",
+                "answer": "no",
+                "evidence": "No other medicine or condition explains it.",
+                "source": "clinician_entry",
+                "recorded_by": "00000000-0000-4000-8000-0000000000c1",
+            }
+        ],
+    }
+    _form, evidence = build_form_3500(_sources(assessment=assessment))
+    clinician = [e for e in evidence if e["source_type"] == "clinician_entered_adr_evidence"]
+    assert len(clinician) == 1
+    assert clinician[0]["attribution"] == "Clinician-entered Naranjo answer: alternative_causes"
+    assert clinician[0]["excerpt"] == "No other medicine or condition explains it."
+    assert clinician[0]["source_id"] is None
+
+
+def test_patient_dechallenge_answer_fills_d7_with_patient_attribution() -> None:
+    """PV-001-D: improved_on_dechallenge is now patient-answerable, so D7 can be patient-confirmed."""
+    assessment = {
+        **_sources().assessment,
+        "naranjo_answers": {"improved_on_dechallenge": "yes"},
+        "evidence": [
+            {
+                "question": "improved_on_dechallenge",
+                "answer": "yes",
+                "evidence": "It eased when my clinician paused it.",
+                "source": "patient_follow_up",
+                "information_request_id": str(REQUEST_ID),
+            }
+        ],
+    }
+    form, evidence = build_form_3500(_sources(assessment=assessment))
+    assert form.section_d.product_1.abated == "yes"
+    entry = _by_path(evidence)["section_d.product_1.abated"][0]
+    assert entry["source_type"] == "patient_confirmed_adr_evidence"
+    assert entry["excerpt"] == "It eased when my clinician paused it."

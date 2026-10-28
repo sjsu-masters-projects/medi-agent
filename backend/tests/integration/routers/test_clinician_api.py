@@ -979,6 +979,94 @@ class TestADRReviewQueueRoutes:
         override_service.review_adr_assessment.assert_not_called()
 
 
+class TestADRClinicianAnswerRoutes:
+    """POST /api/v1/clinicians/me/adr-assessments/{assessment_id}/naranjo-answers (PV-001-D)"""
+
+    def test_answers_are_passed_to_the_service_and_the_score_returned(
+        self, client, override_auth, override_service, clinician_id
+    ):
+        assessment_id, patient_id = uuid4(), uuid4()
+        override_service.record_adr_clinician_answers = AsyncMock(
+            return_value={
+                "id": str(assessment_id),
+                "patient_id": str(patient_id),
+                "status": "draft",
+                "naranjo_score": 5,
+                "causality": "Probable",
+                "naranjo_answers": {"alternative_causes": "no"},
+                "naranjo_assessment": {"score": 5},
+                "evidence": [{"question": "alternative_causes", "source": "clinician_entry"}],
+                "thinking_chain": "PRIVATE MUST NOT LEAK",
+                "updated_at": "2026-10-27T10:00:00Z",
+            }
+        )
+
+        response = client.post(
+            f"/api/v1/clinicians/me/adr-assessments/{assessment_id}/naranjo-answers",
+            json={
+                "answers": [
+                    {"question": "alternative_causes", "answer": "no", "basis": "Chart review."}
+                ]
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        body = response.json()
+        assert body["naranjo_score"] == 5 and body["causality"] == "Probable"
+        assert "thinking_chain" not in body
+        args = override_service.record_adr_clinician_answers.await_args.args
+        assert args[0] == clinician_id and args[1] == assessment_id
+        assert args[2].answers[0].basis == "Chart review."
+
+    @pytest.mark.parametrize(
+        "answers",
+        [
+            [{"question": "dose_response", "answer": "yes", "basis": "Patient question."}],
+            [{"question": "objective_evidence", "answer": "yes"}],
+            [],
+        ],
+    )
+    def test_patient_questions_missing_basis_and_empty_lists_are_refused(
+        self, client, override_auth, override_service, answers
+    ):
+        response = client.post(
+            f"/api/v1/clinicians/me/adr-assessments/{uuid4()}/naranjo-answers",
+            json={"answers": answers},
+        )
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+        override_service.record_adr_clinician_answers.assert_not_called()
+
+    def test_review_can_request_the_new_retrospective_questions(
+        self, client, override_auth, override_service, clinician_id
+    ):
+        assessment_id = uuid4()
+        override_service.review_adr_assessment = AsyncMock(
+            return_value={
+                "id": str(assessment_id),
+                "patient_id": str(uuid4()),
+                "status": "draft",
+                "last_review_action": "request_information",
+                "review_note": "When did it start?",
+                "requested_information": ["event_after_drug", "improved_on_dechallenge"],
+                "reviewed_by": str(clinician_id),
+                "reviewed_at": "2026-10-27T10:00:00Z",
+                "updated_at": "2026-10-27T10:00:00Z",
+            }
+        )
+
+        response = client.post(
+            f"/api/v1/clinicians/me/adr-assessments/{assessment_id}/review",
+            json={
+                "action": "request_information",
+                "note": "When did it start?",
+                "requested_information": ["event_after_drug", "improved_on_dechallenge"],
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+
+
 class TestPatientDeepDiveRoutes:
     """GET /api/v1/clinicians/me/patients/{patient_id}/deep-dive"""
 

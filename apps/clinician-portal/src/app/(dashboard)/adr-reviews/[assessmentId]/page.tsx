@@ -10,7 +10,9 @@ import {
     createMedWatchDraft,
     fetchADRAssessment,
     fetchMedWatchDrafts,
+    recordADRClinicianAnswers,
     reviewADRAssessment,
+    type ADRClinicianAnswerInput,
     type ADRReviewDecisionInput,
     type ADRReviewQueueItem,
 } from "@/services/clinicians";
@@ -106,6 +108,31 @@ function CaseContent() {
         [load],
     );
 
+    const recordAnswers = useCallback(
+        async (id: string, answers: ADRClinicianAnswerInput[], careTeamId?: string) => {
+            if (pending.current) throw new Error("Busy");
+            pending.current = true;
+            setSubmitting(true);
+            setActionError(null);
+            setNotice(null);
+            try {
+                await (careTeamId
+                    ? recordADRClinicianAnswers(id, answers, careTeamId)
+                    : recordADRClinicianAnswers(id, answers));
+                setNotice("Clinician answers saved and audited. The score was recalculated.");
+                await load();
+            } catch {
+                const message = "Unable to save the clinician answers. Your answers are retained. Try again.";
+                setActionError(message);
+                throw new Error(message);
+            } finally {
+                pending.current = false;
+                setSubmitting(false);
+            }
+        },
+        [load],
+    );
+
     const prepare = useCallback(
         async (id: string, rationale: string, careTeamId?: string) => {
             if (pending.current) throw new Error("Busy");
@@ -158,6 +185,7 @@ function CaseContent() {
                     item={item}
                     medwatchDraftId={draftId}
                     onPrepareDraft={prepare}
+                    onRecordAnswers={recordAnswers}
                     onReview={review}
                     submitting={submitting || loading}
                 />

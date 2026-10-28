@@ -48,12 +48,12 @@ Install the clinician portal's locked dependencies first for the TypeScript pars
 | [apps/patient-portal/src/app/(app)/profile/profile-copy.ts](../apps/patient-portal/src/app/%28app%29/profile/profile-copy.ts) | `a8df7495058e93e633c6adb8f75bc7958c7226dbe72820d7734f70ba1a0e2bcc` |
 | [apps/patient-portal/src/components/features/nora-conversations.tsx](../apps/patient-portal/src/components/features/nora-conversations.tsx) | `017df3a9f82e7ff9eaf1910f08129969133aba6e8cd7e0f03a85558f14a9d3c9` |
 | [packages/shared/src/utils/care-conversations.ts](../packages/shared/src/utils/care-conversations.ts) | `283f87a82d5ba91f6e0430b1a9a37e25f874197105661317a8089f798b6010b5` |
-| [backend/src/app/services/notification_centre_presentation.py](../backend/src/app/services/notification_centre_presentation.py) | `78770fee8f5abb1e46893a1f6e919af768de592040221d54271c715a2864b479` |
+| [backend/src/app/services/notification_centre_presentation.py](../backend/src/app/services/notification_centre_presentation.py) | `41387d20c93bc080df0e7bcfd048e9818c74782678c9533778d917c3ed3f89bd` |
 | [backend/src/app/services/symptom_report_presenter.py](../backend/src/app/services/symptom_report_presenter.py) | `0933ef4a7c4ad8b67120be941b9661105f081b01696f82c8c6e3ccefc00284f6` |
 | [backend/src/app/services/appointment_calendar.py](../backend/src/app/services/appointment_calendar.py) | `321826d7839e1e15f867e02cebfc8555c71a95cf9ff030825f5ea4d7ed7bb569` |
 | [backend/src/app/services/email_service.py](../backend/src/app/services/email_service.py) | `8ff3f52ed394057bfb4e9121b2fb65523939ec5cc5a18de97b0770a049b328bb` |
 
-## Review list (648 paired rows)
+## Review list (650 paired rows)
 
 Every listed pair is covered by the matching project-scope review receipt.
 Use the source key to identify duplicate declaration/accessor entries
@@ -667,6 +667,8 @@ across screens; do not infer that similar strings have the same clinical context
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.med_reminder.1` | It's on your Today list. | Está en tu lista de Hoy. |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.obligation_reminder.0` | Care-plan reminder | Recordatorio del plan de cuidado |
 | backend/src/app/services/notification_centre_presentation.py:11 / `_COPY.obligation_reminder.1` | It's on your Today list. | Está en tu lista de Hoy. |
+| backend/src/app/services/notification_centre_presentation.py:178 / `_QUESTION_WORDING.event_after_drug.0` | Whether the symptom started after you began this medicine | Si el síntoma empezó después de que comenzaste a tomar este medicamento |
+| backend/src/app/services/notification_centre_presentation.py:178 / `_QUESTION_WORDING.improved_on_dechallenge.0` | Whether the symptom got better after this medicine was stopped or paused | Si el síntoma mejoró después de que se suspendió o pausó este medicamento |
 | backend/src/app/services/notification_centre_presentation.py:178 / `_QUESTION_WORDING.reappeared_on_rechallenge.0` | Whether the symptom came back after restarting this medicine | Si el síntoma volvió después de reiniciar este medicamento |
 | backend/src/app/services/notification_centre_presentation.py:178 / `_QUESTION_WORDING.dose_response.0` | Whether the symptom changed after a dose change your clinician directed | Si el síntoma cambió después de un cambio de dosis indicado por tu profesional de salud |
 | backend/src/app/services/notification_centre_presentation.py:178 / `_QUESTION_WORDING.similar_previous_reaction.0` | Whether you have had a similar reaction to this medicine before | Si has tenido antes una reacción similar a este medicamento |
