@@ -229,3 +229,132 @@ async def test_a_clinician_with_two_teams_must_choose(service, mock_db):
         uuid4(), assessment["id"], _request(care_team_id=OTHER_TEAM)
     )
     assert mock_db.rpc.call_args.args[1]["p_care_team_id"] == OTHER_TEAM
+
+
+def _clinician_entry(question, answer, basis=None, **overrides):
+    entry = {"question": question, "answer": answer, "source": "clinician_entry"}
+    if basis:
+        entry["evidence"] = basis
+    entry.update(overrides)
+    return entry
+
+
+def _already_saved(patient_id):
+    """The case after the default request was saved once."""
+    return _assessment(
+        patient_id,
+        naranjo_answers={"alternative_causes": "no", "objective_evidence": "do_not_know"},
+        evidence=[
+            _clinician_entry("alternative_causes", "no", "No other cause found."),
+            _clinician_entry("objective_evidence", "do_not_know"),
+        ],
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_repeated_save_changes_nothing(service, mock_db):
+    assessment = _already_saved(uuid4())
+    service._execute = AsyncMock(side_effect=[_response(assessment)])  # type: ignore[method-assign]
+
+    result = await service.record_adr_clinician_answers(uuid4(), assessment["id"], _request())
+
+    # No write, no new evidence and no audit event: the case is returned as it stands.
+    assert result == assessment
+    mock_db.rpc.assert_not_called()
+    service._execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_only_the_changed_answers_are_sent(service, mock_db):
+    assessment = _already_saved(uuid4())
+    saved = {**assessment, "naranjo_score": 4}
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[_response(assessment), _response([saved])]
+    )
+    request = _request(
+        answers=[
+            {"question": "alternative_causes", "answer": "no", "basis": "No other cause found."},
+            {"question": "objective_evidence", "answer": "yes", "basis": "Positive test result."},
+        ]
+    )
+
+    await service.record_adr_clinician_answers(uuid4(), assessment["id"], request)
+
+    payload = mock_db.rpc.call_args.args[1]
+    assert payload["p_answers"] == [
+        {"question": "objective_evidence", "answer": "yes", "basis": "Positive test result."}
+    ]
+    assert payload["p_naranjo_answers"]["objective_evidence"] == "yes"
+    assert payload["p_naranjo_answers"]["alternative_causes"] == "no"
+
+
+@pytest.mark.asyncio
+async def test_the_same_answer_with_a_new_basis_is_recorded(service, mock_db):
+    assessment = _already_saved(uuid4())
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[_response(assessment), _response([assessment])]
+    )
+    request = _request(
+        answers=[
+            {"question": "alternative_causes", "answer": "no", "basis": "Chart reviewed again."}
+        ]
+    )
+
+    await service.record_adr_clinician_answers(uuid4(), assessment["id"], request)
+
+    assert mock_db.rpc.call_args.args[1]["p_answers"] == [
+        {"question": "alternative_causes", "answer": "no", "basis": "Chart reviewed again."}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_stored_answer_without_a_clinician_entry_still_gets_the_clinicians_basis(
+    service, mock_db
+):
+    # The answer is stored, but it came from extraction, so there is no clinician basis yet.
+    assessment = _assessment(
+        uuid4(),
+        naranjo_answers={"alternative_causes": "no"},
+        evidence=[
+            {"question": "alternative_causes", "answer": "no", "evidence": "No other cause found."}
+        ],
+    )
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[_response(assessment), _response([assessment])]
+    )
+    request = _request(
+        answers=[
+            {"question": "alternative_causes", "answer": "no", "basis": "No other cause found."}
+        ]
+    )
+
+    await service.record_adr_clinician_answers(uuid4(), assessment["id"], request)
+
+    assert [item["question"] for item in mock_db.rpc.call_args.args[1]["p_answers"]] == [
+        "alternative_causes"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_the_latest_entry_decides_whether_an_answer_changed(service, mock_db):
+    # No, then Yes, then No again: saving No now is a change from the latest answer, Yes.
+    assessment = _assessment(
+        uuid4(),
+        naranjo_answers={"alternative_causes": "yes"},
+        evidence=[
+            _clinician_entry("alternative_causes", "no", "No other cause found."),
+            _clinician_entry("alternative_causes", "yes", "A new drug was started."),
+        ],
+    )
+    service._execute = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[_response(assessment), _response([assessment])]
+    )
+    request = _request(
+        answers=[
+            {"question": "alternative_causes", "answer": "no", "basis": "No other cause found."}
+        ]
+    )
+
+    await service.record_adr_clinician_answers(uuid4(), assessment["id"], request)
+
+    assert mock_db.rpc.call_count == 1
