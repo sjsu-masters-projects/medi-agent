@@ -1,8 +1,10 @@
 # PV-001-D Naranjo answer coverage
 
-> **Status:** In progress. Implemented and checked locally on `feature/adr-naranjo-answer-coverage`;
-> migration `100_adr_naranjo_answer_coverage.sql` was applied to the hosted medi-agent-staging project by the
-> requester on October 28, 2026 (ledger row 17:37:34 UTC). The code is **not merged or deployed**.
+> **Status:** Verify deployed. Merged in [#227](https://github.com/sjsu-masters-projects/medi-agent/pull/227)
+> (`16f11e2`, October 28, 2026) and deployed: backend revision `mediagent-backend-00195-ch2`, both portals built
+> by Vercel. Migration `100_adr_naranjo_answer_coverage.sql` was applied to the hosted medi-agent-staging project
+> by the requester on October 28 (ledger row 17:37:34 UTC), before the merge. Backend CI did not run on #227
+> (see Verification); the live Elena and Morgan re-test and the peer review remain.
 > **Owner:** Jeevan. **Parent:** PV-001 (Ganesh). **Tracker:** `.agent/TASKS.md` → PV-001-D.
 
 ## Problem
@@ -102,6 +104,10 @@ sit outside the inventory and are not bound by the receipt. Not professional tra
 
 ## Verification (local, October 28)
 
+On #227 the frontend checks, CodeQL, the secret scan and the PR checklist passed. Every backend job, including
+the new `adr-naranjo-answers` shard, was skipped because the dependency audit job fails (see SEC-004 in
+`.agent/TASKS.md`), so the table below is the local record for the backend.
+
 | Command | Result |
 | --- | --- |
 | `backend/.venv/bin/python backend/scripts/validate_migrations.py` | 116 migration files validated |
@@ -129,8 +135,8 @@ and `backend/tests/TESTING_GUIDE.md` now says to keep the two groups in separate
 
 ## Remaining before Done
 
-- Peer and safety review (Ganesh). Migration 100 is applied and the Spanish wording accepted (October 28).
-- Peer and safety review (PV-001 owner).
+- Peer and safety review (PV-001 owner, Ganesh). Migration 100 is applied, the Spanish wording is accepted and
+  the code is merged and deployed (October 28).
 - Deployed acceptance: Elena requests all five patient questions for Morgan; Morgan answers in
   en-US and es-MX; Elena records clinician answers with a basis; the score, evidence attribution,
   audit row and MedWatch preview attribution match.
