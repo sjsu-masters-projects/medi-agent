@@ -224,7 +224,8 @@ acting care team records the other five (`CLINICIAN_ANSWERABLE_NARANJO_QUESTIONS
 (`{answers: [{question, answer, basis?}], care_team_id?}`; Yes or No needs a basis of at most 500
 characters). The service merges the answers, rescores with `score_naranjo` and calls
 `public.record_adr_clinician_answers`, which appends `clinician_entry` evidence and one audit
-event; it does not review or close the case. A save that races a patient answer is retried once,
+event; it does not review or close the case. An answer already recorded with the same basis is
+skipped, so a repeated save adds nothing and returns the case unchanged. A save that races a patient answer is retried once,
 then 409 `ADR_ASSESSMENT_CHANGED`. Another team's case is the same 404 as an unknown id; a
 completed review or invalid answers are 422. `100_adr_naranjo_answer_coverage.sql` must be applied
 before this backend; until then the route returns 503. Detail:

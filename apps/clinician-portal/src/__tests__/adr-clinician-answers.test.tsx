@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ADRClinicianAnswers } from "@/components/features/adr-clinician-answers";
-import { recordADRClinicianAnswers } from "@/services/clinicians";
+import { recordADRClinicianAnswers, type ADRReviewEvidence } from "@/services/clinicians";
 
 vi.mock("@/services/auth-session", () => ({
     readStoredSession: () => ({ accessToken: "synthetic-token" }),
@@ -17,10 +17,19 @@ function renderPanel(
     answers: Record<string, string> = {},
     onRecord = vi.fn().mockResolvedValue(undefined),
     disabled = false,
+    evidence: ADRReviewEvidence[] = [],
 ) {
-    render(<ADRClinicianAnswers answers={answers} disabled={disabled} onRecord={onRecord} />);
+    render(
+        <ADRClinicianAnswers answers={answers} disabled={disabled} evidence={evidence} onRecord={onRecord} />,
+    );
     return onRecord;
 }
+
+function clinicianEntry(question: string, answer: string, basis?: string): ADRReviewEvidence {
+    return { question, answer, evidence: basis, source: "clinician_entry" } as ADRReviewEvidence;
+}
+
+const fieldsetOf = (name: string) => screen.getByText(name, { selector: "legend" }).closest("fieldset")!;
 
 function group(name: string) {
     return screen.getByRole("radiogroup", { name });
@@ -29,26 +38,96 @@ function group(name: string) {
 const save = () => screen.getByRole("button", { name: "Save clinician answers" });
 
 describe("ADR clinician answers (PV-001-D)", () => {
-    it("lists only the five clinical questions with their stored answers and points", () => {
+    it("lists only the five clinical questions and asks only the ones not yet recorded", () => {
         renderPanel({ alternative_causes: "no", dose_response: "yes" });
 
         for (const name of [
             "Previous conclusive reports",
-            "Alternative causes",
             "Reappeared with placebo",
             "Toxic drug concentration",
             "Objective evidence",
         ]) {
             expect(group(name)).toBeInTheDocument();
         }
+        // A recorded question is shown as answered, not asked again.
+        expect(screen.queryByRole("radiogroup", { name: "Alternative causes" })).toBeNull();
         // Patient questions are asked through Request information, never recorded here.
         expect(screen.queryByRole("radiogroup", { name: "Dose-response relationship" })).toBeNull();
         expect(screen.queryByRole("radiogroup", { name: "Event followed medication" })).toBeNull();
-        const alternative = group("Alternative causes").closest("fieldset")!;
-        expect(within(alternative).getByText(/Recorded: No/)).toBeInTheDocument();
-        expect(within(alternative).getByText(/Yes -1, No \+2, Not known 0/)).toBeInTheDocument();
+        expect(screen.queryByText("Dose-response relationship", { selector: "legend" })).toBeNull();
+        const alternative = fieldsetOf("Alternative causes");
+        expect(within(alternative).getByText("No")).toBeInTheDocument();
+        expect(within(alternative).getByText(/\+2 toward the score/)).toBeInTheDocument();
+        expect(within(alternative).getByRole("button", { name: "Change answer" })).toBeEnabled();
+        const open = fieldsetOf("Objective evidence");
+        expect(within(open).getByText(/Not recorded yet/)).toBeInTheDocument();
+        expect(within(open).getByText(/Yes \+1, No 0, Not known 0/)).toBeInTheDocument();
         expect(save()).toBeDisabled();
         expect(screen.queryByRole("textbox")).toBeNull();
+    });
+
+    it("shows the clinician's latest basis for a recorded answer, not an earlier one", () => {
+        renderPanel({ toxic_drug_concentration: "no" }, undefined, false, [
+            clinicianEntry("toxic_drug_concentration", "yes", "First thought."),
+            clinicianEntry("toxic_drug_concentration", "no", "Level was normal."),
+        ]);
+
+        const fieldset = fieldsetOf("Toxic drug concentration");
+        expect(within(fieldset).getByText(/Level was normal\./)).toBeInTheDocument();
+        expect(within(fieldset).queryByText(/First thought\./)).toBeNull();
+        expect(within(fieldset).getByText(/0 toward the score/)).toBeInTheDocument();
+    });
+
+    it("shows no basis for an answer that did not come from a clinician entry", () => {
+        renderPanel({ objective_evidence: "yes" }, undefined, false, [
+            { question: "objective_evidence", answer: "yes", evidence: "Quoted from chat." },
+        ]);
+
+        const fieldset = fieldsetOf("Objective evidence");
+        expect(within(fieldset).getByText("Yes")).toBeInTheDocument();
+        expect(within(fieldset).queryByText(/Quoted from chat/)).toBeNull();
+    });
+
+    it("changes a recorded answer only on request and sends just that question", async () => {
+        const onRecord = renderPanel({ alternative_causes: "no", objective_evidence: "yes" }, undefined, false, [
+            clinicianEntry("alternative_causes", "no", "No other cause."),
+            clinicianEntry("objective_evidence", "yes", "Positive test."),
+        ]);
+
+        const alternative = fieldsetOf("Alternative causes");
+        fireEvent.click(within(alternative).getByRole("button", { name: "Change answer" }));
+        expect(within(alternative).getByText(/Recording a different answer/)).toBeInTheDocument();
+        fireEvent.click(within(group("Alternative causes")).getByLabelText("Yes"));
+        fireEvent.change(screen.getByLabelText(/Basis for alternative causes/), {
+            target: { value: "A new medicine was started." },
+        });
+        fireEvent.click(save());
+
+        await waitFor(() =>
+            expect(onRecord).toHaveBeenCalledWith([
+                { question: "alternative_causes", answer: "yes", basis: "A new medicine was started." },
+            ]),
+        );
+        // The untouched question is not resent, and the changed one returns to the recorded view.
+        await waitFor(() => expect(screen.queryByRole("radiogroup", { name: "Alternative causes" })).toBeNull());
+        expect(within(fieldsetOf("Alternative causes")).getByRole("button", { name: "Change answer" })).toBeEnabled();
+        expect(screen.queryByRole("textbox")).toBeNull();
+        expect(save()).toBeDisabled();
+    });
+
+    it("keeps the recorded answer when a change is cancelled", () => {
+        renderPanel({ alternative_causes: "no" });
+
+        const alternative = fieldsetOf("Alternative causes");
+        fireEvent.click(within(alternative).getByRole("button", { name: "Change answer" }));
+        fireEvent.click(within(group("Alternative causes")).getByLabelText("Yes"));
+        expect(screen.getByRole("status")).toHaveTextContent("Add the basis");
+        fireEvent.click(within(alternative).getByRole("button", { name: "Keep recorded answer" }));
+
+        expect(screen.queryByRole("radiogroup", { name: "Alternative causes" })).toBeNull();
+        expect(within(alternative).getByText("No")).toBeInTheDocument();
+        expect(screen.queryByRole("status")).toBeNull();
+        expect(save()).toBeDisabled();
     });
 
     it("requires a basis for Yes or No and sends only the questions changed here", async () => {
@@ -98,8 +177,9 @@ describe("ADR clinician answers (PV-001-D)", () => {
     });
 
     it("locks every control while disabled", () => {
-        renderPanel({}, undefined, true);
+        renderPanel({ alternative_causes: "no" }, undefined, true);
         for (const radio of screen.getAllByRole("radio")) expect(radio).toBeDisabled();
+        expect(screen.getByRole("button", { name: "Change answer" })).toBeDisabled();
         expect(save()).toBeDisabled();
     });
 });

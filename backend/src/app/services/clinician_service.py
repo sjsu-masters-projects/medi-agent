@@ -36,7 +36,11 @@ from app.core.exceptions import (
 from app.db.repositories import CareTeamRepository, ClinicianRepository, ClinicRepository
 from app.db.supabase_execute import execute_async
 from app.intake.preview import testimony_only
-from app.models.adr import ADRClinicianAnswersRequest, ADRReviewDecisionRequest
+from app.models.adr import (
+    ADRClinicianAnswer,
+    ADRClinicianAnswersRequest,
+    ADRReviewDecisionRequest,
+)
 from app.models.clinic_membership import ClinicMembership
 from app.models.dashboard import DashboardSortBy, DashboardSortOrder, RiskLevel
 from app.models.enums import ADRStatus, MessageChannel, NotificationType
@@ -72,6 +76,25 @@ def _with_transcript_translation(result: dict[str, Any], row: dict[str, Any]) ->
 
 # One read and save, then one repeat when a concurrent answer changed the assessment.
 _ADR_ANSWER_ATTEMPTS = 2
+
+
+def _already_recorded(assessment: dict[str, Any], item: ADRClinicianAnswer) -> bool:
+    """True when this answer and its basis are already the clinician's latest on the case."""
+    stored = cast(dict[str, str], assessment.get("naranjo_answers") or {})
+    if stored.get(item.question.value) != item.answer.value:
+        return False
+    entries = cast(list[dict[str, Any]], assessment.get("evidence") or [])
+    latest = next(
+        (
+            entry
+            for entry in reversed(entries)
+            if entry.get("source") == "clinician_entry"
+            and entry.get("question") == item.question.value
+        ),
+        None,
+    )
+    # An answer that came from the patient or extraction still needs the clinician's own basis.
+    return latest is not None and (latest.get("evidence") or None) == item.basis
 
 
 def _adr_answer_error(code: str | None, assessment_id: UUID) -> Exception:
@@ -827,8 +850,10 @@ class ClinicianService:
         """Record clinician Naranjo answers on an open assessment and rescore it atomically.
 
         The score is recalculated by the shared deterministic rules from the stored answers
-        with the recorded questions replaced. The database refuses a payload built on answers
-        that changed after this read (40001); the read is repeated once before giving up.
+        with the recorded questions replaced. An answer already recorded with the same basis is
+        skipped, so a repeated or retried save adds no evidence. The database refuses a payload
+        built on answers that changed after this read (40001); the read is repeated once before
+        giving up.
         """
         for _ in range(_ADR_ANSWER_ATTEMPTS):
             saved = await self._record_adr_clinician_answers_once(
@@ -852,11 +877,15 @@ class ClinicianService:
             clinician_id,
             assessment_id,
             request.care_team_id,
-            "id, patient_id, status, naranjo_answers, reviewed_by, reviewed_by_care_team_id",
+            "id, patient_id, status, naranjo_answers, naranjo_score, causality, "
+            "naranjo_assessment, evidence, updated_at, reviewed_by, reviewed_by_care_team_id",
         )
+        changed = [item for item in request.answers if not _already_recorded(assessment, item)]
+        if not changed:
+            return assessment
         merged = {
             **cast(dict[str, str], assessment.get("naranjo_answers") or {}),
-            **{item.question.value: item.answer.value for item in request.answers},
+            **{item.question.value: item.answer.value for item in changed},
         }
         rescored = score_naranjo(merged)
         try:
@@ -866,7 +895,7 @@ class ClinicianService:
                     {
                         "p_assessment_id": str(assessment_id),
                         "p_actor_id": str(clinician_id),
-                        "p_answers": [item.model_dump(mode="json") for item in request.answers],
+                        "p_answers": [item.model_dump(mode="json") for item in changed],
                         "p_naranjo_answers": merged,
                         "p_naranjo_assessment": rescored.model_dump(mode="json"),
                         "p_score": rescored.score,
