@@ -338,3 +338,70 @@ describe("Property 6: each evidence entry carries exactly one truthful provenanc
         expect(keyWarnings).toEqual([]);
     }, 30_000); // 312 full renders: CI runners take longer than the 5-second default.
 });
+
+describe("ADR review card replaced clinician answers", () => {
+    const answer = (value: string, basis: string, recordedAt: string): ADRReviewEvidence => ({
+        question: "toxic_drug_concentration",
+        answer: value,
+        evidence: basis,
+        source: "clinician_entry",
+        recorded_at: recordedAt,
+    });
+
+    function evidenceSection(container: HTMLElement) {
+        return within(container)
+            .getByRole("heading", { name: "Naranjo evidence" })
+            .closest("section")!;
+    }
+
+    it("lists the current clinician answer and keeps replaced ones under their own heading", () => {
+        const { container } = renderCard({
+            evidence: [
+                aiEntry,
+                answer("yes", "First thought.", "2026-10-28T18:42:00Z"),
+                answer("yes", "Second thought.", "2026-10-28T18:42:30Z"),
+                answer("no", "Level was normal.", "2026-10-28T18:43:00Z"),
+            ],
+        });
+
+        const section = evidenceSection(container);
+        const current = section.querySelector("ul")!;
+        expect(within(current).getAllByRole("listitem")).toHaveLength(2);
+        expect(current).toHaveTextContent("Level was normal.");
+        expect(current).toHaveTextContent("I became dizzy");
+        expect(current).not.toHaveTextContent("First thought.");
+        expect(current).not.toHaveTextContent("Second thought.");
+
+        const earlier = within(section).getByText("Earlier clinician answers (2)").closest("details")!;
+        expect(earlier).toHaveTextContent("First thought.");
+        expect(earlier).toHaveTextContent("Second thought.");
+        expect(within(earlier).getAllByText("Replaced")).toHaveLength(2);
+        expect(earlier).toHaveTextContent("the score uses the current answers");
+    });
+
+    it("adds no earlier-answers heading when no clinician answer was replaced", () => {
+        const { container } = renderCard({
+            evidence: [
+                aiEntry,
+                answer("no", "Level was normal.", "2026-10-28T18:43:00Z"),
+                { ...answer("yes", "Positive test.", "2026-10-28T18:44:00Z"), question: "objective_evidence" },
+            ],
+        });
+
+        expect(screen.queryByText(/Earlier clinician answers/)).toBeNull();
+        expect(evidenceEntries(container)).toHaveLength(3);
+    });
+
+    it("never regroups repeated patient answers", () => {
+        const { container } = renderCard({
+            evidence: [
+                { ...patientEntry, information_request_id: "request-1" },
+                { ...patientEntry, information_request_id: "request-2", evidence: "Said again." },
+            ],
+        });
+
+        expect(screen.queryByText(/Earlier clinician answers/)).toBeNull();
+        expect(screen.queryByText("Replaced")).toBeNull();
+        expect(evidenceEntries(container)).toHaveLength(2);
+    });
+});

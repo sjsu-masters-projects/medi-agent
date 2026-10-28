@@ -96,6 +96,54 @@ function ProvenanceLabel({
 const cardClass = "rounded-xl border border-line bg-surface p-5";
 const headingClass = "text-sm font-semibold text-ink";
 
+/** Indexes of clinician entries a later clinician entry for the same question has replaced. */
+function replacedClinicianEntries(evidence: ADRReviewEvidence[]): Set<number> {
+    const latest = new Map<string, number>();
+    evidence.forEach((entry, index) => {
+        if (provenance(entry) === "clinician") latest.set(entry.question, index);
+    });
+    return new Set(
+        evidence.flatMap((entry, index) =>
+            provenance(entry) === "clinician" && latest.get(entry.question) !== index ? [index] : [],
+        ),
+    );
+}
+
+function EvidenceRow({
+    entry,
+    item,
+    glosses,
+    replaced = false,
+}: {
+    entry: ADRReviewEvidence;
+    item: ADRReviewQueueItem;
+    glosses: GlossMap;
+    replaced?: boolean;
+}) {
+    return (
+        <li className="space-y-2.5 px-4 py-3.5">
+            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
+                <p className="min-w-0 text-sm font-medium text-ink">{questionLabel(entry.question)}</p>
+                <Badge className="capitalize" variant={entry.answer === "yes" ? "success" : "neutral"}>
+                    {entry.answer.replaceAll("_", " ")}
+                </Badge>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+                <ProvenanceLabel entry={entry} item={item} />
+                {replaced ? <Badge variant="neutral">Replaced</Badge> : null}
+            </div>
+            {/* LOC-003 item 2: a patient's answer is evidence, so it is quoted as
+                given; the English gloss sits beneath it, never in its place. */}
+            {entry.evidence ? (
+                <blockquote className="max-w-[72ch] border-l-2 border-line-strong pl-3 text-sm leading-relaxed text-ink-2">
+                    <span className="block">“{entry.evidence}”</span>
+                    <EvidenceGlossLine gloss={glossFor(glosses, entry.evidence)} />
+                </blockquote>
+            ) : null}
+        </li>
+    );
+}
+
 function EvidenceList({ item, glosses }: { item: ADRReviewQueueItem; glosses: GlossMap }) {
     if (item.evidence.length === 0) {
         return (
@@ -105,38 +153,36 @@ function EvidenceList({ item, glosses }: { item: ADRReviewQueueItem; glosses: Gl
         );
     }
 
+    // Every entry is kept. A clinician answer that a later one replaced moves under its own
+    // heading so the list shows what the score uses; nothing else is regrouped or hidden.
+    const replaced = replacedClinicianEntries(item.evidence);
+    const entries = item.evidence.map((entry, index) => ({ entry, index }));
+    const current = entries.filter(({ index }) => !replaced.has(index));
+    const earlier = entries.filter(({ index }) => replaced.has(index));
+
     return (
-        <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
-            {item.evidence.map((entry, index) => (
-                <li
-                    className="space-y-2.5 px-4 py-3.5"
-                    key={`${index}:${entry.question}:${entry.source ?? "ai"}`}
-                >
-                    <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
-                        <p className="min-w-0 text-sm font-medium text-ink">
-                            {questionLabel(entry.question)}
-                        </p>
-                        <Badge
-                            className="capitalize"
-                            variant={entry.answer === "yes" ? "success" : "neutral"}
-                        >
-                            {entry.answer.replaceAll("_", " ")}
-                        </Badge>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <ProvenanceLabel entry={entry} item={item} />
-                    </div>
-                    {/* LOC-003 item 2: a patient's answer is evidence, so it is quoted as
-                        given; the English gloss sits beneath it, never in its place. */}
-                    {entry.evidence ? (
-                        <blockquote className="max-w-[72ch] border-l-2 border-line-strong pl-3 text-sm leading-relaxed text-ink-2">
-                            <span className="block">“{entry.evidence}”</span>
-                            <EvidenceGlossLine gloss={glossFor(glosses, entry.evidence)} />
-                        </blockquote>
-                    ) : null}
-                </li>
-            ))}
-        </ul>
+        <div className="space-y-3">
+            <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
+                {current.map(({ entry, index }) => (
+                    <EvidenceRow entry={entry} glosses={glosses} item={item} key={index} />
+                ))}
+            </ul>
+            {earlier.length > 0 ? (
+                <details className="ma-disclosure rounded-xl border border-line bg-surface">
+                    <summary className="min-h-10 px-4 py-2 text-[13px] font-semibold text-ink">
+                        Earlier clinician answers ({earlier.length})
+                    </summary>
+                    <p className="border-t border-line px-4 py-2.5 text-xs text-muted">
+                        Replaced by a later answer. Kept for the record; the score uses the current answers.
+                    </p>
+                    <ul className="divide-y divide-line border-t border-line">
+                        {earlier.map(({ entry, index }) => (
+                            <EvidenceRow entry={entry} glosses={glosses} item={item} key={index} replaced />
+                        ))}
+                    </ul>
+                </details>
+            ) : null}
+        </div>
     );
 }
 
@@ -285,6 +331,7 @@ export function ADRReviewCard({
                     {open && onRecordAnswers ? (
                         <ADRClinicianAnswers
                             answers={item.naranjoAnswers}
+                            evidence={item.evidence}
                             disabled={submitting || careTeam.missing}
                             onRecord={(answers) =>
                                 careTeam.careTeamId
