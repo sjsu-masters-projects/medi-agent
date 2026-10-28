@@ -108,6 +108,27 @@ the first pass, 557 after the batch-2 addendum, 648 now.
 | Sources (`summary`, `record`, `page`) | Accurate; "expediente" for the record | unchanged |
 | Notification `medication_confirmation_asked` | Accurate; names no medicine | unchanged |
 
+## Proposed addendum: PV-001-D Naranjo answer coverage (October 28)
+
+**Status: awaiting requester acceptance. Not accepted; the receipt is unchanged.** PV-001-D
+(branch `feature/adr-naranjo-answer-coverage`) adds two retrospective ADR follow-up questions.
+The two notification strings below are in the receipt-gated inventory (650 rows at this
+snapshot), so `--require-reviewed` fails until they are accepted and a new receipt is recorded.
+The six follow-up strings live in `adr-follow-up-copy.ts`, outside the inventory, under the
+PV-001-C wording decision; they need the same acceptance. The review notes below are proposed
+for that decision.
+
+| Source/key | Proposed review | Proposed Spanish |
+| --- | --- | --- |
+| Notification `_QUESTION_WORDING.event_after_drug.0` | Accurate; "comenzaste" keeps the tú register; names no medicine | Si el síntoma empezó después de que comenzaste este medicamento |
+| Notification `_QUESTION_WORDING.improved_on_dechallenge.0` | Accurate; impersonal "se suspendió o pausó" does not imply the patient stopped it alone | Si el síntoma mejoró después de que se suspendió o pausó este medicamento |
+| Follow-up `event_after_drug.label` | Accurate | Cuándo empezó el síntoma |
+| Follow-up `event_after_drug.prompt` | Accurate; "por primera vez" keeps "first start" | ¿Este síntoma empezó por primera vez después de que comenzaste a tomar este medicamento? |
+| Follow-up `event_after_drug.evidencePrompt` | Accurate | Describe cuándo empezaste el medicamento y cuándo empezó el síntoma. |
+| Follow-up `improved_on_dechallenge.label` | Accurate; follows the accepted "Qué pasó al reiniciarlo antes" pattern | Qué pasó al suspenderlo o pausarlo antes |
+| Follow-up `improved_on_dechallenge.prompt` | Accurate; keeps "Antes de esta solicitud" and the explicit do-not-stop caution, as the accepted rechallenge and dose prompts do | Antes de esta solicitud, ¿el síntoma mejoró después de que se suspendió o pausó este medicamento? No lo suspendas ni lo omitas para responder. |
+| Follow-up `improved_on_dechallenge.evidencePrompt` | Accurate | Describe cuándo se suspendió o pausó y qué pasó. |
+
 ## Durable acceptance
 
 The receipt stores every source SHA-256, the full paired-entry fingerprint and row

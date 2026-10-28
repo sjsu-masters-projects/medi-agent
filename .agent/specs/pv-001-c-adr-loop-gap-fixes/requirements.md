@@ -31,6 +31,10 @@
 > `064_medwatch_form_3500.sql`. The contract-test fixture finds the PR 2 file by name
 > (`*_adr_information_loop_lifecycle.sql`).
 > **Scope tracker:** `.agent/TASKS.md` → PV-001-C / PV-002. Historical implementation findings below describe their stated baseline, not current deployment status. October 19 Spanish answers and synthetic draft/export/discard evidence are in the [grouped acceptance checkpoint](../../../docs/evidence/deployed-recheck-2026-10-11.md#pr-202-grouped-acceptance-continuation--october-19).
+> **Question set amendment (2026-10-28, PV-001-D):** migration `100_adr_naranjo_answer_coverage.sql` (not yet
+> applied) widens Question_Key to five patient questions (adding `event_after_drug` and `improved_on_dechallenge`)
+> and lets an assigned clinician record the other five. The three-key definitions below describe this document's
+> baseline. See [PV-001-D](../pv-001-d-naranjo-answer-coverage.md).
 
 ## Introduction
 
