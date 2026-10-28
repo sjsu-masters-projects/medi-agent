@@ -1,7 +1,8 @@
 # PV-001-D Naranjo answer coverage
 
 > **Status:** In progress. Implemented and checked locally on `feature/adr-naranjo-answer-coverage`;
-> migration `100_adr_naranjo_answer_coverage.sql` is written and **not applied**. Not merged or deployed.
+> migration `100_adr_naranjo_answer_coverage.sql` was applied to the hosted medi-agent-staging project by the
+> requester on October 28, 2026 (ledger row 17:37:34 UTC). The code is **not merged or deployed**.
 > **Owner:** Jeevan. **Parent:** PV-001 (Ganesh). **Tracker:** `.agent/TASKS.md` → PV-001-D.
 
 ## Problem
@@ -73,7 +74,10 @@ questions and are defined once in `app.pharmacovigilance.models`.
 
 ## Rollout and rollback
 
-Migration 100 must be applied to the hosted project **before** this backend is deployed. The
+Migration 100 must be applied to the hosted project **before** this backend is deployed. It was
+applied on October 28 (requester, single-file apply through the filename/checksum ledger; the
+migration's own check that browser roles cannot execute the new function passed inside the
+transaction). Pending 098 and 099 were not touched. The
 order matters in one direction only:
 
 - New database, current backend: compatible. The current backend asks at most three questions,
@@ -125,7 +129,7 @@ and `backend/tests/TESTING_GUIDE.md` now says to keep the two groups in separate
 
 ## Remaining before Done
 
-- Requester applies migration 100 (Spanish wording accepted October 28).
+- Peer and safety review (Ganesh). Migration 100 is applied and the Spanish wording accepted (October 28).
 - Peer and safety review (PV-001 owner).
 - Deployed acceptance: Elena requests all five patient questions for Morgan; Morgan answers in
   en-US and es-MX; Elena records clinician answers with a basis; the score, evidence attribution,
