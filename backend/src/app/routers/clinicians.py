@@ -23,6 +23,8 @@ from app.core.security import require_role
 from app.db.connection import get_db
 from app.middleware.rate_limit import soap_note_rate_limiter
 from app.models.adr import (
+    ADRClinicianAnswersRequest,
+    ADRClinicianAnswersResponse,
     ADRReviewDecisionRequest,
     ADRReviewDecisionResponse,
     ADRReviewQueueItem,
@@ -523,6 +525,26 @@ async def review_adr_assessment(
     service: ClinicianService = Depends(_get_service),
 ) -> Any:
     return await service.review_adr_assessment(user.id, assessment_id, decision)
+
+
+@router.post(
+    "/me/adr-assessments/{assessment_id}/naranjo-answers",
+    response_model=ADRClinicianAnswersResponse,
+    summary="Record clinician Naranjo answers on an open ADR assessment",
+    description=(
+        "Records answers to the Naranjo questions a patient is never asked (previous "
+        "reports, alternative causes, placebo, toxic drug level, objective evidence). The "
+        "score is recalculated by the same deterministic rules and an immutable audit "
+        "event is written. The score remains decision support, not a clinical verdict."
+    ),
+)
+async def record_adr_clinician_answers(
+    assessment_id: UUID,
+    request: ADRClinicianAnswersRequest,
+    user: CurrentUser = Depends(_clinician_dep),
+    service: ClinicianService = Depends(_get_service),
+) -> Any:
+    return await service.record_adr_clinician_answers(user.id, assessment_id, request)
 
 
 @router.post(

@@ -160,6 +160,8 @@ def _evidence_source_type(entry: Mapping[str, Any]) -> tuple[str, str]:
     source = entry.get("source")
     if source == "patient_follow_up":
         return "patient_confirmed_adr_evidence", "Patient-confirmed follow-up answer"
+    if source == "clinician_entry":
+        return "clinician_entered_adr_evidence", "Clinician-entered Naranjo answer"
     if not source:
         return "ai_extracted_adr_evidence", "AI-extracted from the patient's report"
     return "adr_assessment_evidence", f"Recorded ADR evidence ({source})"

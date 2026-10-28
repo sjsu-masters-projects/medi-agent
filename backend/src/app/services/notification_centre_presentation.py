@@ -176,6 +176,14 @@ _COPY: dict[str, tuple[str, str, str, str]] = {
 # Fixed (en-US, es-MX) wording per patient-answerable question key. Stored values are
 # never echoed: anything outside this allowlist is dropped.
 _QUESTION_WORDING: dict[str, tuple[str, str]] = {
+    "event_after_drug": (
+        "Whether the symptom started after you began this medicine",
+        "Si el síntoma empezó después de que comenzaste este medicamento",
+    ),
+    "improved_on_dechallenge": (
+        "Whether the symptom got better after this medicine was stopped or paused",
+        "Si el síntoma mejoró después de que se suspendió o pausó este medicamento",
+    ),
     "reappeared_on_rechallenge": (
         "Whether the symptom came back after restarting this medicine",
         "Si el síntoma volvió después de reiniciar este medicamento",
@@ -189,7 +197,7 @@ _QUESTION_WORDING: dict[str, tuple[str, str]] = {
         "Si has tenido antes una reacción similar a este medicamento",
     ),
 }
-_MAX_LISTED_QUESTIONS = 3
+_MAX_LISTED_QUESTIONS = 5
 
 
 def _identifier(value: Any) -> str | None:

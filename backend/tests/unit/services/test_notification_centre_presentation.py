@@ -194,11 +194,19 @@ def test_appointment_response_acknowledgement_flows_only_while_actionable(
 # Independent copy of the approved R5 wording, so a drift in the module fails here.
 QUESTION_WORDING = {
     "en-US": {
+        "event_after_drug": "Whether the symptom started after you began this medicine",
+        "improved_on_dechallenge": (
+            "Whether the symptom got better after this medicine was stopped or paused"
+        ),
         "reappeared_on_rechallenge": "Whether the symptom came back after restarting this medicine",
         "dose_response": "Whether the symptom changed after a dose change your clinician directed",
         "similar_previous_reaction": "Whether you have had a similar reaction to this medicine before",
     },
     "es-MX": {
+        "event_after_drug": "Si el síntoma empezó después de que comenzaste este medicamento",
+        "improved_on_dechallenge": (
+            "Si el síntoma mejoró después de que se suspendió o pausó este medicamento"
+        ),
         "reappeared_on_rechallenge": "Si el síntoma volvió después de reiniciar este medicamento",
         "dose_response": (
             "Si el síntoma cambió después de un cambio de dosis indicado por tu profesional de salud"
@@ -248,7 +256,7 @@ def question_lines(body: str) -> list[str]:
 
 
 @pytest.mark.parametrize("locale", LOCALES)
-def test_all_three_questions_use_the_fixed_wording_in_each_locale(locale):
+def test_all_five_questions_use_the_fixed_wording_in_each_locale(locale):
     raw = request_item(metadata={"requested_information": list(QUESTION_KEYS)})
     result = present_item(raw, "patient", locale)
     assert result.title == REQUEST_TITLE[locale]
@@ -331,7 +339,7 @@ def reference_keys(requested: Any) -> list[str]:
     for value in requested:
         if isinstance(value, str) and value in QUESTION_KEYS and value not in keys:
             keys.append(value)
-    return keys[:3]
+    return keys[:5]
 
 
 def property_1_violations(metadata: Any, locale: str) -> list[str]:

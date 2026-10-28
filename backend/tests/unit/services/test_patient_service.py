@@ -671,3 +671,113 @@ async def test_respond_load_failure_is_external_without_postgrest_text(
     assert _RPC_SERVER_DETAIL not in raised.value.message
     assert _RPC_SERVER_DETAIL not in caplog.text
     db.rpc.assert_not_called()
+
+
+# ── PV-001-D: new retrospective questions and the stale-payload retry ───────────
+
+
+_SAVED_RESPONSE = SimpleNamespace(
+    data=[
+        {
+            "id": "00000000-0000-4000-8000-0000000000a1",
+            "adr_assessment_id": "00000000-0000-4000-8000-0000000000a2",
+            "status": "answered",
+            "resolved_naranjo_score": 3,
+            "resolved_causality": "Possible",
+            "responded_at": "2026-10-27T10:05:00Z",
+        }
+    ]
+)
+
+
+@pytest.mark.asyncio
+async def test_patient_answers_the_two_new_retrospective_questions() -> None:
+    patient_id, request_id = uuid4(), uuid4()
+    db = MagicMock()
+    db.table.return_value = _query(
+        SimpleNamespace(
+            data=[
+                {
+                    "id": str(request_id),
+                    "adr_assessment_id": str(uuid4()),
+                    "patient_id": str(patient_id),
+                    "status": "pending",
+                    "requested_information": ["event_after_drug", "improved_on_dechallenge"],
+                    "adr_assessments": {
+                        "status": "draft",
+                        "naranjo_answers": {"alternative_causes": "no"},
+                        "evidence": [],
+                    },
+                }
+            ]
+        )
+    )
+    db.rpc.return_value.execute.return_value = _SAVED_RESPONSE
+
+    await PatientService(db).respond_to_adr_information_request(
+        patient_id,
+        request_id,
+        ADRInformationResponseRequest(
+            answers=[
+                ADRInformationAnswer(
+                    question=NaranjoQuestion.EVENT_AFTER_DRUG,
+                    answer=NaranjoAnswer.YES,
+                    evidence="It began two days after I started it.",
+                ),
+                ADRInformationAnswer(
+                    question=NaranjoQuestion.IMPROVED_ON_DECHALLENGE,
+                    answer=NaranjoAnswer.YES,
+                    evidence="It eased when my clinician paused it.",
+                ),
+            ],
+            confirmed=True,
+        ),
+    )
+
+    payload = db.rpc.call_args.args[1]
+    # A clinician's stored answer is kept beside the patient's.
+    assert payload["p_naranjo_answers"] == {
+        "alternative_causes": "no",
+        "event_after_drug": "yes",
+        "improved_on_dechallenge": "yes",
+    }
+    assert payload["p_score"] == 5  # +2 after drug, +1 improved, +2 no alternative cause
+    assert payload["p_causality"] == "Probable"
+
+
+@pytest.mark.asyncio
+async def test_a_clinician_answer_saved_in_between_is_reread_once() -> None:
+    patient_id, request_id = uuid4(), uuid4()
+    db = _pending_request_db(patient_id, request_id)
+    db.rpc.return_value.execute.side_effect = [
+        APIError({"code": "40001", "message": _RPC_SERVER_DETAIL, "details": None}),
+        _SAVED_RESPONSE,
+    ]
+
+    result = await PatientService(db).respond_to_adr_information_request(
+        patient_id, request_id, _dose_response_answer()
+    )
+
+    assert result["status"] == "answered"
+    assert db.rpc.call_count == 2
+    assert db.table.call_count == 2  # the request and assessment were read again
+
+
+@pytest.mark.asyncio
+async def test_repeated_concurrent_changes_ask_the_patient_to_retry(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    patient_id, request_id = uuid4(), uuid4()
+    db = _pending_request_db(patient_id, request_id)
+    db.rpc.return_value.execute.side_effect = APIError(
+        {"code": "40001", "message": _RPC_SERVER_DETAIL, "details": _RPC_SERVER_DETAIL}
+    )
+
+    with caplog.at_level(logging.DEBUG), pytest.raises(ExternalServiceError) as raised:
+        await PatientService(db).respond_to_adr_information_request(
+            patient_id, request_id, _dose_response_answer()
+        )
+
+    assert db.rpc.call_count == 2
+    assert _RPC_SERVER_DETAIL not in str(raised.value)
+    assert _RPC_SERVER_DETAIL not in caplog.text

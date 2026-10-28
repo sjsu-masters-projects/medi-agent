@@ -27,18 +27,24 @@ from supabase import Client
 from app.core import authorization_reasons as reasons
 from app.core.exceptions import (
     AuthorizationError,
+    ConflictError,
     ExternalServiceError,
     NotFoundError,
+    ServiceUnavailableError,
     ValidationError,
 )
 from app.db.repositories import CareTeamRepository, ClinicianRepository, ClinicRepository
 from app.db.supabase_execute import execute_async
 from app.intake.preview import testimony_only
-from app.models.adr import ADRReviewDecisionRequest
+from app.models.adr import ADRClinicianAnswersRequest, ADRReviewDecisionRequest
 from app.models.clinic_membership import ClinicMembership
 from app.models.dashboard import DashboardSortBy, DashboardSortOrder, RiskLevel
 from app.models.enums import ADRStatus, MessageChannel, NotificationType
-from app.pharmacovigilance import PATIENT_ANSWERABLE_NARANJO_QUESTIONS, NaranjoQuestion
+from app.pharmacovigilance import (
+    PATIENT_ANSWERABLE_NARANJO_QUESTIONS,
+    NaranjoQuestion,
+    score_naranjo,
+)
 from app.services.acting_care_team import acting_care_team
 from app.services.care_plan_activity_scope import ActivityScope, plan_owner_by_target, visible_to
 from app.services.care_team_access import CareTeamAccessService, ClinicianAccess, PatientAccess
@@ -62,6 +68,25 @@ def _with_transcript_translation(result: dict[str, Any], row: dict[str, Any]) ->
         result["translation"] = row.get("translated_text")
         result["translation_model_id"] = row.get("model_id")
     return result
+
+
+# One read and save, then one repeat when a concurrent answer changed the assessment.
+_ADR_ANSWER_ATTEMPTS = 2
+
+
+def _adr_answer_error(code: str | None, assessment_id: UUID) -> Exception:
+    """The service error for a refused clinician-answer save, from its SQLSTATE only."""
+    if code in {"P0002", "42501"}:
+        # Unknown, or taken up by another team: the same answer as an unknown id.
+        return NotFoundError("ADR assessment", str(assessment_id))
+    if code == "23514":
+        return ValidationError("ADR assessment review has already been completed")
+    if code == "22023":
+        return ValidationError("These answers could not be accepted")
+    if code == "PGRST202":
+        # The database migration that adds the function has not been applied yet.
+        return ServiceUnavailableError("Recording clinician answers is not available yet")
+    return ExternalServiceError("Supabase", "Clinician answers could not be saved")
 
 
 logger = logging.getLogger(__name__)
@@ -727,27 +752,12 @@ class ClinicianService:
         decision: ADRReviewDecisionRequest,
     ) -> dict[str, Any]:
         """Apply an atomic, assignment-scoped clinician action to an ADR draft."""
-        assessment_result = await self._execute(
-            self.db.table("adr_assessments")
-            .select(
-                "id, patient_id, status, naranjo_assessment, reviewed_by, reviewed_by_care_team_id"
-            )
-            .eq("id", str(assessment_id))
-            .single()
+        assessment, team_id = await self._open_adr_assessment(
+            clinician_id,
+            assessment_id,
+            decision.care_team_id,
+            "id, patient_id, status, naranjo_assessment, reviewed_by, reviewed_by_care_team_id",
         )
-        assessment = cast(dict[str, Any] | None, assessment_result.data)
-        if not assessment:
-            raise NotFoundError("ADR assessment", str(assessment_id))
-
-        patient_id = UUID(str(assessment["patient_id"]))
-        await self._assert_patient_assignment(clinician_id, patient_id)
-        access = await self._patient_access(clinician_id, patient_id)
-        if not access.can_see_adr(assessment):
-            # Another team already acted on it: the same answer as an unknown id.
-            raise NotFoundError("ADR assessment", str(assessment_id))
-        team_id = acting_care_team(access, decision.care_team_id)
-        if assessment.get("status") != ADRStatus.DRAFT.value:
-            raise ValidationError("ADR assessment review has already been completed")
 
         if decision.action.value == "request_information":
             requested = set(decision.requested_information)
@@ -780,6 +790,99 @@ class ClinicianService:
         rows = cast(list[dict[str, Any]], result.data or [])
         if not rows:
             raise ValidationError("ADR assessment review could not be saved")
+        return rows[0]
+
+    async def _open_adr_assessment(
+        self,
+        clinician_id: UUID,
+        assessment_id: UUID,
+        care_team_id: UUID | None,
+        columns: str,
+    ) -> tuple[dict[str, Any], str]:
+        """An open assessment this clinician may act on, and the team they act for."""
+        assessment_result = await self._execute(
+            self.db.table("adr_assessments").select(columns).eq("id", str(assessment_id)).single()
+        )
+        assessment = cast(dict[str, Any] | None, assessment_result.data)
+        if not assessment:
+            raise NotFoundError("ADR assessment", str(assessment_id))
+
+        patient_id = UUID(str(assessment["patient_id"]))
+        await self._assert_patient_assignment(clinician_id, patient_id)
+        access = await self._patient_access(clinician_id, patient_id)
+        if not access.can_see_adr(assessment):
+            # Another team already acted on it: the same answer as an unknown id.
+            raise NotFoundError("ADR assessment", str(assessment_id))
+        team_id = acting_care_team(access, care_team_id)
+        if assessment.get("status") != ADRStatus.DRAFT.value:
+            raise ValidationError("ADR assessment review has already been completed")
+        return assessment, team_id
+
+    async def record_adr_clinician_answers(
+        self,
+        clinician_id: UUID,
+        assessment_id: UUID,
+        request: ADRClinicianAnswersRequest,
+    ) -> dict[str, Any]:
+        """Record clinician Naranjo answers on an open assessment and rescore it atomically.
+
+        The score is recalculated by the shared deterministic rules from the stored answers
+        with the recorded questions replaced. The database refuses a payload built on answers
+        that changed after this read (40001); the read is repeated once before giving up.
+        """
+        for _ in range(_ADR_ANSWER_ATTEMPTS):
+            saved = await self._record_adr_clinician_answers_once(
+                clinician_id, assessment_id, request
+            )
+            if saved is not None:
+                return saved
+        raise ConflictError(
+            "The ADR assessment changed while saving. Reload it and try again.",
+            code="ADR_ASSESSMENT_CHANGED",
+        )
+
+    async def _record_adr_clinician_answers_once(
+        self,
+        clinician_id: UUID,
+        assessment_id: UUID,
+        request: ADRClinicianAnswersRequest,
+    ) -> dict[str, Any] | None:
+        """One read, rescore and save; None when the assessment changed in between."""
+        assessment, team_id = await self._open_adr_assessment(
+            clinician_id,
+            assessment_id,
+            request.care_team_id,
+            "id, patient_id, status, naranjo_answers, reviewed_by, reviewed_by_care_team_id",
+        )
+        merged = {
+            **cast(dict[str, str], assessment.get("naranjo_answers") or {}),
+            **{item.question.value: item.answer.value for item in request.answers},
+        }
+        rescored = score_naranjo(merged)
+        try:
+            result = await self._execute(
+                self.db.rpc(
+                    "record_adr_clinician_answers",
+                    {
+                        "p_assessment_id": str(assessment_id),
+                        "p_actor_id": str(clinician_id),
+                        "p_answers": [item.model_dump(mode="json") for item in request.answers],
+                        "p_naranjo_answers": merged,
+                        "p_naranjo_assessment": rescored.model_dump(mode="json"),
+                        "p_score": rescored.score,
+                        "p_causality": rescored.causality.value,
+                        "p_care_team_id": team_id,
+                    },
+                )
+            )
+        except APIError as exc:
+            if exc.code == "40001":
+                return None
+            # Map only the SQLSTATE. Never log PostgREST details: they can echo the basis.
+            raise _adr_answer_error(exc.code, assessment_id) from None
+        rows = cast(list[dict[str, Any]], result.data or [])
+        if not rows:
+            raise ValidationError("Clinician answers could not be saved")
         return rows[0]
 
     @staticmethod

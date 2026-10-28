@@ -32,14 +32,28 @@ class NaranjoQuestion(StrEnum):
     OBJECTIVE_EVIDENCE = "objective_evidence"
 
 
-# These questions can be answered from events the patient already experienced. The
-# remaining Naranjo inputs require a clinician, chart, literature, laboratory result,
-# or a controlled exposure and must never be presented as an instruction to the patient.
+# These questions can be answered from events the patient already experienced. They are
+# always asked retrospectively and must never be presented as an instruction to start,
+# stop or change a medicine.
 PATIENT_ANSWERABLE_NARANJO_QUESTIONS = frozenset(
     {
+        NaranjoQuestion.EVENT_AFTER_DRUG,
+        NaranjoQuestion.IMPROVED_ON_DECHALLENGE,
         NaranjoQuestion.REAPPEARED_ON_RECHALLENGE,
         NaranjoQuestion.DOSE_RESPONSE,
         NaranjoQuestion.SIMILAR_PREVIOUS_REACTION,
+    }
+)
+
+# These need a clinician's judgment, the literature, a laboratory result or a controlled
+# exposure. An assigned clinician records them; a patient is never asked them.
+CLINICIAN_ANSWERABLE_NARANJO_QUESTIONS = frozenset(
+    {
+        NaranjoQuestion.PREVIOUS_REPORTS,
+        NaranjoQuestion.ALTERNATIVE_CAUSES,
+        NaranjoQuestion.REAPPEARED_WITH_PLACEBO,
+        NaranjoQuestion.TOXIC_DRUG_CONCENTRATION,
+        NaranjoQuestion.OBJECTIVE_EVIDENCE,
     }
 )
 
