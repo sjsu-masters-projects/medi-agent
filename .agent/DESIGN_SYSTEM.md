@@ -40,6 +40,11 @@ Foundation PR. Track scope and evidence in [TASKS.md](TASKS.md).
 - Use tokens from each app's globals.css, not competing ad hoc palettes.
 - A check seal communicates actual clinician approval/verification. A sparkle chip
   identifies AI-produced content. Never substitute one for the other.
+- Records override (requester-approved October 29, REC-001-UX): document-type
+  tiles and file-format chips use neutral tokens in both portals. Shape identifies
+  type, with visible type and uploader labels; unknown types use the file icon.
+  Source-review badges state approval in words. Completed parsing stays neutral
+  so processing success cannot be mistaken for clinical approval.
 
 ## Motion and depth
 

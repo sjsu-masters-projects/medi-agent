@@ -55,6 +55,7 @@ export default function ChatPage() {
     const careTeamDestination = searchParams.get("view") === "care-team";
     const conversationId = careTeamDestination ? searchParams.get("conversation") : null;
     const recipientId = careTeamDestination ? searchParams.get("recipient") : null;
+    const recordRequestId = careTeamDestination ? searchParams.get("record_request") : null;
     // A document handoff from Records opens Nora directly (see usePatientChatSession).
     const [inbox, setInbox] = useState(() => !conversationOpen && !searchParams.has("document") && !searchParams.has("session"));
     const requestedDestination = careTeamDestination ? `${conversationId ?? ""}:${recipientId ?? ""}` : null;
@@ -250,7 +251,7 @@ export default function ChatPage() {
         </section> : null}
         {inbox && !humanThreadId && <NoraConversations locale={locale} activeSessionId={sessionId} onOpen={openNora} />}
         {(inbox || careTeamOpened) && <div ref={careTeamRegionRef} role="region" aria-label={copy.careTeamLabel} tabIndex={-1} hidden={!inbox && conversation !== "care-team"} className="space-y-3 outline-none">
-            <CareConversations compact locale={locale} conversationId={conversationId} recipientId={recipientId} inboxLead={<ADRFollowUpEntryRow locale={locale} />} visible={inbox || conversation === "care-team"} onThreadPresentationChange={setHumanThreadId} />
+            <CareConversations compact locale={locale} conversationId={conversationId} recipientId={recipientId} recordRequestId={recordRequestId} inboxLead={<ADRFollowUpEntryRow locale={locale} />} visible={inbox || conversation === "care-team"} onThreadPresentationChange={setHumanThreadId} />
             {historicalMessages.length > 0 && <section hidden={Boolean(humanThreadId)} className="overflow-hidden rounded-[22px] bg-surface">
                 <button className="flex min-h-14 w-full items-center gap-3 px-[14px] py-3 text-left hover:bg-[#FBF7F0]" type="button" aria-expanded={showHistory}
                     onClick={() => setShowHistory((current) => !current)}>

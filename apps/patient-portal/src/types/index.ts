@@ -85,6 +85,7 @@ export {
     Gender,
     ChatRole,
     DocumentParseStatus,
+    DocumentReviewStatus,
     DocumentType,
     PortalUserRole,
     FeedTaskStatus,

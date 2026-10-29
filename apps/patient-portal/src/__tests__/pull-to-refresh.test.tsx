@@ -40,6 +40,19 @@ describe("PullToRefresh", () => {
         expect(refresh).not.toHaveBeenCalled();
         expect(screen.getByRole("img", { name: "Refresh" })).toBeInTheDocument();
     });
+    it("can leave parent loading to the page's own indicator while still blocking gestures", async () => {
+        let resolve!: () => void;
+        const refresh = vi.fn(() => new Promise<void>((done) => { resolve = done; }));
+        const { rerender } = render(<PullToRefresh busy indicateBusy={false} onRefresh={refresh} label="Refresh"><p>List</p></PullToRefresh>);
+        expect(screen.queryByRole("img", { name: "Refresh" })).not.toBeInTheDocument();
+        gesture(screen.getByText("List"));
+        expect(refresh).not.toHaveBeenCalled();
+        rerender(<PullToRefresh indicateBusy={false} onRefresh={refresh} label="Refresh"><p>List</p></PullToRefresh>);
+        gesture(screen.getByText("List"));
+        expect(screen.getByRole("img", { name: "Refresh" })).toBeInTheDocument();
+        await act(async () => { resolve(); });
+        expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    });
     it("keeps the pending indication until an actual async refresh resolves", async () => {
         let resolve!: () => void;
         const refresh = vi.fn(() => new Promise<void>((done) => { resolve = done; }));

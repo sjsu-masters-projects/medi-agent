@@ -1,12 +1,14 @@
-import { Icon, type IconName } from "@/components/ui/icons";
-import { IconTile, type TileTone } from "@/components/ui/list";
+import { Icon } from "@/components/ui/icons";
+import { IconTile } from "@/components/ui/list";
+import { documentTypeIcon } from "../../../../../packages/shared/src/utils/document-presentation";
 import {
   DocumentParseStatus,
-  DocumentType,
   type Document,
   type Locale,
 } from "@/types";
 import { recordsCopy } from "./records-copy";
+import { RecordReviewStatus } from "./record-review-status";
+import { RecordOrigin } from "./record-origin";
 
 /** Filename formatting only; source identity and clinical wording stay untouched. */
 export function cleanRecordTitle(filename: string, patientName?: string) {
@@ -67,12 +69,6 @@ export function groupRecordDates<T extends { createdAt: string }>(
   ].filter((group) => group.items.length);
 }
 
-const tiles: Partial<Record<DocumentType, { icon: IconName; tone: TileTone }>> = {
-  [DocumentType.LAB_REPORT]: { icon: "lab", tone: "lab" },
-  [DocumentType.PRESCRIPTION]: { icon: "rx", tone: "med" },
-  [DocumentType.DISCHARGE_SUMMARY]: { icon: "note", tone: "note" },
-};
-
 export function RecordRow({
   document,
   patientName,
@@ -82,6 +78,11 @@ export function RecordRow({
   date,
   statusLabel,
   onOpen,
+  entering = false,
+  leaving = false,
+  highlight = false,
+  onHighlightEnd,
+  stalled = false,
 }: {
   document: Document;
   patientName?: string;
@@ -91,24 +92,39 @@ export function RecordRow({
   date: string;
   statusLabel?: string;
   onOpen: () => void;
+  /** A row added during this visit, such as a new upload. */
+  entering?: boolean;
+  /** A removed row on its way out; it no longer takes input. */
+  leaving?: boolean;
+  /** A brief neutral highlight after processing finishes while the page is open. */
+  highlight?: boolean;
+  onHighlightEnd?: () => void;
+  /** Still processing, but the page stopped checking: no moving dots. */
+  stalled?: boolean;
 }) {
   const duplicate = document.parseStatus === DocumentParseStatus.DUPLICATE;
   const processing =
     document.parseStatus === DocumentParseStatus.PENDING ||
     document.parseStatus === DocumentParseStatus.PROCESSING;
+  const live = processing && !stalled;
   const failed = document.parseStatus === DocumentParseStatus.FAILED;
-  const tile = tiles[document.documentType] ?? (document.uploadedByRole === "patient"
-    ? { icon: "up" as const, tone: "upload" as const }
-    : { icon: "note" as const, tone: "note" as const });
   const summary = statusLabel === recordsCopy(locale, "AI Summary");
   const spanish = locale === "es-MX";
+  const motion = leaving ? "ma-leave pointer-events-none" : highlight ? "ma-ready" : entering ? "ma-enter" : "";
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="group flex min-h-11 w-full items-center gap-3 px-[14px] py-[13px] text-left transition-colors duration-[160ms] hover:bg-[#FBF7F0] active:bg-surface-2"
+      aria-hidden={leaving || undefined}
+      tabIndex={leaving ? -1 : undefined}
+      onAnimationEnd={(event) => {
+        // Child animations (dots, chip fade) bubble here; only the row's own highlight counts.
+        if (event.target === event.currentTarget && event.animationName === "ma-ready")
+          onHighlightEnd?.();
+      }}
+      className={`group flex min-h-11 w-full items-center gap-3 px-[14px] py-[13px] text-left transition-colors duration-[160ms] hover:bg-[#FBF7F0] active:bg-surface-2 ${motion}`}
     >
-      <IconTile icon={tile.icon} tone={tile.tone} className={duplicate ? "opacity-70" : ""} />
+      <IconTile icon={documentTypeIcon(document.documentType)} tone="neutral" className={duplicate ? "opacity-70" : ""} />
       <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
         <span className="min-w-0 flex-1 basis-[128px]">
           <h3
@@ -120,6 +136,8 @@ export function RecordRow({
           <span className="mt-0.5 block break-words text-[13px] leading-snug text-muted first-letter:uppercase">
             <span>{typeLabel}</span> · {provider} · {date}
           </span>
+          <RecordOrigin document={document} locale={locale} />
+          <RecordReviewStatus status={document.reviewStatus} locale={locale} />
           {duplicate ? (
             <span className="mt-0.5 block text-[13px] text-muted">
               {statusLabel}
@@ -141,17 +159,19 @@ export function RecordRow({
               <span
                 className={`inline-flex flex-wrap items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${failed ? "bg-danger-tint text-danger-ink" : processing ? "bg-surface-2 text-muted" : "bg-note-tint text-note-ink"}`}
               >
-                {processing ? (
+                {live ? (
                   <>
                     <span className="sr-only">{statusLabel}</span>
                     <span aria-hidden="true">
                       {spanish ? "Leyendo" : "Reading"}
                     </span>
                   </>
+                ) : processing ? (
+                  recordsCopy(locale, "Still processing")
                 ) : (
                   statusLabel
                 )}
-                {processing ? (
+                {live ? (
                   <span aria-hidden="true" className="inline-flex gap-[3px]">
                     {[0, 0.15, 0.3].map((delay) => (
                       <span

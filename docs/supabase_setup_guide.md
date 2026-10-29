@@ -74,6 +74,22 @@ reminder run. Configuration and production status:
 
 ## Apply migrations
 
+`102_document_explanation_presentations.sql` adds the service-only validated
+presentation cache for REC-001-UX. It retains one current entry per document/locale,
+with a source fingerprint and format version, and cascades on document removal.
+It changes no source summary, review or clinical truth. Apply it before the matching
+backend release only after explicit authorization for that hosted target. It is
+locally tested, not hosted-applied here; missing schema makes structured explanations
+unavailable without falling back to an AI call on every view.
+
+`101_patient_document_removal.sql` is required by REC-001-RM's restricted patient
+removal route. It adds a minimal removal audit and service-role-only status/removal
+functions using the existing evidence fence; no source backfill. Apply it before
+the matching backend/portal release, only after explicit target authorization.
+Without it the route fails closed and the portal offers the private care-team
+request path. Local checks and rollout state belong to the
+[record clarity contract](../.agent/specs/rec-001-patient-record-clarity.md#patient-removal-and-reading-refinement).
+
 Apply every SQL file through the repository migration ledger against an empty development database. The ledger records the complete filename and SHA-256 checksum, so a rerun skips unchanged files and stops if an applied migration was edited. Do not run a reset, seed, or migration command against a production database.
 
 ```bash

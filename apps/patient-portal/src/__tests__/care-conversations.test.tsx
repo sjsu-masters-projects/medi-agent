@@ -114,6 +114,34 @@ describe("non-blocking message translation", () => {
 });
 
 describe("human conversations", () => {
+  it("prepares a record request only after recipient choice and sends through the existing explicit message path", async () => {
+    vi.mocked(api.get).mockResolvedValue({ id: "source-record", patient_id: "patient", file_name: "synthetic-source.pdf" });
+    render(<CareConversations compact recordRequestId="source-record" recipientId="clinician-two" />);
+    await screen.findByText(/Choose a care-team member to request a record correction/);
+    expect(careConversations.open).not.toHaveBeenCalled();
+    expect(careConversations.messages).not.toHaveBeenCalled();
+    expect(careConversations.send).not.toHaveBeenCalled();
+    await select();
+    fireEvent.click(await screen.findByRole("button", { name: "Prepare request" }));
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toContain("Record reference: source-record");
+    expect(careConversations.send).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(careConversations.send).toHaveBeenCalledWith("synthetic-token", "thread-one", expect.stringContaining("Record reference: source-record"), expect.any(String)));
+  });
+
+  it("requires choosing a recipient again for a new request and retains an unrelated draft", async () => {
+    vi.mocked(api.get).mockResolvedValue({ id: "source-record", patient_id: "patient", file_name: "synthetic-source.pdf" });
+    const { rerender } = render(<CareConversations compact />);
+    await select();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "My unsent private question" } });
+    rerender(<CareConversations compact recordRequestId="source-record" />);
+    await screen.findByText(/Choose a care-team member to request a record correction/);
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    await select();
+    expect(screen.getByRole("textbox")).toHaveValue("My unsent private question");
+    expect(await screen.findByRole("button", { name: "Prepare request" })).toBeDisabled();
+    expect(careConversations.send).not.toHaveBeenCalled();
+  });
   it.each([
     ["en-US", "Automatic translation unavailable for this message"],
     ["es-MX", "Traducción automática no disponible para este mensaje"],

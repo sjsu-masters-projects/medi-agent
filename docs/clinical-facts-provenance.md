@@ -88,6 +88,16 @@ nor the candidate is deleted.
 
 ## Lineage and access
 
+REC-001-RM restricts patient document removal to their own pending, unused upload.
+Migration 101 adds a service-role-only removal/status contract and a minimal audit
+independent of the deleted document. It preserves any source with a recorded review,
+candidate decision, annotation or clinical/care-plan use. A denial makes no withdrawal
+or clinical mutation. The removal locks the document and takes the existing evidence
+fence without waiting in reverse lock order; conflicts require a fresh read/retry.
+Reviewed and clinician-uploaded records use an explicit private care-team message to
+request correction/removal instead. Such a message grants no authority to alter the
+source or approved local truth. Hosted application of 101 remains separately gated.
+
 `ClinicalFactService.get_lineage(fact_id, patient_id)` resolves a fact to its
 citations and source artifacts. `list_facts_for_document(document_id, patient_id)`
 resolves a source document to the non-deleted candidates it supports.

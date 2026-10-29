@@ -123,7 +123,7 @@ describe("PatientDocumentsPanel", () => {
         );
 
         expect(screen.getByText("lab.pdf")).toBeInTheDocument();
-        expect(screen.getByText(/Review rejected/i)).toBeInTheDocument();
+        expect(screen.getByText("Source not approved")).toBeInTheDocument();
         expect(screen.getByText(/by Mina Shah/i)).toBeInTheDocument();
         expect(screen.getByText(/Review note: Looks valid/i)).toBeInTheDocument();
     });

@@ -1,4 +1,4 @@
-import { DocumentType, type Document } from "@/types";
+import { DocumentType, type Document, type Locale } from "@/types";
 import { api } from "./api";
 
 export interface DocumentApiRecord {
@@ -23,8 +23,74 @@ export interface DocumentApiRecord {
     summary_status?: string | null;
     summary_failure_code?: string | null;
     source_clinic?: string | null;
+    review_status?: Document["reviewStatus"] | null;
+    reviewed_at?: string | null;
     visibility: Document["visibility"];
     created_at: string;
+}
+
+export const EXPLANATION_KINDS = [
+    "overview",
+    "medicines",
+    "results",
+    "conditions",
+    "allergies",
+    "instructions",
+    "questions",
+] as const;
+export type ExplanationKind = (typeof EXPLANATION_KINDS)[number];
+export interface ExplanationSection {
+    kind: ExplanationKind;
+    items: string[];
+}
+export interface DocumentExplanation {
+    language: Locale;
+    summary: string;
+    sections: ExplanationSection[];
+}
+
+/** Refuse an older server's unstructured or mismatched-language response. */
+export function readDocumentExplanation(
+    value: unknown,
+    locale: Locale,
+): DocumentExplanation | null {
+    if (!value || typeof value !== "object") return null;
+    const response = value as Record<string, unknown>;
+    if (
+        response.available !== true ||
+        response.language !== locale ||
+        !Array.isArray(response.sections) ||
+        !response.sections.length ||
+        response.sections.length > EXPLANATION_KINDS.length
+    )
+        return null;
+    const sections: ExplanationSection[] = [];
+    for (const candidate of response.sections) {
+        if (!candidate || typeof candidate !== "object") return null;
+        const section = candidate as Record<string, unknown>;
+        if (
+            !EXPLANATION_KINDS.includes(section.kind as ExplanationKind) ||
+            !Array.isArray(section.items) ||
+            !section.items.length ||
+            section.items.length > 20 ||
+            section.items.some(
+                (item) =>
+                    typeof item !== "string" ||
+                    !item.trim() ||
+                    item.length > 2000,
+            )
+        )
+            return null;
+        if (sections.some((item) => item.kind === section.kind)) return null;
+        sections.push({
+            kind: section.kind as ExplanationKind,
+            items: section.items as string[],
+        });
+    }
+    // Speech and chat use exactly the same text as the visible sections.
+    const summary = sections.flatMap((section) => section.items).join("\n\n");
+    if (summary.length > 16000 || summary !== response.summary) return null;
+    return { language: locale, summary, sections };
 }
 
 /** Render persisted legacy summaries as text even if an older model used Markdown. */

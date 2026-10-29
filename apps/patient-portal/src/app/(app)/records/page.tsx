@@ -9,8 +9,16 @@ import { NotificationBell } from "@/components/features/notification-centre";
 import { groupRecordDates, RecordRow, recordTitle } from "@/components/features/record-row";
 import { Icon } from "@/components/ui/icons";
 import { PullToRefresh } from "@/components/ui/pull-to-refresh";
-import { OverflowMenu } from "@/components/ui/overflow-menu";
-import { ListenBars, ProcessingDots } from "@/components/ui/motion";
+import { RecordActions } from "@/components/features/record-actions";
+import { RecordOrigin } from "@/components/features/record-origin";
+import { RecordReviewStatus } from "@/components/features/record-review-status";
+import {
+  EXPLANATION_SLOW_MS,
+  ExplanationPending,
+  ExplanationSections,
+} from "@/components/features/explanation-sections";
+import { useDocumentExplanation } from "@/hooks/use-document-explanation";
+import { ListenBars, ProcessingDots, useReducedMotion } from "@/components/ui/motion";
 import { usePatientProfile } from "@/hooks/use-patient-profile";
 import { recordsCopy } from "@/components/features/records-copy";
 import { Button, EmptyState, ErrorState, Modal, Skeleton } from "@/components/ui";
@@ -39,10 +47,7 @@ import {
   DEFAULT_LOCALE,
   DocumentParseStatus,
   Locale,
-  SUPPORTED_LOCALES,
-  getLocaleLabel,
   getDocumentTypeLabel,
-  normalizeLocale,
   type Document,
   type UploadCareTeamOption,
 } from "@/types";
@@ -58,7 +63,7 @@ type PortalDocument = Document & {
 };
 
 const EXPLANATION_UNAVAILABLE_MESSAGE =
-  "Translation is currently unavailable. Please try again later.";
+  "The explanation is unavailable in your language right now. Please try again.";
 const PARSING_IN_PROGRESS_MESSAGE =
   "We are preparing this document. Its explanation will appear when ready.";
 const PARSING_FAILED_FALLBACK_MESSAGE = "This document could not be processed.";
@@ -133,6 +138,43 @@ function duplicateUploadMessage(locale: Locale): string {
 }
 const INITIAL_POLL_DELAY_MS = 3_000;
 const MAX_POLL_DELAY_MS = 30_000;
+/** Visible checking time before a document is shown as "Still processing" with Refresh. */
+const POLL_WATCH_LIMIT_MS = 10 * 60_000;
+/** Matches the record modal's exit and the row's `ma-leave`. */
+const MODAL_EXIT_MS = 160;
+const ROW_LEAVE_MS = 160;
+
+type UploadPhase = "preparing" | "uploading";
+type UploadError = { message: string; action: "choose" | "refresh" | null };
+type ProcessingOutcome = "ready" | "duplicate" | "failed";
+
+/** Resolves after `ms`, or at once when the page stops watching. */
+function pause(ms: number, signal: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    const timer = window.setTimeout(done, ms);
+    function done() {
+      window.clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    }
+    signal.addEventListener("abort", done, { once: true });
+  });
+}
+
+/** A hidden tab does not poll; checking resumes when the patient comes back. */
+function untilVisible(signal: AbortSignal) {
+  if (document.visibilityState !== "hidden" || signal.aborted) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    function done() {
+      if (document.visibilityState === "hidden" && !signal.aborted) return;
+      document.removeEventListener("visibilitychange", done);
+      signal.removeEventListener("abort", done);
+      resolve();
+    }
+    document.addEventListener("visibilitychange", done);
+    signal.addEventListener("abort", done, { once: true });
+  });
+}
 const MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024;
 const SUPPORTED_UPLOAD_MIME_TYPES = new Set([
   "application/pdf",
@@ -181,6 +223,37 @@ function needsHumanDocumentReview(status: string) {
   );
 }
 
+function isDocumentWorkPending(document: PortalDocument) {
+  return isDocumentProcessing(document.parseStatus) || (
+    document.parseStatus === DocumentParseStatus.COMPLETED &&
+    !document.aiSummary &&
+    (document.summaryStatus === "pending" || document.summaryStatus === "processing")
+  );
+}
+
+/** Where a polled document ended up; null while it is still being read. */
+function processingOutcome(document: PortalDocument): ProcessingOutcome | null {
+  if (document.parseStatus === DocumentParseStatus.DUPLICATE) return "duplicate";
+  if (
+    document.parseStatus === DocumentParseStatus.FAILED ||
+    needsHumanDocumentReview(document.parseStatus)
+  )
+    return "failed";
+  if (isDocumentWorkPending(document)) return null;
+  if (document.parsed || document.parseStatus === DocumentParseStatus.COMPLETED)
+    return "ready";
+  return null;
+}
+
+function announceOutcome(title: string, outcome: ProcessingOutcome, locale: Locale) {
+  const spanish = locale === "es-MX";
+  if (outcome === "ready")
+    return spanish ? `Ya puedes consultar ${title}.` : `${title} is ready to view.`;
+  if (outcome === "duplicate")
+    return spanish ? `Ya tenías este archivo: ${title}.` : `${title} was already on file.`;
+  return spanish ? `No pudimos procesar ${title}.` : `We could not process ${title}.`;
+}
+
 function mapDocument(record: DocumentApiRecord): PortalDocument {
   return {
     aiSummary: normalizePatientSummary(record.ai_summary),
@@ -204,6 +277,8 @@ function mapDocument(record: DocumentApiRecord): PortalDocument {
       (record.parsed
         ? DocumentParseStatus.COMPLETED
         : DocumentParseStatus.NONE),
+    reviewStatus: record.review_status ?? undefined,
+    reviewedAt: record.reviewed_at ?? undefined,
     parsed: record.parsed,
     patientId: record.patient_id,
     provider: record.source_clinic ?? "Care team",
@@ -247,6 +322,11 @@ function getDocumentStatus(document: PortalDocument, locale: Locale) {
 }
 
 export default function RecordsPage() {
+  const actorId = useSelector((state: RootState) => state.auth.user?.id);
+  return <RecordsWorkspace key={actorId ?? "signed-out"} />;
+}
+
+function RecordsWorkspace() {
   const profile = usePatientProfile();
   const locale = profile?.preferredLanguage ?? DEFAULT_LOCALE;
   const copy = useCallback(
@@ -259,31 +339,89 @@ export default function RecordsPage() {
   const handledDocument = useRef<string | null>(null);
   const [documentUnavailable, setDocumentUnavailable] = useState(false);
   const [documents, setDocuments] = useState<PortalDocument[]>([]);
-  const [selectedDocument, setSelectedDocument] =
+  const [selectedRecord, setSelectedDocument] =
     useState<PortalDocument | null>(null);
-  const [deleteConfirming, setDeleteConfirming] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(
-    null,
-  );
-  const [explanationLang, setExplanationLang] =
-    useState<Locale>(DEFAULT_LOCALE);
-  const [explanationText, setExplanationText] = useState<string | null>(null);
-  // Whether the text above is a real explanation or a reason one is missing. The two
-  // must not be confused: a reason may never be forwarded as a document's summary.
-  const [explanationAvailable, setExplanationAvailable] = useState(false);
-  const [explanationLoading, setExplanationLoading] = useState(false);
+  const selectedDocument = documents.find((document) => document.id === selectedRecord?.id) ?? selectedRecord;
   const [loading, setLoading] = useState(true);
+  // A count or empty state is shown only after a successful read, never an invented zero.
+  const [hasLoaded, setHasLoaded] = useState(false);
+  // List-loading errors only; upload problems use `uploadError`.
   const [pageError, setPageError] = useState<string | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
-  const [readbackActive, setReadbackActive] = useState(false);
+  const [uploadError, setUploadError] = useState<UploadError | null>(null);
+  const [readbackKey, setReadbackKey] = useState<string | null>(null);
+  const stopReadback = useRef<(() => void) | null>(null);
   const [parsingDocIds, setParsingDocIds] = useState<Set<string>>(new Set());
-  const [uploading, setUploading] = useState(false);
+  const [stalledDocIds, setStalledDocIds] = useState<Set<string>>(new Set());
+  const [readyDocIds, setReadyDocIds] = useState<Set<string>>(new Set());
+  const [addedDocIds, setAddedDocIds] = useState<Set<string>>(new Set());
+  const [leavingDocIds, setLeavingDocIds] = useState<Set<string>>(new Set());
+  const [lastOutcome, setLastOutcome] = useState<{ id: string; outcome: ProcessingOutcome } | null>(null);
+  const [removalNotice, setRemovalNotice] = useState(false);
+  const [closingModal, setClosingModal] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState<UploadPhase | null>(null);
+  const uploading = uploadPhase !== null;
   const [routingPrompt, setRoutingPrompt] = useState<{ file: File; options: UploadCareTeamOption[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const statusAreaRef = useRef<HTMLDivElement | null>(null);
   const activePollsRef = useRef(new Set<string>());
+  const pollController = useRef<AbortController | null>(null);
+  const listVersion = useRef({ value: 0 });
+  const reducedMotion = useReducedMotion();
   const { accessToken, expiresAt, refreshToken, user } = useSelector(
     (state: RootState) => state.auth,
+  );
+  // Polls can outlive a token refresh; each request uses the current session.
+  const tokenRef = useRef(accessToken);
+  useEffect(() => {
+    tokenRef.current = accessToken;
+  }, [accessToken]);
+
+  const eligibleForExplanation =
+    selectedDocument?.parseStatus === DocumentParseStatus.COMPLETED &&
+    !parsingDocIds.has(selectedDocument.id);
+  const explanation = useDocumentExplanation({
+    documentId: eligibleForExplanation ? selectedDocument.id : null,
+    source: selectedDocument?.aiSummary,
+    locale,
+    token: accessToken,
+    actorId: user?.id,
+  });
+  const explanationLang = locale;
+  const explanationLoading = explanation.loading;
+  const explanationAvailable = Boolean(explanation.data);
+  const explanationText = (() => {
+    if (!selectedDocument) return null;
+    if (selectedDocument.parseStatus === DocumentParseStatus.DUPLICATE)
+      return duplicateUploadMessage(locale);
+    if (isDocumentProcessing(selectedDocument.parseStatus))
+      return copy(PARSING_IN_PROGRESS_MESSAGE);
+    if (
+      selectedDocument.parseStatus === "failed" ||
+      needsHumanDocumentReview(selectedDocument.parseStatus)
+    )
+      return describeParseFailure(selectedDocument.parseFailureCode, locale);
+    if (!selectedDocument.aiSummary)
+      return describeMissingSummary(selectedDocument, locale);
+    if (explanation.data) return explanation.data.summary;
+    return explanation.loading
+      ? copy("Preparing your explanation…")
+      : copy(EXPLANATION_UNAVAILABLE_MESSAGE);
+  })();
+  const playbackKey = JSON.stringify([
+    selectedDocument?.id,
+    locale,
+    user?.id,
+    accessToken,
+    explanation.data?.summary,
+  ]);
+  const readbackActive = readbackKey === playbackKey;
+  useEffect(
+    () => () => {
+      stopReadback.current?.();
+      stopReadback.current = null;
+    },
+    [playbackKey],
   );
 
   const IMPORT_REFRESH_WINDOW_SECONDS = 2 * 60;
@@ -293,70 +431,48 @@ export default function RecordsPage() {
       return;
     }
 
+    const request = ++listVersion.current.value;
     setLoading(true);
+    setRemovalNotice(false);
     try {
       const result = await api.get<DocumentApiRecord[]>("/api/v1/documents/", {
         token: accessToken,
       });
+      if (request !== listVersion.current.value) return;
       setDocuments(result.map(mapDocument));
       setPageError(null);
+      setHasLoaded(true);
+      // A successful Refresh resumes checking documents that were left "Still processing".
+      setStalledDocIds(new Set());
     } catch {
-      setPageError(copy("We could not load your documents. Please try again."));
+      if (request === listVersion.current.value)
+        setPageError(copy("We could not load your documents. Please try again."));
     } finally {
-      setLoading(false);
+      if (request === listVersion.current.value) setLoading(false);
     }
   }, [accessToken, copy]);
 
   const openDocument = useCallback(
     (document: PortalDocument) => {
+      setRemovalNotice(false);
+      setClosingModal(false);
       setSelectedDocument(document);
-      setDeleteConfirming(false);
-      setDeleteError(null);
-      setExplanationLang(locale);
-      setExplanationLoading(false);
-
-      setExplanationAvailable(false);
-
-      if (document.parseStatus === DocumentParseStatus.DUPLICATE) {
-        setExplanationText(duplicateUploadMessage(locale));
-        return;
-      }
-
-      if (
-        document.parseStatus === "failed" ||
-        needsHumanDocumentReview(document.parseStatus)
-      ) {
-        setExplanationText(
-          describeParseFailure(document.parseFailureCode, locale),
-        );
-        return;
-      }
-
-      if (
-        isDocumentProcessing(document.parseStatus) ||
-        parsingDocIds.has(document.id)
-      ) {
-        setExplanationText(copy(PARSING_IN_PROGRESS_MESSAGE));
-        return;
-      }
-
-      if (!document.aiSummary) {
-        setExplanationText(describeMissingSummary(document, locale));
-        return;
-      }
-
-      // Cached source explanations retain their original language until explicitly requested.
-      setExplanationLang(DEFAULT_LOCALE);
-      setExplanationAvailable(true);
-      setExplanationText(document.aiSummary);
     },
-    [parsingDocIds, locale, copy],
+    [],
   );
 
+  // The record stays selected through the modal's short exit so its content does not
+  // flash; speech stops at once because closing is the patient's stop signal.
   const closeDocumentModal = useCallback(() => {
+    stopReadback.current?.();
+    stopReadback.current = null;
+    setReadbackKey(null);
+    setClosingModal(true);
+  }, []);
+
+  const finishModalExit = useCallback(() => {
     setSelectedDocument(null);
-    setDeleteConfirming(false);
-    setDeleteError(null);
+    setClosingModal(false);
   }, []);
 
   useEffect(() => {
@@ -376,60 +492,113 @@ export default function RecordsPage() {
   }, [accessToken, loadDocuments]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    pollController.current = controller;
     const activePolls = activePollsRef.current;
-    return () => activePolls.clear();
+    const listRequests = listVersion.current;
+    return () => {
+      listRequests.value++;
+      controller.abort();
+      activePolls.clear();
+    };
   }, []);
 
-  async function pollForParsedStatus(docId: string) {
-    if (activePollsRef.current.has(docId)) return;
-    activePollsRef.current.add(docId);
-    setParsingDocIds((current) => addTrackedDocumentId(current, docId));
+  /**
+   * Watches one document until it is read, with 3s→30s backoff. Hidden tabs pause, and
+   * after ten minutes of visible checking the row becomes "Still processing" with
+   * Refresh, so the moving dots never promise an update the page is not waiting for.
+   */
+  const pollForParsedStatus = useCallback(
+    async (docId: string) => {
+      const signal = pollController.current?.signal;
+      if (!signal || signal.aborted || activePollsRef.current.has(docId)) return;
+      activePollsRef.current.add(docId);
+      setParsingDocIds((current) => addTrackedDocumentId(current, docId));
 
-    let delayMs = INITIAL_POLL_DELAY_MS;
-    try {
-      while (activePollsRef.current.has(docId)) {
-        await new Promise((resolve) => window.setTimeout(resolve, delayMs));
-        if (!activePollsRef.current.has(docId)) return;
-        try {
-          const record = await api.get<DocumentApiRecord>(
-            `/api/v1/documents/${docId}`,
-            { token: accessToken ?? undefined },
-          );
-          const nextDocument = mapDocument(record);
-          setDocuments((current) =>
-            current.map((document) =>
-              document.id === docId ? nextDocument : document,
-            ),
-          );
-          if (
-            nextDocument.parsed ||
-            nextDocument.parseStatus === "completed" ||
-            nextDocument.parseStatus === DocumentParseStatus.DUPLICATE
-          )
-            return;
-          if (
-            nextDocument.parseStatus === "failed" ||
-            needsHumanDocumentReview(nextDocument.parseStatus)
-          ) {
-            setParseError(
-              describeParseFailure(nextDocument.parseFailureCode, locale),
+      let delayMs = INITIAL_POLL_DELAY_MS;
+      let watchedMs = 0;
+      try {
+        while (activePollsRef.current.has(docId)) {
+          await pause(delayMs, signal);
+          watchedMs += delayMs;
+          await untilVisible(signal);
+          if (!activePollsRef.current.has(docId)) return;
+          try {
+            const record = await api.get<DocumentApiRecord>(
+              `/api/v1/documents/${docId}`,
+              { token: tokenRef.current ?? undefined },
             );
+            if (!activePollsRef.current.has(docId)) return;
+            const nextDocument = mapDocument(record);
+            setDocuments((current) =>
+              current.map((document) =>
+                document.id === docId ? {
+                  ...nextDocument,
+                  // Background metadata reads renew signed URLs. Keep an already
+                  // available preview steady while the patient reads it; explicit
+                  // Refresh still obtains fresh URLs, including after expiry.
+                  fileUrl: document.fileUrl,
+                  previewUrl: document.previewStatus === "ready"
+                    ? document.previewUrl
+                    : nextDocument.previewUrl,
+                } : document,
+              ),
+            );
+            const outcome = processingOutcome(nextDocument);
+            if (outcome) {
+              // Drop the entrance mark first so the row does not replay it after the highlight.
+              setAddedDocIds((current) => removeTrackedDocumentId(current, docId));
+              setReadyDocIds((current) => addTrackedDocumentId(current, docId));
+              setLastOutcome({ id: docId, outcome });
+              if (outcome === "failed")
+                setParseError(
+                  describeParseFailure(nextDocument.parseFailureCode, locale),
+                );
+              return;
+            }
+          } catch {
+            // A queue-backed worker can outlive a short network failure.
+          }
+          if (watchedMs >= POLL_WATCH_LIMIT_MS) {
+            setStalledDocIds((current) => addTrackedDocumentId(current, docId));
             return;
           }
-        } catch {
-          // A queue-backed worker can outlive a short network failure.
+          delayMs = Math.min(delayMs * 2, MAX_POLL_DELAY_MS);
         }
-        delayMs = Math.min(delayMs * 2, MAX_POLL_DELAY_MS);
+      } finally {
+        activePollsRef.current.delete(docId);
+        setParsingDocIds((current) => removeTrackedDocumentId(current, docId));
       }
-    } finally {
-      activePollsRef.current.delete(docId);
-      setParsingDocIds((current) => removeTrackedDocumentId(current, docId));
+    },
+    [locale],
+  );
+
+  // Documents already processing when the page loads are watched too, not only new uploads.
+  useEffect(() => {
+    for (const document of documents) {
+      if (
+        isDocumentWorkPending(document) &&
+        !stalledDocIds.has(document.id)
+      )
+        void pollForParsedStatus(document.id);
     }
-  }
+  }, [documents, stalledDocIds, pollForParsedStatus]);
+
+  // A patient-started upload or upload error is brought into view; background changes are not.
+  useEffect(() => {
+    if (!uploadPhase && !uploadError) return;
+    statusAreaRef.current?.scrollIntoView?.({
+      block: "nearest",
+      behavior: reducedMotion ? "auto" : "smooth",
+    });
+  }, [uploadPhase, uploadError, reducedMotion]);
 
   async function getUploadSession() {
     if (!accessToken || !user) {
-      setPageError(copy("Please sign in again before uploading a document."));
+      setUploadError({
+        message: copy("Please sign in again before uploading a document."),
+        action: null,
+      });
       return null;
     }
 
@@ -449,9 +618,10 @@ export default function RecordsPage() {
     if (!refreshToken) {
       dispatch(logout());
       redirectToLogin({ reason: "session_expired" });
-      setPageError(
-        copy("Your session expired. Please sign in again before uploading."),
-      );
+      setUploadError({
+        message: copy("Your session expired. Please sign in again before uploading."),
+        action: null,
+      });
       return null;
     }
 
@@ -468,9 +638,10 @@ export default function RecordsPage() {
       dispatch(logout());
       redirectToLogin({ reason: "session_expired" });
     }
-    setPageError(
-      copy("Your session expired. Please sign in again before uploading."),
-    );
+    setUploadError({
+      message: copy("Your session expired. Please sign in again before uploading."),
+      action: null,
+    });
     return null;
   }
 
@@ -479,24 +650,27 @@ export default function RecordsPage() {
     if (!file) {
       return;
     }
+    // "Upload another" starts from an open record; close it so progress is visible.
+    if (selectedDocument) closeDocumentModal();
+    setRemovalNotice(false);
 
     const validationError = getUploadValidationError(file);
     if (validationError) {
-      setPageError(copy(validationError));
+      setUploadError({ message: copy(validationError), action: "choose" });
       event.target.value = "";
       return;
     }
 
     event.target.value = "";
-    setPageError(null);
+    setUploadError(null);
     setParseError(null);
     // PLAN-002: ask which care team the document is for before anything is uploaded. When
     // the care teams cannot be read, the server's own routing rule applies and any
     // CARE_TEAM_REQUIRED answer reopens this question.
     if (accessToken) {
-      setUploading(true);
+      setUploadPhase("preparing");
       const options = await fetchUploadCareTeamOptions(accessToken);
-      setUploading(false);
+      setUploadPhase(null);
       if (options && options.length > 0) {
         setRoutingPrompt({ file, options });
         return;
@@ -506,9 +680,9 @@ export default function RecordsPage() {
   }
 
   async function uploadFile(file: File, routing?: DocumentRoutingChoice) {
-    setPageError(null);
+    setUploadError(null);
     setParseError(null);
-    setUploading(true);
+    setUploadPhase("uploading");
 
     try {
       const session = await getUploadSession();
@@ -540,6 +714,7 @@ export default function RecordsPage() {
         { token: session.accessToken },
       );
       const nextDocument = mapDocument(created);
+      setAddedDocIds((current) => addTrackedDocumentId(current, nextDocument.id));
       setDocuments((current) => [nextDocument, ...current]);
       // Candidate-only ingestion runs in the background. It never updates
       // the patient's canonical profile until a clinician reconciles it.
@@ -547,81 +722,19 @@ export default function RecordsPage() {
     } catch (error) {
       if (apiErrorCode(error) === "CARE_TEAM_REQUIRED" && accessToken) {
         // The server needs an explicit choice: ask, then upload the same file.
+        setUploadPhase("preparing");
         const options = await fetchUploadCareTeamOptions(accessToken);
         if (options && options.length > 0) {
           setRoutingPrompt({ file, options });
           return;
         }
       }
-      setPageError(
-        copy("Upload failed. Please refresh your records before trying again."),
-      );
+      setUploadError({
+        message: copy("Upload failed. Please refresh your records before trying again."),
+        action: "refresh",
+      });
     } finally {
-      setUploading(false);
-    }
-  }
-
-  async function handleLanguageChange(language: Locale) {
-    const nextLocale = normalizeLocale(language);
-    setExplanationLang(nextLocale);
-    if (
-      nextLocale === DEFAULT_LOCALE &&
-      selectedDocument?.parseStatus === DocumentParseStatus.COMPLETED
-    ) {
-      setExplanationAvailable(Boolean(selectedDocument.aiSummary));
-      setExplanationText(
-        selectedDocument.aiSummary ??
-          describeMissingSummary(selectedDocument, nextLocale),
-      );
-      return;
-    }
-    if (!selectedDocument) {
-      return;
-    }
-
-    if (selectedDocument.parseStatus === DocumentParseStatus.DUPLICATE) {
-      setExplanationAvailable(false);
-      setExplanationText(duplicateUploadMessage(nextLocale));
-      return;
-    }
-
-    if (selectedDocument.parseStatus !== DocumentParseStatus.COMPLETED) {
-      setExplanationText(
-        isDocumentProcessing(selectedDocument.parseStatus)
-          ? recordsCopy(nextLocale, PARSING_IN_PROGRESS_MESSAGE)
-          : describeParseFailure(selectedDocument.parseFailureCode, nextLocale),
-      );
-      return;
-    }
-
-    setExplanationLoading(true);
-    try {
-      const result = await api.post<{
-        available?: boolean;
-        message?: string | null;
-        summary: string | null;
-      }>(
-        `/api/v1/documents/${selectedDocument.id}/explain`,
-        { language: nextLocale },
-        { token: accessToken ?? undefined },
-      );
-      // The backend answers with either an explanation or the reason there is none,
-      // already written in the requested locale.
-      const available = result.available !== false && Boolean(result.summary);
-      setExplanationAvailable(available);
-      setExplanationText(
-        available
-          ? result.summary
-          : (result.message ??
-              recordsCopy(nextLocale, EXPLANATION_UNAVAILABLE_MESSAGE)),
-      );
-    } catch {
-      setExplanationAvailable(false);
-      setExplanationText(
-        recordsCopy(nextLocale, EXPLANATION_UNAVAILABLE_MESSAGE),
-      );
-    } finally {
-      setExplanationLoading(false);
+      setUploadPhase(null);
     }
   }
 
@@ -644,7 +757,7 @@ export default function RecordsPage() {
         provider: selectedDocument.provider,
       }),
       summary: explanationAvailable
-        ? (explanationText ?? selectedDocument.aiSummary)
+        ? explanation.data?.summary
         : undefined,
     });
 
@@ -652,68 +765,64 @@ export default function RecordsPage() {
     router.push(buildDocumentChatHref(selectedDocument.id));
   }
 
-  async function handleDeleteDocument() {
-    if (!selectedDocument) {
-      return;
-    }
-
-    if (!accessToken) {
-      setDeleteError(
-        copy("Please sign in again before deleting this document."),
-      );
-      return;
-    }
-
-    setDeletingDocumentId(selectedDocument.id);
-    setDeleteError(null);
-    try {
-      await api.delete<void>(`/api/v1/documents/${selectedDocument.id}`, {
-        token: accessToken,
-      });
-      setDocuments((current) =>
-        current.filter((document) => document.id !== selectedDocument.id),
-      );
-      setParsingDocIds((current) =>
-        removeTrackedDocumentId(current, selectedDocument.id),
-      );
-      closeDocumentModal();
-    } catch {
-      setDeleteError(
-        copy("Delete failed. Please refresh your records before trying again."),
-      );
-    } finally {
-      setDeletingDocumentId(null);
-    }
-  }
-
   function handleReadSummary() {
-    const text = explanationText ?? selectedDocument?.aiSummary;
-    if (!text) {
+    if (!explanation.data) return;
+    if (readbackActive) {
+      stopReadback.current?.();
+      stopReadback.current = null;
+      setReadbackKey(null);
       return;
     }
-
-    const stop = playAssistantVoiceResponse({
+    stopReadback.current?.();
+    stopReadback.current = playAssistantVoiceResponse({
       language: explanationLang,
-      onEnd: () => setReadbackActive(false),
-      onStart: () => setReadbackActive(true),
-      text,
+      onEnd: () => setReadbackKey((current) => current === playbackKey ? null : current),
+      onStart: () => setReadbackKey(playbackKey),
+      text: explanation.data.summary,
     });
-
-    if (!stop) {
-      setReadbackActive(false);
-    }
   }
 
   const processingCount = documents.filter(
     (document) =>
       parsingDocIds.has(document.id) ||
-      isDocumentProcessing(document.parseStatus),
+      isDocumentWorkPending(document),
   ).length;
-  const isDeletingSelectedDocument =
-    deletingDocumentId === selectedDocument?.id;
+
+  /** Removal reads in order: the record closes, its row leaves, then the notice appears. */
+  function removeRowAfterExit(id: string) {
+    activePollsRef.current.delete(id);
+    window.setTimeout(() => {
+      setLeavingDocIds((current) => addTrackedDocumentId(current, id));
+      window.setTimeout(() => {
+        setDocuments((current) => current.filter((document) => document.id !== id));
+        setParsingDocIds((current) => removeTrackedDocumentId(current, id));
+        setLeavingDocIds((current) => removeTrackedDocumentId(current, id));
+        setRemovalNotice(true);
+      }, reducedMotion ? 0 : ROW_LEAVE_MS);
+    }, reducedMotion ? 0 : MODAL_EXIT_MS);
+  }
 
   const patientName = [profile?.firstName, profile?.lastName].filter(Boolean).join(" ");
   const spanish = locale === "es-MX";
+  const outcomeDocument = lastOutcome
+    ? documents.find((document) => document.id === lastOutcome.id)
+    : undefined;
+  const outcomeAnnouncement =
+    lastOutcome && outcomeDocument
+      ? announceOutcome(recordTitle(outcomeDocument, locale, patientName), lastOutcome.outcome, locale)
+      : "";
+  const selectedProcessing = Boolean(
+    selectedDocument &&
+      selectedDocument.parseStatus !== DocumentParseStatus.DUPLICATE &&
+      (isDocumentProcessing(selectedDocument.parseStatus) ||
+        parsingDocIds.has(selectedDocument.id)),
+  );
+  const selectedStalled = Boolean(
+    selectedProcessing &&
+      selectedDocument &&
+      stalledDocIds.has(selectedDocument.id) &&
+      !parsingDocIds.has(selectedDocument.id),
+  );
   const displayProvider = (document: PortalDocument) => {
     if (document.provider === "Patient uploaded document") return spanish ? "Tu documento" : "Your upload";
     if (document.provider === "Clinician uploaded document") return spanish ? "De tu equipo de atención" : "From your care team";
@@ -731,6 +840,7 @@ export default function RecordsPage() {
     <PullToRefresh
       onRefresh={loadDocuments}
       busy={loading || uploading}
+      indicateBusy={false}
       label={copy("Refresh records")}
     >
       <div className="patient-page pb-6">
@@ -741,18 +851,16 @@ export default function RecordsPage() {
             </h1>
             <div className="ml-auto flex shrink-0 items-center gap-1.5">
               <NotificationBell />
-              <OverflowMenu
-                label={spanish ? "Más opciones" : "More options"}
-                items={[
-                  {
-                    label: copy(loading ? "Refreshing..." : "Refresh records"),
-                    icon: "refresh",
-                    onSelect: () => void loadDocuments(),
-                    disabled: loading || uploading,
-                    busy: loading,
-                  },
-                ]}
-              />
+              <button
+                type="button"
+                aria-label={copy(loading ? "Refreshing..." : "Refresh records")}
+                title={copy("Refresh records")}
+                disabled={loading || uploading}
+                onClick={() => void loadDocuments()}
+                className="ma-press flex h-11 w-11 items-center justify-center rounded-[14px] text-ink-2 hover:bg-surface-2 disabled:opacity-50"
+              >
+                <Icon name="refresh" className={`h-5 w-5 ${loading ? "animate-spin motion-reduce:animate-none" : ""}`} />
+              </button>
               <button
                 type="button"
                 aria-label={copy("Upload")}
@@ -765,11 +873,13 @@ export default function RecordsPage() {
               </button>
             </div>
           </div>
-          {!loading && !pageError && <p className="mt-1 text-sm text-muted" role="status">
+          {/* Keeps the last successful count during a refresh so the list does not jump. */}
+          {hasLoaded && !(pageError && documents.length === 0) && <p className="mt-1 text-sm text-muted" role="status">
             {spanish
-              ? `${documents.length} documentos · ${processingCount} en proceso`
-              : `${documents.length} records · ${processingCount} processing`}
+              ? `${documents.length} ${documents.length === 1 ? "documento" : "documentos"} · ${processingCount} en proceso`
+              : `${documents.length} ${documents.length === 1 ? "record" : "records"} · ${processingCount} processing`}
           </p>}
+          <p className="sr-only" role="status">{outcomeAnnouncement}</p>
         </header>
         <input
           accept={UPLOAD_ACCEPT_ATTRIBUTE}
@@ -794,74 +904,141 @@ export default function RecordsPage() {
             }}
           />
         ) : null}
-        <div className="space-y-3 px-4 pt-4 empty:hidden">
-          {documentUnavailable && <p role="alert" className="rounded-2xl bg-danger-tint p-3 text-sm text-danger-ink">{spanish ? "Este documento no está disponible. Actualiza tus registros." : "This document is unavailable. Refresh your records."}</p>}
-          {uploading ? (
+        <div ref={statusAreaRef} className="scroll-mt-4 space-y-3 px-4 pt-4 empty:hidden">
+          {documentUnavailable && <p role="alert" className="ma-enter rounded-2xl bg-danger-tint p-3 text-sm text-danger-ink">{spanish ? "Este documento no está disponible. Actualiza tus registros." : "This document is unavailable. Refresh your records."}</p>}
+          {uploadPhase ? (
             <p
               role="status"
               className="ma-enter flex items-center gap-3 rounded-[22px] bg-brand-tint px-4 py-3.5 text-sm font-medium text-brand-ink"
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface text-brand"><Icon name="up" className="h-[18px] w-[18px]" /></span>
-              <span className="flex-1">{spanish ? "Subiendo documento..." : "Uploading document..."}</span>
+              <span className="flex-1">
+                {uploadPhase === "preparing"
+                  ? copy("Getting your upload ready…")
+                  : spanish ? "Subiendo documento..." : "Uploading document..."}
+              </span>
               <ProcessingDots className="bg-brand" />
             </p>
           ) : null}
+          {removalNotice ? (
+            // Neutral on purpose: removal is a completed patient action, not an approval.
+            <p
+              role="status"
+              className="ma-enter flex items-center gap-2.5 rounded-2xl bg-surface px-4 py-3 text-sm font-medium text-ink-2"
+            >
+              <Icon name="check" className="h-4 w-4 shrink-0 text-muted" />
+              {copy("Your upload was removed.")}
+            </p>
+          ) : null}
+          {uploadError ? (
+            <div role="alert" className="ma-enter">
+              <ErrorState
+                description={uploadError.message}
+                action={
+                  uploadError.action === "choose" ? (
+                    <Button
+                      onClick={() => {
+                        setUploadError(null);
+                        fileInputRef.current?.click();
+                      }}
+                      variant="secondary"
+                      size="sm"
+                    >
+                      {copy("Choose another file")}
+                    </Button>
+                  ) : uploadError.action === "refresh" ? (
+                    <Button
+                      disabled={loading}
+                      onClick={() => {
+                        setUploadError(null);
+                        void loadDocuments();
+                      }}
+                      variant="secondary"
+                      size="sm"
+                    >
+                      {copy("Refresh records")}
+                    </Button>
+                  ) : undefined
+                }
+                title={copy("Could not upload this file")}
+              />
+            </div>
+          ) : null}
           {pageError && documents.length === 0 ? (
-            <ErrorState
-              description={pageError}
-              action={
-                <Button
-                  disabled={loading}
-                  onClick={() => void loadDocuments()}
-                  variant="secondary"
-                  size="sm"
-                >
-                  {copy("Try again")}
-                </Button>
-              }
-              title={copy("Could not load records")}
-            />
+            <div role="alert" className="ma-enter">
+              <ErrorState
+                description={pageError}
+                action={
+                  <Button
+                    disabled={loading}
+                    onClick={() => void loadDocuments()}
+                    variant="secondary"
+                    size="sm"
+                  >
+                    {copy("Try again")}
+                  </Button>
+                }
+                title={copy("Could not load records")}
+              />
+            </div>
           ) : null}
           {pageError && documents.length > 0 ? (
-            <ErrorState
-              description={pageError}
-              action={
-                <Button
-                  onClick={() => {
-                    setPageError(null);
-                    void loadDocuments();
-                  }}
-                  variant="secondary"
-                  size="sm"
-                >
-                  {copy("Try again")}
-                </Button>
-              }
-              title={copy("Action failed")}
-            />
+            <div role="alert" className="ma-enter">
+              <ErrorState
+                description={pageError}
+                action={
+                  <Button
+                    disabled={loading}
+                    onClick={() => {
+                      setPageError(null);
+                      void loadDocuments();
+                    }}
+                    variant="secondary"
+                    size="sm"
+                  >
+                    {copy("Try again")}
+                  </Button>
+                }
+                title={copy("Could not refresh records")}
+              />
+            </div>
           ) : null}
           {parseError ? (
-            <ErrorState
-              description={parseError}
-              action={
-                <Button
-                  onClick={() => {
-                    setParseError(null);
-                    fileInputRef.current?.click();
-                  }}
-                  variant="secondary"
-                  size="sm"
-                >
-                  {copy("Try again")}
-                </Button>
-              }
-              title={copy("Document processing failed")}
-            />
+            <div role="alert" className="ma-enter">
+              <ErrorState
+                description={parseError}
+                action={
+                  // Patients have no processing retry; this starts a new upload.
+                  <Button
+                    onClick={() => {
+                      setParseError(null);
+                      fileInputRef.current?.click();
+                    }}
+                    variant="secondary"
+                    size="sm"
+                  >
+                    {copy("Upload another")}
+                  </Button>
+                }
+                title={copy("Document processing failed")}
+              />
+            </div>
           ) : null}
-          {loading && documents.length === 0 ? (
-            <div aria-hidden="true" className="space-y-2.5 pt-2">
-              <Skeleton className="h-3 w-24" variant="text" />
-              <Skeleton className="h-[220px] w-full" />
+          {loading && !hasLoaded ? (
+            // Shaped like the grouped list it is replacing.
+            <div aria-hidden="true" className="pt-1">
+              <Skeleton className="ml-1.5 h-3 w-24" variant="text" />
+              <div className="mt-3 overflow-hidden rounded-[22px] bg-surface [&>*+*]:border-t [&>*+*]:border-line">
+                {["w-3/5", "w-1/2", "w-2/3"].map((width) => (
+                  <div key={width} className="flex items-center gap-3 px-[14px] py-[13px]">
+                    <Skeleton className="h-11 w-11 shrink-0 !rounded-[13px]" />
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <Skeleton className={`h-3.5 ${width}`} variant="text" />
+                      <Skeleton className="h-3 w-2/5" variant="text" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : null}
           {loading ? (
@@ -869,8 +1046,8 @@ export default function RecordsPage() {
               {copy("Loading documents...")}
             </p>
           ) : null}
-          {!loading && !pageError && documents.length === 0 ? (
-            <div className="rounded-[22px] bg-surface">
+          {hasLoaded && !pageError && documents.length === 0 ? (
+            <div className="ma-enter rounded-[22px] bg-surface">
               <EmptyState
                 description={copy(
                   "Upload PDFs or images from your clinic visits.",
@@ -926,6 +1103,13 @@ export default function RecordsPage() {
                         document.documentType,
                         locale,
                       )}
+                      entering={addedDocIds.has(document.id)}
+                      leaving={leavingDocIds.has(document.id)}
+                      highlight={readyDocIds.has(document.id)}
+                      onHighlightEnd={() =>
+                        setReadyDocIds((current) => removeTrackedDocumentId(current, document.id))
+                      }
+                      stalled={stalledDocIds.has(document.id) && !parsingDocIds.has(document.id)}
                     />
                   );
                 })}
@@ -936,7 +1120,10 @@ export default function RecordsPage() {
         {!loading && !pageError ? <ConditionsPrivacy locale={locale} /> : null}
         <Modal
           onClose={closeDocumentModal}
-          open={Boolean(selectedDocument)}
+          stickyHeader
+          open={Boolean(selectedDocument) && !closingModal}
+          animateExit
+          onExited={finishModalExit}
           closeLabel={spanish ? "Cerrar ventana" : "Close modal"}
           size="wide"
           title={selectedDocument ? recordTitle(selectedDocument, locale, patientName) : copy("Record details")}
@@ -949,6 +1136,9 @@ export default function RecordsPage() {
                   : null}
               </p>
               <p className="break-words font-mono text-xs text-muted [overflow-wrap:anywhere]">{selectedDocument?.fileName}</p>
+              {selectedDocument ? <RecordOrigin document={selectedDocument} locale={locale} /> : null}
+              <RecordReviewStatus status={selectedDocument?.reviewStatus} locale={locale} />
+              {selectedDocument?.reviewStatus === "approved" ? <p className="text-sm leading-6 text-muted">{copy("Source approval does not approve this explanation or change your treatment.")}</p> : null}
             </div>
             <details className="group rounded-[22px] border border-line-strong bg-surface">
               <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 px-4 py-2 font-semibold text-ink [&::-webkit-details-marker]:hidden">
@@ -956,7 +1146,8 @@ export default function RecordsPage() {
                 <span className="flex-1">{copy("Source document")}</span>
                 <Icon name="chevronDown" className="h-[18px] w-[18px] text-muted transition-transform duration-[240ms] group-open:rotate-180" />
               </summary>
-              <div className="border-t border-line px-4 pt-3 pb-4">
+              {/* Restarts its enter animation each time the disclosure opens. */}
+              <div className="ma-enter border-t border-line px-4 pt-3 pb-4">
                 {selectedDocument?.sourceClinic ? (
                   <p className="mb-2 break-words text-sm text-ink-2">
                     {copy("Source")}: {copy(selectedDocument.sourceClinic)}
@@ -973,58 +1164,59 @@ export default function RecordsPage() {
                 />
               </div>
             </details>
-            <div className="rounded-[22px] bg-brand-tint/70 p-4">
+            <div className="rounded-[22px] bg-surface-2/50 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="inline-flex items-center gap-2 text-sm font-semibold text-brand-ink">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-surface text-brand"><Icon name="spark" className="h-3.5 w-3.5" /></span>
-                  {copy("Explain this to me")}
+                <p className="inline-flex items-center gap-1.5 rounded-full bg-surface px-2.5 py-1 text-xs font-medium text-muted">
+                  <Icon name="spark" className="h-3.5 w-3.5 text-brand" />
+                  {copy("AI explanation")}
                 </p>
-                <div className="flex min-w-0 w-full flex-wrap items-center gap-2 sm:w-auto">
+                <div className="flex shrink-0 items-center gap-2">
                   <button
-                    aria-label={copy("Read summary aloud")}
+                    aria-label={copy(readbackActive ? "Stop reading" : "Read summary aloud")}
                     className="ma-press flex h-11 w-11 items-center justify-center rounded-xl bg-surface text-brand-ink hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={
-                      explanationLoading ||
-                      (!explanationText && !selectedDocument?.aiSummary)
-                    }
+                    disabled={!explanationAvailable}
                     onClick={handleReadSummary}
                     type="button"
                   >
                     {readbackActive ? <ListenBars /> : <Icon name="speaker" className="h-5 w-5" />}
                   </button>
-                  <select
-                    aria-label={copy("Explanation language")}
-                    className="min-h-11 min-w-0 max-w-full flex-1 rounded-xl border border-line-strong bg-surface pl-3 pr-10 py-2 text-base font-medium text-brand-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/15"
-                    onChange={(event) =>
-                      handleLanguageChange(event.target.value as Locale)
-                    }
-                    value={explanationLang}
-                  >
-                    {SUPPORTED_LOCALES.map((locale) => (
-                      <option key={locale} value={locale}>
-                        {getLocaleLabel(locale)}
-                      </option>
-                    ))}
-                  </select>
                 </div>
               </div>
-              <p
-                aria-live="polite"
-                className="mt-3 whitespace-pre-wrap break-words text-base leading-7 text-ink"
-              >
-                {explanationLoading
-                  ? copy("Translating...")
-                  : readbackActive
-                    ? spanish
-                      ? `Escuchando en ${getLocaleLabel(explanationLang)}...`
-                      : `Reading in ${getLocaleLabel(explanationLang)}...`
-                    : (explanationText ??
-                      copy(
-                        "A plain-language explanation will appear here once it is ready.",
-                      ))}
-              </p>
-              {/* Written in the explanation's language, which can differ from the app's. */}
-              <p className="mt-3 border-t border-brand/15 pt-3 text-[13px] leading-5 text-brand-ink/90" lang={explanationLang}>
+              {/* Not aria-busy: the pending status and slow note need to be announced. */}
+              <div aria-live="polite">
+                {explanation.data ? (
+                  <ExplanationSections sections={explanation.data.sections} locale={locale} />
+                ) : explanationLoading ? (
+                  <ExplanationPending
+                    key={`${selectedDocument?.id}:${locale}:explanation`}
+                    label={explanationText ?? ""}
+                    locale={locale}
+                    placeholder
+                    slowAfterMs={EXPLANATION_SLOW_MS}
+                  />
+                ) : selectedProcessing && !selectedStalled ? (
+                  <ExplanationPending
+                    key={`${selectedDocument?.id}:${locale}:processing`}
+                    label={explanationText ?? ""}
+                    locale={locale}
+                  />
+                ) : (
+                  <p lang={locale} className="mt-3 break-words text-base leading-7 text-ink">{explanationText}</p>
+                )}
+                {selectedStalled ? (
+                  <div className="ma-enter mt-3 flex flex-wrap items-center gap-3">
+                    <p className="min-w-0 flex-1 basis-[200px] text-sm leading-6 text-muted">
+                      {copy("We stopped checking automatically. Refresh to see the latest status.")}
+                    </p>
+                    <Button variant="secondary" size="sm" disabled={loading} onClick={() => void loadDocuments()}>
+                      {copy("Refresh records")}
+                    </Button>
+                  </div>
+                ) : null}
+                {explanation.failed ? <Button variant="secondary" size="sm" onClick={explanation.retry} className="mt-3">{copy("Try again")}</Button> : null}
+              </div>
+              {readbackActive ? <p role="status" className="mt-2 text-sm text-brand-ink">{copy("Reading aloud…")}</p> : null}
+              <p className="mt-3 border-t border-line-strong pt-3 text-[13px] leading-5 text-muted" lang={explanationLang}>
                 {explanationLang === "es-MX"
                   ? "Esta explicación describe el documento subido. No es un nuevo plan de atención aprobado ni una recomendación para cambiar el tratamiento. Sigue las instrucciones aprobadas por tu equipo de atención."
                   : "This explanation describes the uploaded document. It is not a newly approved care plan or a recommendation to change treatment. Follow your care team's approved instructions."}
@@ -1046,79 +1238,30 @@ export default function RecordsPage() {
               <Button fullWidth onClick={handleAskAboutDocument} size="lg">
                 <Icon name="chat" className="h-5 w-5" />{copy("Ask about this document")}
               </Button>
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  fullWidth
-                  onClick={closeDocumentModal}
-                  variant="secondary"
-                >
-                  {copy("Close")}
-                </Button>
-                <Button
-                  fullWidth
-                  onClick={() => fileInputRef.current?.click()}
-                  variant="secondary"
-                >
-                  {copy("Upload another")}
-                </Button>
-              </div>
-              {deleteError ? (
-                <ErrorState
-                  description={deleteError}
-                  action={
-                    <Button
-                      onClick={() => void handleDeleteDocument()}
-                      variant="secondary"
-                      size="sm"
-                    >
-                      {copy("Try again")}
-                    </Button>
-                  }
-                  title={copy("Could not delete document")}
-                />
-              ) : null}
-              {deleteConfirming ? (
-                <div className="ma-enter rounded-[22px] bg-danger-tint p-4">
-                  <p className="text-base font-semibold text-danger-ink">
-                    {copy("Delete this document?")}
-                  </p>
-                  <p className="mt-1 text-sm leading-6 text-danger-ink">
-                    {copy(
-                      "This removes the record from your documents. Existing care-plan items created from prior parsing are not removed.",
-                    )}
-                  </p>
-                  <div className="mt-3 grid grid-cols-2 gap-3">
-                    <Button
-                      disabled={isDeletingSelectedDocument}
-                      fullWidth
-                      onClick={() => setDeleteConfirming(false)}
-                      variant="secondary"
-                    >
-                      {copy("Cancel")}
-                    </Button>
-                    <Button
-                      disabled={isDeletingSelectedDocument}
-                      fullWidth
-                      onClick={() => void handleDeleteDocument()}
-                      variant="danger"
-                      className="!bg-danger-ink !text-white hover:!bg-[#8C2F1F]"
-                    >
-                      {isDeletingSelectedDocument
-                        ? copy("Deleting")
-                        : copy("Delete permanently")}
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  disabled={isDeletingSelectedDocument}
-                  onClick={() => setDeleteConfirming(true)}
-                  type="button"
-                  className="ma-press flex min-h-11 w-full items-center justify-center rounded-2xl text-[15px] font-semibold text-danger-ink hover:bg-danger-tint disabled:opacity-50"
-                >
-                  {copy("Delete document")}
-                </button>
-              )}
+              <Button
+                fullWidth
+                onClick={() => fileInputRef.current?.click()}
+                variant="secondary"
+              >
+                {copy("Upload another")}
+              </Button>
+              {selectedDocument && accessToken && user ? <RecordActions
+                key={`${user.id}:${accessToken}:${selectedDocument.id}`}
+                document={selectedDocument}
+                locale={locale}
+                token={accessToken}
+                actorId={user.id}
+                onRemoved={() => {
+                  const id = selectedDocument.id;
+                  closeDocumentModal();
+                  removeRowAfterExit(id);
+                }}
+                onRequest={() => {
+                  const id = selectedDocument.id;
+                  closeDocumentModal();
+                  router.push(`/chat?view=care-team&record_request=${encodeURIComponent(id)}`);
+                }}
+              /> : null}
             </div>
           </div>
         </Modal>

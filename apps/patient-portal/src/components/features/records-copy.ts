@@ -2,6 +2,27 @@ import type { Locale } from "@/types";
 
 // Only interface copy is localized; source documents and clinical wording are preserved.
 const spanish: Record<string, string> = {
+  "AI explanation": "Explicación con IA",
+  "Document explained": "Tu documento en palabras sencillas",
+  "AI-generated explanation": "Explicación generada por IA",
+  "Preparing your explanation…": "Preparando tu explicación…",
+  // REC-001-MO drafts, pending LOC-001 review.
+  "This is taking longer than usual. You can read the original document while you wait.":
+    "Esto está tardando más de lo normal. Mientras tanto, puedes leer el documento original.",
+  "Still processing": "Aún en proceso",
+  "We stopped checking automatically. Refresh to see the latest status.":
+    "Dejamos de revisar automáticamente. Actualiza para ver el estado más reciente.",
+  "Getting your upload ready…": "Preparando tu archivo…",
+  "Your upload was removed.": "Se quitó tu archivo.",
+  "Could not upload this file": "No se pudo subir este archivo",
+  "Choose another file": "Elegir otro archivo",
+  "Could not refresh records": "No se pudieron actualizar los documentos",
+  "Loading page…": "Cargando página…",
+  "The explanation is unavailable in your language right now. Please try again.": "La explicación no está disponible en tu idioma en este momento. Inténtalo de nuevo.",
+  "This explains the document. Follow your care team’s approved plan for treatment.": "Esta explicación describe el documento. Para tu tratamiento, sigue el plan aprobado por tu equipo de atención.",
+  "Source approval does not approve this explanation or change your treatment.": "La aprobación del documento no aprueba esta explicación ni cambia tu tratamiento.",
+  "Stop reading": "Detener lectura",
+  "Reading aloud…": "Leyendo en voz alta…",
   "My Records": "Mis documentos",
   "View clinical records and plain-language explanations.":
     "Consulta tus documentos y explicaciones en lenguaje sencillo.",

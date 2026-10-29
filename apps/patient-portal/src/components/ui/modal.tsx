@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
+import { useReducedMotion } from "./motion";
 
 interface ModalProps {
     open: boolean;
@@ -12,7 +13,17 @@ interface ModalProps {
     size?: "default" | "wide";
     closeLabel?: string;
     keepMounted?: boolean;
+    stickyHeader?: boolean;
+    /**
+     * Opt-in: after `open` turns false, keep the last content on screen for a short
+     * fade and slide out, then call `onExited`. The parent keeps rendering the same
+     * content until then. The dialog role, focus trap and scroll lock end at once.
+     */
+    animateExit?: boolean;
+    onExited?: () => void;
 }
+
+const EXIT_MS = 160;
 
 const sizeClasses: Record<NonNullable<ModalProps["size"]>, string> = {
     default: "max-w-[480px] rounded-t-[28px]",
@@ -25,11 +36,29 @@ const overlayClasses: Record<NonNullable<ModalProps["size"]>, string> = {
 };
 
 /** Bottom sheet on phones: slides up, traps focus, closes on backdrop tap and Escape. */
-export function Modal({ children, closeLabel = "Close modal", keepMounted = false, onClose, open, size = "default", title }: ModalProps) {
+export function Modal({ animateExit = false, children, closeLabel = "Close modal", keepMounted = false, onClose, onExited, open, size = "default", title, stickyHeader = false }: ModalProps) {
     const panel = useRef<HTMLDivElement>(null);
     const titleId = useId();
     const close = useRef(onClose);
+    const exited = useRef(onExited);
+    const reducedMotion = useReducedMotion();
+    const [wasOpen, setWasOpen] = useState(open);
+    const [exiting, setExiting] = useState(false);
+    // Adjust during render, not in an effect, so the closing frame never flashes empty.
+    if (open !== wasOpen) {
+        setWasOpen(open);
+        setExiting(!open && animateExit);
+    }
     useEffect(() => { close.current = onClose; }, [onClose]);
+    useEffect(() => { exited.current = onExited; }, [onExited]);
+    useEffect(() => {
+        if (!exiting) return;
+        const timer = window.setTimeout(() => {
+            setExiting(false);
+            exited.current?.();
+        }, reducedMotion ? 0 : EXIT_MS);
+        return () => window.clearTimeout(timer);
+    }, [exiting, reducedMotion]);
     useEffect(() => {
         if (!open) return;
         const previous = document.activeElement as HTMLElement | null;
@@ -58,23 +87,31 @@ export function Modal({ children, closeLabel = "Close modal", keepMounted = fals
         document.addEventListener("keydown", onKey);
         return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = overflow; if (previous?.isConnected) previous.focus(); };
     }, [open]);
-    if ((!open && !keepMounted) || typeof document === "undefined") {
+    const visible = open || exiting;
+    if ((!visible && !keepMounted) || typeof document === "undefined") {
         return null;
     }
 
     return createPortal(
-        <div hidden={!open} style={!open ? { display: "none" } : undefined} className={`ma-fade fixed inset-0 z-60 flex flex-col bg-[rgba(16,32,43,.4)] ${overlayClasses[size]}`} onClick={onClose}>
+        <div
+            aria-hidden={exiting ? true : undefined}
+            hidden={!visible}
+            style={!visible ? { display: "none" } : undefined}
+            className={`${exiting ? "ma-fade-out pointer-events-none" : "ma-fade"} fixed inset-0 z-60 flex flex-col bg-[rgba(16,32,43,.4)] ${overlayClasses[size]}`}
+            onClick={exiting ? undefined : onClose}
+        >
             <div
                 aria-labelledby={open ? titleId : undefined}
                 aria-modal={open ? true : undefined}
+                inert={exiting || undefined}
                 ref={panel}
                 role={open ? "dialog" : undefined}
                 tabIndex={-1}
-                className={`ma-sheet-panel mx-auto max-h-[90dvh] w-full ${sizeClasses[size]} overflow-y-auto overscroll-contain bg-surface px-5 pt-2.5 pb-[calc(24px+env(safe-area-inset-bottom))] shadow-[var(--shadow-sheet)] outline-none`}
+                className={`${exiting ? "ma-sheet-panel-out" : "ma-sheet-panel"} mx-auto max-h-[90dvh] w-full ${sizeClasses[size]} overflow-y-auto overscroll-contain bg-surface px-5 pt-2.5 pb-[calc(24px+env(safe-area-inset-bottom))] shadow-[var(--shadow-sheet)] outline-none`}
                 onClick={(event) => event.stopPropagation()}
             >
                 <div aria-hidden="true" className={`mx-auto mb-3 h-[5px] w-9 rounded-full bg-line-strong ${size === "wide" ? "md:hidden" : ""}`} />
-                <div className="mb-4 flex items-start justify-between gap-3">
+                <div className={`mb-4 flex items-start justify-between gap-3 ${stickyHeader ? "sticky top-0 z-10 -mx-5 bg-surface px-5 pb-3" : ""}`}>
                     <h3 id={titleId} className="min-w-0 break-words pt-1.5 text-[20px] font-semibold leading-tight tracking-[-0.01em] text-ink [overflow-wrap:anywhere]">{title}</h3>
                     <button
                         aria-label={closeLabel}

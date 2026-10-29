@@ -354,106 +354,198 @@ class TestGetDocument:
 
 
 class TestDeleteDocument:
-    """DELETE /api/v1/documents/{document_id} - Delete a document."""
+    """The owned-removal transaction is authoritative, including replay and refusal."""
 
-    def test_success_removes_only_unapplied_source_and_storage_object(
+    def test_success_cleans_storage_only_after_atomic_removal(
         self, client, override_auth, override_db, mock_supabase_db, patient_id
     ):
         document_id = uuid4()
-        file_path = f"{patient_id}/lab-results.pdf"
-        document_data = {
-            "id": str(document_id),
-            "patient_id": str(patient_id),
-            "uploaded_by": str(patient_id),
-            "uploaded_by_role": "patient",
-            "file_name": "lab-results.pdf",
-            "file_path": file_path,
-            "file_url": "https://storage.example.com/signed-url",
-            "file_size_bytes": 1024000,
-            "mime_type": "application/pdf",
-            "document_type": "lab_report",
-            "source_clinic": None,
-            "parsed": False,
-            "ai_summary": None,
-            "parse_status": "completed",
-            "parse_error": None,
-            "parse_attempts": 1,
-            "visibility": "all_providers",
-            "created_at": "2025-01-15T00:00:00Z",
-        }
-        mock_supabase_db.table().execute.side_effect = [
-            MagicMock(data=document_data),
-            MagicMock(data=[document_data]),
-        ]
+        file_path = f"{patient_id}/synthetic.pdf"
         mock_supabase_db.rpc().execute.return_value = MagicMock(
-            data={"can_delete": True, "removed_candidate_count": 2}
+            data={"removed": True, "file_path": file_path}
         )
-
         response = client.delete(f"/api/v1/documents/{document_id}")
-
-        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert response.status_code == 204
         mock_supabase_db.rpc.assert_any_call(
-            "withdraw_unapplied_document_source",
+            "remove_patient_document_upload",
             {
                 "p_document_id": str(document_id),
                 "p_patient_id": str(patient_id),
                 "p_actor_id": str(patient_id),
             },
         )
-        mock_supabase_db.storage.from_.assert_called_with("documents")
         mock_supabase_db.storage.from_().remove.assert_called_once_with([file_path])
-        assert mock_supabase_db.table().delete.call_count == 1
+        mock_supabase_db.table().delete.assert_not_called()
 
-    def test_delete_retains_applied_source_after_marking_it_withdrawn(
-        self, client, override_auth, override_db, mock_supabase_db, patient_id
+    @pytest.mark.parametrize(
+        "code,http_status", [("42501", 409), ("P0002", 404), ("PGRST202", 503), ("40001", 409)]
+    )
+    def test_refusal_or_missing_migration_never_falls_back_to_legacy_withdrawal(
+        self, client, override_auth, override_db, mock_supabase_db, code, http_status
     ):
-        document_id = uuid4()
-        file_path = f"{patient_id}/lab-results.pdf"
-        document_data = {
-            "id": str(document_id),
-            "patient_id": str(patient_id),
-            "uploaded_by": str(patient_id),
-            "uploaded_by_role": "patient",
-            "file_name": "lab-results.pdf",
-            "file_path": file_path,
-            "file_url": "https://storage.example.com/signed-url",
-            "file_size_bytes": 1024000,
-            "mime_type": "application/pdf",
-            "document_type": "lab_report",
-            "source_clinic": None,
-            "parsed": True,
-            "ai_summary": "Summary",
-            "parse_status": "completed",
-            "parse_error": None,
-            "parse_attempts": 1,
-            "visibility": "all_providers",
-            "created_at": "2025-01-15T00:00:00Z",
-        }
-        mock_supabase_db.table().execute.side_effect = [
-            MagicMock(data=document_data),
-        ]
-        mock_supabase_db.rpc().execute.return_value = MagicMock(
-            data={"can_delete": False, "source_withdrawn_fact_ids": [str(uuid4())]}
+        from postgrest.exceptions import APIError
+
+        mock_supabase_db.rpc().execute.side_effect = APIError(
+            {"code": code, "message": "private database detail"}
+        )
+        response = client.delete(f"/api/v1/documents/{uuid4()}")
+        assert response.status_code == http_status
+        assert "private database detail" not in response.text
+        mock_supabase_db.storage.from_().remove.assert_not_called()
+        assert all(
+            call.args[0] != "withdraw_unapplied_document_source"
+            for call in mock_supabase_db.rpc.call_args_list
+            if call.args
         )
 
-        response = client.delete(f"/api/v1/documents/{document_id}")
-
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+    def test_successful_replay_does_not_repeat_storage_cleanup(
+        self, client, override_auth, override_db, mock_supabase_db
+    ):
+        mock_supabase_db.rpc().execute.return_value = MagicMock(
+            data={"removed": True, "replayed": True}
+        )
+        assert client.delete(f"/api/v1/documents/{uuid4()}").status_code == 204
         mock_supabase_db.storage.from_().remove.assert_not_called()
-        mock_supabase_db.table().delete.assert_not_called()
 
-    def test_not_found(self, client, override_auth, override_db, mock_supabase_db):
-        document_id = uuid4()
-        mock_supabase_db.table().execute.return_value = MagicMock(data=None)
+    def test_invalid_storage_path_never_deletes_another_patients_object(
+        self, client, override_auth, override_db, mock_supabase_db
+    ):
+        mock_supabase_db.rpc().execute.return_value = MagicMock(
+            data={"removed": True, "file_path": "another-patient/source.pdf"}
+        )
+        assert client.delete(f"/api/v1/documents/{uuid4()}").status_code == 204
+        mock_supabase_db.storage.from_().remove.assert_not_called()
 
-        response = client.delete(f"/api/v1/documents/{document_id}")
+    def test_eligibility_comes_from_the_same_database_contract(
+        self, client, override_auth, override_db, mock_supabase_db
+    ):
+        mock_supabase_db.rpc().execute.return_value = MagicMock(
+            data={"can_remove": False, "reason": "reviewed"}
+        )
+        response = client.get(f"/api/v1/documents/{uuid4()}/removal")
+        assert response.status_code == 200
+        assert response.json() == {"can_remove": False, "reason": "reviewed"}
 
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-        mock_supabase_db.table().delete.assert_not_called()
+    def test_clinician_cannot_use_patient_removal_route(
+        self, client, override_db, mock_supabase_db
+    ):
+        app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+            id=uuid4(), email="c@example.test", role="clinician"
+        )
+        try:
+            assert client.delete(f"/api/v1/documents/{uuid4()}").status_code == 403
+            assert client.get(f"/api/v1/documents/{uuid4()}/removal").status_code == 403
+            mock_supabase_db.rpc.assert_not_called()
+        finally:
+            app.dependency_overrides.clear()
 
 
 class TestExplainDocument:
     """POST /api/v1/documents/{document_id}/explain - Explain a document."""
+
+    @pytest.mark.parametrize("locale", ["en-US", "es-MX"])
+    @pytest.mark.parametrize("reused", [False, True])
+    def test_structured_presentation_uses_authorized_source(
+        self, client, override_auth, locale, reused
+    ):
+        from app.services.explanation_service import StructuredExplanation
+
+        document_id = uuid4()
+        source = {"parse_status": "completed", "ai_summary": "Metformina 500 mg."}
+        presentation = StructuredExplanation.model_validate(
+            {
+                "language": locale,
+                "sections": [{"kind": "medicines", "items": ["Metformina 500 mg."]}],
+            }
+        )
+        with (
+            patch(
+                "app.routers.documents.DocumentService.get_document",
+                new=AsyncMock(return_value=source),
+            ) as read,
+            patch(
+                "app.routers.documents.DocumentPresentationService.read_or_present",
+                new=AsyncMock(return_value=(presentation, reused)),
+            ) as present,
+        ):
+            response = client.post(
+                f"/api/v1/documents/{document_id}/explain",
+                json={"language": locale, "structured": True},
+            )
+        assert response.status_code == 200
+        assert response.json()["sections"] == [
+            {"kind": "medicines", "items": ["Metformina 500 mg."]}
+        ]
+        assert response.json()["language"] == locale
+        assert response.json()["summary"] == presentation.plain_text()
+        read.assert_awaited_once()
+        present.assert_awaited_once_with(document_id, source["ai_summary"], locale)
+        assert response.json()["cached"] is reused
+        assert source == {"parse_status": "completed", "ai_summary": "Metformina 500 mg."}
+
+    def test_failed_presentation_never_returns_wrong_language_cache(self, client, override_auth):
+        with (
+            patch(
+                "app.routers.documents.DocumentService.get_document",
+                new=AsyncMock(return_value={"ai_summary": "Resumen antiguo en español."}),
+            ),
+            patch(
+                "app.routers.documents.DocumentPresentationService.read_or_present",
+                new=AsyncMock(side_effect=ValueError("private source text")),
+            ),
+        ):
+            response = client.post(
+                f"/api/v1/documents/{uuid4()}/explain",
+                json={"language": "en-US", "structured": True},
+            )
+        assert response.status_code == 200
+        assert response.json()["available"] is False
+        assert response.json()["summary"] is None
+        assert "Resumen" not in response.text
+        assert "private source" not in response.text
+
+    @pytest.mark.parametrize(
+        "document",
+        [
+            {"parse_status": "duplicate", "ai_summary": "stale"},
+            {"summary_status": "pending", "ai_summary": None},
+        ],
+    )
+    def test_unavailable_source_skips_structured_provider(self, client, override_auth, document):
+        with (
+            patch(
+                "app.routers.documents.DocumentService.get_document",
+                new=AsyncMock(return_value=document),
+            ),
+            patch(
+                "app.routers.documents.DocumentPresentationService.read_or_present", new=AsyncMock()
+            ) as present,
+        ):
+            response = client.post(
+                f"/api/v1/documents/{uuid4()}/explain", json={"structured": True}
+            )
+        assert response.json()["available"] is False
+        present.assert_not_awaited()
+
+    def test_structured_explanation_does_not_call_provider_before_authorization(
+        self, client, override_auth
+    ):
+        from app.core.exceptions import NotFoundError
+
+        with (
+            patch(
+                "app.routers.documents.DocumentService.get_document",
+                new=AsyncMock(side_effect=NotFoundError("Document", "synthetic")),
+            ),
+            patch(
+                "app.routers.documents.DocumentPresentationService.read_or_present", new=AsyncMock()
+            ) as present,
+        ):
+            response = client.post(
+                f"/api/v1/documents/{uuid4()}/explain", json={"structured": True}
+            )
+        assert response.status_code == 404
+        present.assert_not_awaited()
 
     @pytest.mark.parametrize(
         ("language", "message"),

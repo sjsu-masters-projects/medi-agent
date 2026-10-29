@@ -169,6 +169,10 @@ select:not([multiple]):not([size]):not(.appearance-none) {
 @keyframes ma-check   { from { stroke-dashoffset: 1 } to { stroke-dashoffset: 0 } }
 @keyframes ma-bars    { 0%, 100% { transform: scaleY(.4) } 50% { transform: scaleY(1) } }
 @keyframes ma-shimmer { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }
+@keyframes ma-sheet-out { from { transform: none } to { transform: translateY(100%) } }
+@keyframes ma-fade-out { from { opacity: 1 } to { opacity: 0 } }
+/* Neutral on purpose: a finished document must not read as approved (REC-001-UX). */
+@keyframes ma-ready   { from { background-color: var(--color-line-strong) } to { background-color: transparent } }
 
 .ma-enter        { animation: ma-enter var(--dur-panel) var(--ease-out) both; }
 .ma-enter-spring { animation: ma-enter var(--dur-panel) var(--ease-spring) both; }
@@ -176,6 +180,10 @@ select:not([multiple]):not([size]):not(.appearance-none) {
 .ma-bubble       { animation: ma-bubble var(--dur-micro) var(--ease-out) both; }
 .ma-fade         { animation: ma-fade var(--dur-micro) ease-out both; }
 .ma-sheet-panel  { animation: ma-sheet var(--dur-panel) var(--ease-out) both; }
+.ma-sheet-panel-out { animation: ma-sheet-out var(--dur-micro) var(--ease-out) both; }
+.ma-fade-out     { animation: ma-fade-out var(--dur-micro) ease-out both; }
+/* No fill mode: hover and active backgrounds apply again once the highlight ends. */
+.ma-ready        { animation: ma-ready 1.6s var(--ease-out); }
 .ma-check-draw path { stroke-dasharray: 1; animation: ma-check var(--dur-micro) var(--ease-out) both; }
 .ma-press        { transition: transform var(--dur-micro) var(--ease-out), background-color var(--dur-micro) ease-out, color var(--dur-micro) ease-out; }
 .ma-press:active { transform: scale(.98); }

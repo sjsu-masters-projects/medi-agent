@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Skeleton } from "@/components/ui";
+import { ProcessingDots } from "@/components/ui/motion";
 import { recordsCopy } from "./records-copy";
 import type { Locale } from "@/types";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
@@ -29,6 +31,8 @@ function PdfCanvasViewer({
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
+  // The page actually drawn on the canvas; differs from pageNumber while a page renders.
+  const [renderedPage, setRenderedPage] = useState<number | null>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -38,6 +42,7 @@ function PdfCanvasViewer({
       setDocument(null);
       setError(null);
       setPageNumber(1);
+      setRenderedPage(null);
       try {
         const pdfjs = await import("pdfjs-dist");
         pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -85,6 +90,7 @@ function PdfCanvasViewer({
         canvas.height = Math.ceil(viewport.height);
         renderTask = page.render({ canvas, canvasContext: context, viewport });
         await renderTask.promise;
+        if (!cancelled) setRenderedPage(pageNumber);
       } catch {
         if (!cancelled) {
           setError("render");
@@ -112,32 +118,45 @@ function PdfCanvasViewer({
   }
 
   if (!document) {
+    // Page-sized placeholder so the drawn page does not push the explanation down.
     return (
-      <p className="text-sm text-ink-2">
-        {copy("Loading source document…")}
-      </p>
+      <div className="relative flex min-h-[320px] items-center justify-center overflow-hidden rounded-2xl border border-line-strong bg-surface-2 p-3">
+        <Skeleton className="absolute inset-3 !rounded-xl" />
+        <p role="status" className="relative flex items-center gap-2 rounded-full bg-surface px-3 py-1.5 text-sm text-ink-2">
+          <ProcessingDots />
+          {copy("Loading source document…")}
+        </p>
+      </div>
     );
   }
 
+  const firstDraw = renderedPage === null;
+  const pageBusy = !firstDraw && renderedPage !== pageNumber;
   return (
     <div className="space-y-3">
-      <div className="overflow-auto rounded-2xl border border-line-strong bg-surface-2 p-3">
+      <div
+        aria-busy={firstDraw || pageBusy}
+        className={`relative overflow-auto rounded-2xl border border-line-strong bg-surface-2 p-3 ${firstDraw ? "min-h-[320px]" : ""}`}
+      >
+        {firstDraw ? <Skeleton className="absolute inset-3 !rounded-xl" /> : null}
         <canvas
           aria-label={
             locale === "es-MX"
               ? `${fileName}, página ${pageNumber}`
               : `${fileName}, page ${pageNumber}`
           }
-          className="mx-auto max-w-full bg-surface shadow-sm"
+          className={`mx-auto max-w-full bg-surface shadow-sm transition-opacity duration-[160ms] ${firstDraw ? "opacity-0" : pageBusy ? "opacity-50" : "opacity-100"}`}
           ref={canvasRef}
           role="img"
         />
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-ink-2">
-        <span>
+        <span className="inline-flex items-center gap-2">
           {locale === "es-MX"
             ? `Página ${pageNumber} de ${document.numPages}`
             : `Page ${pageNumber} of ${document.numPages}`}
+          {firstDraw || pageBusy ? <ProcessingDots /> : null}
+          {pageBusy ? <span className="sr-only" role="status">{copy("Loading page…")}</span> : null}
         </span>
         <div className="flex gap-2">
           <button
@@ -162,6 +181,32 @@ function PdfCanvasViewer({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Placeholder until the image arrives; a failed load stops the shimmer and says so. */
+function SourceImage({ alt, locale, src }: { alt: string; locale: Locale; src: string }) {
+  const [state, setState] = useState<"loading" | "loaded" | "error">("loading");
+  if (state === "error") {
+    return (
+      <p className="text-sm leading-6 text-danger-ink">
+        {recordsCopy(locale, "This source is temporarily unavailable. Please refresh and try again.")}
+      </p>
+    );
+  }
+  return (
+    <div className={`relative ${state === "loading" ? "min-h-[240px]" : ""}`}>
+      {state === "loading" ? <Skeleton className="absolute inset-0 !rounded-xl" /> : null}
+      {/* The source URL is signed by the API and this is intentionally a native browser image. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        alt={alt}
+        className={`max-h-[560px] w-full rounded-xl object-contain transition-opacity duration-[160ms] ${state === "loaded" ? "opacity-100" : "opacity-0"}`}
+        onError={() => setState("error")}
+        onLoad={() => setState("loaded")}
+        src={src}
+      />
     </div>
   );
 }
@@ -220,11 +265,10 @@ export function DocumentSourceViewer({
         />
       ) : null}
       {canRenderNativeImage && viewUrl ? (
-        // The source URL is signed by the API and this is intentionally a native browser image.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <SourceImage
+          key={viewUrl}
           alt={`${copy("Source document")}: ${fileName}`}
-          className="max-h-[560px] w-full rounded-xl object-contain"
+          locale={locale}
           src={viewUrl}
         />
       ) : null}
