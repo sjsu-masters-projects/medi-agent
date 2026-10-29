@@ -79,7 +79,9 @@ The two locales replace their own cache entries, bounding storage per document;
 document removal cascades the presentation cache. Missing cache schema fails visibly
 without silently returning to per-view generation. Preserve loading/error/retry.
 Apply migrations 101/102 with exact hosted-target authorization before releasing the
-matching backend, then deploy the portal. Neither migration is hosted-applied here.
+matching backend, then deploy the portal. The requester reports both migrations
+applied October 29; the target environment and ledger/checksum receipt were not
+provided. This report does not establish independent schema or deployed acceptance.
 New Spanish interface wording is draft for
 LOC-001 review. Automated provider tests are mocked; no live-model or deployed
 acceptance is claimed. [Local evidence](../../docs/evidence/rec-001-ux-2026-10-28.md)
@@ -116,8 +118,9 @@ Acceptance covers forged/foreign/clinician/reviewed/used/processing removal atte
 concurrent review and repeated removal, unchanged clinical truth on refusal, retained
 removal audit, RPC least privilege, source ownership display, explicit message
 handoff with protected drafts, and readable bilingual content without repeated
-headings. Migration 101 is local-only until separately authorized for hosted use;
-no remote SQL, actual patient deletion, message sending or deployment is authorized.
+headings. The requester reports migration 101 applied October 29; its target and
+ledger receipt are not independently verified here. This report authorizes no
+further remote SQL, actual patient deletion, message sending or deployment.
 
 Implementation/local checks: [October 28 follow-up evidence](../../docs/evidence/rec-001-removal-2026-10-28.md).
 

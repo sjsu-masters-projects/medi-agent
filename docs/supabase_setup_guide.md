@@ -79,7 +79,8 @@ presentation cache for REC-001-UX. It retains one current entry per document/loc
 with a source fingerprint and format version, and cascades on document removal.
 It changes no source summary, review or clinical truth. Apply it before the matching
 backend release only after explicit authorization for that hosted target. It is
-locally tested, not hosted-applied here; missing schema makes structured explanations
+locally tested; the requester reports 101 and 102 applied October 29, with target
+and ledger/checksum receipt not supplied. Missing schema makes structured explanations
 unavailable without falling back to an AI call on every view.
 
 `101_patient_document_removal.sql` is required by REC-001-RM's restricted patient
