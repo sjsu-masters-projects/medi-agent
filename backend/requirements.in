@@ -36,7 +36,15 @@ aiohttp>=3.14.4
 # advisory; `pip-audit` is a blocking CI gate, so a regression below that floor fails the
 # build rather than shipping.
 google-adk
-litellm>=1.84
+litellm>=1.101.3
+
+# SEC-004: patched transitive dependencies required by the blocking audit.
+# google-adk -> authlib; email-validator -> dnspython; the document/NLP stack
+# brings filelock and setuptools. Keep these floors through future lock rebuilds.
+authlib>=1.9.1
+dnspython>=2.9.0
+filelock>=4.2.1
+setuptools>=84.1.0
 
 # -- Voice --
 deepgram-sdk
@@ -64,7 +72,7 @@ sentry-sdk
 PyMuPDF
 # MedWatch Form 3500 fill path (BSD, pure Python); intentionally not PyMuPDF (AGPL).
 # CVE-2026-113786: validate JPEG decoder selection for /DCTDecode image data.
-pypdf==6.21.1
+pypdf==6.21.2
 pytesseract
 # Pillow 13 fixes decoder/encoder advisories reported by the blocking dependency audit.
 Pillow>=13.0.0,<14.0.0

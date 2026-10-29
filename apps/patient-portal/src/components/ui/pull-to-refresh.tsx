@@ -3,10 +3,12 @@
 import { useRef, useState, type ReactNode, type TouchEvent } from "react";
 
 /** Optional gesture affordance. The existing refresh control remains the keyboard path. */
-export function PullToRefresh({ children, onRefresh, busy = false, label }: {
+export function PullToRefresh({ children, onRefresh, busy = false, indicateBusy = true, label }: {
     children: ReactNode;
     onRefresh: () => void | Promise<unknown>;
     busy?: boolean;
+    /** False: parent `busy` still blocks gestures but only a gesture shows the mark. */
+    indicateBusy?: boolean;
     label: string;
 }) {
     const start = useRef<{ x: number; y: number } | null>(null);
@@ -52,7 +54,8 @@ export function PullToRefresh({ children, onRefresh, busy = false, label }: {
             // The existing loader owns its error notice; a gesture must not leave a rejected event promise.
         } finally { locked.current = false; setAwaiting(false); }
     }
-    const height = pending ? 56 : pull;
+    const shown = indicateBusy ? pending : awaiting;
+    const height = shown ? 56 : pull;
     return (
         <div onTouchStart={begin} onTouchMove={move} onTouchEnd={() => { void release(); }} onTouchCancel={reset}>
             <div className="flex items-end justify-center overflow-hidden transition-[height] duration-[240ms]" style={{ height }}>

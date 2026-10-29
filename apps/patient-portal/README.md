@@ -64,6 +64,61 @@ Records distinguishes duplicate-skipped uploads from empty successful extraction
 The duplicate explanation is static en-US/es-MX copy; switching its language does
 not invoke a model or carry that reason into Nora as a clinical summary.
 
+Records has a direct Refresh control. Rows and details label recorded source-review
+status in words; absent status is unavailable, and clinician upload is not inferred
+approval. Source approval never approves the AI explanation or changes treatment.
+Document icons use one neutral tone, with different shapes for document types and
+a file icon for unknown types regardless of uploader. Type, origin and review
+status remain explicit text rather than meanings patients must infer from color.
+The detail sheet keeps one sticky close control, with Escape and focus return.
+
+Document explanations follow the saved Profile language and request a structured
+presentation of the stored summary, including legacy summaries of unknown language.
+The UI uses a short opening and spaced detail bullets without repeated group headings,
+omitting unsupported sections. A quiet AI label and one safety notice identify its scope. Only
+the current document/locale/account response may display or supply text to speech
+and focused chat; failures offer Retry and never display the previous language.
+Audio leaves the explanation visible and stops on context changes. This presentation
+does not rewrite the source or stored summary. Deploy the matching backend before
+the portal; an older server's unstructured response is treated as unavailable.
+Validated presentations are saved per document, language, exact stored-summary
+fingerprint and format version (migration 102). Reopening fetches authorized saved
+content instead of another AI generation. A changed source/version or missing/invalid
+presentation requires generation; failures remain retryable. Closing the modal does
+not discard generation already running on the server. Apply 102 before releasing
+this backend; missing schema fails visibly, without per-view generation fallback.
+Processing polling follows an explicitly pending summary after extraction finishes.
+Background polling keeps source preview URLs steady; explicit Refresh renews them.
+
+Record origin is explicit. A patient may remove only their own pending, unused upload
+after server eligibility and confirmation. Reviewed, used, rejected, processing and
+clinician-uploaded sources cannot be removed through the patient route. The server
+rechecks under the evidence fence, records a minimal removal audit and removes unused
+metadata/candidates atomically before best-effort private storage cleanup. Unknown
+permissions fail closed. A lost response can be retried safely for the same upload.
+
+Records shows running work with motion (REC-001-MO). The explanation shows moving
+dots, a row-shaped placeholder and, after 15 seconds, a note to read the original.
+Every document still being read is checked, including ones already processing on
+load: 3s→30s backoff with the current session, paused while the tab is hidden, and
+stopped after 10 minutes of visible checking as a static **Still processing** with
+Refresh. A document that finishes while the page is open gets a neutral highlight and
+one polite announcement. Upload shows a preparing phase, then uploading; upload errors
+are separate from list-loading errors and offer **Choose another file** or **Refresh
+records**. Removal closes the record, the row leaves, and a neutral notice confirms
+it; while removal eligibility is checked neither removal nor request is offered. The
+record sheet uses `Modal`'s opt-in `animateExit`, and pull-to-refresh shows its mark
+only for the gesture (`indicateBusy={false}`). Reduced motion disables the animation
+but not the status text.
+
+Other records offer **Report an issue** or **Request removal or correction**. This opens
+`/chat?view=care-team&record_request=<id>` and requires recipient selection, an owned
+document read, **Prepare request**, and the normal explicit **Send message**. Existing
+or uncertain message drafts are preserved. This is an ordinary private care-team
+message, not an automatic chart change or a separate tracked review request.
+Migration `101_patient_document_removal.sql` must be applied before enabling direct
+removal; unavailable or older backends retain the request path without a delete fallback.
+
 An opened record shows **Test results / Resultados** from
 `GET /api/v1/documents/{id}/results`, requested only for that opened document (not
 for list rows, and not while it is still being read or is a duplicate). Lab results

@@ -26,6 +26,10 @@ every 15 seconds while visible and on focus, retaining rows if a background read
 fails. Refresh pauses during a review decision; the existing server authorization
 and clinical approval APIs remain authoritative. Care-plan source labels reuse
 grounded English document titles while retaining original filenames and IDs.
+Document-type tiles and file-format chips use neutral tones. Type uses distinct
+icon shapes with a file fallback; review badges say **Awaiting review**, **Source
+approved** or **Source not approved**. Completed parsing is neutral, so extraction
+success does not look like source approval. Review actions and gates are unchanged.
 
 Lint, typecheck and tests:
 

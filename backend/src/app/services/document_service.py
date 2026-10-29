@@ -14,7 +14,12 @@ from uuid import UUID
 from postgrest.exceptions import APIError
 from supabase import Client
 
-from app.core.exceptions import NotFoundError, ValidationError
+from app.core.exceptions import (
+    ConflictError,
+    NotFoundError,
+    ServiceUnavailableError,
+    ValidationError,
+)
 from app.models.enums import DocumentReviewStatus, UploaderRole
 from app.services.clinical_fact_service import ClinicalFactService
 from app.services.clinician_record_gate import ClinicianRecordGate
@@ -280,56 +285,69 @@ class DocumentService:
 
         return cast(dict[str, Any], result.data)
 
+    def removal_status(self, document_id: UUID, patient_id: UUID) -> dict[str, Any]:
+        """Read authoritative eligibility; never guess from parse or uploader icons."""
+        outcome = self._patient_removal_rpc(
+            "patient_document_removal_status", document_id, patient_id
+        )
+        return {"can_remove": outcome.get("can_remove") is True, "reason": outcome.get("reason")}
+
     async def delete_document(self, document_id: UUID, patient_id: UUID) -> None:
-        """Remove only unapplied source evidence; never delete canonical truth."""
-        document = self._get_document_row(document_id, patient_id)
-        self._remove_unapplied_candidates(
-            document_id,
-            patient_id,
-            UUID(str(document["uploaded_by"])),
+        """Remove an owned pending, unused upload atomically; refusals change nothing."""
+        outcome = self._patient_removal_rpc(
+            "remove_patient_document_upload", document_id, patient_id
         )
-
-        file_path = str(document.get("file_path") or "").strip()
-        if file_path:
-            self._delete_storage_file(file_path)
-        preview_path = str(document.get("preview_path") or "").strip()
-        if preview_path:
-            self._delete_storage_file(preview_path)
-
-        (
-            self.db.table("documents")
-            .delete()
-            .eq("id", str(document_id))
-            .eq("patient_id", str(patient_id))
-            .execute()
-        )
-
-    def _remove_unapplied_candidates(
-        self,
-        document_id: UUID,
-        patient_id: UUID,
-        actor_id: UUID,
-    ) -> None:
-        """Delete a source only before any candidate is applied to local truth.
-
-        Legacy canonical rows are intentionally untouched. For an applied fact,
-        the source remains auditable and is marked withdrawn instead of deleting
-        the document or altering the reconciled medication/condition/allergy.
-        """
-        result = self.db.rpc(
-            "withdraw_unapplied_document_source",
-            {
-                "p_document_id": str(document_id),
-                "p_patient_id": str(patient_id),
-                "p_actor_id": str(actor_id),
-            },
-        ).execute()
-        outcome = cast(dict[str, Any], result.data or {})
-        if not outcome.get("can_delete", False):
-            raise ValidationError(
-                "This document has clinician-reviewed candidates. Its source was marked withdrawn; "
-                "the document and clinical audit history were retained for clinician review."
+        if outcome.get("removed") is not True:
+            raise ServiceUnavailableError(
+                "Upload removal is unavailable", code="DOCUMENT_REMOVAL_UNAVAILABLE"
             )
+        # The committed RPC, not a preliminary read, supplies these paths. Private
+        # storage cleanup can fail without undoing or weakening the clinical fence.
+        for field in ("file_path", "preview_path"):
+            path = str(outcome.get(field) or "").strip()
+            if not path:
+                continue
+            try:
+                self._validate_file_path(patient_id, path)
+            except ValidationError:
+                logger.warning("Skipped invalid removal storage path for document %s", document_id)
+                continue
+            self._delete_storage_file(path)
+
+    def _patient_removal_rpc(
+        self, name: str, document_id: UUID, patient_id: UUID
+    ) -> dict[str, Any]:
+        try:
+            result = self.db.rpc(
+                name,
+                {
+                    "p_document_id": str(document_id),
+                    "p_patient_id": str(patient_id),
+                    "p_actor_id": str(patient_id),
+                },
+            ).execute()
+        except APIError as exc:
+            code = str(getattr(exc, "code", ""))
+            if code == "P0002":
+                raise NotFoundError("Document", str(document_id)) from None
+            if code == "42501":
+                raise ConflictError(
+                    "This document cannot be removed directly. Refresh its details or ask your care team.",
+                    code="DOCUMENT_REMOVAL_REQUIRES_REVIEW",
+                ) from None
+            if code == "40001":
+                raise ConflictError(
+                    "The record changed while checking removal. Refresh its removal options.",
+                    code="DOCUMENT_REMOVAL_CHANGED",
+                ) from None
+            raise ServiceUnavailableError(
+                "Upload removal is temporarily unavailable", code="DOCUMENT_REMOVAL_UNAVAILABLE"
+            ) from None
+        if not isinstance(result.data, dict):
+            raise ServiceUnavailableError(
+                "Upload removal is unavailable", code="DOCUMENT_REMOVAL_UNAVAILABLE"
+            )
+        return cast(dict[str, Any], result.data)
 
     def _get_document_derived_record_ids(
         self,

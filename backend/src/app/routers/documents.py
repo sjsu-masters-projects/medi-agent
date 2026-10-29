@@ -24,9 +24,11 @@ from app.models.document import (
     DocumentCareTeamOption,
     DocumentClaimRead,
     DocumentRead,
+    DocumentRemovalStatus,
     DocumentResultRead,
 )
 from app.models.enums import DocumentType, Language, coerce_locale
+from app.services.document_presentation_service import DocumentPresentationService
 from app.services.document_routing_service import DocumentRoutingService
 from app.services.document_service import DocumentService
 from app.services.explanation_service import (
@@ -80,6 +82,7 @@ class ExplainRequest(BaseModel):
     """Language selection for AI explanation responses."""
 
     language: Language = Language.EN
+    structured: bool = False
 
 
 # ── Endpoints ───────────────────────────────────────────
@@ -317,14 +320,23 @@ async def get_document_results(
     return service.list_document_results(document_id, user.id)
 
 
+@router.get("/{document_id}/removal", response_model=DocumentRemovalStatus)
+async def document_removal_status(
+    document_id: UUID,
+    user: CurrentUser = Depends(require_role("patient")),
+    service: DocumentService = Depends(_get_service),
+) -> Any:
+    return service.removal_status(document_id, user.id)
+
+
 @router.delete(
     "/{document_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a document",
+    summary="Remove my pending, unused upload",
 )
 async def delete_document(
     document_id: UUID,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_role("patient")),
     service: DocumentService = Depends(_get_service),
 ) -> None:
     await service.delete_document(document_id, user.id)
@@ -358,6 +370,21 @@ async def explain_document(
         return _unavailable_explanation_response(
             status=reported, failure_code=document.get("summary_failure_code"), locale=locale
         )
+
+    if body and body.structured:
+        try:
+            presentation, reused = await DocumentPresentationService(service.db).read_or_present(
+                document_id, cached, locale
+            )
+        except Exception:  # noqa: BLE001 - refuse unverified output without exposing source text
+            logger.warning("Structured explanation unavailable for document %s", document_id)
+            return _unavailable_explanation_response(
+                status="failed", failure_code="presentation_unavailable", locale=locale
+            )
+        return {
+            **_ready_explanation_response(presentation.plain_text(), locale, cached=reused),
+            "sections": [section.model_dump() for section in presentation.sections],
+        }
 
     # Summaries created before the plain-text prompt contract may contain Markdown.
     # Keep the cache fast, but make its patient-facing representation match newly

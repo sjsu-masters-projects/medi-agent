@@ -13,6 +13,7 @@ import { ChatTextarea, chatButton, chatDisplayTime } from "./chat-presentation";
 import { normalizeLocale, type Locale } from "@/types";
 import { ConversationActivityAttachment, ConversationActivityContext } from "./conversation-activity";
 import { TranslationNote } from "./translation-note";
+import { RecordRequestComposer } from "./record-request-composer";
 import type { CareConversation, CareConversationMessage, ConversationDraft, ConversationRecipient } from "@/types/care-conversations";
 import { applyTranslationResult, conversationAccessDenied, conversationRoleLabel, conversationSendFailure, getConversationCopy, mergeConversationMessages, requestPendingTranslations } from "../../../../../packages/shared/src/utils/care-conversations";
 
@@ -22,6 +23,7 @@ type Presentation = {
   compact?: boolean;
   conversationId?: string | null;
   recipientId?: string | null;
+  recordRequestId?: string | null;
   /** Patient tasks that belong to the care-team inbox, never the Nora thread. */
   inboxLead?: ReactNode;
   onThreadPresentationChange?: (id: string | null) => void;
@@ -33,7 +35,7 @@ export function CareConversations({ locale = "en-US", audience = "patient", visi
   return <ConversationInbox key={user.id} token={accessToken} locale={locale} audience={audience} visible={visible} {...presentation} />;
 }
 
-function ConversationInbox({ token, locale, audience, visible, compact = false, conversationId, recipientId, inboxLead, onThreadPresentationChange }: { token: string; locale: Locale; audience: "patient" | "clinician"; visible: boolean } & Presentation) {
+function ConversationInbox({ token, locale, audience, visible, compact = false, conversationId, recipientId, recordRequestId, inboxLead, onThreadPresentationChange }: { token: string; locale: Locale; audience: "patient" | "clinician"; visible: boolean } & Presentation) {
   const copy = getConversationCopy(locale);
   const [recipients, setRecipients] = useState<ConversationRecipient[]>([]);
   const [threads, setThreads] = useState<CareConversation[]>([]);
@@ -45,6 +47,11 @@ function ConversationInbox({ token, locale, audience, visible, compact = false, 
   const backLabel = locale === "es-MX" ? "Volver a conversaciones" : "Back to conversations";
   const newLabel = locale === "es-MX" ? "Nuevo mensaje" : "New message";
   const [drafts, setDrafts] = useState<Record<string, ConversationDraft>>({});
+  const [appliedRecordRequest, setAppliedRecordRequest] = useState(recordRequestId);
+  if (recordRequestId !== appliedRecordRequest) {
+    setAppliedRecordRequest(recordRequestId);
+    if (recordRequestId) { setSelected(null); setThreadFocused(false); }
+  }
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
   const [sending, setSending] = useState(false);
@@ -133,7 +140,7 @@ function ConversationInbox({ token, locale, audience, visible, compact = false, 
   }, [refreshInbox, invalidateInbox, visible, loading, opening, sending]);
 
   useEffect(() => {
-    const destination = conversationId ? `conversation:${conversationId}` : recipientId ? `recipient:${recipientId}` : null;
+    const destination = recordRequestId ? null : conversationId ? `conversation:${conversationId}` : recipientId ? `recipient:${recipientId}` : null;
     if (!destination) { handledDestination.current = null; return; }
     if (loading || !visible || error || handledDestination.current === destination) return;
     handledDestination.current = destination;
@@ -150,7 +157,7 @@ function ConversationInbox({ token, locale, audience, visible, compact = false, 
       setSelected(opened.id); setThreadFocused(true);
     }).catch(() => { if (session === version.current && handledDestination.current === destination) setDestinationUnavailable(true); })
       .finally(() => { if (session === version.current && handledDestination.current === destination) setOpening(false); });
-  }, [conversationId, recipientId, loading, visible, error, threads, recipients, token]);
+  }, [conversationId, recipientId, recordRequestId, loading, visible, error, threads, recipients, token]);
 
   async function open() {
     if (!recipient || opening || sending) return;
@@ -191,6 +198,7 @@ function ConversationInbox({ token, locale, audience, visible, compact = false, 
       {!compact ? <button className={button} disabled={loading || opening || sending} onClick={() => setAttempt((value) => value + 1)} type="button">{loading ? copy.loading : copy.refresh}</button> : null}
     </div>;
   return <section className="min-w-0 space-y-4 text-sm text-ink-2" aria-busy={loading}>
+    {recordRequestId && audience === "patient" && !active ? <p className="rounded-2xl bg-brand-tint p-3 text-brand-ink">{locale === "es-MX" ? "Elige a un integrante de tu equipo de atención para solicitar una corrección o eliminación del documento. No se enviará ningún mensaje automáticamente." : "Choose a care-team member to request a record correction or removal. No message will be sent automatically."}</p> : null}
     {destinationUnavailable && <p role="alert" className="rounded-2xl bg-danger-tint p-3 text-danger-ink">{locale === "es-MX" ? "Esta conversación no está disponible. Elige un contacto autorizado." : "This conversation is unavailable. Choose an authorized contact."}</p>}
     {compact ? <>
       <div hidden={focused} className="flex items-end justify-between gap-2 pl-1.5 pt-2">
@@ -233,6 +241,7 @@ function ConversationInbox({ token, locale, audience, visible, compact = false, 
     <p role="note" className={`flex items-start gap-2.5 text-sm leading-snug text-[#7A2A1B] ${compact && focused ? "-mx-4 -mt-4 justify-center bg-danger-tint px-4 py-2 text-center text-[13px]" : "rounded-2xl bg-danger-tint px-3.5 py-3"}`}><Icon name="alert" className="mt-px h-[18px] w-[18px] shrink-0" />{copy.notice}</p>
     {!loading && <>
       {active ? <div hidden={compact && !focused}><ConversationThread key={active.id} token={token} thread={active} locale={locale} visible={visible && (!compact || focused)} focusOnOpen={compact}
+        recordRequestId={recordRequestId}
         audience={audience} backAction={backAction}
         draft={drafts[active.id] ?? { body: "" }}
         onDraft={(draft) => setDrafts((current) => ({ ...current, [active.id]: draft }))}
@@ -248,12 +257,13 @@ function ConversationInbox({ token, locale, audience, visible, compact = false, 
   </section>;
 }
 
-function ConversationThread({ token, thread, locale, visible, draft, onDraft, onSending, onRead, onSaved, focusOnOpen, audience, backAction }: {
+function ConversationThread({ token, thread, locale, visible, draft, onDraft, onSending, onRead, onSaved, focusOnOpen, audience, backAction, recordRequestId }: {
   token: string; thread: CareConversation; locale: Locale; visible: boolean; draft: ConversationDraft;
   onDraft: (draft: ConversationDraft) => void; onSending: (sending: boolean) => void;
   onRead: (id: string) => void; onSaved: (message: CareConversationMessage) => void;
   focusOnOpen?: boolean;
   audience: "patient" | "clinician"; backAction?: ReactNode;
+  recordRequestId?: string | null;
 }) {
   const copy = getConversationCopy(locale);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -410,6 +420,11 @@ function ConversationThread({ token, thread, locale, visible, draft, onDraft, on
       <button aria-label={loading ? copy.loading : copy.refresh} title={copy.refresh} className="ma-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-ink-2 hover:bg-surface-2 disabled:opacity-50" disabled={sending || loading || denied} onClick={() => void load().catch(() => undefined)} type="button"><Icon name="refresh" className={`h-[18px] w-[18px] ${loading ? "motion-safe:animate-spin" : ""}`} /></button>
     </header>
     <p className="text-center text-xs text-muted">{getChatControlsCopy(normalizeLocale(locale)).humanOriginal}</p>
+    {recordRequestId && audience === "patient" && visible && !denied && thread.writable ? <RecordRequestComposer
+      key={`${recordRequestId}:${token}`}
+      documentId={recordRequestId} patientId={thread.patient_id} locale={locale} token={token}
+      draft={draft} disabled={sending || loading || Boolean(draft.clientMessageId)} onDraft={onDraft}
+    /> : null}
     {error && <p role="alert" className="rounded-2xl bg-danger-tint px-3.5 py-3 text-sm text-danger-ink">{copy[error]}</p>}
     {loading && <p role="status" className="text-center text-sm text-muted">{copy.loading}</p>}
     {cursor && !denied && <button className={button + " self-center"} disabled={loading || sending} onClick={() => void load(cursor).catch(() => undefined)} type="button">{copy.older}</button>}

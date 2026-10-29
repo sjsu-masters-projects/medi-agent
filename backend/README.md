@@ -55,6 +55,31 @@ not an order, full chart or handoff approval. Re-import creates pending candidat
 No migration or additional environment variable is required. See the
 [mapping and export guide](../docs/smart-fhir-review-mapping.md#identifier-fidelity-and-clinical-core-export).
 
+## Patient document removal
+
+Patient document removal uses the service-role-only functions in
+`101_patient_document_removal.sql` (local implementation; hosted application requires
+explicit authorization). `GET /api/v1/documents/{id}/removal` returns eligibility;
+`DELETE /api/v1/documents/{id}` accepts only patients and atomically rechecks uploader,
+pending review, processing, candidate decisions and clinical/care-plan use. Denials
+never withdraw evidence. Removal and its minimal audit commit together; replay is
+idempotent, and private storage cleanup follows the commit. Missing migration support
+fails closed. No generic legacy withdrawal fallback is used by this route.
+
+## Document explanation reuse
+
+The structured explain route authorizes the source on every request, then reuses a
+validated presentation from `102_document_explanation_presentations.sql`. The key
+includes document, requested locale, exact summary fingerprint and presentation
+version. Invalid saved content is refused and replaced through the same validation
+path; failed generation is never saved. Each document keeps one entry per supported
+locale, removed with its document. Service-only access prevents direct client cache
+reads/writes. Same-process in-flight requests share generation, which survives a
+closed viewer; separate replicas may generate concurrently on a cold miss. Neither
+source text nor review/clinical truth is rewritten. Missing cache schema returns an
+unavailable explanation rather than triggering repeated generation. Apply 102 with
+explicit hosted-target authorization before the matching backend release.
+
 ## Run
 
 ```bash
@@ -281,7 +306,7 @@ runtime, and checked against its SHA-256, page and field inventory and every map
 on every export. Re-pin steps (download into an empty directory outside the repository,
 compare size and SHA-256 and stop on a difference, repeat the copyright check, regenerate the
 record with `scripts/generate_form_3500_template_record.py`) are in
-[`src/app/assets/fda/README.md`](src/app/assets/fda/README.md). The fill uses `pypdf==6.21.1`
+[`src/app/assets/fda/README.md`](src/app/assets/fda/README.md). The fill uses `pypdf==6.21.2`
 (pinned in `requirements.in`; BSD), not PyMuPDF, writes the AcroForm fields and the XFA
 `datasets` packet, keeps the form fillable and re-encrypts it with the template's
 permissions.

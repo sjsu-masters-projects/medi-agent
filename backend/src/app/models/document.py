@@ -69,6 +69,11 @@ class DocumentCareTeamOption(BaseModel):
     clinic_id: UUID | None = None
 
 
+class DocumentRemovalStatus(BaseModel):
+    can_remove: bool
+    reason: Literal["care_team_upload", "reviewed", "processing", "used_in_record"] | None = None
+
+
 class DocumentClaimRead(BaseModel):
     document_id: UUID
     care_team_id: UUID

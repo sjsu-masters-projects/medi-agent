@@ -59,6 +59,30 @@ Deployed October 12 (migrations 057/058); production status and open items are i
 
 ## Worker and service boundaries
 
+REC-001-UX adds an opt-in structured document-explanation presentation through the
+existing `TaskType.PATIENT_EXPLANATION` / `Workload.EXPLANATION` registry route.
+It translates and sections an authorized stored summary, including legacy prose of
+unknown language, without writing source, summary or approval state. Schema,
+number/unit counts, negation and clear language-mismatch checks reject unverified
+output. The saved patient locale owns presentation; the portal rejects responses
+for a stale document/locale/account and exposes only the visible text to speech/chat.
+Details and local verification: [record clarity](specs/rec-001-patient-record-clarity.md).
+Migration 102 stores only validated derivative presentations, one per document and
+supported locale, behind service-only privileges. Every request authorizes the
+current source before cache access. Its exact-summary fingerprint and presentation
+version invalidate stale entries; document deletion cascades them. Same-process
+in-flight generation survives a disconnected viewer and is shared on reopen.
+Cold misses on separate replicas may generate independently; failed output is not saved.
+
+REC-001-RM's patient removal/status functions (migration 101) are service-role-only.
+Removal locks the owned document, takes the existing patient evidence fence with a
+non-waiting acquisition, and refuses reviewed/used/processing/clinician sources.
+Candidate cleanup, metadata removal and a minimal audit commit atomically;
+refusals cannot withdraw evidence. Private object cleanup follows the successful
+transaction. Repeated removal uses that audit for replay. Patient correction and
+removal requests reuse private care-team messages with explicit recipient, draft
+preparation and Send; they neither change clinical truth nor introduce another queue.
+
 PAT-002-B's source audit and confirmation contract are recorded in the
 [confirmed symptom intake plan](specs/pat-002-b-confirmed-symptom-intake-plan.md).
 Current implementation and activation prerequisites are described below. Migrations
