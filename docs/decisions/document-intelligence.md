@@ -1,11 +1,11 @@
 # Document intelligence decision record
 
 **Status:** The bounded worker and scheduled synthetic-demo operation are verified.
-Current issue status is in [TASKS.md](../.agent/TASKS.md); full capacity/production
+Current issue status is in [TASKS.md](../../.agent/TASKS.md); full capacity/production
 qualification is outside this demonstrated scope.
 Extraction of results, vitals, immunizations, procedures and medication actions, row-level
 evidence and phone-photo OCR were added by AI-005; see its
-[specification](../.agent/specs/ai-005-agent-quality.md).
+[specification](../../.agent/specs/ai-005-agent-quality.md).
 
 ## Decision
 
@@ -35,7 +35,7 @@ authorized clinical update.
 - Page/excerpt anchors let a reviewer challenge or correct a candidate without reconstructing
   what the worker saw.
 - The model route is configuration, not a permanent product claim. The current route and its
-  telemetry controls are documented in [the AI runtime decision](decisions/ai-runtime-2026-09.md).
+  telemetry controls are documented in [the AI runtime decision](ai-runtime-2026-09.md).
 - A failed extraction must be honest. It is safer to retain the source for review than to invent
   candidates or silently mark a document processed.
 
@@ -51,7 +51,7 @@ PDF preview for TIFF because browsers cannot safely render TIFF consistently. Th
 a replacement for the immutable source or for clinician review.
 
 The complete setup, scheduler, monitoring, failure-handling, and verification instructions are
-in [the document-ingestion worker guide](document-ingestion-worker.md). Queue and worker
+in [the document-ingestion worker guide](../document-ingestion-worker.md). Queue and worker
 security guarantees are defined by migrations 034 and 036; invocation telemetry is migration
 035.
 
@@ -66,8 +66,7 @@ security guarantees are defined by migrations 034 and 036; invocation telemetry 
    review state.
 
 The scheduled demo operation and five-document consolidation are recorded in the
-[worker guide](document-ingestion-worker.md) and [PAT-005 acceptance](evidence/pat-005-final-acceptance-2026-10-10.md).
-Do not treat older pending-deployment notes as the current board.
+[worker guide](../document-ingestion-worker.md) and [PAT-005 acceptance](../evidence/pat-005-final-acceptance-2026-10-10.md).
 
 Historic tool comparisons, price snapshots, and preliminary benchmark narratives are retained
 in Git history rather than maintained as operating documentation. They are not current product

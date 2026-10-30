@@ -20,13 +20,10 @@ polish after code closure. The current verdict for every row stays in
 
 ## 2. Before you start
 
-1. **Redeploy both portals.** Vercel's Hobby rate limit blocked builds after
-   #220 (patient) and #221 (clinician), so the portals do not yet contain the
-   #221, #223 and #224 changes. The portal owner redeploys the latest `main` in
-   both Vercel projects once the limit resets (see
-   [Cloud infrastructure guide, section 4](../.agent/CLOUD_INFRASTRUCTURE_GUIDE.md)).
-   Confirm both are on current `main` before any portal-facing check; backend,
-   worker and jobs are already deployed.
+1. **Confirm the portals are current.** Both portals and the backend deploy from `main`.
+   Before portal-facing checks, confirm the latest commit's two Vercel statuses succeeded.
+   If one shows "Deployment rate limited", the portal owner redeploys it after the limit
+   resets ([Cloud infrastructure guide, section 4](../.agent/CLOUD_INFRASTRUCTURE_GUIDE.md)).
 2. **Accounts** (fictional, in the `accounts.mediagent.live` namespace; ask the
    requester for credentials):
 
@@ -131,7 +128,7 @@ leaked English in es-MX.
 ### 3.7 Scheduling
 
 **SCH-001-V, UX-006**
-1. Preconditions: Rajeev with visits on Oct 20 and 22 and another patient (Morgan, Evelyn) across Cedar Grove and Willow Terrace.
+1. Preconditions: Rajeev with two upcoming visits and another patient (Morgan, Evelyn) across Cedar Grove and Willow Terrace.
 2. Switch Today to week and All to Willow; check clinic filters, needs-action and patient history.
 3. Create an appointment offer for a patient who is already booked that day at another clinic.
 4. Pass: loading states show with no stale visits; the day's existing booking (for example 10:00 to 10:30 AM) is shown; the offer uses the patient's clinic and Pacific time zone; a cross-clinic conflict is refused; calendar export matches. No horizontal overflow at 390 or 1280 px.
@@ -144,6 +141,18 @@ leaked English in es-MX.
 3. Download the canonical FHIR collection and run a SMART sandbox launch.
 4. Open the ADR record tab, then MedWatch Preview, Approve and Download at 390 px.
 5. Pass: filenames, IDs and pages are retained; withdrawn items show their state; the timeline loads source-linked rows, shows freshness and respects role and private-thread isolation; the FHIR download is candidate-only on re-import and honors sensitive-condition gates; SMART reaches the sandbox patient login, not the provider picker; the MedWatch PDF renders in Chrome and mobile (it only looked blank in the in-app browser). Do not claim full-chart or conformance certification. Make no chart changes without specific approval.
+
+**REC-001-UX, REC-001-RM, REC-001-MO (patient Records)** (spec: [record clarity](../.agent/specs/rec-001-patient-record-clarity.md))
+1. Preconditions: a patient with one own pending upload, one reviewed document and one document with an explanation.
+2. Use Refresh on Records. Open a document and its explanation in en-US and es-MX, then close it with the sticky close control.
+3. Upload a file and watch it process. Remove your own pending upload. Try to remove a reviewed document.
+4. Pass: review labels match the recorded state and clinician labels are explicit; reopening an explanation makes no new model call; processing shows motion, then a neutral highlight and a screen-reader announcement; with reduced motion the status text stays; removal confirms with a notice; a refused removal keeps the source and offers the private care-team request instead.
+
+**PV-001-D (Naranjo answer coverage)** (spec: [PV-001-D](../.agent/specs/pv-001-d-naranjo-answer-coverage.md))
+1. Preconditions: Elena with an open ADR case for Morgan.
+2. As Elena, use Request information. As Morgan, answer all five retrospective questions in en-US and es-MX.
+3. As Elena, record the five clinical questions with a basis and evidence. Save again with no change, then change one answer.
+4. Pass: the score recalculates with unchanged weights and saving does not review the case; a recorded answer shows as answered with Change answer; an unchanged save adds nothing; a replaced answer moves under Earlier clinician answers.
 
 ### 3.9 Safety
 

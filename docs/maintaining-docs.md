@@ -30,6 +30,8 @@ stable when scripts or contributor instructions depend on them.
   and permission boundary. Do not include credentials or production data.
 - Link to configuration templates instead of duplicating variable defaults.
 - Link to status and evidence rather than copying volatile task lists into guides.
+- Keep guides as procedures. Test counts, "applied on" notes, PR progress and session
+  checkpoints go in `docs/evidence/`; the guide links to them.
 
 ## Diagrams
 

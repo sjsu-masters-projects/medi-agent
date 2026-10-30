@@ -43,7 +43,7 @@ remain contracts after their implementation is merged.
 | --- | --- |
 | Approved plans and Today | [PAT-005](../.agent/specs/pat-005-clinician-approved-today-feed-plan.md), [upload evidence gate](patient-upload-care-plan-review-gate.md) |
 | Clinics and care-team plan ownership | [CLN-003](../.agent/specs/clin-003-multi-clinic-clinicians.md), [PLAN-002](../.agent/specs/plan-002-care-plans-per-care-team.md) |
-| Bilingual review | [LOC-001](../.agent/specs/loc-001-bilingual-approved-wording.md), [LOC-003](../.agent/specs/loc-003-english-first-clinician-review.md), [source-linked draft review pack](spanish-draft-review-pack.md) |
+| Bilingual review | [LOC-001](../.agent/specs/loc-001-bilingual-approved-wording.md), [LOC-003](../.agent/specs/loc-003-english-first-clinician-review.md), [source-linked review pack](spanish-draft-review-pack.md) |
 | Confirmed symptoms and follow-up | [PAT-002-B](../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md), [ADR loop](../.agent/specs/pv-001-c-adr-loop-gap-fixes/requirements.md) |
 | Nora and durable conversations | [Grounded answers](../.agent/specs/nora-002-grounded-answers.md), [recovery and document focus](../.agent/specs/pat-001-a-nora-turn-recovery.md), [voice](../.agent/specs/voice-001-voice-mode.md) |
 | Private human messages and visits | [Conversations](../.agent/specs/com-001-two-way-conversations.md), [scheduling](../.agent/specs/sch-001-appointment-scheduling.md) |
@@ -60,7 +60,7 @@ remain contracts after their implementation is merged.
 | Patient and clinician application setup | [Patient README](../apps/patient-portal/README.md), [clinician README](../apps/clinician-portal/README.md) |
 | Clinical-fact provenance and import review | [Provenance](clinical-facts-provenance.md), [FHIR mapping](smart-fhir-review-mapping.md) |
 | Upload types and safety | [Document format policy](document-format-policy.md) |
-| Document processing architecture | [Document intelligence decision](document-intelligence-assessment.md) |
+| Document processing architecture | [Document intelligence decision](decisions/document-intelligence.md) |
 | Model routing, safety and evaluation limits | [Runtime decision](decisions/ai-runtime-2026-09.md), [quality requirements](../.agent/specs/ai-005-agent-quality.md), [repeatable evaluation](demo-ai-evaluation.md) |
 | Chat transport and workers | [Runtime decision](decisions/realtime-and-workers-2026-10.md), [worker contract](../.agent/specs/ops-006-workers-and-event-stream.md) |
 | Portal design and icons | [Design system](../.agent/DESIGN_SYSTEM.md), [icon integration](brand-icons.md) |
@@ -69,8 +69,9 @@ remain contracts after their implementation is merged.
 ## Verification and history
 
 [Evidence index](evidence/README.md) groups deployed rechecks, symptom-intake
-acceptance, care-plan acceptance and UI review reports. Each report states what
-was tested and what was not. The task board owns the current verdict.
+acceptance, care-plan acceptance, record clarity, wording review and dated rollout
+receipts. Each report states what was tested and what was not. The task board owns
+the current verdict.
 
 [Meeting records](../meetings/README.md) are historical context, not current
 implementation instructions. Git history preserves removed duplicates and

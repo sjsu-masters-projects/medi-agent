@@ -28,7 +28,7 @@ with escaped HTML and plaintext and requires an explicit `audience`:
 
 - `patient`: the reference palette (sand canvas, emerald `#147465` action,
   "MediAgent" wordmark) in en-US or es-MX from the saved preference.
-- `clinician`: the clinician portal brand from `apps/clinician-portal` —
+- `clinician`: the clinician portal brand from `apps/clinician-portal`:
   primary blue `#2563EB` (`--color-primary`) for the button, links and the
   "Pro" in the "MediAgent Pro" wordmark, the navy M-check tile of
   `public/brand/mark-sidebar.svg` (`#1E293B`, white M, `#60A5FA` check), the

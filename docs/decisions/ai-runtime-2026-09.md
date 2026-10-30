@@ -1,4 +1,4 @@
-# AI runtime decision record — September 2026
+# AI runtime decision record, September 2026
 
 **Status:** Implemented routing; deployed acceptance evidence is still being collected.
 
@@ -65,7 +65,7 @@ documented in `.env.example`; do not commit a real `.env` file.
 
 ## Evidence and limits
 
-### AI-006 / bounded EVA-001 — October 17 local implementation
+### AI-006 / bounded EVA-001: October 17 local implementation
 
 SOAP retains `GEMINI_PRO_MODEL` and now uses `generate_for_workload(Workload.SOAP)`.
 `SOAP_AI_ENABLED` controls availability; `SOAP_GENERATION_TIMEOUT_SECONDS` defaults
@@ -88,7 +88,7 @@ The bounded demo suite and offline evidence are described in
 [demo AI evaluation](../demo-ai-evaluation.md). Prompt changes are not proof of
 model behavior: real-provider and deployed checks remain unperformed in this lane.
 
-### Capacity controls — 2026-10-03 (deployed; merged #127)
+### Capacity controls: 2026-10-03 (deployed; merged #127)
 
 Interactive ADK routes allow one 429 retry with 200–400 ms jitter (or a valid
 `Retry-After` plus 0–100 ms jitter). Delays over one second, or without at least
@@ -150,7 +150,7 @@ This record replaces the September spike, market surveys, provider-cost research
 evaluation narrative documents. Their dated measurements remain available in Git history;
 they must not be treated as current pricing, availability, or model-selection guidance.
 
-## Medical capability pilot — 2026-10-03
+## Medical capability pilot: 2026-10-03
 
 **Decision: retain current routing pending task-specific adjudication.** Medical knowledge,
 record fidelity, patient-language quality, authority boundaries, and endpoint availability
@@ -268,7 +268,7 @@ where it improves grounding, but verify citations and urgency independently; ret
 does not repair source ambiguity or guarantee safe triage. No routing change, clinical
 readiness claim, or medical-model deployment follows from this small single-run pilot.
 
-## October 4–5 workload tuning — local implementation and synthetic evidence
+## October 4–5 workload tuning: local implementation and synthetic evidence
 
 The routing table above now specifies thinking per task, not one setting for every model.
 The native service and ingestion-job deployment definitions pin the same Gemini model IDs
@@ -330,7 +330,7 @@ in EVA-001 in the task tracker. Opt-in PostgreSQL tests remain skipped. Post-dep
 synthetic acceptance, larger bilingual clinical adjudication, and production availability/
 fallback telemetry remain follow-up work.
 
-## AI-003 gaps and availability metrics — October 22
+## AI-003 gaps and availability metrics: October 22
 
 Gaps found by reading the code against this contract, and what was done:
 
