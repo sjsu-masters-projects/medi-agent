@@ -36,6 +36,7 @@ report. Patients use Nora and "My symptoms"; clinicians use the symptom report p
    conversation state, Redux persistence, localStorage or analytics, nor SOAP, risk, MCP,
    chat context, notifications or tasks. The initial Nora message stays in the transcript
    clinicians can read; never call it private.
+   Patient intake and history responses are sent `Cache-Control: private, no-store`.
 6. Answer states are `answered`, `unknown`, `declined`. Unknown and declined hold no value
    and never become "no", empty text, zero or an estimate. Severity is a patient-chosen 1
    to 10 or null, never inferred from words, documents or a model; reports show "unknown".
@@ -59,6 +60,10 @@ report. Patients use Nora and "My symptoms"; clinicians use the symptom report p
 12. Browser roles cannot write reports, drafts or tasks; service RPCs recheck ownership,
     state and revision. A confirmed report is immutable except the operational
     `flagged_for_adr`. Old rows stay `legacy_unconfirmed` and are never promoted.
+    Risk, SOAP, handoff summary, timeline, MCP and chat context read only `patient_confirmed`
+    rows. A clinician reads a report only through a currently active care-team link,
+    rechecked on every request, so reassignment ends access; denial and "no such report"
+    look the same.
 13. Each mutation has a `mutation_id`: same body replays the saved state, a different body
     or a stale `expected_revision` conflicts. One active draft per patient and session, one
     intake per source message, one report per intake; repeating confirm with the same
@@ -76,7 +81,20 @@ report. Patients use Nora and "My symptoms"; clinicians use the symptom report p
     Patient errors map stable codes to both locales, never raw server text.
 16. "Sent to your care team" shows only when the hand-off audit counted an active clinician;
     zero shows "not sent"; an older report with no count shows neither. Review is per care
-    team, repeat-safe, and records follow-up only. The review notice is History only.
+    team, repeat-safe, and records follow-up only. The review notice is History only, holds
+    only reviewer name, team specialty and the capped report title (never answers,
+    provenance or safety outcome), and has no email category, so no preference can turn it
+    into email.
+17. The offer is decided on the server, deterministic detector first. It never appears for a
+    message the safety floor classifies (emergency, self-harm, medication error), for an
+    information question or for a medication-list, appointment or greeting message; the
+    model's symptom route can add one only if the message names a symptom. It needs
+    `SYMPTOM_INTAKE_ENABLED` and starts nothing until the patient says yes.
+18. Patient wording never claims the care team has read, is monitoring or has diagnosed
+    anything, and cancel never claims chat history was deleted. After a timeout the client
+    reads the authoritative intake before any retry and reuses the same mutation or
+    confirmation id; sign-out or an account switch discards draft state and aborts stale
+    requests. Only the per-message offer dismissal may sit in browser storage.
 
 ## Why it was built this way
 

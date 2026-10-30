@@ -56,7 +56,9 @@ review, approve and download. MediAgent never files anything with the FDA.
    follow-up is unavailable" (patient).
 7. Only a clinician with an active care-team link acts: unassigned gets 403; another team's
    case and an unknown id get the same 404. A pending case is every team's safety item; once
-   a team acts, only that team continues. Several teams need `care_team_id`
+   a team acts, only that team continues. A review or draft with no owning team (older
+   records) is visible to no clinician until one active team takes it (409
+   `RECORD_ALREADY_TAKEN`); a new one cannot commit without an owner. Several teams need `care_team_id`
    (`CARE_TEAM_REQUIRED`). A finished review gives 422. `anon` and `authenticated` cannot
    execute the review, response or answer functions. Errors never log or return PostgREST
    detail, which can echo patient text or the basis.
@@ -71,18 +73,23 @@ review, approve and download. MediAgent never files anything with the FDA.
 10. Notification wording is fixed bilingual text keyed by question; raw keys, ids and
     clinician free text never appear. Stored symptom and medicine text is shown as recorded,
     labelled original wording. Clinician UI is English. Unsent patient answers are never
-    written to browser storage.
+    written to browser storage. Patient save errors show class copy in the saved locale, never
+    server text. The patient view carries the care-team emergency and not-continuously-
+    monitored notice, never Nora's AI caution. Evidence takes the current response time only
+    on an exact request match; no chronology is inferred.
 11. A draft is Form FDA 3500 (not 3500A) filled from a vendored, SHA-256-pinned template in
     `backend/src/app/assets/fda/`, never fetched at runtime. A checksum, revision or
     field-name mismatch refuses export with 503 and records no `exported` event.
 12. Prefill uses stored sources only; each filled field carries evidence attributed by the
-    entry's own `source`. Unknown items stay blank (race, ethnicity, weight, reporter phone,
+    entry's own `source`. Reporter identity goes only in Section G. Unknown items stay blank (race, ethnicity, weight, reporter phone,
     address, occupation, B6 tests, sex for other genders). Section D abated and reappeared
     fill only from a yes or no Naranjo answer.
 13. The A1 identifier defaults to initials plus 4 characters derived from the draft id,
     never a name, email, phone or birth date; a saved identifier matching them gets 422.
     Patient or clinician names in B5, B6, B7 or F give warnings that approval must
-    acknowledge exactly; they are recorded in the audit. Matching ignores accents.
+    acknowledge exactly; they are recorded in the audit. Matching ignores accents. A value
+    outside the template's options, an event or report date after the save date, and a stop
+    before its start get 422 naming the field path.
 14. One gate, `approval_issues`, runs on the stored revision named by `expected_revision` and
     feeds the missing list, preview and approval. It needs A1, report type, confirmed event
     date, narrative, product 1 name, reporter first and last name, phone or email,
@@ -95,10 +102,19 @@ review, approve and download. MediAgent never files anything with the FDA.
     (format; template revision and hash for PDF) before returning bytes. The PDF is fillable,
     adds no text to official fields, and its filename has `not-submitted` and no patient
     name. The preview PDF is never an export; it writes its own `preview_viewed` event.
+    Preview and export responses are `no-store`; the JSON export carries
+    `not_submitted_to_fda: true`.
 17. Audit tables are append-only (no delete or truncate for `anon`, `authenticated`,
     `service_role`). The clinician-answers event holds questions, old and new answers and
     scores, never the basis. A patient's ADR requests, audit and drafts delete with the
     patient; clinician references stay `RESTRICT`.
+
+18. The PDF is filled with pypdf, never PyMuPDF (AGPL), and both the AcroForm and XFA data
+    are written because viewers disagree when only one is; it is not flattened. Past the
+    pinned form's expiry the UI warns it may be superseded and export continues.
+19. A discarded draft is kept with actor, time, reason and audit; at most one non-discarded
+    draft exists per assessment. The case returns to review with one actionable clinician
+    item, no actionable patient item and no email.
 
 ## Why it was built this way
 
@@ -112,9 +128,13 @@ review, approve and download. MediAgent never files anything with the FDA.
 ## Excluded on purpose
 
 - Transmitting a report to the FDA; Form 3500A; device reporting; Sections C and E.
-- Submission recording (`/submission`, `/submission/amend`, Submitted tab) exists as the
-  clinician's own attestation. The requester ruled it out as a gate and future commitment:
-  do not extend it or treat it as filing.
+- Submission recording (`/submission`, `/submission/amend`, `medwatch_external_submissions`,
+  Submitted tab) exists but is out of scope. It stores the clinician's attestation that they
+  submitted the approved form to the FDA themselves, outside MediAgent: date, method,
+  optional FDA reference. It sends nothing and no code path contacts the FDA. Once recorded,
+  the draft cannot be edited, approved or discarded; a correction is an audited amendment
+  with a reason that keeps the original. The requester ruled it out as a gate and future
+  commitment: do not extend it, test it as acceptance or treat it as filing.
 - Changing weights, backfilling old cases, request expiry, automatic B6 lab prefill, and
   account deletion as an acceptance test.
 
@@ -156,5 +176,8 @@ split by fixture (see `backend/tests/TESTING_GUIDE.md`). Portals: `npm run lint`
   mobile ("Open in new tab" is the fallback).
 - The queue filters client-side and caps at 200 cases; notification links still use the old
   `/medwatch?assessment=` redirect.
+- The older patient endpoint `/patients/me/adr-information-requests` still returns the Naranjo
+  score and causality (`ADRInformationRequestRead`); the portal never renders them, but the
+  patient API should not carry them.
 - Peer and safety review of the answer coverage; reassessment on new evidence beyond patient
   and clinician saves is not built.

@@ -17,7 +17,11 @@ token values, and [brand icons](../brand-icons.md) covers assets. This page keep
 
 1. **Presentation only.** A redesign does not add, remove or rename routes, API calls,
    Redux slices, locale keys or data fields, nor change clinical workflow, approval gates,
-   safety copy or emergency wording. Such content may move, never weaken.
+   safety copy or emergency wording. Such content may move, never weaken. That includes
+   "extraction confidence is an automated estimate, not medical certainty or approval",
+   "Naranjo scores support your review; they do not make a clinical decision" and "Today
+   shows the patient's chosen language exactly as written". Say "access logged" only
+   where access is actually logged, and show only persisted state, never mockup values.
 2. **Nothing becomes unreachable.** Moving an action (Refresh to pull-to-refresh) is fine;
    deleting it is not, and gesture refresh keeps an accessible Refresh control. Existing
    `aria-*`, `data-testid` and selectors carry to the equivalent element; change a test

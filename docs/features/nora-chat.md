@@ -68,6 +68,8 @@ or es-MX, triages what the patient writes, and hands anything clinical to the ca
     health. Critical means "contact your care team today". A stopped or held medication is
     never presented as current. The results card is a server snapshot of source-checked
     facts, never parsed from the reply.
+    Nora names a care team only when the record item's plan says which one, never guesses
+    one, and never says who prescribed something unless the record does.
 15. Extraction is a candidate. Each value is grounded on its printed page row with an exact
     value; a flag contradicting its range is low confidence; proposals no page confirms are
     counted in run warnings, not dropped silently. A stopped or held medication is never
@@ -79,7 +81,8 @@ or es-MX, triages what the patient writes, and hands anything clinical to the ca
 17. A client UUID identifies one turn with its exact text, language and document; reuse with
     different content is rejected. The message is saved once, one turn is active per
     conversation, a second send is refused as busy with the text kept in the composer, and a
-    completed retry replays the saved reply.
+    completed retry replays the saved reply. A completed turn whose reply row is gone
+    reports the reply as unavailable and is never regenerated.
 18. The server owns the turn: closing a socket never cancels it. State changes are guarded
     transitions and only the lease holder writes. Budgets use the database clock: processing
     40 s, lease 70 s at the default 30 s model timeout (save has its own 30 s grace, never
@@ -92,10 +95,14 @@ or es-MX, triages what the patient writes, and hands anything clinical to the ca
     sending disabled until the recovery handshake; they never fall back to legacy execution.
     Streamed text is provisional and authorizes nothing; it is a prefix of the saved reply
     because source lines and Markdown are removed as text streams.
+    Pending message text and audio stay in memory, never browser storage.
 21. Model context is stored messages only: newest whole turns within 6,000 characters plus
-    a stored rolling summary (at most 1,500 read), labelled data. A private symptom draft is
-    never an input. A reply's evidence row (tools, sources, no reply text) is append-only,
-    readable by the patient and an actively assigned clinician only, kept 180 days.
+    a stored rolling summary (at most 1,500 read), labelled data. Runtime sessions are keyed
+    by patient and conversation. The summary is written after the reply is delivered, never
+    in the reply path, by compare-and-set on its watermark so a stale writer loses; its
+    prompt keeps medication names, doses and numbers as written, and a failure keeps the old
+    summary. A private symptom draft is never an input. A reply's evidence row (tools,
+    sources, no reply text) is append-only, readable by the patient and an actively assigned clinician only, kept 180 days.
 
 ## Why it was built this way
 

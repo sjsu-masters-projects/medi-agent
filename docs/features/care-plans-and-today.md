@@ -65,9 +65,14 @@ review, publish and follow up.
 13. Reminders are per combined entry and idempotent under concurrent runs. If grouping is
     unreadable, reminders are deferred or deduped by identity, never sent ungrouped and
     never dropped for a due dose. As-needed, event-based and unrecognized frequencies
-    cannot create routine schedules; the backend enforces cadence counts.
+    cannot create routine schedules; the backend enforces cadence counts and explicitly
+    named clinical weekdays (patient-chosen times never change them). Today and dispatch
+    ignore a stored schedule that no longer matches the current frequency; an unscheduled
+    item is available, not due now. A profile timezone change leaves existing per-item
+    timezones alone.
 14. `taken` and `completed` both count as responses; a future dose stays upcoming until its
-    absolute time; empty allergies read "Not documented". The Today preview is read-only;
+    absolute time; empty allergies read "Not documented". The Today preview is read-only,
+    unavailable while edits are unsaved or any blocker stands, and not an exact feed;
     Today never shows a previous-locale feed (only the latest request may replace it).
 15. Attaching an activity, sending or replying never changes a plan, reminders or
     completions. The server rechecks ownership and current source; stale or foreign
@@ -75,6 +80,10 @@ review, publish and follow up.
 16. Lock order: authorization reads, patient fence, idempotency record, plan, version,
     items, projections. Use the database clock; log ids, never clinical text.
 17. Deterministic medication-error chat floors are in [safety](safety.md).
+18. A patient upload marked "Not sure" waits in every care team's queue until one claims the
+    whole document (one winner, audited); approve or reject needs the claim. Drafting follows
+    the claiming team's plan, and an unrouted document starts no draft. A legacy upload with
+    no determinable team becomes "Not sure", never guessed.
 
 ## Why it was built this way
 

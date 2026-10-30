@@ -38,13 +38,16 @@ across all their clinics. Both locales (`en-US`, `es-MX`); synthetic data only.
    slot. Accept works only while a slot is `proposed`; it confirms that slot and
    withdraws its siblings. Decline and request-alternative change every proposed slot of
    the offer; a proposed grouped offer is declined, not cancelled. Locks go patient
-   first, then offer rows, so competing responses yield one booking, not a deadlock.
+   first, then offer rows, so competing responses yield one booking, not a deadlock. The
+   offer RPCs and the audit table are backend-only, audit rows cannot be updated, and
+   browser roles cannot write grouped rows.
 4. **No double booking.** Pending options reserve nothing. Exclusion constraints stop
    overlapping `confirmed`/`scheduled` visits for one patient (migration 043) and for one
    clinician across all clinics (069), including direct writes. Intervals are
    `[start, end)` so back-to-back visits are allowed; minutes are UTC arithmetic, so
    DST cannot matter. An exclusion or deadlock failure rolls back the whole response,
-   including sibling changes and audit rows.
+   including sibling changes and audit rows. Any other database failure returns a
+   sanitized error.
 5. **Conflicts name no patient.** A refused offer returns `CLINICIAN_SCHEDULE_CONFLICT`
    with only the other visit's clinic name and interval; busy times are the same.
 6. **Expiry.** A slot expires at `min(created_at + 168 hours, slot start)`. Editing
@@ -76,9 +79,10 @@ across all their clinics. Both locales (`en-US`, `es-MX`); synthetic data only.
     own patient or authorized clinician; `confirmed`, `scheduled` or `cancelled`
     (exported as `STATUS:CANCELLED` so re-import removes it). Other statuses are
     refused. RFC 5545 file: UTC `DTSTART`/`DTEND`, stable UID, TEXT escaping, CRLF,
-    75-octet UTF-8-safe folding, generic localized title, clinic, location and a no-sync
-    notice; no reasons, notes or patient identifiers. A snapshot: no URL credentials,
-    public links or invitations.
+    75-octet UTF-8-safe folding, `CLASS:PRIVATE`, a localized title naming the visit's own
+    clinic (so a multi-clinic person can tell visits apart), location and a no-sync
+    notice; no reasons, notes, clinician or patient identifiers. A snapshot: no URL
+    credentials, public links or invitations.
 12. **Reads are caller-scoped.** `/appointments/schedule` returns only the caller's own
     visits in `[from, to)` (45-day cap); `/busy` is capped at 48 hours; a clinic filter
     is honoured only for a clinic the caller belongs to. "Assigned" and roster counts
@@ -132,6 +136,7 @@ or invitations, SMS or push visit notices, any model step that picks a time.
 ## Still open
 
 - Withdrawing an open offer before the patient answers (no endpoint or control).
+- Editing a visit's details (`PUT /appointments/{id}`) writes no audit row of its own.
 - A patient-visible no-show message (none exists).
 - Undecided: one active offer per visit reason per patient.
 - Offset choice for a repeated DST hour (the clinician picks another time today).

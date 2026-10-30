@@ -37,6 +37,10 @@ Gemini is called through the Google Gen AI SDK on Vertex's global endpoint.
    candidate and cannot approve a medication change, diagnosis or clinical action.
 2. Tool access is deny-by-default per agent. Every route has a deterministic outcome and a
    kill switch (checked at import). Structured output is validated at the boundary.
+   Care-plan categorization may only label the supplied source fact IDs, each exactly once;
+   an unknown, missing or duplicate ID rejects the whole proposal. SOAP assessment and plan
+   are considerations for clinician review, not a diagnosis, and patient chat and document
+   text are fenced data, never instructions.
 3. Telemetry records provider, model, outcome, finish reason, latency, retries and fallback
    path; never a patient identifier, prompt, response or raw exception.
 4. Retriable failures (429, 5xx, timeout) move to the declared fallback before any response
@@ -100,6 +104,8 @@ Gemini is called through the Google Gen AI SDK on Vertex's global endpoint.
 20. Remote changes (queue, worker service, service accounts, flags, migrations) need exact
     authorization. The worker flags default off; turning `CHAT_TURNS_VIA_WORKER` off is the
     rollback.
+    Deploys set the API and worker services' variables and secrets with the update forms,
+    never the set forms, so separately managed values and secret references survive.
 
 ## Why it was built this way
 

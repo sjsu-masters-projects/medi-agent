@@ -50,13 +50,19 @@ clinician Alerts), and selective email. Synthetic data only; `en-US` and `es-MX`
    nothing. History is append-only: no role may delete it, and it goes only with the
    patient or account. Browser roles cannot write events. Malformed source values make an
    item non-actionable, never fail the centre. A missing summary is "unavailable", not 0.
+   Legacy urgent or message history is never replayed as fresh work, and a confirmed ADR is
+   never inferred. Ending an assignment denies that item's details and target. The ledger
+   helpers (`notification_source`, `_authorized`, `_actionable`, `_scope`, `_owner_sees`)
+   are layered wrappers: a new event type wraps the current function and delegates, and a
+   migration that replaces one outright silently drops the event types below it.
 8. **Appointments are classified by transition.** A new offer reaches the patient once per
    offer group. A patient's accept, decline, change request, cancel or note reaches the
    responsible clinician. A time or location change to a booked visit, an offer's expiry
    and a clinician cancel reach the patient. Withdrawn siblings, completion and no-show
-   create nothing. A confirmation is an ordinary notification; a decline, change request
-   or cancel is an action item until acknowledged or a newer appointment exists. A
-   multi-slot answer is one item.
+   create nothing. Reminders (24 h and 1 h) exist only for `confirmed` or `scheduled`
+   visits, so a cancelled visit gets none. A confirmation is an ordinary notification; a
+   decline, change request or cancel is an action item until acknowledged or a newer
+   appointment exists. A multi-slot answer is one item.
 9. **Other events.** An ADR information request is actionable only while pending; its
    answer is a History-only item for assigned clinicians. A reviewed symptom report and a
    medication-confirmation question go to the patient; the question's event holds no
@@ -66,8 +72,10 @@ clinician Alerts), and selective email. Synthetic data only; `en-US` and `es-MX`
     controls stay English. Notification copy never translates a human message or clinical
     instruction. Links are server-built local routes; private IDs never appear in copy.
 11. **Signed snapshots.** Cursors and "read through" cutoffs are short-lived, signed and
-    bound to actor and role. Mark all read touches only snapshot items still visible and
-    returns `updated_count` and `skipped_count`, which both portals show.
+    bound to actor and role. The signing key is derived per purpose from a secret, never
+    the raw login key, and every API replica must share the same root. Mark all read
+    touches only snapshot items still visible and returns `updated_count` and
+    `skipped_count`, which both portals show.
 12. **Bounded reads.** One shared poll (60 s visible, none hidden); focus events within 60
     s of the last refresh are ignored; failures back off (2, 4, then 5 minutes) and keep
     the last list. The server gives up after 6 s and shares identical concurrent reads.
@@ -85,12 +93,14 @@ clinician Alerts), and selective email. Synthetic data only; `en-US` and `es-MX`
 16. **Email content.** No Nora answers, unpublished drafts, diagnoses, per-dose reminders,
     attachments, health detail or IDs; one link to `/notifications` or `/alerts`. Dynamic
     values escaped; patient locale from preference, clinician English. Addresses ending
-    `@accounts.mediagent.live` are never sent to.
+    `@accounts.mediagent.live` are never sent to, and a genuine verified mailbox or an Auth
+    link is never diverted to a demo sink.
 17. **Recovery and invitations.** Password reset answers neutrally whether or not the
     account exists, builds the destination from a fixed portal selector, and logs no
     email, token or provider body. The link needs a click on Continue before the token is
     used (scanners cannot burn it); the recovery session is isolated; a save signs out
-    every session (minimum 8 characters). Invitations use hashed opaque tokens; only clinic
+    every session (minimum 8 characters) and the next sign-in still passes clinic and MFA
+    checks. Invitations use hashed opaque tokens; only clinic
     admins invite; acceptance checks address, inviter authority, expiry and revocation.
 
 ## Why it was built this way

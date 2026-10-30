@@ -26,6 +26,7 @@ summaries for colleagues. Care plans per team are in [care plans](care-plans-and
    explicit `clinic_id` checked against an active membership, and the role comes from THAT
    membership, never `clinicians.role`. With several memberships and none named: 422
    `CLINIC_REQUIRED`. With none: refused (fail closed). Clinics compare by id, never name.
+   Sign-in with no active membership is refused (`NO_ACTIVE_CLINIC`).
 4. Admin rights apply only at the clinic where the clinician is admin, enforced in the
    service and again in SQL. The open clinic code is returned only to an admin there. Any
    member may create their own patient invite codes.
@@ -38,14 +39,16 @@ summaries for colleagues. Care plans per team are in [care plans](care-plans-and
    memberships or the audit. The membership audit is append-only for every role, written in
    the same transaction as the change, with ids and types only (no email or name).
 7. Leave ends the caller's own active and pending links and unused invite codes at that
-   clinic (each audited), and is refused for the last clinic and the sole admin. Removing a
-   member ends theirs too. Nothing is deleted; other clinicians' links are untouched.
+   clinic (each audited), and is refused for the last clinic and the sole admin. The
+   confirm dialog says in plain words that those links end. Removing a member ends theirs
+   too. Nothing is deleted; other clinicians' links are untouched.
 8. A filter naming a clinic the caller does not belong to returns the same empty result as
    an unknown clinic, so existence is never revealed. Notification summary counts stay
    clinician-wide.
 9. A clinician cannot hold overlapping confirmed or scheduled visits at any clinic; an
    offer checks the whole schedule and a clash returns the other visit's clinic and times,
-   never patient data. An appointment's clinic is overwritten from its link. Other
+   never patient data, and the refusal is logged by count only. An appointment's clinic is
+   overwritten from its link. Other
    scheduling rules are in [scheduling](scheduling.md).
 10. Only the appointment's own clinician, or a colleague with an active link to that
     patient at the appointment's clinic, may edit or export it; a link at another clinic
@@ -55,7 +58,8 @@ summaries for colleagues. Care plans per team are in [care plans](care-plans-and
     missed). Critical-result alerts are shared. Active conditions are shared unless the
     patient marks one sensitive: only its recording team sees it; others see "Some
     conditions are kept private by the patient", never a silently partial list. A sensitive
-    condition with an unknown recorder is visible to no clinician.
+    condition with an unknown recorder is visible to no clinician. The sensitive-condition
+    rule is a product rule, not a legal opinion; confirm it before any real use.
 12. Owned by one team and not shared: documents, that team's plan detail, chat and
     messages, SOAP notes, ADR reviews. Other teams see only that a plan exists.
 13. A clinic tag comes from the link or the appointment, never `clinicians.clinic_id`.
@@ -119,8 +123,9 @@ share route is the same 404.
 
 ## Excluded on purpose
 
-Coverage or delegation; a clinic switcher; model-written handoff narrative; patient-facing
-handoffs; pushing exports to a server; sharing drafts or edited versions.
+Coverage or delegation; a clinic switcher; model-written handoff narrative (if one is ever
+added it must be a marked draft with citations and never feed the deterministic sections);
+patient-facing handoffs; pushing exports to a server; sharing drafts or edited versions.
 
 ## Where it lives
 

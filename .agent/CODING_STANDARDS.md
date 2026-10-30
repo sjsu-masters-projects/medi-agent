@@ -337,3 +337,49 @@ __tests__/risk-radar.test.tsx
 | **Husky + lint-staged** | Pre-commit hooks | Root `package.json`; runs Ruff, mypy and ESLint on staged files |
 
 **Rule: If the linter complains, fix it. No `# noqa` or `eslint-disable` without a comment explaining why.**
+
+## Concurrency and distributed-systems rules
+
+These rules are acceptance criteria for every backend and realtime change, and reviews check them. A few name an SSE stream as an example; that stream was ruled out, and the rule applies to whichever transport is in use. [AI runtime and workers](../docs/features/ai-runtime-and-workers.md) shows how the chat worker applies them.
+
+**State and ownership**
+1. The database is the only source of truth. No correctness depends on in-process memory (registries, caches or queues are optimisations only), because Cloud Run runs many instances and any instance can stop at any time.
+2. Every state change is a guarded transition: `UPDATE … WHERE id=$1 AND status=$expected [AND lease=$lease]`, checked by row count or `RETURNING`. Never read-then-write without a lock or a conditional write. Terminal states (completed, failed, dismissed) are never left.
+3. One owner per running unit of work: a turn or task is held by a lease (`lease` UUID plus `deadline_at`). Only the lease holder may write progress or a result. Ownership changes only through an explicit transition (retry, reconcile), never by overwriting.
+
+**Idempotency and delivery**
+4. Every externally triggered operation has an idempotency key (`client_message_id`, task name, event id). Repeating it returns the same result and never repeats a side effect.
+5. Assume at-least-once delivery for queues, retries, sockets, SSE and HTTP retries. Consumers de-duplicate (unique keys, `ON CONFLICT DO NOTHING`, seq numbers). Clinical side effects run at most once (`actions_started`, guarded by the lease).
+6. Use a transactional outbox for "write plus notify": the notification or event row is written in the same transaction as the state change, and delivery happens after commit. Never notify about uncommitted state.
+
+**Locks**
+7. Global lock order, always acquired in this sequence and never reversed: clinic → clinician(s) by id → patient-scoped advisory locks (evidence, conversation pair, notification prepare) → rows by primary key ascending. A new lock site must state where it fits.
+8. Locks are short and transaction-scoped (`pg_advisory_xact_lock`, `SELECT … FOR UPDATE`). No lock is held across a network call, a model call, a sleep or a user wait.
+9. Authorize before taking contended locks (lock-free pre-check), so an unauthorized caller cannot queue behind or delay others.
+10. Use `NOWAIT` or `SKIP LOCKED` for work claiming. Set `lock_timeout` and `statement_timeout` on every database role and session the backend uses, so nothing waits forever.
+
+**Timeouts, budgets and backpressure**
+11. Every outbound call (database, model, email, HTTP) has a timeout, and the per-request budget is smaller than the caller's budget: client > API > queue task > worker step > database statement.
+12. Retries use bounded exponential backoff with jitter, only for retryable errors, and are capped by the remaining budget. Never retry a non-idempotent call without its idempotency key.
+13. Bulkheads: separate thread pools or connection pools per workload (chat turns, notifications, default), and separate queues per job type, so one slow dependency cannot starve another. Queue concurrency and rate limits are explicit config.
+14. Load shedding: when a pool or queue is saturated, reject fast with a retryable error (429/503 with `Retry-After`) rather than queueing without bound. In-memory queues are bounded (for example, a viewer event queue drops the viewer, not memory).
+
+**Async and threads**
+15. Never block the event loop: synchronous database or SDK calls go through the designated pool (`asyncio.to_thread` with a named executor). CPU-heavy work goes to the worker service.
+16. Tasks started outside a request are tracked (strong reference, registry), cancellation-safe (`try/finally` releases resources) and drained on shutdown. No fire-and-forget without supervision.
+17. Shared in-process structures are touched only from the event loop thread, or protected by a lock. No mutable globals across threads.
+
+**Time and ordering**
+18. Deadlines and leases use the database clock (`clock_timestamp()`), never client or instance clocks. Durations inside the process use monotonic time.
+19. Ordering comes from sequence numbers (per turn, per user stream), not timestamps. Consumers resume from the last seq (`Last-Event-ID`).
+
+**Failure handling and recovery**
+20. Every in-flight state has a recovery path: a deadline reconcile moves an abandoned `processing` turn to `interrupted`, a stuck task is retried by the queue, and a dead stream reconnects and resumes.
+21. Partial failure is explicit: an operation that may or may not have happened (for example, a save timeout) is reconciled by reading the source of truth, never assumed.
+22. Circuit breakers or fallbacks for the model provider (existing fallback routes). Deterministic safety floors never depend on the model or the queue being available.
+
+**Security across boundaries**
+23. Every service boundary authenticates: Cloud Tasks OIDC on the worker, user JWT on the API and the stream. The worker re-validates ownership from the database, never trusting task payload claims alone.
+
+**Observability**
+24. Every log line in a request, task or turn carries `request_id`, `turn_id` or `task_id`, as appropriate. State transitions, lock timeouts, retries, load shedding and rejections are logged with a reason. No PHI in logs.

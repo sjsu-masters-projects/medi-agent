@@ -24,8 +24,9 @@ Spanish only where it is exactly what the patient sees or the original evidence.
 
 1. One setting. The server resolves the patient's language; clients do not pass ad hoc
    locales for patient content. First paint uses a hint (query on entry pages, then
-   cookie, then `Accept-Language`); the cookie is presentation only, never identity, and is
-   cleared on every sign-out. While unresolved, show a locale-neutral skeleton.
+   cookie, then `Accept-Language`); the cookie is presentation only, never identity, and it and
+   the guest preference are cleared on every sign-out (manual, cross-tab, inactivity) so the
+   next person on a shared device does not inherit them. While unresolved, show a locale-neutral skeleton.
 2. Every patient-facing care-plan item carries both languages, approved together in the
    same review that approves the plan. A language change never alters approval,
    schedules, timezone or completion. Approved and superseded versions are never
@@ -126,6 +127,9 @@ interface-wording-review`. Clinician: `npx vitest run care-plan-wording`.
 
 ## Still open
 
+- Translation failures must log counts, codes and exception types, never wording, message or
+  fact text. `fact_display_translation.py` logs a traceback (`exc_info=True`) for a bad batch
+  response, which can echo model output.
 - An optional "bilingual colleague reviewed the Spanish" mark is not built; the portal only
   suggests asking one.
 - No patient-language chip in the clinician header or per-message language label (not found).

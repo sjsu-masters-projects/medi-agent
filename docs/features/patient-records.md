@@ -30,8 +30,11 @@ reconcile them with the local chart and ask the patient to confirm medicines.
    resource-level provenance ([clinical facts](../clinical-facts-provenance.md)) and never
    overwrite approved medications, conditions or allergies. Only an assigned clinician's
    explicit, audited, atomic decision can: add, update selected non-empty fields, keep
-   existing, defer or reject. Demographics never update the profile; other resource types
-   are evidence-only. A reconciled candidate is immutable; a newer source version makes a
+   existing, defer or reject. A lost-response replay is bound to actor, patient, fact,
+   decision, target, fields and note, re-checks assignment before returning anything and
+   never runs a second mutation. Patients see only approved facts, never pending
+   candidates. Demographics never update the profile; other resource types are
+   evidence-only. A reconciled candidate is immutable; a newer source version makes a
    new pending one. Medication updates keep the medication ID (reminders, adherence and
    ADR links hold); imports never create reminders.
 2. **Identity is explicit.** An issuer plus external patient ID must be bound to one local
@@ -39,13 +42,14 @@ reconcile them with the local chart and ask the patient to confirm medicines.
    local credential and bypasses no care-team check.
 3. **Grounded or nothing.** A document candidate needs one page, an exact excerpt found on
    it and bounded confidence. Ungrounded output is kept as `needs_evidence_review`, a
-   text-less scan as `needs_ocr`, both with no candidate. Uploads dedupe by content hash.
-   Originals, storage keys, source IDs, excerpts and audit history are never altered; no
-   mapper backfill.
-4. **Evidence is not a conclusion.** Exact "no known allergies" statements stay evidence.
-   Source differences are review flags, not equivalence or safety claims; interaction
-   coverage is shown as unchecked. A free-text product without a canonical link creates no
-   medication, ADR or Naranjo score.
+   text-less scan as `needs_ocr`, both with no candidate. Each candidate records its
+   extractor and model version. Uploads dedupe by content hash. Originals, storage keys,
+   source IDs, excerpts and audit history are never altered; no mapper backfill.
+4. **Evidence is not a conclusion.** Exact "no known allergies" statements stay evidence;
+   mixed or unknown narrative is never reclassified by substring. Name matching keeps
+   ER/IR, salts and combinations distinct. Source differences are review flags, not
+   equivalence or safety claims; interaction coverage is shown as unchecked. A free-text
+   product without a canonical link creates no medication, ADR or Naranjo score.
 5. **Public references on demand.** Only on an explicit click, only the drug name, after
    assignment, patient and fact checks; at most three DailyMed or MedlinePlus items with
    dates; never applied automatically.
@@ -58,10 +62,13 @@ reconcile them with the local chart and ask the patient to confirm medicines.
    Idempotent by client ID, one open ask per fact and link, ten open per patient, one
    answer each (a different second answer is 409), 14-day expiry on the database clock,
    append-only audit. Unauthorized access returns not found. The alert event carries only
-   the clinician name and care team.
+   the clinician name and care team. The patient card and alert say plainly that the
+   answer changes no medicine or reminder and to keep taking medicines as prescribed.
 8. **Source review in words.** Pending, approved and rejected describe the uploaded
    source, never treatment approval. A clinician upload is an origin, not a review;
-   missing is unknown; completed parsing is neutral. Explanations are labelled
+   missing is unknown; completed parsing is neutral, and file-type tiles and the
+   finished-processing highlight stay neutral, never the approval colour. Explanations
+   are labelled
    AI-generated and the care-plan boundary stays after them.
 9. **Explanations are derivatives.** The request path never generates a summary (the
    worker does). A structured presentation (`structured: true`) is built in the saved
@@ -80,7 +87,9 @@ reconcile them with the local chart and ask the patient to confirm medicines.
     patient must address and send; nothing sends or withdraws automatically.
 11. **SMART flow.** OAuth code with PKCE (S256); allowlisted issuer; state, verifier,
     scopes and issuer bound to one single-use session (10 min); verifier and launch handle
-    encrypted; read-only patient scopes. The callback refuses provider errors, bad or
+    encrypted; read-only patient scopes. SMART stays disabled until its own client,
+    redirect and encryption settings exist; it never reuses the Supabase JWT
+    configuration. The callback refuses provider errors, bad or
     replayed state, wrong audience and missing scope; error text is sanitized (200
     characters). The browser gets only a single-use five-minute ticket, never a token. A
     local clinician session and an assigned patient are required.
@@ -92,7 +101,9 @@ reconcile them with the local chart and ask the patient to confirm medicines.
     DocumentReference, Bundle; others become warnings. Dedup key is issuer, type, ID and
     version (or content hash). Raw JSON and identifiers are stored verbatim.
 13. **FHIR download is canonical-only.** Active medicines (MedicationStatement, never
-    MedicationRequest), visible Conditions and Allergies, a minimal Patient. It re-checks
+    MedicationRequest: a download must not create an order), visible Conditions and
+    Allergies, a minimal Patient. No dose schedule, severity or status is invented and
+    other teams' private external identifiers are not copied. It re-checks
     assignment and sensitive-condition visibility each call, validates before returning (no
     partial file), is `no-store`, and re-imports as candidates only.
 14. **Withdrawal and re-projection.** An untouched pending import can be removed; after
