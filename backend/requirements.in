@@ -44,6 +44,8 @@ litellm>=1.101.3
 authlib>=1.9.1
 # SEC-004 follow-up: Authlib's JOSE dependency, CVE-2026-119284.
 joserfc>=1.7.6
+# SEC-004: ASN.1 decoder fixes reported by the blocking audit.
+pyasn1>=0.6.5
 dnspython>=2.9.0
 filelock>=4.2.1
 setuptools>=84.1.0
@@ -73,8 +75,8 @@ sentry-sdk
 # -- Document Processing --
 PyMuPDF
 # MedWatch Form 3500 fill path (BSD, pure Python); intentionally not PyMuPDF (AGPL).
-# CVE-2026-113786: validate JPEG decoder selection for /DCTDecode image data.
-pypdf==6.21.2
+# CVE-2026-113786 plus CVE-2026-119203 through CVE-2026-119209 decoder fixes.
+pypdf==6.21.4
 pytesseract
 # Pillow 13 fixes decoder/encoder advisories reported by the blocking dependency audit.
 Pillow>=13.0.0,<14.0.0
