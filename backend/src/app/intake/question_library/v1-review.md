@@ -1,10 +1,10 @@
-# candidate-1 — paired-locale review worksheet
+# v1: paired-locale review worksheet
 
-**Status: requester reports Ganesh approved candidate-1 on October 12, 2026. The approval record is below; intake activation is tracked separately.**
+**Status: retired for new intakes by [v2](v2-review.md) on October 30, 2026. The requester reports Ganesh approved this release on October 12, 2026; the approval record is below. Drafts and reports that started on it stay pinned to it.**
 
-- Version: `candidate-1`
+- Stored version: `candidate-1` (shown as v1; see the [release process](README.md))
 - Canonical bundle SHA-256: `a7ee7f3c7bfd91fdbf3fccba56fb42af86176801895ca0d70ad3c99ffd0917ab`
-- Source: [candidate-1.json](candidate-1.json)
+- Source: [v1.json](v1.json)
 - Review location: [draft PR #159](https://github.com/sjsu-masters-projects/medi-agent/pull/159). A formal PR review is not asserted by this record.
 - Designated safety/backend reviewer: Ganesh, per the task tracker. Include a reviewer able to assess Mexican Spanish wording.
 

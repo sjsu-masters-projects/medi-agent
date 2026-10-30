@@ -265,8 +265,8 @@ class EvidenceAnchor(BaseModel):
 class DocumentIntelligencePolicy(BaseModel):
     """Thresholds and limits for extraction, quality routing, and anchoring.
 
-    Values are the calibrated defaults from the synthetic benchmark recorded in
-    ``.agent/specs/rec-003-document-intelligence-plan.md``; change them there first.
+    Values are the calibrated defaults from a synthetic benchmark, not clinical validation.
+    See ``docs/features/patient-records.md``.
     """
 
     render_dpi: int = 300

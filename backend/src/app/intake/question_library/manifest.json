@@ -1,14 +1,20 @@
 {
-  "active_version": "candidate-1",
+  "active_version": "v2",
   "bundles": {
-    "candidate-2": {
-      "file": "candidate-2.json",
-      "status": "pending_review",
-      "sha256": "cb35ff1dcd75d42cc147744ce5f056d6b676ba00d19a069769f1db6244c4939f",
-      "approval": null
+    "v2": {
+      "file": "v2.json",
+      "label": "v2",
+      "status": "approved",
+      "sha256": "c0f83dba4e7c82f8e17be98090395e5fbb6069b779d3b4dd5a39235b8122907a",
+      "approval": {
+        "reference": "backend/src/app/intake/question_library/v2-review.md#approval",
+        "reviewer_identity": "Rajeev Chaurasia (requester decision)",
+        "reviewer_role": "Project owner; wording checked by model-assisted bilingual review, no independent clinical review",
+        "date": "2026-10-30"
+      }
     },
     "candidate-1": {
-      "file": "candidate-1.json",
+      "file": "v1.json",
       "status": "approved",
       "sha256": "a7ee7f3c7bfd91fdbf3fccba56fb42af86176801895ca0d70ad3c99ffd0917ab",
       "approval": {
@@ -16,7 +22,8 @@
         "reviewer_identity": "Ganesh Thampi",
         "reviewer_role": "Designated safety/backend reviewer",
         "date": "2026-10-12"
-      }
+      },
+      "label": "v1"
     }
   }
 }

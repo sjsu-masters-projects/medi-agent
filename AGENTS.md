@@ -9,15 +9,17 @@ it here.
 
 1. Inspect the branch and working tree. Preserve unrelated user changes.
 2. Read [`.agent/TASKS.md`](.agent/TASKS.md), then the active plan named at its
-   top. Select an existing task, then read its linked specification or its section
-   in `.agent/specs/project-backlog-acceptance.md` before editing. Create a scoped
-   task entry before expanding the product surface.
+   top. Select an existing task, then read the feature doc for that area under
+   [`docs/features/`](docs/features/) or its section in
+   `.agent/specs/project-backlog-acceptance.md` before editing. Feature docs hold the
+   rules a change must keep. Create a scoped task entry before expanding the product
+   surface.
 3. Read the relevant routing documents below and inspect adjacent code and
    tests before editing.
 4. State the acceptance path, assumptions, and any missing decision. Implement
    and verify the smallest coherent change that satisfies that path.
-5. Update the task tracker and affected product or operational documentation
-   whenever behavior, contracts, rollout, or evidence changes.
+5. Update the task tracker, the feature doc, and affected product or operational
+   documentation whenever behavior, contracts, rollout, or evidence changes.
 
 ## Product boundaries that are not optional
 
@@ -37,12 +39,12 @@ it here.
 
 | Change surface | Read before editing | Verify before review |
 | --- | --- | --- |
-| Any task | `.agent/TASKS.md`, `.agent/PROJECT.md`, `.agent/TEAM.md` | Scope, acceptance criteria, and tracker state are current |
+| Any task | `.agent/TASKS.md`, `.agent/PROJECT.md`, `.agent/TEAM.md`, the area's `docs/features/` doc | Scope, acceptance criteria, and tracker state are current |
 | Backend/API | `backend/README.md`, `.agent/CODING_STANDARDS.md`, adjacent router/service/tests | Focused tests; Ruff and mypy for changed Python |
 | Patient or clinician portal | Relevant app `README.md`, `.agent/DESIGN_SYSTEM.md`, adjacent UI/tests | Lint, typecheck, focused tests, and build when practical |
 | Database, Auth, storage, or Supabase | `docs/supabase_setup_guide.md`, migrations, relevant RLS tests | Migration validation and the least-privilege/RLS path; never improvise remote SQL |
 | Synthetic demo data | `docs/demo-environment.md`, `docs/synthetic-data-catalog.md`, fixture README | Fixture checksum, dry run, idempotency, and documented synthetic-only boundary |
-| Clinical provenance, approvals, FHIR, or SMART | `docs/clinical-facts-provenance.md`, `.agent/specs/int-002-003-interoperability-plan.md` | Provenance, authorization, error, and review behavior—not only a happy path |
+| Clinical provenance, approvals, FHIR, or SMART | `docs/clinical-facts-provenance.md`, `docs/features/patient-records.md` | Provenance, authorization, error, and review behavior—not only a happy path |
 | Architecture or cross-cutting behavior | `.agent/ARCHITECTURE.md`, active specification | Update the decision record and integration tests as needed |
 | CI or dependencies | `.github/workflows/ci.yml`, lockfiles, `.agent/TASKS.md` | Reproducible install and all relevant required checks |
 

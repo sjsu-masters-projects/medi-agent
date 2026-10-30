@@ -12,6 +12,11 @@ They are not operating instructions or a second task board. Use
 | [Portal UI and language review](portal-ui-ux-review-2026-10-10.md) | Layout, content, localization and screen-level observations | A dated review, not an assertion about the current deployment |
 | [Reference redesign verification](ux-002-overhaul-verification.md) | Redesign implementation and local checks | Distinguishes local verification from live acceptance |
 | [Earlier task-board checkpoints](task-board-acceptance-history-2026-10-13.md) | Older LOC/ADR/care-plan local test and acceptance records removed from the board | Historical unchecked items are not the current task verdict |
+| [COM and SAFE gap audit](com-safe-gap-audit-2026-10.md) | Code-level audit of conversations and safety controls, October 22 | Static read of the code; nothing in it was run |
+| [Interface wording review](loc-001-interface-review.md) | Spanish interface wording inventory and its project acceptance | Model-assisted review on the requester's authority, not human sign-off |
+| [Operating-guide receipts](operating-guide-receipts-2026-10.md) | Migration application reports and rollout notes moved out of the operating guides | The hosted ledger and the task board stay authoritative |
+| [OPS-005 root-cause analysis](ops-005-rca-2026-10.md) | Intermittent page failures: log evidence, cause, fix and what cannot be proven | Supported by backend logs, not browser logs from the original episodes |
+| [SEC-004 CI correction](sec-004-pr230-ci-2026-10-29.md) | Python dependency audit advisories and the PR #230 CI correction | Local and CI evidence, not a deployed check |
 
 ## Confirmed symptom intake
 
@@ -21,7 +26,7 @@ They are not operating instructions or a second task board. Use
 | [October 12 local acceptance](pat-002-b-acceptance-2026-10-12.md) | Implementation, paired-language candidate and local journey |
 | [October 17 onward review closure](pat-002-b-acceptance-2026-10-17.md) | Review, integration tests and later merge receipts |
 
-The [intake specification](../../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md)
+The [intake specification](../features/symptom-intake.md)
 defines the behavior. The [rollout guide](../pat-002-b-rollout.md) defines activation.
 Physical voice acceptance remains separate from mocked transport or permission tests.
 
@@ -29,15 +34,30 @@ Physical voice acceptance remains separate from mocked transport or permission t
 
 [PAT-005 acceptance](pat-005-final-acceptance-2026-10-10.md) records the earlier
 approved-plan-to-Today journey. Read it with the current
-[care-team plan contract](../../.agent/specs/plan-002-care-plans-per-care-team.md),
+[care-team plan contract](../features/care-plans-and-today.md),
 which extends ownership and cross-plan behavior.
 
-## Adding evidence
+## Patient record clarity
+
+| Report | Scope |
+| --- | --- |
+| [Clarity changes](rec-001-ux-2026-10-28.md) | Refresh, review labels, saved-language explanations and modal close |
+| [Patient removal](rec-001-removal-2026-10-28.md) | Restricted upload removal and the private request handoff |
+| [Icons](rec-001-icons-2026-10-29.md) | Neutral document and file-format icons in both portals |
+| [Motion and state feedback](rec-001-motion-2026-10-29.md) | Processing, completion and error states on Records |
+| [Commit review](rec-001-review-2026-10-29.md) | Review findings and fixes on the combined change |
+
+The [record clarity contract](../features/patient-records.md)
+defines the behavior.
+
+## Interface wording
 
 [October 22 interface wording review](spanish-interface-wording-2026-10-22.md)
 records English/es-MX meaning-and-safety acceptance for the exact paired-source
-snapshot. Its JSON receipt is machine-checkable; it is not clinical validation,
-professional translation certification or a deployed/device acceptance run.
+snapshot, with later addenda. Its JSON receipt is machine-checkable; it is not clinical
+validation, professional translation certification or a deployed/device acceptance run.
+
+## Adding evidence
 
 Record the date, commit or revision, environment, synthetic account role, action,
 expected outcome, observed result and remaining gap. Reference identifiers only

@@ -186,7 +186,7 @@ remote migration, remote seed/reset, deployment or merge occurred.
 
 1. **Library gate completed for the local synthetic check:** the requester reported
    Ganesh Thampi approved the opened `candidate-1` package on October 12. The
-   [approval record](../../backend/src/app/intake/question_library/candidate-1-review.md#requester-reported-approval)
+   [approval record](../../backend/src/app/intake/question_library/v1-review.md#requester-reported-approval)
    names its unchanged canonical hash and distinguishes that report from a reviewer
    signature or PR approval. `manifest.json` selects that exact version/hash.
 2. **Target schema checked:** the requester applied 059/060. Read-only ledger checks
@@ -419,7 +419,7 @@ en-US/es-MX wording and canonical SHA-256
 `a7ee7f3c7bfd91fdbf3fccba56fb42af86176801895ca0d70ad3c99ffd0917ab`.
 That is content/structure evidence, not approval. The manifest still has no approved
 active version and a fresh local configuration check resolves intake off.
-The [review worksheet](../../backend/src/app/intake/question_library/candidate-1-review.md)
+The [review worksheet](../../backend/src/app/intake/question_library/v1-review.md)
 presents both locales and explicit branch/red-flag review decisions. It records no
 reviewer approval. The requester was asked for the actual decision/reference.
 

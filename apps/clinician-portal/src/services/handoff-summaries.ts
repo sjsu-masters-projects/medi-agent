@@ -1,7 +1,7 @@
 /**
  * CON-001 clinician API: reviewed care-handoff summaries.
  *
- * Contract: `.agent/specs/con-001-care-handoff-summary.md`. Every call reads the stored
+ * Contract: `docs/features/clinics-and-care-teams.md#handoff-summary`. Every call reads the stored
  * clinician session. The sections are assembled by the server from records the author may
  * see; the client only edits the narrative, notes and title.
  */

@@ -5,7 +5,7 @@
 The approved UX-002 redesign replaces the previous palette, typography, hero cards
 and layout conventions. Do not combine it with the abandoned portal-theme draft.
 
-Read [the implementation handoff](specs/ux-002-reference-redesign.md) and
+Read [the implementation handoff](../docs/features/portal-design.md) and
 [brand-icon integration](../docs/brand-icons.md) before changing either portal.
 The requester-supplied animated reference is
 [the MediAgent redesign](https://claude.ai/artifact/97piWWCbSeiGMFWEUkeJ5d).

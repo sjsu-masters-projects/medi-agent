@@ -93,5 +93,6 @@ they conflict with the current direction above**, not deleted.
 
 - `.agent/ARCHITECTURE.md` — verified implementation shape and target boundaries
 - `.agent/TASKS.md` — status, owners, and acceptance checklist
-- `.agent/specs/project-backlog-acceptance.md` — detailed acceptance requirements
+- `docs/features/` — what each shipped feature does and the rules it must keep
+- `.agent/specs/project-backlog-acceptance.md` — detailed acceptance requirements for unfinished work
 - `CONTRIBUTING.md` — contribution and review expectations

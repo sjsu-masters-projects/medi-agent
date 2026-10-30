@@ -43,29 +43,9 @@ scheduled inclusion and unscheduled absence for medications and obligations.
 Expired-session return paths retain the exact document fragment as well as the
 patient Documents tab. These changes do not grant additional access.
 
-## Verification update
+## Verify
 
-Backend service/router suite: `pytest tests/unit/services
-tests/integration/routers --no-cov -q` — **1,034 passed**. Focused Spanish
-cadence/feed suite: **98 passed**. Ruff passed for cadence source/tests; mypy
-passed for four changed service files. Clinician suite: **223 passed**, with
-typecheck, focused ESLint and webpack production build passing. All **65 real
-PostgreSQL tests passed** against isolated PostgreSQL 16 containers; migration
-validation accepted 56 SQL files. These local checks do not prove deployed
-behavior. No remote migration or deployment performed.
-
-Parallel database review finalized patient-scoped evidence fencing, atomic
-generation/publication eligibility rechecks and serialized queue creation. It
-filters null patient IDs inside every lineage-discovery loop and adds a bounded
-insert/delete regression. Static validation passed for 56 migrations and seven
-PL/pgSQL bodies; Ruff, formatting and diff checks passed. Native initdb failed
-with macOS shared-memory exhaustion. The opt-in Docker fixture bypassed that
-host limitation without changing kernel settings: **65 passed, 3 warnings in
-227.76 seconds**. A fixture that accidentally created two open drafts for one
-patient was corrected to use a second synthetic patient; the full suite then
-passed. No product constraint was weakened.
-
-Reproduce from `backend/` using synthetic CI settings:
+Run from `backend/` using synthetic CI settings:
 
 ```sh
 CARE_PLAN_TEST_POSTGRES=1 CARE_PLAN_TEST_POSTGRES_DOCKER=1 PYTHONPATH=src \
@@ -76,21 +56,5 @@ Docker mode requires an already available official `postgres:16` image. Each
 test creates and removes its own network-isolated container, without host
 ports, volumes or connection to Supabase.
 
-## Authorized staging application — October 10
-
-The requester separately authorized only
-`048_patient_upload_care_plan_review_gate.sql` for medi-agent-staging
-(`yprctrscrtaeqadhjdkj`). It committed at `2026-10-10 16:18:01.436642+00`
-through the advisory-lock and filename/checksum-ledger protocol. Recorded SHA-256:
-`2e07f7ef955b0002a3b158f4dae6cc0fe1f0039ec5795f5559d13abac3e0d375`.
-Eight read-only checks passed: checksum, six evidence fences, publication/queue
-guards, service-role-only public RPCs, invoker-security helpers, pending-evidence
-exclusion, unchanged approved V2 and unchanged draft V3. No plan approval or
-history rewrite occurred. Backend/UI deployment and live Spanish/non-scheduled-day
-acceptance are recorded in [the PAT-005 final acceptance](evidence/pat-005-final-acceptance-2026-10-10.md)
-(V3 Spanish, Saturday absence; #140 deployed); this is not a production-readiness claim.
-
-October 10 inline-review cleanup extracts the intentional Docker readiness
-command from the subprocess argument list, without changing its value or
-database behavior. Ruff lint/format and all 65 isolated PostgreSQL tests passed
-again (233.36 seconds). No migration change or remote operation was performed.
+Earlier results and the October 10 staging application are in the
+[operating-guide receipts](evidence/operating-guide-receipts-2026-10.md#patient-upload-review-gate-pat-005-r).

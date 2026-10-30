@@ -14,14 +14,10 @@ Use this guide to recreate the project after an inactive instance is removed. It
 
 ## Account email delivery (EMAIL-001)
 
-See [the email contract](../.agent/specs/email-001-email-flows.md) before changing
-Auth settings. Initial dashboard inspection on October 11 found Confirm email
-**off** and custom SMTP **off** in the synthetic staging project. After operator
-setup, a dashboard reload confirmed SMTP **on**, Resend host/port and a stored
-hidden password. This verifies saved configuration, not delivery. With explicit
-requester approval, Site URL was set to `https://app.mediagent.live` and the three
-exact deployed reset destinations listed below were added. Reload confirmed they
-persisted. No wildcard redirects or signup-confirmation changes were made.
+See [the email contract](features/messaging-and-alerts.md) before changing
+Auth settings. Keep Confirm email off and use no wildcard redirects. Set Site URL to
+`https://app.mediagent.live` and add the three exact deployed reset destinations listed
+below. Saved SMTP settings verify configuration, not delivery.
 Existing signup expects an
 immediate session; do not enable confirmation until the pending-verification flow
 is implemented and reviewed. SMTP delivery can be configured independently.
@@ -55,41 +51,23 @@ References: [Resend SMTP](https://resend.com/docs/send-with-supabase-smtp),
 [Supabase password recovery](https://supabase.com/docs/guides/auth/passwords).
 
 Application email uses separate verified opt-in contacts and server-only outbox
-records from `057_email_delivery.sql` and `058_email_delivery_fixes.sql` (both applied
-to the synthetic project). No email function reads the `auth` schema: a hosted migration
+records from `057_email_delivery.sql` and `058_email_delivery_fixes.sql`. No email function reads the `auth` schema: a hosted migration
 cannot grant `service_role` access there, so the backend reads account addresses through
 the Auth Admin API with the service-role key. The notification and onboarding sender
 identities are documented in `.env.example`; they are not Supabase SMTP configuration.
 With no configured notification sender, verification is unavailable rather than sent
 from a default testing identity.
 
-The Reset password template is `docs/email-templates/supabase-password-recovery.html`,
-installed October 12. Reinstall it in Authentication → Emails → Reset password after
+The Reset password template is `docs/email-templates/supabase-password-recovery.html`.
+Reinstall it in Authentication → Emails → Reset password after
 every change to that file, with separate authorization; never enable confirmation as a
 side effect of applying SQL. Its link opens the portal reset page, so both portals'
 `NEXT_PUBLIC_SUPABASE_ANON_KEY` must be the project's exact public key: `/verify` does not
 check the key, but saving the new password does. Periodic email delivery runs after each
 reminder run. Configuration and production status:
-[EMAIL-001](../.agent/specs/email-001-email-flows.md#operations-and-configuration).
+[EMAIL-001](features/messaging-and-alerts.md).
 
 ## Apply migrations
-
-`102_document_explanation_presentations.sql` adds the service-only validated
-presentation cache for REC-001-UX. It retains one current entry per document/locale,
-with a source fingerprint and format version, and cascades on document removal.
-It changes no source summary, review or clinical truth. Apply it before the matching
-backend release only after explicit authorization for that hosted target. It is
-locally tested; the requester reports 101 and 102 applied October 29, with target
-and ledger/checksum receipt not supplied. Missing schema makes structured explanations
-unavailable without falling back to an AI call on every view.
-
-`101_patient_document_removal.sql` is required by REC-001-RM's restricted patient
-removal route. It adds a minimal removal audit and service-role-only status/removal
-functions using the existing evidence fence; no source backfill. Apply it before
-the matching backend/portal release, only after explicit target authorization.
-Without it the route fails closed and the portal offers the private care-team
-request path. Local checks and rollout state belong to the
-[record clarity contract](../.agent/specs/rec-001-patient-record-clarity.md#patient-removal-and-reading-refinement).
 
 Apply every SQL file through the repository migration ledger against an empty development database. The ledger records the complete filename and SHA-256 checksum, so a rerun skips unchanged files and stops if an applied migration was edited. Do not run a reset, seed, or migration command against a production database.
 
@@ -112,12 +90,54 @@ exceptions cover the confirmed-symptom files alongside the independently applied
 and clinician-visit migrations; the validator rejects any other new shared prefix. Preserve
 applied names and bytes. The ledger in
 `public.schema_migrations` is authoritative: a local file count does not establish remote
-application or authorize applying unrelated migrations. Migrations through
-`075_notification_zone_lookup.sql` are recorded as applied by the requester (October 18,
-2026). A read-only October 19 check also recorded the exact 071 symptom handoff and
-`076_care_conversation_activity_review.sql`; application of 077/078 was not checked.
+application or authorize applying unrelated migrations. Past
+hosted application reports are in the
+[operating-guide receipts](evidence/operating-guide-receipts-2026-10.md#migration-application-reports).
 Browser session limits (AUTH-002) are portal
 environment variables, not Supabase settings; no Auth configuration change is required.
+
+### Hosted default grants
+
+New public tables and functions created through SQL receive platform default grants to `anon`,
+`authenticated` and `service_role` on the hosted project, and a local or Docker PostgreSQL does not
+reproduce that. Every migration that adds a table or function must therefore `ENABLE ROW LEVEL
+SECURITY` and explicitly `REVOKE` what the object must not expose (`REVOKE ALL ... FROM PUBLIC, anon,
+authenticated`, then grant only what is needed), and end with a fail-closed verification block that
+checks `relrowsecurity` and `has_table_privilege` / `has_function_privilege` for the three roles.
+Migration 033 created `authorization_denial_events` without revoking the defaults, so the
+browser-role grants remained in production until 069 restored the intended ones.
+
+### Renamed migration files
+
+The migration ledger keys on the filename. A renumbered or renamed file is a new file to the ledger
+and is applied again, so every migration must be idempotent (`IF NOT EXISTS`, `CREATE OR REPLACE`,
+guarded constraint and policy creation). Example: LOC-003's migrations were first applied as
+`065_english_display_facts` and `066_message_translations`, then renumbered to `067_english_display_facts`
+and `068_message_translations`; the renumbered files reapplied cleanly because they are re-runnable.
+Keep the applied `067_english_display_facts.sql` unchanged. The validator permits only the exact historical 067 pair
+with `067_clinic_lists_and_roles.sql`; any new 067 filename collision fails validation.
+Never edit an applied migration; renumber only a file that has not merged, and test it twice.
+
+## Notes for specific migrations
+
+The ledger applies files in order, so these notes matter only when a migration has a
+prerequisite, a preflight or a backend dependency. Applying hosted SQL always needs
+separate explicit authorization for that target.
+
+`102_document_explanation_presentations.sql` adds the service-only validated
+presentation cache for REC-001-UX. It retains one current entry per document/locale,
+with a source fingerprint and format version, and cascades on document removal.
+It changes no source summary, review or clinical truth. Apply it before the matching
+backend release only after explicit authorization for that hosted target. Missing schema makes structured explanations
+unavailable without falling back to an AI call on every view.
+
+`101_patient_document_removal.sql` is required by REC-001-RM's restricted patient
+removal route. It adds a minimal removal audit and service-role-only status/removal
+functions using the existing evidence fence; no source backfill. Apply it before
+the matching backend/portal release, only after explicit target authorization.
+Without it the route fails closed and the portal offers the private care-team
+request path. Local checks and rollout state belong to the
+[record clarity contract](features/patient-records.md).
 
 Migration `047_adr_patient_information_loop.sql` adds the patient-confirmed ADR information
 request, deterministic reassessment, notification closure, and patient-actor audit transaction.
@@ -127,7 +147,7 @@ Migration `048_medwatch_draft_lifecycle.sql` adds the assigned-clinician
 draft/edit/approval/export lifecycle with immutable audit events and optimistic revision control.
 It deliberately does not add an FDA submission operation.
 
-### ADR loop and Form 3500 (063/064, PV-001-C) — applied October 13
+### ADR loop and Form 3500 (063/064, PV-001-C)
 
 `063_adr_information_loop_lifecycle.sql` makes each ADR information request its own
 notification source, adds the clinician "patient answered" alert and cascades ADR audit on
@@ -144,15 +164,77 @@ delegates with `'json'`), `discard_medwatch_draft`, `record_medwatch_external_su
 `amend_medwatch_external_submission`. It ends with a fail-closed verification block. No
 function or table sends anything to FDA.
 
-Both files were applied to the hosted project by the requester on October 13, before the backend
-that calls 064 objects deployed. Applying a migration needs the requester's explicit
-authorization naming that action. **Order for a fresh environment:** 063, then 064, before that backend. Every 048
-function keeps its signature, so the currently deployed backend keeps working once 064 is
-applied. Rows written by that backend in the meantime are labelled `fda-3500-legacy-048` and
-are upgraded on read. After applying, verify with the ledger and with the read-only checks the
+**Order for a fresh environment:** 063, then 064, before the backend that calls 064 objects.
+Every 048 function keeps its signature, so an older backend keeps working once 064 is applied.
+Rows it writes in the meantime are labelled `fda-3500-legacy-048` and are upgraded on read. After applying, verify with the ledger and with the read-only checks the
 fail-closed block already performs (it raises and rolls the migration back on any gap).
 
-### Confirmed symptom ADR handoff (071, PAT-002-B) — recorded applied October 18
+### Chat safety alerts (059)
+
+`059_chat_safety_alerts.sql` (SHA-256
+`9ce875b7d1fca79f687f83e6ea02d7b4b56273d5aba064c665591dc8a2ac56f5`).
+It creates server-only safety evidence and the narrowly granted service RPCs
+`record_chat_safety_turn` and `deliver_chat_safety_alerts`. Ordinary initial
+emergency chat rows retain existing transcript visibility; this is not private
+draft storage. Safety evidence and its source rows are immutable; pending alert
+delivery uses current active care-team assignments and existing operational alerts.
+No-recipient dispatch records that outcome without claiming a recipient was notified.
+
+The target must have the preceding schema and
+private schema, migration 059 must precede this backend version, and
+`A2A_RETRY_WORKER_ENABLED=true` is required for background redelivery. A backend
+without 059 still shows direction but cannot guarantee saved evidence/delivery;
+that mismatch is not accepted rollout. Pending delivery notices are not pushed
+again when the worker later succeeds. Verify service-only RPC execution, browser
+denial, assignment changes, rollback/retry and operational alert deduplication
+on the authorized target. Disposable local SQL checks cover selected migrations
+and platform stubs, not that target's complete Supabase setup or grants. See
+[B2 evidence and reproduction commands](evidence/pat-002-b-acceptance-2026-10-10.md#b2-verification).
+
+### Confirmed symptom intake (060, 071)
+
+Migrations 059/060 are versioned implementation artifacts. Applying them, publishing
+question eligibility and changing deployed configuration are distinct rollout
+actions. No bundle is seeded or approved by migration 060. Approval provenance is in the
+[question release process](../backend/src/app/intake/question_library/README.md), which also
+covers publishing a release.
+
+| Migration | SHA-256 |
+| --- | --- |
+| `059_chat_safety_alerts.sql` | `9ce875b7d1fca79f687f83e6ea02d7b4b56273d5aba064c665591dc8a2ac56f5` |
+| `060_confirmed_symptom_intake.sql` | `3f6c9591fe41dab5bd476096174c5d69770be38dbeae8d5db82841f2a0361d42` |
+| `071_confirmed_symptom_handoff.sql` | `f690b788d5f29c3d7583f2fe8cc43b7a51a6af817c276d6839cc9c9ab2ded36b` |
+
+Before an authorized rollout, drain old direct symptom-report writers, including
+old demo/import tooling that inserts unconfirmed reports. Migration 060 removes direct
+browser report writes and requires new reports through confirmation. Historical rows
+stay legacy and are not converted into fabricated patient consent. Deploy compatible
+nullable-severity consumers with the schema before enabling new confirmation behavior.
+Verify owner read, browser stored-context column denial, staff/unassigned denial,
+service-RPC-only writes, append-only audit,
+source/session binding, exact confirmation/retry and independent safety alert delivery.
+
+Activation requires the reviewed immutable packaged version/hash, matching genuine
+`set_symptom_question_eligibility` metadata and `SYMPTOM_INTAKE_ENABLED=true`. That
+manifest RPC is deployment-only; runtime intake never calls it and browsers cannot.
+Changed content requires a new version. Revocation blocks progression/confirmation;
+owned recovery, cancellation and existing safety escalation remain available. Never
+substitute the disposable SQL fixtures' approval reference into a runtime manifest.
+
+Rollback disables intake and its ordinary writes while preserving drafts, confirmed
+reports and durable safety-alert retry. It must not restore automatic unconfirmed
+report insertion. See [the acceptance record](evidence/pat-002-b-acceptance-2026-10-12.md) for
+local SQL constraints, manual acceptance, dependency reproducibility and the C handoff.
+
+`071_confirmed_symptom_handoff.sql` intentionally coexists with the clinician-visit 071 file because the ledger keys on the
+full filename and checksum. Keep applied 059/060/071 names and checksums unchanged.
+The exact prerequisites, authorization state and read-only
+`preflight_symptom_intake.py` procedure are in the
+[PAT-002-B rollout](pat-002-b-rollout.md). Do not run unrelated pending migrations as
+part of a symptom-intake change. Candidate-2 remains pending review; neither SQL nor a
+passing test approves a question bundle.
+
+### Confirmed symptom ADR handoff (071, PAT-002-B)
 
 `071_confirmed_symptom_handoff.sql` requires the already-applied confirmed-intake
 migration 060 and migration 065 clinic memberships. It normalizes exact active-medication
@@ -163,14 +245,13 @@ The trigger does not assign causality or create an FDA submission.
 `A2A_RETRY_WORKER_ENABLED=true` is required so interrupted work is recovered.
 
 The exact file has SHA-256
-`f690b788d5f29c3d7583f2fe8cc43b7a51a6af817c276d6839cc9c9ab2ded36b`. A read-only
-October 19 ledger check recorded that identity as applied on October 18. Preserve the
+`f690b788d5f29c3d7583f2fe8cc43b7a51a6af817c276d6839cc9c9ab2ded36b`. Preserve the
 filename and bytes: do not rename or replay it because it shares prefix 071 with
 `071_clinician_visit_management.sql`. Only a fresh or explicitly verified missing
 environment may apply the exact file, and applying it still requires explicit authorization.
 Backend deployment and runtime feature activation remain separate gates.
 
-### Clinic memberships (065, CLN-003 slice A) — applied October 16
+### Clinic memberships (065, CLN-003 slice A)
 
 `065_clinic_memberships.sql` adds `clinic_memberships` (one row per clinician and clinic,
 with that clinic's role and an `active`/`inactive` status), backfilled from
@@ -187,12 +268,10 @@ their own role or clinic through the Data API. `private.is_clinic_member(uuid)` 
 and used by no policy; `is_assigned_clinician` and every existing policy are unchanged. It
 ends with a fail-closed verification block.
 
-Applied by the requester on October 16 before #176 merged (its invite-code paths read
-`clinic_memberships` and write `care_teams.clinic_id`, so apply first, merge after). Applying
-needs the requester's explicit authorization naming that action. After applying, confirm the
-ledger row and read the `NOTICE` count of clinicians without a clinic.
+Apply before the backend, because its invite-code paths read `clinic_memberships` and write
+`care_teams.clinic_id`. After applying, confirm the ledger row and read the `NOTICE` count of clinicians without a clinic.
 
-### Sign in once (066, CLN-003 slice B) — applied October 16
+### Sign in once (066, CLN-003 slice B)
 
 `066_clinic_sign_in_once.sql` requires 065. It adds the append-only
 `clinic_membership_audit_events` table (RLS on, no foreign keys, identifiers only; `service_role`
@@ -204,47 +283,40 @@ admin rights are read from the membership at the invitation's clinic), and care-
 notification checks that use the care-team link's clinic. `clinicians.clinic_id` stays the
 clinician's default clinic for legacy readers. It ends with a fail-closed verification block.
 
-Applied by the requester on October 16 before #178 merged, because the new routes call
-`clinician_clinic_operation` (apply first, merge after). Every replaced function keeps its
+Apply before the backend, because its routes call `clinician_clinic_operation`. Every replaced function keeps its
 signature. After applying, confirm the ledger row.
 
 **Supabase Auth dashboard changes: none.** Sign-in, MFA and email settings are unchanged; the
 service-role backend performs the membership operations.
 
-### Clinic lists, scheduling and message translations (067–069) — applied October 17
+### Clinic lists, scheduling and message translations (067–069)
 
-Applied by the requester on October 17: `067_clinic_lists_and_roles.sql` (CLN-003 slices C and D),
+`067_clinic_lists_and_roles.sql` (CLN-003 slices C and D),
 `067_english_display_facts.sql` and `068_message_translations.sql` (LOC-003), and
 `069_clinic_scheduling_and_tags.sql` (CLN-003 slices E and F). 068 is re-runnable, has RLS and is
-backend-only (fixed in [#183](https://github.com/sjsu-masters-projects/medi-agent/pull/183)). 069 adds the
+backend-only. 069 adds the
 clinician overlap exclusion constraint and restores the intended grants on
 `authorization_denial_events`; its backfill fails closed on an unmatched link or existing overlaps,
-so run `backend/scripts/appointment-clinician-overlap-preflight.sql` (read-only) first. It tagged 38
-appointments in the hosted project. A read-only audit on October 17 found no public table with RLS
-off and no browser-role SELECT or INSERT on a public table.
+so run `backend/scripts/appointment-clinician-overlap-preflight.sql` (read-only) first.
 
 ### Message-translation integrity, wording verification and display provenance (080–082 and 088)
 
-October 22 operator receipt: the requester supplied successful `COMMIT` and ledger inserts
-for 080, 081, 082 and 088, followed by `Migration ledger is synchronized`. Care-team
-083–087 were already applied and skipped. This records the supplied output, not an
-independent hosted checksum/security audit. #203 merged as `dace6a8d` afterward.
 For a new environment, apply in ledger order after 079 (including care-team 083–087
 before 088), before deploying the backend that requires these contracts:
 
-1. `080_message_translation_integrity.sql` — `AFTER DELETE` triggers on
+1. `080_message_translation_integrity.sql`: `AFTER DELETE` triggers on
    `care_conversation_messages` and `chat_messages` that remove a deleted message's stored
    translations (the cascade a polymorphic `source_table` cannot express as one foreign key),
    plus `public.purge_message_translations(interval)`, which removes orphans and expired
    failure markers. The function is `service_role`-only; the migration's verification block
    fails closed if either trigger is missing or a browser role can execute it.
-2. `081_care_plan_wording_verification.sql` — `care_plan_items.back_translation` (the cached
+2. `081_care_plan_wording_verification.sql`: `care_plan_items.back_translation` (the cached
    back-translation a clinician verifies against) and `care_plan_items.wording_verification`
    (the deterministic guard outcome recorded with `wording_verified`), plus a trigger
    requiring new or changed verified wording to carry its record. Legacy approved wording
    is not rewritten; cache-only updates remain possible without inventing verification. It also
    adds `care_plan_items.translation_model_id`, the model that drafted the second language.
-3. `082_loc003_display_provenance.sql` — `clinical_facts.display_model_id` (the model that
+3. `082_loc003_display_provenance.sql`: `clinical_facts.display_model_id` (the model that
    produced a fact's English display fields), and widens the `message_translations`
    `source_table` check to accept `evidence_excerpt`, so an English gloss of Spanish source
    evidence is stored in the table that already holds translations with their guard outcome
@@ -252,8 +324,7 @@ before 088), before deploying the backend that requires these contracts:
    by a UUIDv5 of the excerpt text, so 080's orphan sweep leaves them alone (it only looks
    under the two message labels). The migration finds 068's inline constraint by definition
    rather than assuming its generated name, and fails closed if either change is missing.
-
-4. `088_confirmed_message_translation.sql` — backend-only atomic confirmed send: the
+4. `088_confirmed_message_translation.sql`: backend-only atomic confirmed send: the
    existing clinic-authorized send and exact clinician-confirmed translation commit together.
    Duplicate retries cannot replace the approved text; translation failure or a changed patient
    locale rolls the send back. Original-only clinician sends atomically store a permanent
@@ -281,32 +352,6 @@ PostgreSQL 18 the fixture pins `LC_ALL=C` and creates the `postgres` superuser i
 local cluster configuration is needed. CI runs the same file in the PostgreSQL contract
 matrix as `loc003-translation-schema`.
 
-### Hosted default grants
-
-New public tables and functions created through SQL receive platform default grants to `anon`,
-`authenticated` and `service_role` on the hosted project, and a local or Docker PostgreSQL does not
-reproduce that. Every migration that adds a table or function must therefore `ENABLE ROW LEVEL
-SECURITY` and explicitly `REVOKE` what the object must not expose (`REVOKE ALL ... FROM PUBLIC, anon,
-authenticated`, then grant only what is needed), and end with a fail-closed verification block that
-checks `relrowsecurity` and `has_table_privilege` / `has_function_privilege` for the three roles.
-Migration 033 created `authorization_denial_events` without revoking the defaults, so the
-browser-role grants remained in production until 069 restored the intended ones.
-
-### Renamed migration files
-
-The migration ledger keys on the filename. A renumbered or renamed file is a new file to the ledger
-and is applied again, so every migration must be idempotent (`IF NOT EXISTS`, `CREATE OR REPLACE`,
-guarded constraint and policy creation). Example: LOC-003's migrations were first applied as
-`065_english_display_facts` and `066_message_translations`, then renumbered to `067_english_display_facts`
-and `068_message_translations`; the renumbered files reapplied cleanly because they are re-runnable.
-Keep the applied `067_english_display_facts.sql` unchanged. PR #203's proposed 079/083
-English-display copies were byte-identical and redundant, so they were removed rather than
-creating another ledger identity. The validator permits only the exact historical 067 pair
-with `067_clinic_lists_and_roles.sql`; any new 067 filename collision fails validation.
-Main's 079 remains the applied unlisted-product migration. #203 reserves 080–082 and 088;
-merged care-team PR #210 owns 083–087, not applied by this work.
-Never edit an applied migration; renumber only a file that has not merged, and test it twice.
-
 ### Appointment booking guards (042/043)
 
 Appointment Slice 5 is applied to the synthetic project. For a new environment, run the
@@ -316,34 +361,7 @@ overlap pairs), apply `042_appointment_expired_status.sql` before
 `backend/scripts/verify-appointment-slice5.sql`, which must print
 `Slice 5 schema and function permissions verified`. Rollout order and the synthetic
 conflict/expiry journey are in
-[the scheduling design §14](../.agent/specs/sch-001-appointment-scheduling.md#14-slice-5--booking-conflicts-and-proposal-expiry).
-
-## PAT-002-B local safety checkpoint
-
-B2 adds local migration `059_chat_safety_alerts.sql` (SHA-256
-`9ce875b7d1fca79f687f83e6ea02d7b4b56273d5aba064c665591dc8a2ac56f5`).
-It creates server-only safety evidence and the narrowly granted service RPCs
-`record_chat_safety_turn` and `deliver_chat_safety_alerts`. Ordinary initial
-emergency chat rows retain existing transcript visibility; this is not private
-draft storage. Safety evidence and its source rows are immutable; pending alert
-delivery uses current active care-team assignments and existing operational alerts.
-No-recipient dispatch records that outcome without claiming a recipient was notified.
-
-After separate authorization, the target must have the preceding schema and
-private schema, migration 059 must precede this backend version, and
-`A2A_RETRY_WORKER_ENABLED=true` is required for background redelivery. A backend
-without 059 still shows direction but cannot guarantee saved evidence/delivery;
-that mismatch is not accepted rollout. Pending delivery notices are not pushed
-again when the worker later succeeds. Verify service-only RPC execution, browser
-denial, assignment changes, rollback/retry and operational alert deduplication
-on the authorized target. Disposable local SQL checks cover selected migrations
-and platform stubs, not that target's complete Supabase setup or grants. See
-[B2 evidence and reproduction commands](evidence/pat-002-b-acceptance-2026-10-10.md#b2-verification).
-
-Private drafts, explicit report confirmation and revoked browser report writes
-remain later work. Migration 027's service-role SELECT grant does not remove the
-old owner INSERT policy. No remote migration, seed/reset, deployment, review or
-PR #136 migration is authorized or claimed by this checkpoint.
+[the scheduling design §14](features/scheduling.md).
 
 ## Configure SMART staging
 
@@ -469,60 +487,3 @@ The backend accepts access tokens up to 30 seconds past their `exp` (clock-skew 
 - [ ] An assigned clinician can retry a retryable failed document, while a concurrent retry and a fourth total attempt are denied.
 
 Use synthetic or deidentified sandbox records only. This project does not accept real patient data for this demo.
-
-## PAT-002-B confirmation rollout (local verification active)
-
-Migrations 059/060 are versioned implementation artifacts. Applying them, publishing
-question eligibility and changing deployed configuration are distinct rollout
-actions. No bundle is seeded or approved by migration 060. On October 12 the requester
-reported Ganesh approved the unchanged paired-locale candidate; the
-[approval record](../backend/src/app/intake/question_library/candidate-1-review.md#requester-reported-approval)
-states its provenance, date and canonical hash. This is not a formal PR approval.
-
-October 12 requester rollout recheck: the requester reported applying the migrations.
-Read-only `schema_migrations` queries confirmed both 059/060 ledger entries match the
-versioned file checksums below. The confirmation column is available and the intake
-RPC rejects an unknown patient with `42501`. After the dated approval report, the
-manifest selected `candidate-1`, matching eligibility metadata were published via
-`set_symptom_question_eligibility`, and the local backend was restarted with
-`SYMPTOM_INTAKE_ENABLED=true`. An authenticated fictional patient confirmation and
-assigned-clinician summary then passed locally, as recorded in the
-[acceptance evidence](evidence/pat-002-b-acceptance-2026-10-12.md#approved-library-local-acceptance--october-12).
-The deployed backend setting and deployed acceptance remain separate.
-
-| Migration | SHA-256 |
-| --- | --- |
-| `059_chat_safety_alerts.sql` | `9ce875b7d1fca79f687f83e6ea02d7b4b56273d5aba064c665591dc8a2ac56f5` |
-| `060_confirmed_symptom_intake.sql` | `3f6c9591fe41dab5bd476096174c5d69770be38dbeae8d5db82841f2a0361d42` |
-| `071_confirmed_symptom_handoff.sql` | `f690b788d5f29c3d7583f2fe8cc43b7a51a6af817c276d6839cc9c9ab2ded36b` |
-
-Before an authorized rollout, drain old direct symptom-report writers, including
-old demo/import tooling that inserts unconfirmed reports. Migration 060 removes direct
-browser report writes and requires new reports through confirmation. Historical rows
-stay legacy and are not converted into fabricated patient consent. Deploy compatible
-nullable-severity consumers with the schema before enabling new confirmation behavior.
-Verify owner read, browser stored-context column denial, staff/unassigned denial,
-service-RPC-only writes, append-only audit,
-source/session binding, exact confirmation/retry and independent safety alert delivery.
-
-Activation requires the reviewed immutable packaged version/hash, matching genuine
-`set_symptom_question_eligibility` metadata and `SYMPTOM_INTAKE_ENABLED=true`. That
-manifest RPC is deployment-only; runtime intake never calls it and browsers cannot.
-Changed content requires a new version. Revocation blocks progression/confirmation;
-owned recovery, cancellation and existing safety escalation remain available. Never
-substitute the disposable SQL fixtures' approval reference into a runtime manifest.
-
-Rollback disables intake and its ordinary writes while preserving drafts, confirmed
-reports and durable safety-alert retry. It must not restore automatic unconfirmed
-report insertion. See [the acceptance record](evidence/pat-002-b-acceptance-2026-10-12.md) for
-local SQL constraints, manual acceptance, dependency reproducibility and the C handoff.
-
-
-The October 17 handoff work uses the exact applied 071 identity described above. It
-intentionally coexists with the clinician-visit 071 file because the ledger keys on the
-full filename and checksum. Keep applied 059/060/071 names and checksums unchanged.
-The exact prerequisites, authorization state and read-only
-`preflight_symptom_intake.py` procedure are in the
-[PAT-002-B rollout](pat-002-b-rollout.md). Do not run unrelated pending migrations as
-part of this change. Candidate-2 remains pending genuine review; neither SQL nor a
-passing test approves a question bundle.

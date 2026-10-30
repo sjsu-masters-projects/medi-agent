@@ -14,7 +14,7 @@ from supabase import Client
 
 from app.config import settings
 from app.core.exceptions import AuthorizationError, ValidationError
-from app.intake.conversation import interpret, source_suggestions
+from app.intake.conversation import interpret, reports_no_other_products, source_suggestions
 from app.intake.library import Bundle, load_library, select_question, validate_value
 from app.intake.preview import retrieve_context, summarize, verify_context
 from app.models.auth import CurrentUser
@@ -389,7 +389,10 @@ class SymptomIntakeService:
                 )
             )
             summary += f"\n{label}: {name}"
-        if row["answers"].get("concomitant", {}).get("state") == "answered":
+        concomitant = row["answers"].get("concomitant", {})
+        if concomitant.get("state") == "answered" and not reports_no_other_products(
+            concomitant.get("value")
+        ):
             summary += "\n" + (
                 "Los productos y cambios adicionales son reportados por el paciente, sin verificar."
                 if row["locale"] == "es-MX"

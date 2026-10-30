@@ -20,7 +20,7 @@ unit tests. Use the synthetic settings documented in the backend test setup.
 Authentication needs an authorized development Supabase project. Generation, voice
 and email need their own configured services. A page loading successfully does not
 prove those integrations are active. See [database setup](supabase_setup_guide.md),
-[email configuration](../.agent/specs/email-001-email-flows.md) and
+[email configuration](features/messaging-and-alerts.md) and
 [worker setup](chat-worker-setup.md).
 
 ## Service checks
@@ -71,5 +71,5 @@ three synthetic negative cases without a named owning endpoint:
 `list_patient_documents`, `view_medication_timeline` and `view_document_metadata`.
 Treat these as historical test gaps, not current authorization requirements. Check
 the current [task requirements](../.agent/specs/project-backlog-acceptance.md) and
-the [interoperability plan](../.agent/specs/int-002-003-interoperability-plan.md)
+the [interoperability plan](features/patient-records.md)
 before changing behavior or declaring the cases covered.

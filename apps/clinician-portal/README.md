@@ -289,7 +289,7 @@ The shared notification cache polls `/api/v1/notification-centre` once a minute
 while visible and refreshes on focus. Signed per-page cutoffs protect bulk reads
 against new arrivals; "Mark all loaded read" skips items that are no longer
 available and says how many; assignment revocation removes access. Counts
-unavailable is not zero. See [NOT-001](../../.agent/specs/not-001-notification-centre.md) for
+unavailable is not zero. See [NOT-001](../../docs/features/messaging-and-alerts.md) for
 the contract.
 
 The conversation API is `/api/v1/care-conversations`. Pages contain at most 50
@@ -373,7 +373,7 @@ rechecks active patient assignment and current appointment status. The one-time 
 copy contains exact start/end and location; changes/cancellations do not sync.
 Clinician cancellation/completion controls remain subsequent work. Full synthetic click-through steps and
 verification evidence are in
-[the scheduling design](../../.agent/specs/sch-001-appointment-scheduling.md#13-slice-4--clinician-appointments-screen).
+[the scheduling design](../../docs/features/scheduling.md).
 
 Sessions are shared across tabs: one refresh at a time, a sign-out in any tab signs out all,
 and MFA state survives a second tab. Limits are enforced in the browser: 2 hours idle (a

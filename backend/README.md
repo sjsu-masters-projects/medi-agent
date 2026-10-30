@@ -254,7 +254,7 @@ skipped, so a repeated save adds nothing and returns the case unchanged. A save 
 then 409 `ADR_ASSESSMENT_CHANGED`. Another team's case is the same 404 as an unknown id; a
 completed review or invalid answers are 422. `100_adr_naranjo_answer_coverage.sql` must be applied
 before this backend; until then the route returns 503. Detail:
-[PV-001-D](../.agent/specs/pv-001-d-naranjo-answer-coverage.md).
+[PV-001-D](../docs/features/adverse-events.md).
 
 ## MedWatch Form 3500 drafts (PV-001-C)
 
@@ -386,11 +386,11 @@ revoked. Apply it **only with separate operator authorization**, before backend
 and patient rollout. Older clients retain their existing contract, not durable
 retry guarantees. An unavailable durable store must fail closed, not rerun through
 the legacy path. Full contract and verification:
-[PAT-001-A](../.agent/specs/pat-001-a-nora-turn-recovery.md).
+[PAT-001-A](../docs/features/nora-chat.md).
 
 Migration `074_nora_late_completion.sql` lets a finished reply be saved for its current lease
 even just after the deadline, and `075_notification_zone_lookup.sql` makes notification reads
-fast (see [NOT-001](../.agent/specs/not-001-notification-centre.md)). Both are re-runnable and
+fast (see [NOT-001](../docs/features/messaging-and-alerts.md)). Both are re-runnable and
 need the same separate authorization; the backend is compatible with the database before and
 after (a missing `late` key means not late). Chat-turn and notification database calls use
 their own bounded thread pools (`app/core/db_pools.py`).
@@ -438,7 +438,7 @@ through the normal chat turn. Bounds (all optional, defaults in `app/config.py`)
 per patient), plus frame, queue, utterance and speech-length limits. Only
 `DEEPGRAM_API_KEY` is required, on the API service; the chat worker does not use it.
 Voice logs carry lengths and ids, never transcript or reply text. Protocol, failure modes
-and the acceptance path: [VOICE-001](../.agent/specs/voice-001-voice-mode.md).
+and the acceptance path: [VOICE-001](../docs/features/voice-mode.md).
 
 ## Package Layout
 
@@ -449,7 +449,7 @@ The existing retry worker re-drives pending delivery; it must remain enabled
 (`A2A_RETRY_WORKER_ENABLED=true`). No symptom report or ADR task is created for
 these turns. Non-emergency reports still use the old flow; private intake APIs
 and confirmation are not implemented. See the
-[B2 walkthrough and exact local test steps](../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md#18-b2--safety-takes-priority-october-10-2026)
+[B2 walkthrough and exact local test steps](../docs/features/symptom-intake.md)
 and [checkpoint evidence and limitations](../docs/evidence/pat-002-b-acceptance-2026-10-10.md).
 Migration 059 requires separate authorization before any remote application.
 
@@ -510,7 +510,7 @@ Message retries reuse a sender-scoped UUID key; a changed body or thread rejects
 reuse. Pagination uses `(created_at, id)`, and read markers advance only through
 the specified message. Browser database grants are intentionally absent; callers
 use the API. Message bodies must not be logged. See
-`../.agent/specs/com-001-two-way-conversations.md` for the full contract and rollout
+`../docs/features/messaging-and-alerts.md` for the full contract and rollout
 boundary. This is not authorization for real-PHI use or a clinical-readiness claim.
 
 Run the isolated database contract suite with synthetic CI settings and an
@@ -549,7 +549,7 @@ authorize changing them.
 
 The role-scoped `/api/v1/notification-centre` API presents saved events and
 current clinician work; its read operations never perform clinical approval.
-See [the notification contract](../.agent/specs/not-001-notification-centre.md)
+See [the notification contract](../docs/features/messaging-and-alerts.md)
 for recipient rules, endpoints, migration/acceptance boundaries and portal behaviour.
 Short-lived actor-bound read snapshots contain exact receipt IDs, so a concurrent
 arrival is not consumed by a bulk read. Human conversation read markers remain
@@ -576,7 +576,7 @@ New clinic-scoped writes, all through `clinician_clinic_operation` and all audit
 the last clinic, `LAST_CLINIC`, and the only admin, `SOLE_ADMIN`; ends the caller's own care-team
 links and unused invite codes at that clinic), and `PUT /clinicians/me/clinics/{clinic_id}` (clinic
 display name, admin at that clinic only, `CLINIC_NAME_TAKEN`). Migration
-`067_clinic_lists_and_roles.sql` carries the SQL (applied October 17). See `.agent/specs/clin-003-multi-clinic-clinicians.md` for the design and decisions.
+`067_clinic_lists_and_roles.sql` carries the SQL (applied October 17). See `docs/features/clinics-and-care-teams.md` for the design and decisions.
 
 ### Structured logging and turn tracing (OPS-006 phase 1)
 
@@ -686,7 +686,7 @@ cd backend
 PYTHONPATH=src .venv/bin/python -m app.workers.health_knowledge_refresh
 ```
 
-Design, checks and failure behaviour: `.agent/specs/nora-002-grounded-answers.md`.
+Design, checks and failure behaviour: `docs/features/nora-chat.md`.
 
 Assigned clinicians may explicitly request
 `GET /smart/patients/{patient_id}/facts/{fact_id}/medication-reference` under
@@ -749,8 +749,9 @@ recorded rows only); assigned clinicians read
 reachable. No new configuration.
 
 `SYMPTOM_INTAKE_ENABLED=false` is the default. Migration 060 does not approve a library.
-The approved `candidate-1` is pinned in the manifest; revised `candidate-2` is pending
-genuine paired-locale review. Matching immutable database eligibility is required. Unavailability
+The manifest selects the active [question release](src/app/intake/question_library/README.md),
+and `scripts/publish_symptom_questions.py` publishes its matching immutable database eligibility,
+which is required. Unavailability
 never restores automatic report insertion. Source binding requires a new backend-saved
 Nora user turn with a session ID; old unbound transcript rows remain readable.
 
@@ -816,9 +817,9 @@ environment run the preflight before applying if the migration reports overlaps.
 
 ## Care plans per care team and the shared clinical core (PLAN-002, CLN-003 G/H)
 
-A care plan belongs to one care-team link (patient, clinician, clinic). Specification,
+A care plan belongs to one care-team link (patient, clinician, clinic). Rules,
 decisions, lock order, read-path audit and the API contract:
-[PLAN-002](../.agent/specs/plan-002-care-plans-per-care-team.md).
+[PLAN-002](../docs/features/care-plans-and-today.md).
 
 - **Migrations 083-087** (unapplied; never apply remote SQL without explicit authorization):
   plan ownership and per-plan versions (083), owned records, routed documents and the shared
@@ -844,8 +845,8 @@ decisions, lock order, read-path audit and the API contract:
 `GET /api/v1/ops/ai-availability?hours=24` (clinic admins) returns per workload and model attempt
 counts by outcome (success, timeout, 429, 5xx, circuit open, fallback) and p50/p95/p99 latency over
 a rolling window, from `ai_availability_buckets` (migration 090). Counters hold no patient data or
-text. Settings: `AI_AVAILABILITY_ENABLED`, `AI_AVAILABILITY_FLUSH_SECONDS`. See the AI runtime
-decision record.
+text. Settings: `AI_AVAILABILITY_ENABLED`, `AI_AVAILABILITY_FLUSH_SECONDS`. See
+[AI runtime and workers](../docs/features/ai-runtime-and-workers.md).
 
 ## Reviewed care-handoff summaries (CON-001)
 
@@ -858,7 +859,7 @@ approved version as a FHIR R4B document Bundle with Provenance. Storage is migra
 (append-only versions and audit events, `SECURITY DEFINER` functions for `service_role`
 only, optimistic versions, row locks). Only the approved current version exports, and every
 export is an audit event. Contract and decisions:
-[`.agent/specs/con-001-care-handoff-summary.md`](../.agent/specs/con-001-care-handoff-summary.md).
+[`docs/features/clinics-and-care-teams.md#handoff-summary`](../docs/features/clinics-and-care-teams.md#handoff-summary).
 Tests: `tests/unit/services/test_handoff_summary.py`,
 `tests/integration/routers/test_handoff_summaries_api.py`, and the opt-in Postgres contract
 `tests/integration/test_care_handoff_summaries_postgres.py` (CI shard `care-handoff`).
