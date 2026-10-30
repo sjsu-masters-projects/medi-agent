@@ -5,7 +5,7 @@ nothing else: no fallback, no time limit, and no answer for the case where the m
 slow, disabled, or wrong. Each of those gaps has cost us something measurable.
 
 The routing evidence and its limits are recorded in
-`docs/decisions/ai-runtime-2026-09.md`. The two finalists could not be separated on clinical
+`docs/features/ai-runtime-and-workers.md`. The two finalists could not be separated on clinical
 accuracy at the available sample size, so the primary for each workload is chosen on the
 properties that did separate them — latency, cost, recall on reconciliation, and whether the
 model honours an output schema.

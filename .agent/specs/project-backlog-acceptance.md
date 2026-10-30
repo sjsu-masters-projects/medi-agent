@@ -1,13 +1,13 @@
 # Project backlog — detailed acceptance requirements
 
-This is the required scope reference for issues that do not yet have a dedicated
-specification. Read the selected issue here **after TASKS.md and before editing**.
+This is the required scope reference for issues that do not yet have a
+[feature doc](../../docs/features/). Read the selected issue here **after TASKS.md and before editing**.
 The task board alone supplies current status, owner and priority; bullets here
 are requirements, not progress checkboxes. Existing implementations may satisfy
 part of them. Inspect code/tests before assuming a missing implementation.
 
-Dedicated specifications take precedence for PAT-005, SCH-001, COM-001-B,
-INT-002/003, LOC-001, NORA-002, NOT-001 and UX-002. Clinical safety requirements are not relaxed by the demo scope.
+The rules in [`docs/features/`](../../docs/features/) take precedence for PAT-005, SCH-001,
+COM-001-B, INT-002/003, LOC-001, NORA-002, NOT-001 and UX-002. Clinical safety requirements are not relaxed by the demo scope.
 The delivery target is a university expo with fictional patient and clinician
 accounts. No real-patient recruitment, professional-clinician recruitment, VC
 pitch or production certification is an acceptance gate. In-app clinician

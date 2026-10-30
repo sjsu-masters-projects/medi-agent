@@ -10,7 +10,7 @@ Every task that once routed to the retired medical-model experiment now routes t
 experiment was measured and dropped; its client also raised unless a dedicated endpoint was
 configured. Document parsing therefore already used the Flash fallback, while triage
 classification degraded without a recorded model response. The current decision and limits are
-in `docs/decisions/ai-runtime-2026-09.md`.
+in `docs/features/ai-runtime-and-workers.md`.
 """
 
 from __future__ import annotations

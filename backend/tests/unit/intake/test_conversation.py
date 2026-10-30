@@ -6,7 +6,7 @@ from tests.unit.intake.test_library import synthetic_bundle
 from tests.unit.intake.test_service import resolved_row, service
 
 from app.core.exceptions import ValidationError
-from app.intake.conversation import interpret, source_suggestions
+from app.intake.conversation import interpret, reports_no_other_products, source_suggestions
 from app.models.symptom_intake import IntakeReply
 
 
@@ -44,6 +44,66 @@ def test_product_name_is_testimony_not_a_medication_match():
     )
     with pytest.raises(ValidationError):
         interpret(synthetic_bundle().question("product"), "Yes")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "no",
+        "No.",
+        "nope",
+        "No, I'm not",
+        "No, I’m not",
+        "not really",
+        "nothing",
+        "no thanks",
+        "Nada",
+        "no gracias",
+        "No me preocupa",
+        "no, ninguno",
+    ],
+)
+def test_a_plain_no_never_becomes_a_product_name(text):
+    assert interpret(synthetic_bundle().question("product"), text) == (
+        "answered",
+        {"concern": False},
+    )
+
+
+@pytest.mark.parametrize(
+    "text", ["no, but maybe ibuprofen", "I don't think so", "creo que no", "not sure if it's that"]
+)
+def test_a_hedged_negative_asks_again_rather_than_recording_a_product(text):
+    with pytest.raises(ValidationError):
+        interpret(synthetic_bundle().question("product"), text)
+
+
+@pytest.mark.parametrize(
+    ("text", "name"),
+    [
+        ("yes, ibuprofen", "ibuprofen"),
+        ("Sí, ibuprofeno", "ibuprofeno"),
+        ("ibuprofen", "ibuprofen"),
+        ("Norvasc", "Norvasc"),
+        ("No-Doz", "No-Doz"),
+        ("Nobel vitamin", "Nobel vitamin"),
+    ],
+)
+def test_a_named_product_is_kept_without_a_leading_yes(text, name):
+    assert interpret(synthetic_bundle().question("product"), text) == (
+        "answered",
+        {"concern": True, "name": name},
+    )
+
+
+@pytest.mark.parametrize("text", ["none", "Nada", "no, ninguno", "ningún otro"])
+def test_no_other_products_is_recognized(text):
+    assert reports_no_other_products(text)
+
+
+@pytest.mark.parametrize("text", ["ibuprofen", "", None, 3])
+def test_named_other_products_are_not_treated_as_none(text):
+    assert not reports_no_other_products(text)
 
 
 def test_source_candidates_quote_explicit_values_only():

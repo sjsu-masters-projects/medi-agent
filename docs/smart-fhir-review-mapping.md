@@ -30,16 +30,16 @@ candidate and preserves the original resource envelope.
 
 | FHIR resource | Candidate type | Clinician-visible mapped fields | R2 canonical destination | Deliberately not inferred |
 | --- | --- | --- | --- | --- |
-| `Patient` | `patient_demographics` | name, birth date, administrative gender | None — comparison-only identity confirmation | identity match, account creation, local demographic overwrite |
-| `Encounter` | `encounter` | status, class, type, period | None — evidence-only | billing interpretation or care-team assignment |
-| `Condition` | `condition` | name, recognized ICD-10, clinical status | `conditions.name`, `icd10_code`, `status`, `notes` — selected fields only | diagnostic certainty beyond the source |
-| `AllergyIntolerance` | `allergy` | allergen, clinical status, criticality, reactions, reaction severity | `allergies.allergen`, `reaction`, `severity` — selected fields only | severity from FHIR criticality; a missing severity becomes `unknown` |
+| `Patient` | `patient_demographics` | name, birth date, administrative gender | None: comparison-only identity confirmation | identity match, account creation, local demographic overwrite |
+| `Encounter` | `encounter` | status, class, type, period | None: evidence-only | billing interpretation or care-team assignment |
+| `Condition` | `condition` | name, recognized ICD-10, clinical status | `conditions.name`, `icd10_code`, `status`, `notes`: selected fields only | diagnostic certainty beyond the source |
+| `AllergyIntolerance` | `allergy` | allergen, clinical status, criticality, reactions, reaction severity | `allergies.allergen`, `reaction`, `severity`: selected fields only | severity from FHIR criticality; a missing severity becomes `unknown` |
 | `MedicationRequest`, `MedicationStatement` | `medication` | name, RxCUI, dosage, frequency, route, instructions, dates, status | `medications` selected fields; source status can become `is_active` only when known | automatic prescription reconciliation or reminder creation |
-| `Observation` | `observation` | code, quantity or coded value, effective time, status, interpretation, reference range | None — evidence-only | trend or clinical interpretation |
-| `DiagnosticReport` | `diagnostic_report` | report code, conclusion, status, effective and issued times, result count | None — evidence-only | a diagnosis based on report text |
-| `Procedure` | `procedure` | procedure code, status, performed time, reason, body site | None — evidence-only | outcome or follow-up plan |
-| `CarePlan` | `care_plan` | title/category, narrative description, status, intent, period, activities, addressed conditions | None — evidence-only | acceptance as a local plan of care or an obligation |
-| `DocumentReference` | `document_reference` | type, description, date, status, authors, content types | None — evidence-only | document download, OCR, or new local document storage |
+| `Observation` | `observation` | code, quantity or coded value, effective time, status, interpretation, reference range | None: evidence-only | trend or clinical interpretation |
+| `DiagnosticReport` | `diagnostic_report` | report code, conclusion, status, effective and issued times, result count | None: evidence-only | a diagnosis based on report text |
+| `Procedure` | `procedure` | procedure code, status, performed time, reason, body site | None: evidence-only | outcome or follow-up plan |
+| `CarePlan` | `care_plan` | title/category, narrative description, status, intent, period, activities, addressed conditions | None: evidence-only | acceptance as a local plan of care or an obligation |
+| `DocumentReference` | `document_reference` | type, description, date, status, authors, content types | None: evidence-only | document download, OCR, or new local document storage |
 
 Unsupported resource types are preserved in the import envelope with a warning
 but do not create a candidate fact. Missing or partial source fields are shown
@@ -172,7 +172,7 @@ The collection and its resources are validated with the installed R4B models,
 using R4-compatible fields. Re-import is candidate-only and never reapplies an
 approval, changes reminders or modifies a plan. Raw evidence remains available
 through the existing source inspection and reviewed handoff export is a separate
-workflow. See the [completion contract](../.agent/specs/int-002-003-interoperability-plan.md#october-22-completion-scope).
+workflow. See the [completion contract](features/patient-records.md).
 
 ## Standards references
 

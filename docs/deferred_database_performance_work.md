@@ -16,4 +16,5 @@ profile validation before they are changed:
 
 The `vector` extension remains in `public`. Its only user is the retired
 `drug_knowledge_chunks` table and `match_drug_knowledge_chunks` function (migrations 015
-and 020); drop the extension with that table in the planned cleanup migration (MED-001).
+and 020). Application code no longer reads them. No migration drops them yet, and none is
+scheduled: drop the extension together with that table if a cleanup migration is authorized.

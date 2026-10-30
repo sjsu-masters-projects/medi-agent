@@ -30,9 +30,9 @@ demo with fictional data, not for any production claim.
 
 Row (TASKS.md:253): "Beyond private threads: opt-in administrative delivery/retry/operations
 and care-gap tasks; shared clinic inbox separately scoped." Linked specs:
-[`com-001-two-way-conversations.md`](com-001-two-way-conversations.md) (covers COM-001-B only),
-`project-backlog-acceptance.md` § COM-001, [`email-001-email-flows.md`](email-001-email-flows.md),
-[`not-001-notification-centre.md`](not-001-notification-centre.md).
+[`com-001-two-way-conversations.md`](../features/messaging-and-alerts.md) (covers COM-001-B only),
+`project-backlog-acceptance.md` § COM-001, [`email-001-email-flows.md`](../features/messaging-and-alerts.md),
+[`not-001-notification-centre.md`](../features/messaging-and-alerts.md).
 
 | Requirement (backlog § COM-001) | Shipped? and evidence | Gap | Size | Owner / lane | Expo? |
 | --- | --- | --- | --- | --- | --- |
@@ -95,8 +95,8 @@ route; feature guards/audit exist." Spec: `project-backlog-acceptance.md` § SAF
 Row (TASKS.md:260): "Synthetic rule/wording tests and durable per-turn rule/outcome audit;
 no professional recruitment required and no clinical-validation claim." There is no dedicated
 SAFE-002 spec; references are `project-backlog-acceptance.md:191`,
-[`nora-002-grounded-answers.md`](nora-002-grounded-answers.md#safety-review-and-live-evidence-2026-10-11)
-and [`../docs/decisions/ai-runtime-2026-09.md`](../../docs/decisions/ai-runtime-2026-09.md) (control 1, line 43).
+[`nora-002-grounded-answers.md`](../features/nora-chat.md)
+and [`../docs/features/ai-runtime-and-workers.md`](../features/ai-runtime-and-workers.md) (control 1, line 43).
 
 | Requirement | Shipped? and evidence | Gap | Size | Owner / lane | Expo? |
 | --- | --- | --- | --- | --- | --- |

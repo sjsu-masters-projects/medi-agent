@@ -163,7 +163,7 @@ UI review evidence: `docs/evidence/portal-ui-ux-review-2026-10-10.md`.
 
 The reference-led patient redesign is tracked in
 [UX-002 verification](../../docs/evidence/ux-002-overhaul-verification.md) and the
-[redesign spec](../../.agent/specs/ux-002-reference-redesign.md).
+[portal design](../../docs/features/portal-design.md).
 It keeps clinical wording and service contracts unchanged; a confirmed completion
 may show brief visual feedback, while failed/uncertain saves and reduced motion
 do not. Refresh buttons remain available alongside pull-to-refresh. Nora keeps
@@ -211,7 +211,7 @@ list visible; a saved response followed by a failed refresh has a distinct notic
 Visits refreshes at pending deadlines and on browser focus. The server/database
 remains authoritative for expiry and booking conflicts.
 
-See [the scheduling design](../../.agent/specs/sch-001-appointment-scheduling.md#14-slice-5--booking-conflicts-and-proposal-expiry)
+See [the scheduling design](../../docs/features/scheduling.md)
 for the synthetic acceptance steps.
 
 Confirmed/scheduled cards now include **Add to calendar / Agregar al calendario**.
@@ -220,7 +220,7 @@ Each click checks the current appointment and authorization before downloading a
 clinical reasons and notes are omitted. It is a one-time copy: later changes and
 cancellations do not sync, and the calendar app uses its own display timezone.
 Failed downloads keep the visit list visible with a translated retry notice.
-See [Slice 6 verification and click-through](../../.agent/specs/sch-001-appointment-scheduling.md#15-slice-6--one-time-calendar-export).
+See [Slice 6 verification and click-through](../../docs/features/scheduling.md).
 
 ## In-app notifications
 
@@ -235,7 +235,7 @@ One shared cache refreshes once a minute while visible and on focus, preserving
 lists after network failure. Unavailable counts are not shown as zero. Each loaded
 page retains a server-signed viewing cutoff; marking displayed items read excludes
 concurrent arrivals. No new email, SMS or push delivery is introduced. See
-[NOT-001](../../.agent/specs/not-001-notification-centre.md) for the contract and tests.
+[NOT-001](../../docs/features/messaging-and-alerts.md) for the contract and tests.
 
 ## Clinic on visits and notifications
 
@@ -333,8 +333,8 @@ private TTS has no chat message ID. Late recordings cannot answer a different
 revision. Detailed fields remain available as a fallback. Read the preview, select
 consent and press **Confirm and share**; spoken assent never submits it.
 
-Approved `candidate-1` remains active. Revised `candidate-2` wording/applicability is
-pending genuine review and cannot activate yet. The checksum-pinned, applied
+The backend chooses the active
+[question release](../../backend/src/app/intake/question_library/README.md). The checksum-pinned, applied
 `071_confirmed_symptom_handoff.sql` adds durable ADR and review notices; the existing
 retry worker must run. Follow the
 [October 17 verification record](../../docs/evidence/pat-002-b-acceptance-2026-10-17.md) and

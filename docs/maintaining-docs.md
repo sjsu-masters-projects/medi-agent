@@ -10,8 +10,9 @@ and test evidence each have one maintained home.
 | --- | --- | --- |
 | How do I start locally? | Setup guide | README and `docs/development.md` |
 | How do I perform a specific operation? | Task guide | Existing operating guide under `docs/` |
-| What are the fields, contracts and limits? | Reference | App/backend READMEs and linked specifications |
-| Why does the system work this way? | Explanation | `.agent/ARCHITECTURE.md` and `docs/decisions/` |
+| What are the fields, contracts and limits? | Reference | App/backend READMEs |
+| What does a feature do, and what must it keep doing? | Feature doc | `docs/features/` |
+| Why does the system work this way? | Explanation | `.agent/ARCHITECTURE.md` and the feature doc |
 | What remains to be delivered? | Task board | `.agent/TASKS.md` |
 | What was actually verified? | Evidence | `docs/evidence/` |
 
@@ -30,6 +31,8 @@ stable when scripts or contributor instructions depend on them.
   and permission boundary. Do not include credentials or production data.
 - Link to configuration templates instead of duplicating variable defaults.
 - Link to status and evidence rather than copying volatile task lists into guides.
+- Keep guides as procedures. Test counts, "applied on" notes, PR progress and session
+  checkpoints go in `docs/evidence/`; the guide links to them.
 
 ## Diagrams
 
@@ -45,9 +48,18 @@ and [Mermaid accessibility guidance](https://mermaid.js.org/config/accessibility
 
 ## Retire or move a document
 
-Keep active specifications, repeatable operating procedures, unresolved decisions
-and evidence needed to judge acceptance. A completed implementation does not make
-its requirements disposable.
+Keep repeatable operating procedures, unresolved decisions and evidence needed to judge
+acceptance.
+
+A specification is temporary. Write one under `.agent/specs/` only for work being built. When
+the feature ships, move what code cannot explain into its doc under `docs/features/`: the rules
+it must keep, why they exist, the options rejected and what was ruled out. Anything unbuilt goes
+under that doc's "Still open". Then delete the specification. The same applies to a decision
+record once its choice is settled.
+
+A feature doc describes current behavior only, with no status, PR numbers, test counts or dated
+progress. Update it in the same change that alters the behavior. If a doc and the code disagree
+on a safety rule, treat that as a bug to raise, not a wording fix.
 
 Before removal, move unique, still-useful information into its maintained source.
 Then remove the redundant document and repair inbound links. Git preserves the old
@@ -70,7 +82,7 @@ code-fence balance. It does not fetch external URLs, run setup commands or prove
 Mermaid rendering. Parse and inspect changed diagrams separately.
 
 1. Confirm every local file link and heading anchor resolves, including inbound links
-   from specifications and app READMEs.
+   from feature docs and app READMEs.
 2. Parse and render changed Mermaid blocks. Inspect wrapping, contrast and arrows.
 3. Verify setup commands against scripts, manifests and configuration loading code.
 4. Search edited guides for em dashes, credentials, unsupported claims and stale status.

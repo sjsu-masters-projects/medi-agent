@@ -41,7 +41,7 @@ failure leaves the prior preference unchanged. Entry screens have a separate
 guest choice before a profile exists. Chat no longer owns a competing preference.
 
 Clinician controls remain English. Superseded by
-[LOC-001](../../.agent/specs/loc-001-bilingual-approved-wording.md): care-plan wording is
+[LOC-001](../features/language.md): care-plan wording is
 approved in English and Spanish together, so a language switch changes Today and
 Reminders without new review. Historical messages keep the language they were written
 in, and older single-language records are labelled with their language. The language

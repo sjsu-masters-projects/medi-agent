@@ -14,7 +14,7 @@ take precedence. No requirement is closed or reopened by this move.
 - [x] Today and Reminders render approved wording in the saved language with identical completion state; reminder scheduling is unchanged.
 - [x] Older single-language items are labelled with their language instead of mixing silently.
 - [x] Existing plans refreshed by review only: open draft translated, approved single-language plan re-drafted; no approved row edited.
-- [x] Local checks (backend, PostgreSQL contract, both portals and builds) and synthetic-environment verification ([evidence](../../.agent/specs/loc-001-bilingual-approved-wording.md#verification--2026-10-10-synthetic-environment)).
+- [x] Local checks (backend, PostgreSQL contract, both portals and builds) and synthetic-environment verification ([evidence](../features/language.md)).
 - [x] Record titles: drafted per language from the existing summary/topics (no numbers, no patient name, bounded attempts); Records and clinician lists show them with the file name kept; missing column tolerated before migration 050.
 - [x] Clinician patient detail shows approved English wording; reconciliation still compares source text.
 - [x] Migration 050 applied (authorized); worker backfill titled 18/18 eligible documents; Records (English) and clinician Documents verified in the browser. Spanish titles verified in data, not yet through a saved-language switch.

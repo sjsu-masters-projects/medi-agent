@@ -2,7 +2,7 @@
  * Care plans per care team (PLAN-002, CLN-003 slices G and H).
  *
  * Mirrors the JSON the backend returns (snake_case) for the endpoints documented in
- * `.agent/specs/plan-002-care-plans-per-care-team.md#api-contract-pr-210`.
+ * `docs/features/care-plans-and-today.md#api-contract`.
  */
 
 export type PlanOwnershipState = "owned" | "unowned" | "unassigned_legacy";

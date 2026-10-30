@@ -108,6 +108,20 @@ def _load_library(version: str | None = None) -> Bundle:
     return bundle
 
 
+def version_label(version: str | None) -> str | None:
+    """The name people see. The first release keeps its stored identifier, `candidate-1`,
+    because existing intakes and reports reference it, but it is displayed as `v1`."""
+    if not version:
+        return version
+    try:
+        manifest = json.loads(
+            (Path(__file__).parent / "question_library/manifest.json").read_text()
+        )
+        return str(manifest["bundles"][version]["label"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return version
+
+
 def select_question(bundle: Bundle, answers: dict[str, Any]) -> Question | None:
     for question in bundle.questions[: bundle.budget]:
         if question.id in answers:

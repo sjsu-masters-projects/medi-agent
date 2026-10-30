@@ -49,7 +49,7 @@ Install the clinician portal's locked dependencies first for the TypeScript pars
 | [apps/patient-portal/src/components/features/nora-conversations.tsx](../apps/patient-portal/src/components/features/nora-conversations.tsx) | `017df3a9f82e7ff9eaf1910f08129969133aba6e8cd7e0f03a85558f14a9d3c9` |
 | [packages/shared/src/utils/care-conversations.ts](../packages/shared/src/utils/care-conversations.ts) | `283f87a82d5ba91f6e0430b1a9a37e25f874197105661317a8089f798b6010b5` |
 | [backend/src/app/services/notification_centre_presentation.py](../backend/src/app/services/notification_centre_presentation.py) | `41387d20c93bc080df0e7bcfd048e9818c74782678c9533778d917c3ed3f89bd` |
-| [backend/src/app/services/symptom_report_presenter.py](../backend/src/app/services/symptom_report_presenter.py) | `0933ef4a7c4ad8b67120be941b9661105f081b01696f82c8c6e3ccefc00284f6` |
+| [backend/src/app/services/symptom_report_presenter.py](../backend/src/app/services/symptom_report_presenter.py) | `4cad3069d39cb12c334daa698b27b18bcc489fb0241b3934a7e7a98b123b8711` |
 | [backend/src/app/services/appointment_calendar.py](../backend/src/app/services/appointment_calendar.py) | `321826d7839e1e15f867e02cebfc8555c71a95cf9ff030825f5ea4d7ed7bb569` |
 | [backend/src/app/services/email_service.py](../backend/src/app/services/email_service.py) | `8ff3f52ed394057bfb4e9121b2fb65523939ec5cc5a18de97b0770a049b328bb` |
 
@@ -672,31 +672,31 @@ across screens; do not infer that similar strings have the same clinical context
 | backend/src/app/services/notification_centre_presentation.py:178 / `_QUESTION_WORDING.reappeared_on_rechallenge.0` | Whether the symptom came back after restarting this medicine | Si el síntoma volvió después de reiniciar este medicamento |
 | backend/src/app/services/notification_centre_presentation.py:178 / `_QUESTION_WORDING.dose_response.0` | Whether the symptom changed after a dose change your clinician directed | Si el síntoma cambió después de un cambio de dosis indicado por tu profesional de salud |
 | backend/src/app/services/notification_centre_presentation.py:178 / `_QUESTION_WORDING.similar_previous_reaction.0` | Whether you have had a similar reaction to this medicine before | Si has tenido antes una reacción similar a este medicamento |
-| backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.description` | What happened | Qué pasó |
-| backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.location` | Where | Dónde |
-| backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.onset` | When it started | Cuándo empezó |
-| backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.duration` | How long | Cuánto tiempo |
-| backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.course` | How it has changed | Cómo ha cambiado |
-| backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.severity` | Severity (0 to 10) | Intensidad (0 a 10) |
-| backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.associated` | Other symptoms | Otros síntomas |
-| backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.red_flags` | Warning signs | Señales de alerta |
-| backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.product` | Product involved | Producto involucrado |
-| backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.concomitant` | Other products | Otros productos |
-| backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.history` | Related history | Antecedentes relacionados |
-| backend/src/app/services/symptom_report_presenter.py:20 / `_LABELS.outcome` | Outcome so far | Resultado hasta ahora |
-| backend/src/app/services/symptom_report_presenter.py:50 / `_PRODUCT_LABELS.concern` | Product concern | Preocupación por un producto |
-| backend/src/app/services/symptom_report_presenter.py:50 / `_PRODUCT_LABELS.name` | Product | Producto |
-| backend/src/app/services/symptom_report_presenter.py:50 / `_PRODUCT_LABELS.strength` | Strength | Concentración |
-| backend/src/app/services/symptom_report_presenter.py:50 / `_PRODUCT_LABELS.dose` | Dose | Dosis |
-| backend/src/app/services/symptom_report_presenter.py:50 / `_PRODUCT_LABELS.route` | Route | Vía |
-| backend/src/app/services/symptom_report_presenter.py:50 / `_PRODUCT_LABELS.indication` | Reason for use | Motivo de uso |
-| backend/src/app/services/symptom_report_presenter.py:50 / `_PRODUCT_LABELS.start` | Start | Inicio |
-| backend/src/app/services/symptom_report_presenter.py:50 / `_PRODUCT_LABELS.stop` | Stop | Suspensión |
-| backend/src/app/services/symptom_report_presenter.py:50 / `_PRODUCT_LABELS.change` | Change | Cambio |
-| backend/src/app/services/symptom_report_presenter.py:74 / `_UNRESOLVED.unknown` | I don’t know | No sé |
-| backend/src/app/services/symptom_report_presenter.py:74 / `_UNRESOLVED.declined` | Prefer not to answer | Prefiero no responder |
-| backend/src/app/services/symptom_report_presenter.py:78 / `_YES_NO.0` | Yes | Sí |
-| backend/src/app/services/symptom_report_presenter.py:78 / `_YES_NO.1` | No | No |
+| backend/src/app/services/symptom_report_presenter.py:21 / `_LABELS.description` | What happened | Qué pasó |
+| backend/src/app/services/symptom_report_presenter.py:21 / `_LABELS.location` | Where | Dónde |
+| backend/src/app/services/symptom_report_presenter.py:21 / `_LABELS.onset` | When it started | Cuándo empezó |
+| backend/src/app/services/symptom_report_presenter.py:21 / `_LABELS.duration` | How long | Cuánto tiempo |
+| backend/src/app/services/symptom_report_presenter.py:21 / `_LABELS.course` | How it has changed | Cómo ha cambiado |
+| backend/src/app/services/symptom_report_presenter.py:21 / `_LABELS.severity` | Severity (0 to 10) | Intensidad (0 a 10) |
+| backend/src/app/services/symptom_report_presenter.py:21 / `_LABELS.associated` | Other symptoms | Otros síntomas |
+| backend/src/app/services/symptom_report_presenter.py:21 / `_LABELS.red_flags` | Warning signs | Señales de alerta |
+| backend/src/app/services/symptom_report_presenter.py:21 / `_LABELS.product` | Product involved | Producto involucrado |
+| backend/src/app/services/symptom_report_presenter.py:21 / `_LABELS.concomitant` | Other products | Otros productos |
+| backend/src/app/services/symptom_report_presenter.py:21 / `_LABELS.history` | Related history | Antecedentes relacionados |
+| backend/src/app/services/symptom_report_presenter.py:21 / `_LABELS.outcome` | Outcome so far | Resultado hasta ahora |
+| backend/src/app/services/symptom_report_presenter.py:51 / `_PRODUCT_LABELS.concern` | Product concern | Preocupación por un producto |
+| backend/src/app/services/symptom_report_presenter.py:51 / `_PRODUCT_LABELS.name` | Product | Producto |
+| backend/src/app/services/symptom_report_presenter.py:51 / `_PRODUCT_LABELS.strength` | Strength | Concentración |
+| backend/src/app/services/symptom_report_presenter.py:51 / `_PRODUCT_LABELS.dose` | Dose | Dosis |
+| backend/src/app/services/symptom_report_presenter.py:51 / `_PRODUCT_LABELS.route` | Route | Vía |
+| backend/src/app/services/symptom_report_presenter.py:51 / `_PRODUCT_LABELS.indication` | Reason for use | Motivo de uso |
+| backend/src/app/services/symptom_report_presenter.py:51 / `_PRODUCT_LABELS.start` | Start | Inicio |
+| backend/src/app/services/symptom_report_presenter.py:51 / `_PRODUCT_LABELS.stop` | Stop | Suspensión |
+| backend/src/app/services/symptom_report_presenter.py:51 / `_PRODUCT_LABELS.change` | Change | Cambio |
+| backend/src/app/services/symptom_report_presenter.py:75 / `_UNRESOLVED.unknown` | I don’t know | No sé |
+| backend/src/app/services/symptom_report_presenter.py:75 / `_UNRESOLVED.declined` | Prefer not to answer | Prefiero no responder |
+| backend/src/app/services/symptom_report_presenter.py:79 / `_YES_NO.0` | Yes | Sí |
+| backend/src/app/services/symptom_report_presenter.py:79 / `_YES_NO.1` | No | No |
 | backend/src/app/services/appointment_calendar.py:12 / `_COPY.0` | MediAgent appointment | Cita de MediAgent |
 | backend/src/app/services/appointment_calendar.py:12 / `_COPY.1` | This is a one-time calendar copy. Changes and cancellations do not sync. Check MediAgent for the latest appointment details. | Esta es una copia única para tu calendario. Los cambios y las cancelaciones no se sincronizan. Consulta MediAgent para ver los datos actuales de la cita. |
 | backend/src/app/services/appointment_calendar.py:12 / `_COPY.2` | Clinic | Clínica |
@@ -717,5 +717,5 @@ across screens; do not infer that similar strings have the same clinical context
 Stored care-plan wording, historical human messages, question-library content and
 generated clinical translations require their own source-linked review. They are
 not replaced by this interface pack. Existing clinical safety copy is unchanged.
-The linked [LOC-001 contract](../.agent/specs/loc-001-bilingual-approved-wording.md)
+The linked [LOC-001 contract](features/language.md)
 owns approval semantics; [the task board](../.agent/TASKS.md) owns current status.

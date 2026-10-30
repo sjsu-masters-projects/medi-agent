@@ -135,5 +135,5 @@ The existing reset script cannot delete fixture patients with offer events; do n
 that reset after exercising grouped offers in a shared environment. Use the existing
 fixture without resetting, or a fresh isolated demo database. A purge/reset path for
 this audit history requires a separate retention review. Single-slot fixtures remain
-unchanged. See the scheduling design in `.agent/specs/sch-001-appointment-scheduling.md`
+unchanged. See the scheduling design in `docs/features/scheduling.md`
 for the grouped-offer API and manual acceptance steps.
