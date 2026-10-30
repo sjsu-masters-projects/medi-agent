@@ -102,7 +102,9 @@ permission, review-gate or clinical-wording change.
 Both portals: lint, typecheck, full unit suites and webpack production builds.
 Tests that asserted the old noisy text are updated to the new copy; new tests
 cover the error mapping, label maps, Technical details placement and saved-time-
-zone chat times. New es-MX strings are drafts for LOC-001 review. Visual review at
+zone chat times. The changed static es-MX pairs were reviewed October 30 under the
+accepted project method; [wording evidence](../../docs/evidence/ux-007-spanish-review-2026-10-30.md)
+and the exact-source receipt record the limited scope. Visual review at
 patient 360px and clinician 1280px and deployed acceptance remain.
 
 ## October 30 local review
@@ -126,4 +128,6 @@ merged. Preserve source uncertainty as well as the simpler wording:
   separately because the link cannot yet open that page directly.
 
 No backend, migration, access or approval behavior is added by this review. Existing
-Spanish wording and the added field labels remain drafts for LOC-001 review.
+Spanish wording and added field labels subsequently received the October 30
+interface wording review linked above; generated clinical translations remain
+outside that acceptance.

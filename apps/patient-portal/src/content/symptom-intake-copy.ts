@@ -19,7 +19,7 @@ const en = {
     reported: "What you reported", context: "Relevant information from your record", summary: "Summary for your care team", emptyContext: "No relevant record context was used.",
     saved: "Report saved for care-team review", cancelled: "Draft cancelled. Your chat history was not deleted.",
     interrupted: "Intake interrupted for safety", pending: "The safety save could not be verified.",
-    // UX-007 wording (timezone, fallback, recordDetail, factLabels): es-MX drafts pending LOC-001 review.
+    // UX-007 interface labels: see the October 30 wording review and paired receipt.
     timezone: "Times use", fallback: "Your saved time zone is unavailable. Times are shown in UTC.", progress: "Questions resolved", value: "Your answer",
     recordDetail: "Record detail",
     factFieldLabels: { name: "Name", test_name: "Test", amount: "Amount", value: "Result", unit: "Unit", reference_range: "Report range", flag: "Report flag", observed_at: "Date measured", dose: "Dose", dosage: "Dose", frequency: "How often", route: "How taken", instructions: "Instructions", description: "Description", status: "Status", start_date: "Start date", end_date: "End date", allergen: "Allergen", reaction: "Reaction", severity: "Severity", notes: "Notes", systolic: "Systolic pressure", diastolic: "Diastolic pressure" } as Record<string, string>,
@@ -46,9 +46,9 @@ const es: typeof en = {
     reported: "Lo que reportaste", context: "Información relevante de tu expediente", summary: "Resumen para tu equipo clínico", emptyContext: "No se usó información relevante del expediente.",
     saved: "Reporte guardado para revisión del equipo clínico", cancelled: "Borrador cancelado. No se eliminó tu historial del chat.",
     interrupted: "Captura interrumpida por seguridad", pending: "No se pudo verificar el guardado de seguridad.",
-    timezone: "Los horarios usan", fallback: "Tu zona horaria guardada no está disponible. Los horarios se muestran en UTC.", progress: "Preguntas resueltas", value: "Tu respuesta",
+    timezone: "Los horarios se muestran en", fallback: "Tu zona horaria guardada no está disponible. Los horarios se muestran en UTC.", progress: "Preguntas resueltas", value: "Tu respuesta",
     recordDetail: "Dato del expediente",
-    factFieldLabels: { name: "Nombre", test_name: "Prueba", amount: "Cantidad", value: "Resultado", unit: "Unidad", reference_range: "Rango del informe", flag: "Marca del informe", observed_at: "Fecha de medición", dose: "Dosis", dosage: "Dosis", frequency: "Frecuencia", route: "Vía de administración", instructions: "Indicaciones", description: "Descripción", status: "Estado", start_date: "Fecha de inicio", end_date: "Fecha de término", allergen: "Alérgeno", reaction: "Reacción", severity: "Intensidad", notes: "Notas", systolic: "Presión sistólica", diastolic: "Presión diastólica" },
+    factFieldLabels: { name: "Nombre", test_name: "Prueba", amount: "Cantidad", value: "Resultado", unit: "Unidad", reference_range: "Rango del informe", flag: "Indicador del informe", observed_at: "Fecha de medición", dose: "Dosis", dosage: "Dosis", frequency: "Frecuencia", route: "Vía de administración", instructions: "Indicaciones", description: "Descripción", status: "Estado", start_date: "Fecha de inicio", end_date: "Fecha de término", allergen: "Alérgeno", reaction: "Reacción", severity: "Gravedad", notes: "Notas", systolic: "Presión sistólica", diastolic: "Presión diastólica" },
     factLabels: { medication: "Medicamento", dose: "Dosis", allergy: "Alergia", condition: "Condición", lab_result: "Resultado de prueba", vital_sign: "Medición", immunization: "Vacuna", procedure: "Procedimiento", appointment: "Cita", instruction: "Indicación", obligation: "Indicación" },
     yes: "Sí", no: "No", productConcern: "Me preocupa algún medicamento u otro producto", name: "Nombre del producto", strength: "Concentración", dose: "Dosis", route: "Vía",
     indication: "Motivo de uso", startDate: "Inicio (tus palabras)", stop: "Suspensión (tus palabras)", change: "Cambio (tus palabras)",

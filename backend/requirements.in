@@ -42,6 +42,8 @@ litellm>=1.101.3
 # google-adk -> authlib; email-validator -> dnspython; the document/NLP stack
 # brings filelock and setuptools. Keep these floors through future lock rebuilds.
 authlib>=1.9.1
+# SEC-004 follow-up: Authlib's JOSE dependency, CVE-2026-119284.
+joserfc>=1.7.6
 dnspython>=2.9.0
 filelock>=4.2.1
 setuptools>=84.1.0

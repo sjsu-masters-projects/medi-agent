@@ -45,3 +45,12 @@ and six cache PostgreSQL cases to execute successfully, with no skips.
 This is dependency maintenance, not production or clinical certification. Final
 backend compatibility results and the updated PR run are recorded in the task board
 and dated evidence once verification completes.
+
+## October 30 follow-up — PR #232
+
+The fresh audit reports CVE-2026-119284 in transitive `joserfc` 1.7.5 and requires
+1.7.6. Add that floor, regenerate both locks with the pinned resolver, verify that
+only this version changes, repeat the compile unchanged, and run the unchanged
+blocking audit with only the existing SEC-003 exception. Validate the full backend
+suite under the updated lock and verify remote CI; no audit bypass or remote
+deployment is authorized. [Failing job](https://github.com/sjsu-masters-projects/medi-agent/actions/runs/41115572887/job/124268798884).

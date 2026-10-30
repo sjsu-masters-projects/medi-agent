@@ -88,7 +88,7 @@ const spanish: Record<string, string> = {
     "La explicación de este documento no está disponible por ahora. Tu documento y tus registros se conservan. Tu equipo de atención puede solicitarla de nuevo.",
   "There are no saved details from this document to explain. You can still open the original document above or ask your care team about it.":
     "No hay datos guardados de este documento para explicar. Puedes abrir el original o consultar a tu equipo de atención.",
-  // UX-007 draft, pending LOC-001 review.
+  // UX-007 interface wording reviewed October 30; source wording is unchanged.
   "Original file": "Archivo original",
   "The plain-language explanation is still being prepared. You can read the original document above and check back shortly.":
     "La explicación aún se está preparando. Puedes leer el documento original y volver más tarde.",

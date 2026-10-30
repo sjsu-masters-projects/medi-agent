@@ -162,3 +162,17 @@ This closes the language meaning-and-safety review for the exact paired interfac
 snapshot. It does not establish deployed rendering, narrow-screen wrapping,
 physical voice/device behavior, bilingual generated clinical content, an expo
 rehearsal or clinical safety qualification. Those remain their own tasks.
+
+
+## Addendum: UX-007 interface wording (October 30)
+
+The [UX-007 review](ux-007-spanish-review-2026-10-30.md) compares all 37 changed/new
+paired rows (34 distinct pairs) in symptom context and explicitly reviews six
+additional contexts outside the inventory. Timezone, report-flag and severity
+wording were corrected before acceptance. The paired inventory now contains 685
+rows; the other 13 inventoried source files retain their accepted checksums.
+
+The receipt was renewed after the meaning-and-safety comparison, using the existing
+requester-accepted project review method. This does not approve generated clinical
+wording, stored records or care plans, and is not professional translation or
+independent peer review. Visual and deployed acceptance remain open.
