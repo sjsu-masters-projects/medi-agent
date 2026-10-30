@@ -31,12 +31,9 @@ reset/seed data or implement ADR follow-up.
    filename/checksum only on successful commit. Never print the connection string. Do not
    execute a locally modified migration runner that embeds credentials. Inspect its
    committed source or use a clean checkout.
-2. Keep the existing approved `candidate-1` immutable. Review the exact paired
-   `candidate-2` package and [review record](../backend/src/app/intake/question_library/candidate-2-review.md)
-   before recording any approval or selecting it. New applicability and severity
-   wording cannot inherit candidate-1 approval. Publish matching version/hash/
-   actual approval metadata only with authorization for that eligibility write.
-   Existing drafts keep their pinned version.
+2. Follow the [question release process](../backend/src/app/intake/question_library/README.md).
+   Publish the active version with `scripts/publish_symptom_questions.py` only with
+   authorization for that eligibility write. Existing drafts keep their pinned version.
 3. Authorize backend and portal deployment separately. Drain old backend
    instances/direct report writers: migration 060 blocks unconfirmed insertion.
    Do not restore automatic insertion to work around a disabled feature.
@@ -72,5 +69,6 @@ state through the existing operational path; never fabricate successful processi
 
 ## Question library state
 
-`candidate-1` is the active approved library. `candidate-2` stays inactive until its wording
-is reviewed. A passing test or a SQL change does not approve a question bundle.
+v2 is the active release and v1 stays available for pinned drafts and reports. The
+[question release process](../backend/src/app/intake/question_library/README.md) records each
+release and its approval. A passing test or a SQL change does not approve a question bundle.

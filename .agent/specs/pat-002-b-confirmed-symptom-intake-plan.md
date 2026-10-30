@@ -1106,7 +1106,7 @@ No migration, clinical report, library approval or broader turn-recovery task is
 
 The requester reported that Ganesh Thampi reviewed and approved the unchanged
 paired-locale `candidate-1` package on October 12. The
-[versioned approval record](../../backend/src/app/intake/question_library/candidate-1-review.md#requester-reported-approval)
+[versioned approval record](../../backend/src/app/intake/question_library/v1-review.md#requester-reported-approval)
 states the provenance and exact canonical hash without asserting a separate reviewer
 signature, itemized findings or GitHub PR approval. The manifest now selects that
 version; matching eligibility was published through the deployment-only RPC after
@@ -1143,9 +1143,9 @@ assigned-clinician review notice; emergency and urgent handling stay independent
 Unlisted products remain labelled patient testimony and never modify medications.
 Reuse the existing ADR workspace; do not implement its separate follow-up lifecycle.
 
-`candidate-1` remains immutable. `candidate-2` is a pending-review draft that asks
-about concomitant products for every symptom and adds severity anchors. Its exact
-paired wording/hash needs genuine approval before live activation. Applied 059/060
+The first release stays immutable under its stored version `candidate-1`. Release v2 asks
+about concomitant products for every symptom and adds severity anchors; see the
+[release process](../../backend/src/app/intake/question_library/README.md). Applied 059/060
 filenames/checksums remain fixed; additional SQL is additive and tested locally.
 
 Run owning API/service, real PostgreSQL transaction/permission and portal tests,

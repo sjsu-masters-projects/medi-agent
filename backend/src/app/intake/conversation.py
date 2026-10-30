@@ -34,6 +34,45 @@ DECLINED = {
     "omitir",
     "saltar",
 }
+# Plain replies meaning "no product concern". Anything else that opens with a negation asks
+# again: a sentence such as "no, but maybe ibuprofen" must never become a product name.
+NO_CONCERN = {
+    "no",
+    "nope",
+    "nah",
+    "none",
+    "nothing",
+    "not really",
+    "no concern",
+    "no concerns",
+    "no thanks",
+    "no thank you",
+    "no i'm not",
+    "no im not",
+    "i'm not",
+    "im not",
+    "not concerned",
+    "i'm not concerned",
+    "im not concerned",
+    "no medicine",
+    "no medicines",
+    "ninguno",
+    "ninguna",
+    "nada",
+    "no gracias",
+    "no me preocupa",
+    "no me preocupa nada",
+    "no estoy preocupado",
+    "no estoy preocupada",
+    "no ninguno",
+    "no ninguna",
+    "no nada",
+}
+HEDGED_NEGATION = re.compile(
+    r"^(no|not|nope|nah|i don't|i dont|i do not|creo que no|no creo|tal vez no|maybe not)\b(?!-)"
+)
+AFFIRMATION_PREFIX = re.compile(r"^\s*(?:yes|yeah|yep|s[ií])\s*[,:;.-]?\s+", re.IGNORECASE)
+NO_OTHER_PRODUCTS = NO_CONCERN | {"no other", "no others", "ningun otro", "ninguna otra"}
 NUMBERS = {
     word: value
     for value, words in enumerate(
@@ -77,13 +116,26 @@ def interpret(question: Question, text: str) -> tuple[str, Any]:
         if value in {"no"}:
             return "answered", False
     elif question.answer_type == "product":
-        if value in {"no", "none", "no concern", "ninguno", "ninguna"}:
+        plain = _without_punctuation(value)
+        if plain in NO_CONCERN:
             return "answered", {"concern": False}
-        # Keep an unstructured product reply exactly as reported. It cannot create
-        # a medication or imply a match; structured details remain explicitly editable.
-        if value not in {"yes", "si"} and len(text.strip()) <= 300:
-            return "answered", {"concern": True, "name": text.strip()}
+        if HEDGED_NEGATION.match(plain):
+            raise ValidationError("Please clarify this answer", code="INTAKE_REPLY_AMBIGUOUS")
+        # Keep an unstructured product reply as reported, without a leading "yes". It cannot
+        # create a medication or imply a match; structured details remain explicitly editable.
+        name = AFFIRMATION_PREFIX.sub("", text.strip()).strip()
+        if plain not in {"yes", "yeah", "yep", "si"} and name and len(name) <= 300:
+            return "answered", {"concern": True, "name": name}
     raise ValidationError("Please clarify this answer", code="INTAKE_REPLY_AMBIGUOUS")
+
+
+def _without_punctuation(value: str) -> str:
+    return " ".join(value.replace("’", "'").replace(",", " ").split())
+
+
+def reports_no_other_products(text: Any) -> bool:
+    """True for a plain "none" reply, so a report does not claim products that were not named."""
+    return isinstance(text, str) and _without_punctuation(normalized(text)) in NO_OTHER_PRODUCTS
 
 
 def source_suggestions(text: str) -> dict[str, str | int]:

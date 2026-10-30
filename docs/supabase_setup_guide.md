@@ -196,7 +196,8 @@ and platform stubs, not that target's complete Supabase setup or grants. See
 Migrations 059/060 are versioned implementation artifacts. Applying them, publishing
 question eligibility and changing deployed configuration are distinct rollout
 actions. No bundle is seeded or approved by migration 060. Approval provenance is in the
-[candidate-1 review record](../backend/src/app/intake/question_library/candidate-1-review.md#requester-reported-approval).
+[question release process](../backend/src/app/intake/question_library/README.md), which also
+covers publishing a release.
 
 | Migration | SHA-256 |
 | --- | --- |

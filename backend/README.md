@@ -749,8 +749,9 @@ recorded rows only); assigned clinicians read
 reachable. No new configuration.
 
 `SYMPTOM_INTAKE_ENABLED=false` is the default. Migration 060 does not approve a library.
-The approved `candidate-1` is pinned in the manifest; revised `candidate-2` is pending
-genuine paired-locale review. Matching immutable database eligibility is required. Unavailability
+The manifest selects the active [question release](src/app/intake/question_library/README.md),
+and `scripts/publish_symptom_questions.py` publishes its matching immutable database eligibility,
+which is required. Unavailability
 never restores automatic report insertion. Source binding requires a new backend-saved
 Nora user turn with a session ID; old unbound transcript rows remain readable.
 

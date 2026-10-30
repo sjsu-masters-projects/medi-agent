@@ -9,7 +9,7 @@ from app.intake.library import Bundle, load_library, select_question, validate_v
 
 
 def synthetic_bundle():
-    path = Path(__file__).parents[3] / "src/app/intake/question_library/candidate-1.json"
+    path = Path(__file__).parents[3] / "src/app/intake/question_library/v1.json"
     return Bundle.model_validate(json.loads(path.read_text()))
 
 

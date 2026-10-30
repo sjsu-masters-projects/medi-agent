@@ -54,7 +54,7 @@ or PR #136 migration was authorized or claimed by that checkpoint.
 ### October 12 rollout recheck
 
 On October 12 the requester reported Ganesh approved the unchanged paired-locale candidate;
-the [approval record](../../backend/src/app/intake/question_library/candidate-1-review.md#requester-reported-approval)
+the [approval record](../../backend/src/app/intake/question_library/v1-review.md#requester-reported-approval)
 states its provenance, date and canonical hash. This is not a formal PR approval.
 
 The requester reported applying the migrations. Read-only `schema_migrations` queries
@@ -94,9 +94,9 @@ saved no report and a deliberate local backend outage recovered through reload/r
 The portal now sends `microphone=(self)` so user-granted dictation can work; camera
 and geolocation stay disabled. This needs the normal separately authorized portal
 rollout. The requester elected to keep physical speech verification pending.
-Candidate-2 remains inactive pending genuine review. The active candidate-1 can be
-verified now using the steps in the acceptance record; do not describe the revised
-candidate or physical microphone path as approved/verified.
+The stored `candidate-1` release was active at this point; the next release, v2, went live
+later under the [question release process](../../backend/src/app/intake/question_library/README.md).
+Do not describe the physical microphone path as verified.
 
 
 The tested continuation is draft PR #193 on `fix/confirmed-intake-integration`.

@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from app.intake.library import version_label
 from app.models.symptom_report_history import (
     ClinicianSymptomReport,
     ReportAnswer,
@@ -240,7 +241,7 @@ def present_clinician(card: dict[str, Any]) -> ClinicianSymptomReport:
             source_message_id=provenance.get("source_message_id"),
             session_id=provenance.get("session_id"),
             schema_version=provenance.get("schema_version"),
-            library_version=provenance.get("library_version"),
+            library_version=version_label(provenance.get("library_version")),
             submitted_status=provenance.get("submitted_status"),
             confirmed_at=_required(card["confirmed_at"]),
             confirmed_by=provenance.get("confirmed_by"),

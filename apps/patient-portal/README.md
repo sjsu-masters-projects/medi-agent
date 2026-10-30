@@ -333,8 +333,8 @@ private TTS has no chat message ID. Late recordings cannot answer a different
 revision. Detailed fields remain available as a fallback. Read the preview, select
 consent and press **Confirm and share**; spoken assent never submits it.
 
-Approved `candidate-1` remains active. Revised `candidate-2` wording/applicability is
-pending genuine review and cannot activate yet. The checksum-pinned, applied
+The backend chooses the active
+[question release](../../backend/src/app/intake/question_library/README.md). The checksum-pinned, applied
 `071_confirmed_symptom_handoff.sql` adds durable ADR and review notices; the existing
 retry worker must run. Follow the
 [October 17 verification record](../../docs/evidence/pat-002-b-acceptance-2026-10-17.md) and

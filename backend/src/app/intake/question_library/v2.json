@@ -1,6 +1,6 @@
 {
   "schema_version": "symptom-questions/1",
-  "version": "candidate-2",
+  "version": "v2",
   "budget": 12,
   "questions": [
     {
