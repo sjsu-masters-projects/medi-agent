@@ -21,8 +21,8 @@
 
 > **Status:** Implementation merged/deployed in #171, with migrations 063/064 recorded applied. Remaining acceptance is tracked under PV-001-C and PV-002, not a pending implementation sequence.
 > Requirements 1 to 14 (PR 1, PR 2) were approved by the requester on 2026-10-12; requirements 15 to 24 (PR 3) were
-> added the same day, and the requester decided D12 to D17 exactly as proposed. Design in `design.md`, tasks in
-> `tasks.md`.
+> added the same day, and the requester decided D12 to D17 exactly as proposed. Design in `design.md`. The completed
+> implementation checklist was removed October 30; it is in Git history.
 > **Routing amendment (2026-10-18):** the requester directed that clinician ADR follow-up appear under Care Team,
 > never inside Nora. The exact-request notification still opens the structured form directly; Back returns to
 > Care team messages.

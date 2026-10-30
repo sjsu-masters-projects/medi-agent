@@ -33,10 +33,25 @@ polish after code closure. The current verdict for every row stays in
    | Clinician with two clinics | Elena (Cedar Grove and Willow Terrace) |
    | Clinician with MFA | Rajeev (clinician) |
    | Clinic admin | Carmen |
-   | A second care-team member (sharing, per-team review) | another clinician assigned to the same patient |
+   | Two care teams on one patient (sharing, per-team review) | Morgan, with Elena and Rajeev (clinician). Set this up with the steps below |
 
    If an account has drifted (missing assignment, wrong clinic), report it; do not
    recreate accounts.
+
+   **Link a second clinician to Morgan.** Do this once, through the normal invite flow. It
+   needs no reset, seed or configuration change. Skip it if Rajeev (clinician) already lists
+   Morgan on Patient Roster.
+
+   1. In the clinician portal, sign in as Rajeev (clinician). Go to **Settings > Patient
+      Invites** and select **Generate New Invite Code**. Copy the code.
+   2. In the patient portal, sign in as Morgan. Go to **Profile**, select **Add a care team
+      member**, enter the code and select **Add to my care team**.
+   3. Pass: Morgan sees "Added to your care team. They are now available." Rajeev's Patient
+      Roster lists Morgan, and Elena still lists Morgan too.
+
+   The link stays in place afterward, so Morgan is now a two-team patient. Use Evelyn, or
+   another patient with one care team, for checks that a single-team patient's screens are
+   unchanged.
 3. **Locales:** run each patient-facing check in en-US and es-MX (switch in
    profile/settings). Restore English afterward.
 4. **Viewports:** 390 px (phone) and 1280 px (desktop). Note any horizontal

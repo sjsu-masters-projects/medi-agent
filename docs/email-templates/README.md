@@ -1,27 +1,34 @@
-# Transactional email design reference
+# Email templates
 
-These three standalone HTML templates were extracted from the requester-provided
-`MediAgent Emails (standalone).html` on October 11, 2026. They preserve the supplied
-design without copying its JavaScript bundle or preview wrapper. The governing
-delivery and acceptance contract is [EMAIL-001](../../.agent/specs/email-001-email-flows.md).
+This folder holds one template that can be installed and three design references. No
+application code loads any file here: the backend renders its own emails in
+`backend/src/app/services/email_templates.py`. The delivery and acceptance contract is
+[EMAIL-001](../../.agent/specs/email-001-email-flows.md).
 
-## Integration boundaries
+| File | Status | Use |
+| --- | --- | --- |
+| [`supabase-password-recovery.html`](supabase-password-recovery.html) | **Installable** | The Supabase Reset password template. See [Password recovery](#password-recovery) |
+| [`reference/password-recovery.html`](reference/password-recovery.html) | Reference | The original supplied design that the installable template replaced |
+| [`reference/signup-confirmation.html`](reference/signup-confirmation.html) | Reference | For future use. Signup confirmation is off; do not enable it until signup supports pending verification |
+| [`reference/care-plan-updated.html`](reference/care-plan-updated.html) | Reference | For a possible future care-plan email. Nothing sends it today |
 
-- `password-recovery.html`: Supabase Auth template candidate. Keep
-  `{{ .ConfirmationURL }}` and `{{ .Email }}` as Supabase placeholders. Installing
-  a dashboard template is a separately authorized remote configuration change.
-- `signup-confirmation.html`: reference only while confirmation is disabled.
-  Do not enable confirmation until signup supports pending verification.
-- `care-plan-updated.html`: application-email reference, not an active sender.
-  Substitute only authoritative published-plan data, escape dynamic values and
-  require verified mailbox ownership and optional-email consent. Never manufacture
+## Reference templates
+
+Keep these for future work. They were extracted from the requester-provided
+`MediAgent Emails (standalone).html` on October 11, 2026, without its JavaScript bundle or
+preview wrapper, and are kept unchanged.
+
+They are English examples with placeholders, not send-ready messages. Before using one:
+
+- Add reviewed es-MX copy, plain text and safe links.
+- Require verified mailbox ownership and optional-email consent. The example footer saying a
+  clinic added the patient does not establish consent.
+- Fill it only from authoritative data, and escape dynamic values. Never manufacture a
   clinician approval, clinic address or publication date to fill a placeholder.
+- Keep the Supabase placeholders `{{ .ConfirmationURL }}` and `{{ .Email }}` in Auth templates.
+  Installing a dashboard template is a separately authorized remote configuration change.
 
-These supplied examples are English. Patient delivery also needs reviewed es-MX
-copy, plain text and safe links. Do not infer eligibility from the example footer
-that says a clinic added the patient: email consent is a separate requirement.
-
-## Implemented adapters
+## Application emails
 
 `backend/src/app/services/email_templates.py` uses the responsive table layout
 with escaped HTML and plaintext and requires an explicit `audience`:
@@ -39,10 +46,11 @@ Clinician invitations, clinician verification codes and notices addressed to
 clinicians (shared review work, appointment responses, unread messages) use the
 clinician brand; everything addressed to a patient uses the patient brand.
 Application notices contain no clinical details, filenames, patient identifiers
-or message bodies. The supplied files above remain unchanged references, not
-active senders.
+or message bodies.
 
-`supabase-password-recovery.html` is the deployable Auth-template candidate.
+## Password recovery
+
+`supabase-password-recovery.html` is the deployable Auth template.
 Supabase allows one Reset password template per project, so this one file has
 three variants, chosen with standard Go-template `eq` conditions on the exact
 approved reset URL the backend sends as `redirect_to`:
