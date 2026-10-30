@@ -71,6 +71,8 @@ sentry-sdk
 # -- Document Processing --
 PyMuPDF
 # MedWatch Form 3500 fill path (BSD, pure Python); intentionally not PyMuPDF (AGPL).
+# Security floor for CVE-2026-119284. Pulled transitively by the Supabase auth client.
+joserfc>=1.7.6
 # CVE-2026-113786: validate JPEG decoder selection for /DCTDecode image data.
 pypdf==6.21.2
 pytesseract
