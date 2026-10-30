@@ -534,5 +534,23 @@ export function fieldPathLabel(path: string): string {
     if (other) {
         return `F Other product ${Number(other[1]) + 1}: ${ROW_FIELD_LABELS[other[2]] ?? other[2]}`;
     }
-    return path;
+    return humanizePath(path);
+}
+
+/** "section_b.lab_notes" as "Section B · Lab notes" for paths with no Form 3500 item. */
+function humanizePath(path: string): string {
+    return path
+        .split(".")
+        .map((part) => {
+            const section = /^section_([a-z])$/i.exec(part);
+            if (section) return `Section ${section[1].toUpperCase()}`;
+            const words = part.replace(/\[(\d+)\]/g, (_, index: string) => ` ${Number(index) + 1}`).replaceAll("_", " ").trim();
+            return words ? words.charAt(0).toUpperCase() + words.slice(1) : part;
+        })
+        .join(" · ");
+}
+
+/** A label for an earlier-draft key that has no Form 3500 item. */
+export function legacyKeyLabel(key: string): string {
+    return fieldPathLabel(key);
 }

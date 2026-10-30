@@ -86,8 +86,10 @@ const spanish: Record<string, string> = {
     "No se pudo abrir este archivo. Puede estar dañado o protegido con contraseña.",
   "A plain-language explanation is not available for this document right now. Your document and your records are unchanged, and your care team can request it again.":
     "La explicación de este documento no está disponible por ahora. Tu documento y tus registros se conservan. Tu equipo de atención puede solicitarla de nuevo.",
-  "There is no extracted information in this document to explain. You can still open the original document above or ask your care team about it.":
-    "No hay información extraída de este documento para explicar. Puedes abrir el original o consultar a tu equipo de atención.",
+  "There are no saved details from this document to explain. You can still open the original document above or ask your care team about it.":
+    "No hay datos guardados de este documento para explicar. Puedes abrir el original o consultar a tu equipo de atención.",
+  // UX-007 draft, pending LOC-001 review.
+  "Original file": "Archivo original",
   "The plain-language explanation is still being prepared. You can read the original document above and check back shortly.":
     "La explicación aún se está preparando. Puedes leer el documento original y volver más tarde.",
   "Choose a PDF, JPG, PNG, WebP, or TIFF file up to 20 MB.":

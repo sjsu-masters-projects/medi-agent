@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui";
 import { AiChip } from "@/components/ui/ai-chip";
 import { Icon } from "@/components/ui/icons";
 import { ADRClinicianAnswers } from "@/components/features/adr-clinician-answers";
-import { questionLabel } from "@/components/features/adr-questions";
+import { answerLabel, questionLabel } from "@/components/features/adr-questions";
 import { ADRReviewActions } from "@/components/features/adr-review-actions";
 import { EvidenceGlossLine, glossFor, useEvidenceGlosses, type GlossMap } from "@/components/features/evidence-gloss";
 import { queueTabOf, STATUS_LABELS, type QueueTab } from "@/components/features/adr-queue";
@@ -74,12 +74,12 @@ function ProvenanceLabel({
             <Badge variant="neutral">Patient-confirmed</Badge>
             <span className="text-xs text-muted">
                 {!entry.information_request_id
-                    ? "Follow-up request not recorded"
+                    ? "Follow-up link not recorded"
                     : !item.informationRequestId
-                      ? "Recorded follow-up"
+                      ? "From a follow-up request"
                       : entry.information_request_id === item.informationRequestId
-                        ? "Current follow-up"
-                        : "Different follow-up"}
+                        ? "From this follow-up"
+                        : "From another follow-up"}
             </span>
             {answeredAt ? (
                 <span className="text-xs text-muted">
@@ -124,8 +124,8 @@ function EvidenceRow({
         <li className="space-y-2.5 px-4 py-3.5">
             <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
                 <p className="min-w-0 text-sm font-medium text-ink">{questionLabel(entry.question)}</p>
-                <Badge className="capitalize" variant={entry.answer === "yes" ? "success" : "neutral"}>
-                    {entry.answer.replaceAll("_", " ")}
+                <Badge variant={entry.answer === "yes" ? "success" : "neutral"}>
+                    {answerLabel(entry.answer)}
                 </Badge>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -300,7 +300,7 @@ export function ADRReviewCard({
                                     >
                                         <span className="min-w-0 text-ink-2">
                                             {questionLabel(scored.question)}:{" "}
-                                            <span className="capitalize">{scored.answer.replaceAll("_", " ")}</span>
+                                            <span>{answerLabel(scored.answer)}</span>
                                         </span>
                                         <span className="shrink-0 font-mono text-ink">
                                             {scored.points > 0 ? `+${scored.points}` : scored.points}
@@ -375,7 +375,7 @@ export function ADRReviewCard({
                                             >
                                                 <p className="text-sm font-medium text-ink">
                                                     {questionLabel(response.question)}:{" "}
-                                                    {response.answer.replaceAll("_", " ")}
+                                                    {answerLabel(response.answer)}
                                                 </p>
                                                 {response.evidence ? (
                                                     <p className="mt-1 text-sm text-ink-2">
@@ -386,7 +386,7 @@ export function ADRReviewCard({
                                             </div>
                                         ))}
                                         <p className="text-xs text-ok-ink">
-                                            The deterministic score above includes these confirmed
+                                            The calculated score above includes these confirmed
                                             answers. Clinician judgment is still required.
                                         </p>
                                     </div>

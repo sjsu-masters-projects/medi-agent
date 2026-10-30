@@ -15,8 +15,10 @@ const patient: PatientRiskData = {
 describe("RiskExplanation source freshness", () => {
     it("keeps old snapshots compatible and unknown", () => {
         render(<RiskExplanationDialog patient={patient} onClose={vi.fn()} />);
-        expect(screen.getByText("Source freshness unknown for this snapshot.")).toBeInTheDocument();
+        expect(screen.getByText("Source dates aren't available for this calculation.")).toBeInTheDocument();
         expect(screen.getByText(/not the last clinical review/)).toBeInTheDocument();
+        const version = screen.getByText("outpatient-review-priority-v1");
+        expect(version.closest("details")).not.toHaveAttribute("open");
     });
 
     it("distinguishes genuine source timestamps, missing data and failed reads", () => {
@@ -28,18 +30,18 @@ describe("RiskExplanation source freshness", () => {
             ],
         } }} onClose={vi.fn()} />);
         expect(screen.getByText("Latest adherence response (30-day window)")).toBeInTheDocument();
-        expect(screen.getByText("Unknown — no dated source available")).toBeInTheDocument();
-        expect(screen.getByText("Source freshness unavailable — read failed")).toBeInTheDocument();
+        expect(screen.getByText("No dated record available")).toBeInTheDocument();
+        expect(screen.getByText("Couldn't be read — refresh the dashboard")).toBeInTheDocument();
         expect(document.querySelector('time[datetime="2026-10-01T09:00:00Z"]')).toBeInTheDocument();
         expect(document.querySelector('time[datetime="2026-10-21T12:00:00Z"]')).toBeInTheDocument();
-        expect(screen.getByText(/not an atomic snapshot/)).toBeInTheDocument();
-        expect(screen.getByText(/not that it is clinically fresh or reviewed/)).toBeInTheDocument();
+        expect(screen.getByText(/not a single point-in-time view/)).toBeInTheDocument();
+        expect(screen.getByText(/not that it is current or reviewed/)).toBeInTheDocument();
     });
 
     it("never substitutes calculation time for invalid source dates", () => {
         render(<RiskExplanationDialog patient={{ ...patient, risk_explanation: {
             ...patient.risk_explanation!, source_freshness: [{ source: "medications", timestamp_field: "created_at", latest_at: "invalid", status: "available" }],
         } }} onClose={vi.fn()} />);
-        expect(screen.getByText("Unknown — no dated source available")).toBeInTheDocument();
+        expect(screen.getByText("No dated record available")).toBeInTheDocument();
     });
 });

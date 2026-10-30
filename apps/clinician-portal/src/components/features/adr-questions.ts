@@ -17,8 +17,20 @@ export const QUESTION_LABELS: Record<string, string> = {
     toxic_drug_concentration: "Toxic drug concentration",
 };
 
+function humanize(code: string) {
+    const words = code.replaceAll("_", " ").trim();
+    return words ? words.charAt(0).toUpperCase() + words.slice(1) : code;
+}
+
 export function questionLabel(question: string) {
-    return QUESTION_LABELS[question] ?? question.replaceAll("_", " ");
+    return QUESTION_LABELS[question] ?? humanize(question);
+}
+
+/** The same words the clinician answer form uses; an unknown answer is humanized. */
+export const ANSWER_LABELS: Record<string, string> = { yes: "Yes", no: "No", do_not_know: "Not known" };
+
+export function answerLabel(answer: string) {
+    return ANSWER_LABELS[answer] ?? humanize(answer);
 }
 
 /** Asked of the patient through Request information; always retrospective. */

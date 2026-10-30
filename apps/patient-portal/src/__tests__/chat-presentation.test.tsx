@@ -4,6 +4,20 @@ import { ChatTextarea, chatDisplayTime } from "@/components/features/chat-presen
 
 describe("chat presentation", () => {
   const now = new Date(2026, 9, 10, 12);
+  it("judges today and yesterday in the saved time zone, not the device's", () => {
+    // 06:30 UTC on Oct 11 is still Oct 10 in Los Angeles.
+    const now = new Date("2026-10-11T06:30:00Z");
+    const lateEvening = new Date("2026-10-11T04:00:00Z"); // 9:00 PM Oct 10 in Los Angeles
+    expect(chatDisplayTime(lateEvening, "en-US", now, "America/Los_Angeles")).toBe(
+      new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" }).format(lateEvening),
+    );
+    expect(chatDisplayTime(new Date("2026-10-10T04:00:00Z"), "en-US", now, "America/Los_Angeles")).toBe(
+      new Intl.RelativeTimeFormat("en-US", { numeric: "auto" }).format(-1, "day"),
+    );
+    // An unusable saved zone falls back to the device zone rather than failing.
+    expect(chatDisplayTime(lateEvening, "en-US", now, "Not/AZone")).not.toBe("");
+  });
+
   it.each(["en-US", "es-MX"])("formats actual message dates in %s without inventing timestamps", (locale) => {
     const today = new Date(2026, 9, 10, 11, 3);
     expect(chatDisplayTime(today, locale, now)).toBe(new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit" }).format(today));

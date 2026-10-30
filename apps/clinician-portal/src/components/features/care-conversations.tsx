@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { TranslationInfo } from "@/components/ui/translation-note";
 import { careConversations } from "@/services/care-conversations";
+import { formatClinicianDateTime } from "@/utils/dates";
 import { ConversationActivityReview } from "./conversation-activity";
 import { confirmedTranslationFor, ReplyPreview, sendBlocker, useReplyPreview } from "./reply-preview";
 import type { CareConversation, CareConversationMessage, ConversationDraft, ConversationRecipient } from "@/types/care-conversations";
@@ -395,7 +396,8 @@ function ConversationThread({ token, audience, thread, locale, visible, draft, o
           // A clinician reads English: only a translation into English is ever shown.
           const sourceLabel = own ? undefined : (translationLocale === "en-US" ? "Translated from Spanish" : undefined);
           return <li key={message.id} className={`ma-bubble flex max-w-[78%] flex-col gap-1 ${own ? "items-end self-end" : "items-start self-start"}`}>
-            <p className="px-1 text-[11px] text-muted">{message.sender_name} · {conversationRoleLabel(message.sender_role, locale)} · {thread.clinic_name} · <time className="font-mono" dateTime={message.created_at}>{new Date(message.created_at).toLocaleString(locale)}</time></p>
+            {/* The thread header already names the clinic; each message shows who and when. */}
+            <p className="px-1 text-[11px] text-muted">{own ? "You" : `${message.sender_name} · ${conversationRoleLabel(message.sender_role, locale)}`} · <time className="font-mono" dateTime={message.created_at}>{formatClinicianDateTime(message.created_at, { dateStyle: "medium", timeStyle: "short" })}</time></p>
             <p className={`whitespace-pre-wrap break-words px-3.5 py-2.5 text-sm ${own ? "rounded-[18px_18px_6px_18px] bg-primary text-white" : "rounded-[18px_18px_18px_6px] bg-surface-2 text-ink"}`}>{message.body}</p>
             {message.activity_context ? <ConversationActivityReview activity={message.activity_context} token={token} conversationId={thread.id} messageId={message.id} patientId={thread.patient_id} /> : null}
             {message.translation_pending && !own ? <p role="status" className="px-1 text-[11px] text-muted">{copy.translating}</p> : null}

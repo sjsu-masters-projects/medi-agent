@@ -7,6 +7,7 @@ import { ApprovalSeal } from "@/components/ui/approval-seal";
 import { Icon } from "@/components/ui/icons";
 import { MedicationConfirmationRequest } from "@/components/features/medication-confirmation-request";
 import { api } from "@/services/api";
+import { readableError } from "@/services/error-text";
 import { ClinicalCoreExport } from "@/components/features/clinical-core-export";
 import type { RootState } from "@/store/store";
 
@@ -71,7 +72,7 @@ function MedicationReferencePanel({ patientId, factId, token }: { patientId: str
       <p>Reference subject: {result.subject ?? "Unknown"} · Resolved RxNorm ingredient: {result.rxcui ?? "Unknown"}</p>
       <p className="text-xs text-muted">Lookup returned: <ReferenceTime value={result.retrieved_at} />. Source check dates below are not the last clinical review.</p>
       {result.status === "unavailable" && <p role="alert">Public reference lookup unavailable. Any cached references below retain their own check dates.</p>}
-      {result.status === "not_found" && <p role="status">No public reference found for this candidate. This does not mean the product is safe or has no interactions.</p>}
+      {result.status === "not_found" && <p role="status">No public reference found for this medication. This does not mean the product is safe or has no interactions.</p>}
       {result.references.length > 0 && <p className="text-xs text-muted">Up to 3 references; excerpts are limited to 1,200 characters each. Open the official source for the full reference.</p>}
       <ul className="space-y-3">
         {result.references.map((reference) => <li key={`${reference.source}:${reference.locale}:${reference.url}`} className="space-y-1 border-t border-line pt-3">
@@ -304,14 +305,22 @@ function formatValue(value: unknown, timezone: string, field = ""): string {
     const record = value as Record<string, unknown>;
     if (typeof record.text === "string") return record.text;
     if (typeof record.display === "string") return record.display;
-    if (typeof record.code === "string") return record.code;
+    if (typeof record.code === "string") {
+      // A bare code says which concept; name its system so it can be looked up.
+      const system = typeof record.system === "string" ? CODE_SYSTEMS[record.system] ?? sourceHost(record.system) : "";
+      return system ? `${record.code} (${system})` : record.code;
+    }
     if (DATE_FIELDS.has(field) && (typeof record.start === "string" || typeof record.end === "string")) {
       return [record.start, record.end]
         .filter((item): item is string => typeof item === "string")
         .map((item) => formatFhirDateTime(item, timezone))
         .join(" to ");
     }
-    return JSON.stringify(record);
+    // Other structures read as labelled parts rather than JSON.
+    const parts = Object.entries(record)
+      .filter(([, item]) => item !== null && item !== undefined && item !== "")
+      .map(([key, item]) => `${humanizeKey(key)}: ${formatValue(item, timezone, key)}`);
+    return parts.length ? parts.join("; ") : "Not supplied";
   }
   return String(value);
 }
@@ -344,6 +353,79 @@ function sourceHost(issuer: string): string {
   }
 }
 
+const RECONCILIATION_LABELS: Record<string, string> = {
+  not_started: "Not started",
+  applied: "Applied",
+  kept_existing: "Kept existing",
+  deferred: "Deferred",
+  rejected: "Rejected",
+  reviewed_evidence: "Reviewed evidence",
+  source_withdrawn: "Source withdrawn",
+};
+
+/** "clinical_status" or "birthDate" as "Clinical status" / "Birth date". */
+function humanizeKey(key: string): string {
+  const words = key.replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll("_", " ").trim().toLowerCase();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : key;
+}
+
+/** The review label for a field, the same one the fact card uses. */
+function fieldLabel(factType: string, key: string): string {
+  return FACT_FIELDS[factType]?.find(([field]) => field === key)?.[1] ?? humanizeKey(key);
+}
+
+const CODE_SYSTEMS: Record<string, string> = {
+  "http://www.nlm.nih.gov/research/umls/rxnorm": "RxNorm",
+  "http://snomed.info/sct": "SNOMED CT",
+  "http://loinc.org": "LOINC",
+  "http://hl7.org/fhir/sid/icd-10-cm": "ICD-10-CM",
+  "http://hl7.org/fhir/sid/ndc": "NDC",
+};
+
+/** "document-intelligence/1;pymupdf/1.28.2" as "document-intelligence 1, pymupdf 1.28.2". */
+function extractorLabel(version: string): string {
+  return version
+    .split(";")
+    .map((part) => part.trim().replace("/", " "))
+    .filter(Boolean)
+    .join(", ");
+}
+
+/** The cited page recorded with document evidence, when there is one. */
+function sourcePage(raw: Record<string, unknown> | undefined): number | null {
+  const location = raw?.location;
+  if (!location || typeof location !== "object") return null;
+  const page = (location as Record<string, unknown>).page;
+  return typeof page === "number" && Number.isFinite(page) && page > 0 ? page : null;
+}
+
+/** Ids and versions kept for audit and support, with plain labels. */
+function SourceTechnicalDetails({ source }: { source: ReviewSource }) {
+  const rows: Array<[string, string]> =
+    source.source_kind === "document"
+      ? [
+          ["Document ID", source.external_resource_id ?? ""],
+          ["Extracted by", source.version_id ? extractorLabel(source.version_id) : ""],
+        ]
+      : [
+          ["Source record", [source.resource_type, source.external_resource_id].filter(Boolean).join(" ")],
+          ["Source version", source.version_id ?? ""],
+          ["Source system", source.issuer],
+        ];
+  const shown = rows.filter(([, value]) => value);
+  if (!shown.length) return <p className="pb-1 pl-[1.375rem]">No technical details recorded.</p>;
+  return (
+    <dl className="space-y-1 pb-1 pl-[1.375rem] text-[11px]">
+      {shown.map(([label, value]) => (
+        <div className="flex flex-wrap gap-x-2" key={label}>
+          <dt className="font-medium text-ink-2">{label}</dt>
+          <dd className="min-w-0 break-all font-mono">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function FactDetails({
   fact,
   patientTimezone,
@@ -353,7 +435,7 @@ function FactDetails({
 }) {
   const fields =
     FACT_FIELDS[fact.fact_type] ??
-    Object.keys(fact.value).map((key) => [key, key] as [string, string]);
+    Object.keys(fact.value).map((key) => [key, humanizeKey(key)] as [string, string]);
   return (
     <dl className="grid gap-x-6 gap-y-3 rounded-[14px] border border-line bg-surface-2 p-4 sm:grid-cols-2 xl:grid-cols-3">
       {fields.map(([key, label]) => {
@@ -388,7 +470,7 @@ function correctionFields(fact: ReviewFact): Array<[string, string]> {
     ...preferred,
     ...Object.keys(fact.value)
       .filter((key) => !known.has(key))
-      .map((key) => [key, key] as [string, string]),
+      .map((key) => [key, humanizeKey(key)] as [string, string]),
   ];
 }
 
@@ -477,9 +559,7 @@ export function SmartImportReviewPanel({
       setReview(response);
     } catch (loadError) {
       setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Unable to load imported records.",
+        readableError(loadError, "Unable to load imported records."),
       );
     } finally {
       setLoading(false);
@@ -513,9 +593,7 @@ export function SmartImportReviewPanel({
       await load();
     } catch (reviewError) {
       setError(
-        reviewError instanceof Error
-          ? reviewError.message
-          : "Unable to approve imported fact.",
+        readableError(reviewError, "Unable to approve imported fact."),
       );
     } finally {
       setBusyFactId(null);
@@ -551,9 +629,7 @@ export function SmartImportReviewPanel({
       setNote("");
     } catch (reviewError) {
       setError(
-        reviewError instanceof Error
-          ? reviewError.message
-          : "Unable to prepare record reconciliation.",
+        readableError(reviewError, "Unable to prepare record reconciliation."),
       );
     } finally {
       setBusyFactId(null);
@@ -573,9 +649,7 @@ export function SmartImportReviewPanel({
       setBindingNote("");
     } catch (bindingError) {
       setError(
-        bindingError instanceof Error
-          ? bindingError.message
-          : "Unable to load the external-patient comparison.",
+        readableError(bindingError, "Unable to load the patient comparison."),
       );
     } finally {
       setBusyFactId(null);
@@ -602,9 +676,7 @@ export function SmartImportReviewPanel({
       setBindingNote("");
     } catch (bindingError) {
       setError(
-        bindingError instanceof Error
-          ? bindingError.message
-          : "Unable to confirm the external patient binding.",
+        readableError(bindingError, "Unable to confirm that this is the same patient."),
       );
     } finally {
       setBusyFactId(null);
@@ -651,9 +723,7 @@ export function SmartImportReviewPanel({
       await load();
     } catch (reviewError) {
       setError(
-        reviewError instanceof Error
-          ? reviewError.message
-          : "Unable to record reconciliation decision.",
+        readableError(reviewError, "Unable to record reconciliation decision."),
       );
     } finally {
       setBusyFactId(null);
@@ -675,9 +745,7 @@ export function SmartImportReviewPanel({
       await load();
     } catch (reviewError) {
       setError(
-        reviewError instanceof Error
-          ? reviewError.message
-          : "Unable to reject imported fact.",
+        readableError(reviewError, "Unable to reject imported fact."),
       );
     } finally {
       setBusyFactId(null);
@@ -707,9 +775,7 @@ export function SmartImportReviewPanel({
       await load();
     } catch (reviewError) {
       setError(
-        reviewError instanceof Error
-          ? reviewError.message
-          : "Unable to correct imported fact.",
+        readableError(reviewError, "Unable to correct imported fact."),
       );
     } finally {
       setBusyFactId(null);
@@ -728,9 +794,7 @@ export function SmartImportReviewPanel({
       setSource({ factId: fact.id, detail });
     } catch (sourceError) {
       setError(
-        sourceError instanceof Error
-          ? sourceError.message
-          : "Unable to load source FHIR resource.",
+        readableError(sourceError, "Unable to load the source record."),
       );
     } finally {
       setBusyFactId(null);
@@ -758,7 +822,7 @@ export function SmartImportReviewPanel({
             External records review
           </h2>
           <p className="mt-1 max-w-[80ch] text-sm text-muted">
-            Review SMART and document candidates with source-level provenance.
+            Review records imported through SMART or read from documents, each linked to its source.
             Only a field-by-field reconciliation decision can change an existing
             medication, condition, or allergy; evidence-only records remain
             read-only.
@@ -777,7 +841,7 @@ export function SmartImportReviewPanel({
       <ClinicalCoreExport patientId={patientId} token={token} />
 
       <ol aria-label="Review steps" className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px] text-muted">
-        {["Inspect provenance", "Compare with the local chart", "Record a clinician decision"].map((step, index) => (
+        {["Check the source", "Compare with the local chart", "Record a clinician decision"].map((step, index) => (
           <li className="flex items-center gap-2" key={step}>
             {index > 0 ? <Icon name="chevron" className="h-3.5 w-3.5 text-[#94A3B8]" /> : null}
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sunken font-mono text-[11px] text-ink-2">{index + 1}</span>
@@ -944,8 +1008,8 @@ export function SmartImportReviewPanel({
               No {stateLabel(reviewState).toLowerCase()} imported facts
             </p>
             <p className="max-w-[48ch] text-sm text-muted">
-              New SMART and document imports appear here as clinician-review
-              candidates.
+              New SMART and document imports appear here for clinician
+              review.
             </p>
           </div>
         ) : (
@@ -972,8 +1036,8 @@ export function SmartImportReviewPanel({
                       )}
                       {fact.reconciliation_state &&
                         fact.reconciliation_state !== "not_started" && (
-                          <span className={`${CHIP} bg-sunken capitalize text-ink-2`}>
-                            {fact.reconciliation_state.replaceAll("_", " ")}
+                          <span className={`${CHIP} bg-sunken text-ink-2`}>
+                            {RECONCILIATION_LABELS[fact.reconciliation_state] ?? humanizeKey(fact.reconciliation_state)}
                           </span>
                         )}
                     </div>
@@ -991,14 +1055,6 @@ export function SmartImportReviewPanel({
                             : "Unknown source"}
                         </dd>
                       </div>
-                      {fact.source && (
-                        <div className="flex items-center gap-1.5">
-                          <dt className="sr-only">Resource type</dt>
-                          <dd className="rounded-[5px] bg-sunken px-1.5 py-0.5 font-mono text-[11px] text-ink-2">
-                            {fact.source.resource_type}
-                          </dd>
-                        </div>
-                      )}
                       <div className="flex items-center gap-1.5">
                         <dt>Imported</dt>
                         <dd className="font-mono text-ink-2">
@@ -1006,11 +1062,11 @@ export function SmartImportReviewPanel({
                         </dd>
                       </div>
                     </dl>
-                    <details className="ma-disclosure mt-1 text-xs text-muted"><summary className="min-h-9 py-1.5 text-[13px] font-medium">Source identifiers</summary><p className="break-words pb-1 pl-[1.375rem] font-mono text-[11px]">
+                    <details className="ma-disclosure mt-1 text-xs text-muted"><summary className="min-h-9 py-1.5 text-[13px] font-medium">Technical details</summary>
                       {fact.source
-                        ? `${fact.source.resource_type}${fact.source.external_resource_id ? ` · ${fact.source.external_resource_id}` : ""}${fact.source.version_id ? ` · version ${fact.source.version_id}` : ""}`
-                        : "Source metadata unavailable"}
-                    </p></details>
+                        ? <SourceTechnicalDetails source={fact.source} />
+                        : <p className="pb-1 pl-[1.375rem]">Source details unavailable.</p>}
+                    </details>
                   </div>
                   <div className="flex flex-wrap gap-2 lg:justify-end">
                     <button
@@ -1113,10 +1169,9 @@ export function SmartImportReviewPanel({
                   fact.reconciliation_target_id && (
                     <a
                       className="inline-flex items-center gap-1.5 text-[13px] font-medium text-primary hover:text-primary-hover hover:underline"
-                      href={`/patients/${patientId}`}
+                      href={`/patients/${patientId}?tab=profile`}
                     >
-                      View applied local{" "}
-                      {fact.reconciliation_target_type ?? "record"}
+                      Open in chart
                       <Icon name="arrow" className="h-3.5 w-3.5" />
                     </a>
                   )}
@@ -1126,6 +1181,7 @@ export function SmartImportReviewPanel({
                     <div className="flex items-start gap-2.5 rounded-xl border border-warn-line bg-warn-soft px-4 py-3 text-sm text-warn-ink">
                       <Icon name="info" className="mt-0.5 h-4 w-4 shrink-0" />
                       <p>
+                        <span className="font-semibold">Check these fields against the source. </span>
                         {[
                           ...fact.source.mapping_warnings,
                           ...fact.source.validation_errors,
@@ -1194,14 +1250,14 @@ export function SmartImportReviewPanel({
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-[14px] border border-line bg-surface-2 p-4">
                 <h3 className="text-[13px] font-semibold text-ink">
-                  Imported candidate
+                  Imported record
                 </h3>
                 <dl className="mt-3 space-y-2.5 text-sm">
                   {Object.entries(reconciling.preview.candidate_fields).map(
                     ([field, value]) => (
                       <div key={field}>
                         <dt className={EYEBROW}>
-                          {field.replaceAll("_", " ")}
+                          {fieldLabel(reconciling.fact.fact_type, field)}
                         </dt>
                         <dd className="mt-0.5 break-words text-ink">
                           {formatValue(value, patientTimezone ?? "UTC", field)}
@@ -1218,7 +1274,7 @@ export function SmartImportReviewPanel({
                 {reconciling.preview.matches.length === 0 ? (
                   <p className="mt-3 text-sm text-muted">
                     No conservative match was found. You may add a new local
-                    record after checking the candidate fields.
+                    record after checking the imported fields.
                   </p>
                 ) : (
                   <>
@@ -1258,7 +1314,7 @@ export function SmartImportReviewPanel({
                                 .map(([field, value]) => (
                                   <div key={field}>
                                     <dt className={EYEBROW}>
-                                      {field.replaceAll("_", " ")}
+                                      {fieldLabel(reconciling.fact.fact_type, field)}
                                     </dt>
                                     <dd className="mt-0.5 break-words text-ink">
                                       {formatValue(
@@ -1282,7 +1338,7 @@ export function SmartImportReviewPanel({
                                   .map((field) => (
                                     <div key={field}>
                                       <dt className={EYEBROW}>
-                                        {field.replaceAll("_", " ")}
+                                        {fieldLabel(reconciling.fact.fact_type, field)}
                                       </dt>
                                       <dd className="mt-0.5">
                                         <span className="text-muted line-through decoration-line-strong">
@@ -1335,7 +1391,7 @@ export function SmartImportReviewPanel({
                       }
                       type="checkbox"
                     />
-                    {field.replaceAll("_", " ")}
+                    {fieldLabel(reconciling.fact.fact_type, field)}
                   </label>
                 ))}
               </div>
@@ -1420,7 +1476,7 @@ export function SmartImportReviewPanel({
           }
         }}
         open={Boolean(binding)}
-        title="Confirm external patient binding"
+        title="Confirm this is the same patient"
       >
         {binding && (
           <div className="space-y-5">
@@ -1438,7 +1494,7 @@ export function SmartImportReviewPanel({
                     ([field, value]) => (
                       <div key={field}>
                         <dt className={EYEBROW}>
-                          {field.replaceAll("_", " ")}
+                          {fieldLabel("patient_demographics", field)}
                         </dt>
                         <dd className="mt-0.5">{formatValue(value, patientTimezone ?? "UTC", field)}</dd>
                       </div>
@@ -1455,7 +1511,7 @@ export function SmartImportReviewPanel({
                     ([field, value]) => (
                       <div key={field}>
                         <dt className={EYEBROW}>
-                          {field.replaceAll("_", " ")}
+                          {fieldLabel("patient_demographics", field)}
                         </dt>
                         <dd className="mt-0.5">{formatValue(value, patientTimezone ?? "UTC", field)}</dd>
                       </div>
@@ -1501,7 +1557,7 @@ export function SmartImportReviewPanel({
                 onClick={() => void confirmIdentityBinding()}
                 type="button"
               >
-                {busyFactId ? "Confirming…" : "Confirm binding"}
+                {busyFactId ? "Confirming…" : "Confirm same patient"}
               </button>
             </div>
           </div>
@@ -1520,7 +1576,7 @@ export function SmartImportReviewPanel({
       >
         <div className="space-y-4">
           <p className="text-sm text-ink-2">
-            Record why this imported candidate should not be used. The original
+            Record why this imported record should not be used. The original
             source remains in the audit trail.
           </p>
           <label className="block text-[13px] font-medium text-ink-2">
@@ -1628,7 +1684,7 @@ export function SmartImportReviewPanel({
               onClick={() => void correct()}
               type="button"
             >
-              {busyFactId ? "Saving…" : "Save corrected candidate"}
+              {busyFactId ? "Saving…" : "Save correction"}
             </button>
           </div>
         </div>
@@ -1639,21 +1695,49 @@ export function SmartImportReviewPanel({
         open={Boolean(source)}
         title={
           source?.detail.source_kind === "document"
-            ? "Original document evidence"
-            : "Original SMART FHIR source"
+            ? "Document source"
+            : "Imported source record"
         }
       >
         {source && (
-          <div className="space-y-3">
-            <p className="font-mono text-xs text-muted">
-              {source.detail.resource_type}
-              {source.detail.external_resource_id
-                ? ` · ${source.detail.external_resource_id}`
-                : ""}
-              {source.detail.version_id
-                ? ` · version ${source.detail.version_id}`
-                : ""}
-            </p>
+          <div className="space-y-4">
+            {(() => {
+              const isDocument = source.detail.source_kind === "document";
+              const page = isDocument ? sourcePage(source.detail.raw_resource) : null;
+              const documentId = isDocument ? source.detail.external_resource_id : null;
+              return (
+                <>
+                  <dl className="grid gap-x-6 gap-y-3 rounded-[14px] border border-line bg-surface-2 p-4 sm:grid-cols-2">
+                    <div className="min-w-0">
+                      <dt className={EYEBROW}>Source</dt>
+                      <dd className="mt-1 break-words text-sm text-ink">
+                        {isDocument ? "Uploaded document" : `SMART · ${sourceHost(source.detail.issuer)}`}
+                      </dd>
+                    </div>
+                    {isDocument ? (
+                      <div className="min-w-0">
+                        <dt className={EYEBROW}>Cited page</dt>
+                        <dd className="mt-1 text-sm text-ink">{page ?? "Not recorded"}</dd>
+                      </div>
+                    ) : (
+                      <div className="min-w-0">
+                        <dt className={EYEBROW}>Record type</dt>
+                        <dd className="mt-1 break-words text-sm text-ink">{humanizeKey(source.detail.resource_type)}</dd>
+                      </div>
+                    )}
+                  </dl>
+                  {documentId ? (
+                    <a
+                      className="inline-flex items-center gap-1.5 text-[13px] font-medium text-primary hover:text-primary-hover hover:underline"
+                      href={`/patients/${patientId}?tab=documents#document-${encodeURIComponent(documentId)}`}
+                    >
+                      Open the document
+                      <Icon name="arrow" className="h-3.5 w-3.5" />
+                    </a>
+                  ) : null}
+                </>
+              );
+            })()}
             {source.detail.source_kind === "smart" && <div className="space-y-2 text-sm text-ink-2">
               <p className="font-medium">Source business identifiers</p>
               <p className="text-muted">Source metadata only. These identifiers do not confirm patient identity or approve a clinical value.</p>
@@ -1662,9 +1746,16 @@ export function SmartImportReviewPanel({
                 {source.detail.master_identifier && <li>Master identifier: {source.detail.master_identifier.system || "System not supplied"}: <span className="whitespace-pre-wrap font-mono">{source.detail.master_identifier.value ?? "Value not supplied"}</span></li>}
               </ul> : <p>None recorded by the source.</p>}
             </div>}
-            <pre className="max-h-[60vh] overflow-auto rounded-xl bg-rail p-4 font-mono text-xs leading-relaxed text-rail-ink">
-              {JSON.stringify(source.detail.raw_resource, null, 2)}
-            </pre>
+            <details className="ma-disclosure text-xs text-muted">
+              <summary className="min-h-9 py-1.5 text-[13px] font-medium">Technical details</summary>
+              <SourceTechnicalDetails source={source.detail} />
+              <p className="mt-3 text-[13px] text-ink-2">
+                {source.detail.source_kind === "document" ? "Stored evidence record" : "Original record as received"}
+              </p>
+              <pre className="mt-1.5 max-h-[50vh] overflow-auto rounded-xl bg-rail p-4 font-mono text-xs leading-relaxed text-rail-ink">
+                {JSON.stringify(source.detail.raw_resource, null, 2)}
+              </pre>
+            </details>
           </div>
         )}
       </Modal>

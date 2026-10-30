@@ -9,7 +9,7 @@ import { Icon } from "@/components/ui/icons";
 import { Modal } from "@/components/ui/modal";
 import { ProcessingDots } from "@/components/ui/motion";
 import { PullToRefresh } from "@/components/ui/pull-to-refresh";
-import { ChatTextarea, chatButton, chatDisplayTime } from "./chat-presentation";
+import { ChatTextarea, chatButton, chatDisplayTime, useSavedTimezone } from "./chat-presentation";
 import { normalizeLocale, type Locale } from "@/types";
 import { ConversationActivityAttachment, ConversationActivityContext } from "./conversation-activity";
 import { TranslationNote } from "./translation-note";
@@ -37,6 +37,7 @@ export function CareConversations({ locale = "en-US", audience = "patient", visi
 
 function ConversationInbox({ token, locale, audience, visible, compact = false, conversationId, recipientId, recordRequestId, inboxLead, onThreadPresentationChange }: { token: string; locale: Locale; audience: "patient" | "clinician"; visible: boolean } & Presentation) {
   const copy = getConversationCopy(locale);
+  const timezone = useSavedTimezone();
   const [recipients, setRecipients] = useState<ConversationRecipient[]>([]);
   const [threads, setThreads] = useState<CareConversation[]>([]);
   const [recipient, setRecipient] = useState("");
@@ -220,12 +221,12 @@ function ConversationInbox({ token, locale, audience, visible, compact = false, 
       <div hidden={focused}><PullToRefresh onRefresh={refreshInbox} busy={opening || sending} label={copy.refresh}>
       <ul className={`overflow-hidden rounded-[22px] bg-surface [&>li+li]:border-t [&>li+li]:border-line ${threads.length ? "" : "hidden"}`}>
         {threads.map((thread) => <li key={thread.id}>
-          <button ref={(element) => { if (element) contactButtons.current.set(thread.id, element); else contactButtons.current.delete(thread.id); }} className={`flex min-h-11 w-full items-center gap-3 px-[14px] py-3.5 text-left transition-colors duration-[160ms] hover:bg-[#FBF7F0] disabled:opacity-60 ${selected === thread.id && !compact ? "bg-brand-tint" : ""}`} type="button" aria-label={[`${name(thread)} · ${thread.clinic_name}`, thread.unread_count > 0 ? `${thread.unread_count} ${copy.unread}` : null, thread.last_message_preview, thread.last_message_at ? chatDisplayTime(thread.last_message_at, locale) : null].filter(Boolean).join(" · ")} aria-pressed={selected === thread.id} disabled={sending || opening} onClick={() => { setSelected(thread.id); setThreadFocused(true); }}>
+          <button ref={(element) => { if (element) contactButtons.current.set(thread.id, element); else contactButtons.current.delete(thread.id); }} className={`flex min-h-11 w-full items-center gap-3 px-[14px] py-3.5 text-left transition-colors duration-[160ms] hover:bg-[#FBF7F0] disabled:opacity-60 ${selected === thread.id && !compact ? "bg-brand-tint" : ""}`} type="button" aria-label={[`${name(thread)} · ${thread.clinic_name}`, thread.unread_count > 0 ? `${thread.unread_count} ${copy.unread}` : null, thread.last_message_preview, thread.last_message_at ? chatDisplayTime(thread.last_message_at, locale, undefined, timezone) : null].filter(Boolean).join(" · ")} aria-pressed={selected === thread.id} disabled={sending || opening} onClick={() => { setSelected(thread.id); setThreadFocused(true); }}>
             <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-note-tint text-[15px] font-semibold text-note-ink">{name(thread).replace(/^Dr\.?\s*/i, "").split(" ").filter(Boolean).slice(0, 2).map((part) => part[0]).join("")}</span>
             <span className="min-w-0 flex-1">
             <span className="flex items-baseline gap-2">
               <span className="min-w-0 flex-1 break-words text-[15px] font-semibold text-ink">{name(thread)}</span>
-              {thread.last_message_at && <time className="shrink-0 font-mono text-xs text-muted" dateTime={thread.last_message_at}>{chatDisplayTime(thread.last_message_at, locale)}</time>}
+              {thread.last_message_at && <time className="shrink-0 font-mono text-xs text-muted" dateTime={thread.last_message_at}>{chatDisplayTime(thread.last_message_at, locale, undefined, timezone)}</time>}
             </span>
             <span className="block break-words text-[13px] text-muted"><span className="sr-only"> · </span>{thread.clinic_name}</span>
             <span className="mt-0.5 flex items-center gap-2">
@@ -266,6 +267,7 @@ function ConversationThread({ token, thread, locale, visible, draft, onDraft, on
   recordRequestId?: string | null;
 }) {
   const copy = getConversationCopy(locale);
+  const timezone = useSavedTimezone();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (!visible || !focusOnOpen) return;
@@ -456,7 +458,8 @@ function ConversationThread({ token, thread, locale, visible, draft, onDraft, on
             {/* LOC-003 item 5: a computer made this, it may be wrong, and the original counts. */}
             <TranslationNote copy={copy} modelId={message.translation_model_id} />
           </p> : null}
-          <p className={`max-w-[88%] break-words px-1 text-[11px] text-muted ${own ? "text-right" : ""}`}>{message.sender_name} · {conversationRoleLabel(message.sender_role, locale)} · {thread.clinic_name} · <time className="font-mono" dateTime={message.created_at}>{chatDisplayTime(message.created_at, locale)}</time></p>
+          {/* The header already names the clinic; each message shows who and when. */}
+          <p className={`max-w-[88%] break-words px-1 text-[11px] text-muted ${own ? "text-right" : ""}`}>{own ? (locale === "es-MX" ? "Tú" : "You") : `${message.sender_name} · ${conversationRoleLabel(message.sender_role, locale)}`} · <time className="font-mono" dateTime={message.created_at}>{chatDisplayTime(message.created_at, locale, undefined, timezone)}</time></p>
         </li>;
       })}
     </ol>

@@ -170,6 +170,24 @@ describe("API client error mapping", () => {
         );
     });
 
+    it.each([
+        [500, { detail: "psycopg.errors.UndefinedColumn: column x does not exist" }, "MediAgent couldn't complete this right now. Try again in a moment."],
+        [500, { detail: [{ loc: ["body", "internal_field"], msg: "psycopg internal failure" }] }, "MediAgent couldn't complete this right now. Try again in a moment."],
+        [409, { detail: "Conflict" }, "This action conflicts with the current information. Refresh to check the latest details before trying again."],
+        [403, { error: { code: "AUTHORIZATION_ERROR", message: "AUTHORIZATION_ERROR" } }, "You don't have access to do this. Ask a clinic admin if you need it."],
+        [404, null, "This item is no longer available. Refresh the page to see the latest."],
+        [403, { detail: "Only clinic admins can manage staff" }, "Only clinic admins can manage staff"],
+    ])("shows plain words instead of status codes, server internals and framework phrases (%i)", async (status, payload, message) => {
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(payload === null ? "" : JSON.stringify(payload), {
+            headers: { "Content-Type": "application/json" }, status,
+        })));
+        const failure = await api.post("/api/v1/test").catch((error: unknown) => error);
+        expect(failure).toBeInstanceOf(ApiClientError);
+        expect((failure as ApiClientError).message).toBe(message);
+        expect((failure as ApiClientError).message).not.toMatch(/HTTP \d|psycopg/);
+        expect((failure as ApiClientError).status).toBe(status);
+    });
+
     it("throws ApiClientError with status metadata", async () => {
         vi.stubGlobal(
             "fetch",

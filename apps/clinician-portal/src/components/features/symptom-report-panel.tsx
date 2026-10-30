@@ -30,6 +30,25 @@ const EVENT_LABEL: Record<string, string> = {
     reviewed: "Marked reviewed",
 };
 
+const LANGUAGE_NAMES: Record<string, string> = { "en-US": "English", "es-MX": "Spanish (Mexico)" };
+const URGENCY_LABEL: Record<string, string> = { urgent: "Urgent", emergency: "Emergency" };
+const DELIVERY_LABEL: Record<string, string> = {
+    delivered: "delivered",
+    sent: "sent",
+    queued: "waiting to send",
+    pending: "waiting to send",
+    failed: "not delivered",
+};
+
+function humanize(code: string) {
+    const words = code.replaceAll("_", " ").trim();
+    return words ? words.charAt(0).toUpperCase() + words.slice(1) : code;
+}
+
+function languageName(locale: string | null | undefined) {
+    return locale ? LANGUAGE_NAMES[locale] ?? locale : "Not recorded";
+}
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
     return (
         <div className="py-2">
@@ -100,7 +119,7 @@ export function SymptomReportPanel({ patientId, reportId, onClose, onReviewed }:
                         </header>
 
                         <section aria-labelledby="report-answers">
-                            <h4 id="report-answers" className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Confirmed answers ({report.locale})</h4>
+                            <h4 id="report-answers" className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Confirmed answers · {languageName(report.locale)}</h4>
                             {report.answers.length === 0 ? <p className="mt-2 text-sm text-muted">No answers were saved with this report.</p> : (
                                 <dl lang={report.locale} className="divide-y divide-line">
                                     {report.answers.map((answer) => (
@@ -117,27 +136,39 @@ export function SymptomReportPanel({ patientId, reportId, onClose, onReviewed }:
                                 <Row label="Emergency rule check at confirmation">
                                     {report.triage.safety_result === "no_existing_rule_matched"
                                         ? "No existing emergency rule matched. This is not a clinical triage."
-                                        : (report.triage.safety_result ?? "Not recorded")}
-                                    {report.triage.safety_rule_version ? ` (${report.triage.safety_rule_version})` : ""}
+                                        : report.triage.safety_result
+                                          ? humanize(report.triage.safety_result)
+                                          : "Not recorded"}
                                 </Row>
                                 <Row label="Urgent-answer alert">
                                     {report.triage.escalation_urgency
-                                        ? `${report.triage.escalation_urgency}, delivery ${report.triage.escalation_delivery ?? "unknown"}, ${when(report.triage.escalation_at, report.timezone)}`
+                                        ? `${URGENCY_LABEL[report.triage.escalation_urgency] ?? humanize(report.triage.escalation_urgency)}, ${
+                                              report.triage.escalation_delivery
+                                                  ? DELIVERY_LABEL[report.triage.escalation_delivery] ?? humanize(report.triage.escalation_delivery).toLowerCase()
+                                                  : "delivery not recorded"
+                                          }, ${when(report.triage.escalation_at, report.timezone)}`
                                         : "None recorded"}
                                 </Row>
                             </dl>
                         </section>
 
                         <section aria-labelledby="report-provenance">
-                            <h4 id="report-provenance" className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Provenance</h4>
+                            <h4 id="report-provenance" className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Report details</h4>
                             <dl className="divide-y divide-line">
-                                <Row label="Report id">{report.provenance.report_id}</Row>
-                                <Row label="Source chat message">{report.provenance.source_message_id ?? "Not recorded"}</Row>
                                 <Row label="Confirmed">{when(report.provenance.confirmed_at, report.provenance.timezone)}</Row>
-                                <Row label="Patient language">{report.provenance.language}</Row>
+                                <Row label="Patient language">{languageName(report.provenance.language)}</Row>
                                 <Row label="Patient consent to share">{report.provenance.consent_recorded ? "Explicit consent recorded at confirmation" : "Not recorded"}</Row>
-                                <Row label="Schema / question library">{report.provenance.schema_version ?? "n/a"} / {report.provenance.library_version ?? "n/a"}</Row>
                             </dl>
+                            {/* Audit and support identifiers; not needed to review the report. */}
+                            <details className="ma-disclosure mt-2 rounded-lg bg-surface-2 px-3 py-1 text-xs text-muted">
+                                <summary className="min-h-9 py-1.5 text-[13px] font-medium">Technical details</summary>
+                                <dl className="space-y-1.5 pb-2 [overflow-wrap:anywhere]">
+                                    <div><dt className="font-medium text-ink-2">Report ID</dt><dd className="font-mono">{report.provenance.report_id}</dd></div>
+                                    <div><dt className="font-medium text-ink-2">Source chat message ID</dt><dd className="font-mono">{report.provenance.source_message_id ?? "Not recorded"}</dd></div>
+                                    <div><dt className="font-medium text-ink-2">Question set version</dt><dd className="font-mono">{[report.provenance.schema_version, report.provenance.library_version].filter(Boolean).join(" · ") || "Not recorded"}</dd></div>
+                                    <div><dt className="font-medium text-ink-2">Emergency rule version</dt><dd className="font-mono">{report.triage.safety_rule_version ?? "Not recorded"}</dd></div>
+                                </dl>
+                            </details>
                         </section>
 
                         <section aria-labelledby="report-events">
@@ -145,7 +176,7 @@ export function SymptomReportPanel({ patientId, reportId, onClose, onReviewed }:
                             <ol className="mt-2 space-y-2">
                                 {report.events.map((event) => (
                                     <li key={`${event.kind}-${event.at}`} className="text-sm text-ink-2">
-                                        {EVENT_LABEL[event.kind] ?? event.kind}{event.actor_name ? ` by ${event.actor_name}` : ""}{event.team_label ? ` (${event.team_label})` : ""}
+                                        {EVENT_LABEL[event.kind] ?? humanize(event.kind)}{event.actor_name ? ` by ${event.actor_name}` : ""}{event.team_label ? ` (${event.team_label})` : ""}
                                         <span className="block text-xs text-muted"><time dateTime={event.at}>{when(event.at, report.timezone)}</time></span>
                                     </li>
                                 ))}

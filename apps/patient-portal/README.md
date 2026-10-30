@@ -170,6 +170,15 @@ do not. Refresh buttons remain available alongside pull-to-refresh. Nora keeps
 Enter-to-send and Shift+Enter for a new line; human conversation input retains its
 existing multiline behavior.
 
+Interface text avoids technical noise (UX-007). Records show who uploaded a document
+once and a clinic name only when one is recorded; the original file name sits in
+the Source document section. Record-correction requests name the document and date
+added, never the database id. Chat times use the saved time zone, and the
+"Original language" label appears only when a message is in the other language or
+its language is unknown. Time zones read as names ("Pacific Time · Los Angeles"),
+through `content/timezone-label.ts`. See the
+[UX-007 spec](../../.agent/specs/ux-007-interface-noise.md).
+
 ## Care team conversations
 
 **Ask about a plan activity** opens an optional approved-activity picker in the

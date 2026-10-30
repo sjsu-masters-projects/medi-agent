@@ -26,7 +26,7 @@ import type { RootState } from "@/store/store";
 import { PatientADRPanel } from "@/components/features/patient-adr-panel";
 import { PatientTimeline } from "@/components/features/patient-timeline";
 import { SymptomReportPanel } from "@/components/features/symptom-report-panel";
-import { formatClinicianDateTime } from "@/utils/dates";
+import { formatClinicianDate, formatClinicianDateTime } from "@/utils/dates";
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
 
@@ -283,7 +283,8 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                         </div>
                         <LinkedAt name={clinics.length >= 2 ? patient.clinic_name : null} />
                         <p className="mt-0.5 flex flex-wrap gap-x-1.5 text-[13px] text-muted">
-                            {patient.date_of_birth ? <span>DOB {patient.date_of_birth}</span> : null}
+                            {/* A date-only value is read in UTC so it never shifts by a day. */}
+                            {patient.date_of_birth ? <span>DOB {/^\d{4}-\d{2}-\d{2}$/.test(patient.date_of_birth) ? formatClinicianDate(`${patient.date_of_birth}T00:00:00Z`, { timeZone: "UTC", dateStyle: "medium" }) : patient.date_of_birth}</span> : null}
                             {patient.date_of_birth ? <span aria-hidden="true">·</span> : null}
                             <span className="break-all">{patient.email}</span>
                         </p>

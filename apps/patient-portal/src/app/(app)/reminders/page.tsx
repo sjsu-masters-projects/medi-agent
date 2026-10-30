@@ -30,6 +30,7 @@ import type {
   ReminderTarget,
 } from "@/types";
 import { useSelector } from "react-redux";
+import { formatTimezoneLabel } from "@/content/timezone-label";
 
 const DAYS: ReminderDayOfWeek[] = [
   "monday",
@@ -406,7 +407,7 @@ export default function ReminderSettingsPage() {
                   <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-ink-2"><Icon name="globe" className="h-5 w-5" /></span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-[15px] font-semibold text-ink">{copy("Advanced settings")}</span>
-                    <span className="block break-words text-[13px] text-muted">{patientTimezone.replaceAll("_", " ")}</span>
+                    <span className="block break-words text-[13px] text-muted">{formatTimezoneLabel(patientTimezone, locale)}</span>
                   </span>
                   <Icon name="chevronDown" className="h-[18px] w-[18px] shrink-0 text-muted transition-transform duration-[240ms] group-open:rotate-180" />
                 </summary>
@@ -556,7 +557,7 @@ export default function ReminderSettingsPage() {
                             ))}
                           </p>
                           <p className="break-words text-xs text-muted">
-                            {target.reminderSchedule.timezone.replaceAll("_", " ")}
+                            {formatTimezoneLabel(target.reminderSchedule.timezone, locale)}
                           </p>
                         </div>
                       </div>
@@ -638,7 +639,7 @@ export default function ReminderSettingsPage() {
                         </p>
                         <p className="break-words text-sm text-muted">
                           {copy("Reminder timezone:")}{" "}
-                          {draft.timezone.replaceAll("_", " ")}
+                          {formatTimezoneLabel(draft.timezone, locale)}
                         </p>
                         <div>
                           <p className="mb-3 text-[15px] font-semibold text-ink">

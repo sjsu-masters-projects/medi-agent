@@ -136,14 +136,14 @@ describe("ADR review card evidence provenance", () => {
         });
         const entries = evidenceEntries(container);
         expect(entries).toHaveLength(3);
-        expect(entries[0]).toHaveTextContent("Follow-up request not recorded");
-        expect(entries[1]).toHaveTextContent("Different follow-up");
-        expect(entries[2]).toHaveTextContent("Current follow-up");
+        expect(entries[0]).toHaveTextContent("Follow-up link not recorded");
+        expect(entries[1]).toHaveTextContent("From another follow-up");
+        expect(entries[2]).toHaveTextContent("From this follow-up");
         expect(entries[0].querySelector("time")).toBeNull();
         expect(entries[1].querySelector("time")).toBeNull();
         expect(entries[2].querySelector("time")).toHaveAttribute("dateTime", RESPONDED_AT);
         for (const entry of entries) expect(labelsIn(entry)).toEqual(["Patient-confirmed"]);
-        expect(within(entries[1]).getByText("no", { exact: true })).toBeInTheDocument();
+        expect(within(entries[1]).getByText("No", { exact: true })).toBeInTheDocument();
     });
 
     it("labels every entry AI-extracted when no entry records a source", () => {

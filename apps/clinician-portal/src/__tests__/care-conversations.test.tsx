@@ -177,7 +177,10 @@ describe("human conversations", () => {
     await select();
     expect(screen.getByText("<img src=x onerror=alert(1)>")).toBeInTheDocument();
     expect(document.querySelector("img")).toBeNull();
-    expect(screen.getAllByText(/Dr. One · Clinician · Clinic One/).length).toBeGreaterThan(1);
+    // Each message names its sender; the clinic appears once, in the thread header.
+    expect(screen.getAllByText(/^Dr. One · Clinician ·/).length).toBeGreaterThan(1);
+    expect(screen.queryAllByText(/Clinician · Clinic One/, { selector: "p" })).toHaveLength(0);
+    expect(screen.getByRole("heading", { name: /Clinic One/ })).toBeInTheDocument();
     await waitFor(() => expect(careConversations.read).toHaveBeenCalledWith("synthetic-token", thread.id, "two"));
     expect(careConversations.read).not.toHaveBeenCalledWith("synthetic-token", thread.id, "unseen");
   });

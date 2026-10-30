@@ -169,6 +169,9 @@ describe("Form3500PreviewView", () => {
         render(<Form3500PreviewView preview={makePreview({ legacy: { "reporter.specialty": "Internal medicine" } })} />);
         const legacy = screen.getByRole("region", { name: "Earlier draft text with no Form 3500 item" });
         expect(within(legacy).getByText("Internal medicine")).toBeInTheDocument();
+        // The stored key is labelled for people, including in the printed copy.
+        expect(within(legacy).getByText("Reporter · Specialty")).toBeInTheDocument();
+        expect(within(legacy).queryByText("reporter.specialty")).not.toBeInTheDocument();
     });
 });
 

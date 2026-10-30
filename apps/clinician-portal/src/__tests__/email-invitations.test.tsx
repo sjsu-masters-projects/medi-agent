@@ -8,10 +8,11 @@ const item = { id: "invite-1", email: "demo@example.com", role: "provider", expi
 beforeEach(() => { vi.resetAllMocks(); mocks.get.mockResolvedValue({ items: [item] }); });
 afterEach(cleanup);
 
-it("keeps provider acceptance separate from membership and inbox delivery", async () => {
+it("keeps email delivery separate from membership and does not call the mail service a provider", async () => {
   render(<EmailInvitations token="session" revision={null} />);
-  await screen.findByText("Provider accepted — delivery not confirmed");
-  expect(screen.getByText(/Awaiting acceptance/)).toBeInTheDocument();
+  await screen.findByText("Email sent — delivery not yet confirmed");
+  expect(screen.getByText("Provider · Awaiting acceptance")).toBeInTheDocument();
+  expect(screen.queryByText(/Provider accepted|Provider confirmed/)).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Revoke invitation" })).toBeInTheDocument();
 });
 it("revokes the exact unused invitation and refreshes its authoritative status", async () => {
@@ -24,12 +25,12 @@ it("revokes the exact unused invitation and refreshes its authoritative status",
 it("does not offer revocation for an accepted membership", async () => {
   mocks.get.mockResolvedValue({ items: [{ ...item, accepted_at: "2026-10-11T00:00:00Z" }] });
   render(<EmailInvitations token="session" revision={null} />);
-  await screen.findByText(/provider · Accepted/);
+  await screen.findByText(/Provider · Accepted/);
   expect(screen.queryByRole("button", { name: "Revoke invitation" })).not.toBeInTheDocument();
 });
 it("reads one clinic's invitation history when a clinic is named", async () => {
   render(<EmailInvitations clinicId="clinic-a" token="session" revision={null} />);
-  await screen.findByText("Provider accepted — delivery not confirmed");
+  await screen.findByText("Email sent — delivery not yet confirmed");
   expect(mocks.get).toHaveBeenCalledWith("/api/v1/email/invitations?clinic_id=clinic-a", { token: "session" });
 });
 it("explains a refusal for a clinic where the clinician is not an admin", async () => {

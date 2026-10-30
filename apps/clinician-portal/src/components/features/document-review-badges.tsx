@@ -45,6 +45,25 @@ interface ParseStatusBadgeProps {
     parseStatus: string;
 }
 
+const PARSE_STATUS_LABELS: Record<string, string> = {
+    none: "Not processed",
+    pending: "Waiting to process",
+    processing: "Processing",
+    completed: "Processed",
+    failed: "Processing failed",
+    duplicate: "Duplicate — already on file",
+    needs_ocr: "Scan not readable — review needed",
+    needs_evidence_review: "Couldn't verify — check source",
+};
+
+/** Processing state in words; an unknown state is humanized, never shown as a code. */
+export function parseStatusLabel(parseStatus: string): string {
+    const known = PARSE_STATUS_LABELS[parseStatus];
+    if (known) return known;
+    const words = parseStatus.replaceAll("_", " ").trim();
+    return words ? `Processing: ${words}` : "Processing status unavailable";
+}
+
 export function ParseStatusBadge({ parseStatus }: ParseStatusBadgeProps) {
     const tone = getParseStatusTone(parseStatus);
     return (
@@ -54,13 +73,7 @@ export function ParseStatusBadge({ parseStatus }: ParseStatusBadgeProps) {
             ) : (
                 <span aria-hidden="true" className={`h-[7px] w-[7px] shrink-0 rounded-full ${tone.dot}`} />
             )}
-            {parseStatus === "duplicate"
-                ? "Duplicate upload — extraction skipped"
-                : parseStatus === "needs_ocr"
-                ? "OCR review needed"
-                : parseStatus === "needs_evidence_review"
-                  ? "Evidence review needed"
-                  : `Parse ${parseStatus}`}
+            {parseStatusLabel(parseStatus)}
         </span>
     );
 }

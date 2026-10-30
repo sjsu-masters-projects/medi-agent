@@ -36,9 +36,11 @@ describe("record review request preparation", () => {
     fireEvent.click(button);
     expect(onDraft).toHaveBeenCalledWith({
       body: expect.stringContaining(
-        "Document: Prescription\nOriginal file: source.pdf\nRecord reference: record-a",
+        "Document: Prescription\nOriginal file: source.pdf\n\nMy request: ",
       ),
     });
+    // The patient's message names the record in words, not by its database id.
+    expect(onDraft.mock.calls[0][0].body).not.toContain("record-a");
     expect(get).toHaveBeenCalledWith(
       "/api/v1/documents/record-a",
       expect.objectContaining({ token: "synthetic-token" }),
@@ -100,8 +102,9 @@ describe("record review request preparation", () => {
     expect(screen.queryByText("Wrong source")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Prepare request" }));
     expect(onDraft).toHaveBeenCalledWith({
-      body: expect.stringContaining("record-b"),
+      body: expect.stringContaining("Document: Prescription"),
     });
+    expect(onDraft.mock.calls[0][0].body).not.toContain("Wrong source");
   });
 
   it("prepares Spanish wording while preserving original source identity", async () => {
