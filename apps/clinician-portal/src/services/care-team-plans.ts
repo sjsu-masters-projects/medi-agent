@@ -2,7 +2,7 @@
  * PLAN-002 / CLN-003 G-H clinician API: plans per care team, cross-plan conflicts, review
  * items, unowned plans, the shared clinical summary and document claims.
  *
- * Contract: `.agent/specs/plan-002-care-plans-per-care-team.md#api-contract-pr-210`.
+ * Contract: `docs/features/care-plans-and-today.md#api-contract`.
  * Every function reads the stored clinician session, so a caller never handles a token.
  */
 

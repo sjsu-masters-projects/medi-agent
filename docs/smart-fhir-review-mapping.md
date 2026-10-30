@@ -172,7 +172,7 @@ The collection and its resources are validated with the installed R4B models,
 using R4-compatible fields. Re-import is candidate-only and never reapplies an
 approval, changes reminders or modifies a plan. Raw evidence remains available
 through the existing source inspection and reviewed handoff export is a separate
-workflow. See the [completion contract](../.agent/specs/int-002-003-interoperability-plan.md#october-22-completion-scope).
+workflow. See the [completion contract](features/patient-records.md).
 
 ## Standards references
 

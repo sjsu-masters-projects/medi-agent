@@ -14,7 +14,7 @@ Use this guide to recreate the project after an inactive instance is removed. It
 
 ## Account email delivery (EMAIL-001)
 
-See [the email contract](../.agent/specs/email-001-email-flows.md) before changing
+See [the email contract](features/messaging-and-alerts.md) before changing
 Auth settings. Keep Confirm email off and use no wildcard redirects. Set Site URL to
 `https://app.mediagent.live` and add the three exact deployed reset destinations listed
 below. Saved SMTP settings verify configuration, not delivery.
@@ -65,7 +65,7 @@ side effect of applying SQL. Its link opens the portal reset page, so both porta
 `NEXT_PUBLIC_SUPABASE_ANON_KEY` must be the project's exact public key: `/verify` does not
 check the key, but saving the new password does. Periodic email delivery runs after each
 reminder run. Configuration and production status:
-[EMAIL-001](../.agent/specs/email-001-email-flows.md#operations-and-configuration).
+[EMAIL-001](features/messaging-and-alerts.md).
 
 ## Apply migrations
 
@@ -137,7 +137,7 @@ functions using the existing evidence fence; no source backfill. Apply it before
 the matching backend/portal release, only after explicit target authorization.
 Without it the route fails closed and the portal offers the private care-team
 request path. Local checks and rollout state belong to the
-[record clarity contract](../.agent/specs/rec-001-patient-record-clarity.md#patient-removal-and-reading-refinement).
+[record clarity contract](features/patient-records.md).
 
 Migration `047_adr_patient_information_loop.sql` adds the patient-confirmed ADR information
 request, deterministic reassessment, notification closure, and patient-actor audit transaction.
@@ -361,7 +361,7 @@ overlap pairs), apply `042_appointment_expired_status.sql` before
 `backend/scripts/verify-appointment-slice5.sql`, which must print
 `Slice 5 schema and function permissions verified`. Rollout order and the synthetic
 conflict/expiry journey are in
-[the scheduling design §14](../.agent/specs/sch-001-appointment-scheduling.md#14-slice-5--booking-conflicts-and-proposal-expiry).
+[the scheduling design §14](features/scheduling.md).
 
 ## Configure SMART staging
 

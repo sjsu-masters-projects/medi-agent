@@ -12,7 +12,7 @@
 <!-- Mark all that apply -->
 - [ ] No docs update required.
 - [ ] Updated `.agent/TASKS.md`.
-- [ ] Updated `.agent/specs/*` docs.
+- [ ] Updated the feature doc in `docs/features/`.
 - [ ] Updated `README.md` and/or `CONTRIBUTING.md`.
 
 ## Required Verification Checklist

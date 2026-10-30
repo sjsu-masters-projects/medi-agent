@@ -7,7 +7,7 @@ clinical approval, source provenance and access controls intact.
 
 1. Inspect the branch and working tree. Preserve unrelated work.
 2. Read the [contributor contract](AGENTS.md), [task board](.agent/TASKS.md) and
-   the selected task's linked specification.
+   the feature doc for the selected task's area.
 3. Check [product scope](.agent/PROJECT.md), [architecture](.agent/ARCHITECTURE.md),
    [coding standards](.agent/CODING_STANDARDS.md) and [team responsibilities](.agent/TEAM.md).
 4. State the user outcome, acceptance checks and decisions still needed.
@@ -120,11 +120,12 @@ also need the applicable safety review. Do not merge or deploy without authoriza
 | Change | Update |
 | --- | --- |
 | Status, owner, remaining work | [Task board](.agent/TASKS.md) |
-| Feature behavior and acceptance | Linked specification under `.agent/specs/` |
-| Cross-cutting design | [Architecture](.agent/ARCHITECTURE.md) or existing decision record |
+| Feature behavior and rules | [Feature doc](docs/features/) for that area |
+| Requirements for work not yet built | Temporary specification under `.agent/specs/` ([rules](docs/maintaining-docs.md#retire-or-move-a-document)) |
+| Cross-cutting design | [Architecture](.agent/ARCHITECTURE.md) or the feature doc |
 | Commands and recovery procedures | Relevant operating guide under `docs/` |
 | Test results, screenshots and observations | Linked report under [evidence](docs/evidence/README.md) |
 | Setup or navigation | [README](README.md), [documentation index](docs/README.md) or app README |
 
-Specifications stay useful after implementation. Remove a document only when its
-unique requirements or operational value have a maintained home elsewhere.
+A specification is temporary: when its feature ships, move the rules worth keeping into
+the feature doc and delete it. See [retiring a document](docs/maintaining-docs.md#retire-or-move-a-document).

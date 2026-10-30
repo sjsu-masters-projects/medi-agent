@@ -151,7 +151,7 @@ normal review. Do not copy a new hash merely to silence CI.
 ## Verification and remaining work
 
 Focused source/regression checks are recorded in the
-[review specification](../../.agent/specs/loc-001-interface-review.md).
+[review specification](loc-001-interface-review.md).
 The full patient suite passes 989 tests in 91 files; focused backend checks pass
 280 tests. Lint, both portal type-checks, backend mypy, receipt freshness and
 documentation checks pass. These verify code/copy contracts, not live rendering.

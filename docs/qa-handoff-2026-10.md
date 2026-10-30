@@ -84,7 +84,7 @@ leaked English in es-MX.
 2. Open the document and ask about a value in es-MX.
 3. Pass: values, units and page provenance are retained, an "unreviewed data" warning shows, the answer persists after reload, chat fits at 360/390/430 px. Attaching an invalid file shows the specific explanation.
 
-**VOICE-001 and VOI-001-M (physical voice)** (spec: [VOICE-001](../.agent/specs/voice-001-voice-mode.md))
+**VOICE-001 and VOI-001-M (physical voice)** (reference: [VOICE-001](features/voice-mode.md))
 1. Preconditions: real phone, synthetic patient account, microphone available.
 2. Allow the microphone, dictate in en-US then es-MX. Check the transcript and corrections.
 3. Listen to the reply. Interrupt it (barge-in), pause, cancel, drop and restore the connection.
@@ -105,11 +105,11 @@ leaked English in es-MX.
 2. As the patient open "My symptoms" and the report detail.
 3. As a clinician on that team open the report panel (answers, safety outcome, provenance, consent) and use "Mark reviewed".
 4. Back as the patient, then as a clinician on another team.
-5. Pass: history shows only the patient's confirmed reports in the saved time zone; status comes from recorded events; "Sent to your care team" appears only if the hand-off reached an active link; Mark reviewed is idempotent (a second click makes no second event); the patient gets a notification linking to the report; the other team sees the review. Spec: [PAT-002-B plan, sections 27 and 30](../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md).
+5. Pass: history shows only the patient's confirmed reports in the saved time zone; status comes from recorded events; "Sent to your care team" appears only if the hand-off reached an active link; Mark reviewed is idempotent (a second click makes no second event); the patient gets a notification linking to the report; the other team sees the review. Reference: [Symptom intake](features/symptom-intake.md).
 
 ### 3.3 Care-team plans
 
-**PLAN-002, CLN-003** (spec: [PLAN-002](../.agent/specs/plan-002-care-plans-per-care-team.md))
+**PLAN-002, CLN-003** (reference: [PLAN-002](features/care-plans-and-today.md))
 1. Preconditions: Elena (two clinics) and a patient linked to two teams.
 2. As each team, view and edit that team's plan; publish a change that duplicates or conflicts with the other team's plan.
 3. Expected: the publish flow offers blockers (duplicate, stop, dose), keep both with a reason, ask the other team, or publish without. The patient's Today shows merged items with owner labels.
@@ -118,7 +118,7 @@ leaked English in es-MX.
 
 ### 3.4 Handoff summaries
 
-**CON-001** (spec: [CON-001](../.agent/specs/con-001-care-handoff-summary.md))
+**CON-001** (reference: [CON-001](features/clinics-and-care-teams.md#handoff-summary))
 1. Preconditions: synthetic patient with a timeline; author clinician and a second allowed clinician on the team.
 2. As the author build a handoff summary, check sections are source-linked, approve it, then print and export FHIR.
 3. Share the approved version with the second clinician. As that clinician, read it, print and export it, and confirm you get a notification.
@@ -131,7 +131,7 @@ leaked English in es-MX.
 2. As the clinician choose "Ask the patient to confirm".
 3. As the patient open Today and answer (Yes / No, I stopped / It changed / Not sure) in en-US and es-MX.
 4. Back as the clinician, view the answer in the review panel and in export.
-5. Pass: the answer appears as patient testimony with time and "not verified"; it never changes the approved medication list; repeating the answer is idempotent; an expired (14-day) or foreign request is refused; wording is correct in both languages. No notification-centre alert is expected yet. Spec: [MED-002](../.agent/specs/expo-workflow-completion.md#med-002--clinician-reconciliation-experience-and-patient-confirmation).
+5. Pass: the answer appears as patient testimony with time and "not verified"; it never changes the approved medication list; repeating the answer is idempotent; an expired (14-day) or foreign request is refused; wording is correct in both languages. No notification-centre alert is expected yet. Reference: [Patient records](features/patient-records.md).
 
 ### 3.6 Notifications
 
@@ -150,20 +150,20 @@ leaked English in es-MX.
 
 ### 3.8 Records and FHIR
 
-**REC-001, CLN-002, INT-002, INT-003-V, UX-005** (spec: [interoperability plan](../.agent/specs/int-002-003-interoperability-plan.md#october-22-completion-scope))
+**REC-001, CLN-002, INT-002, INT-003-V, UX-005** (reference: [patient records](features/patient-records.md))
 1. Preconditions: synthetic documents and a clinician assigned to the patient.
 2. Open source and lifecycle views for a document-derived item; open the clinician timeline.
 3. Download the canonical FHIR collection and run a SMART sandbox launch.
 4. Open the ADR record tab, then MedWatch Preview, Approve and Download at 390 px.
 5. Pass: filenames, IDs and pages are retained; withdrawn items show their state; the timeline loads source-linked rows, shows freshness and respects role and private-thread isolation; the FHIR download is candidate-only on re-import and honors sensitive-condition gates; SMART reaches the sandbox patient login, not the provider picker; the MedWatch PDF renders in Chrome and mobile (it only looked blank in the in-app browser). Do not claim full-chart or conformance certification. Make no chart changes without specific approval.
 
-**REC-001-UX, REC-001-RM, REC-001-MO (patient Records)** (spec: [record clarity](../.agent/specs/rec-001-patient-record-clarity.md))
+**REC-001-UX, REC-001-RM, REC-001-MO (patient Records)** (reference: [record clarity](features/patient-records.md))
 1. Preconditions: a patient with one own pending upload, one reviewed document and one document with an explanation.
 2. Use Refresh on Records. Open a document and its explanation in en-US and es-MX, then close it with the sticky close control.
 3. Upload a file and watch it process. Remove your own pending upload. Try to remove a reviewed document.
 4. Pass: review labels match the recorded state and clinician labels are explicit; reopening an explanation makes no new model call; processing shows motion, then a neutral highlight and a screen-reader announcement; with reduced motion the status text stays; removal confirms with a notice; a refused removal keeps the source and offers the private care-team request instead.
 
-**PV-001-D (Naranjo answer coverage)** (spec: [PV-001-D](../.agent/specs/pv-001-d-naranjo-answer-coverage.md))
+**PV-001-D (Naranjo answer coverage)** (reference: [PV-001-D](features/adverse-events.md))
 1. Preconditions: Elena with an open ADR case for Morgan.
 2. As Elena, use Request information. As Morgan, answer all five retrospective questions in en-US and es-MX.
 3. As Elena, record the five clinical questions with a basis and evidence. Save again with no change, then change one answer.
@@ -171,7 +171,7 @@ leaked English in es-MX.
 
 ### 3.9 Safety
 
-**SAFE-002, SAFE-001-H, AI-006** (specs: [AI runtime](decisions/ai-runtime-2026-09.md), [safety release](../.agent/specs/safety-release-completion.md))
+**SAFE-002, SAFE-001-H, AI-006** (reference: [AI runtime](features/ai-runtime-and-workers.md), [safety release](features/safety.md))
 1. Preconditions: synthetic patient chatting with Nora.
 2. Send, in both languages: a medication-error statement (for example a double dose), a severe-symptom phrase, a low-mood message, a mild stable symptom, and a general wellness question.
 3. Pass: the medication-error and severe cases give urgent, same-day wording and raise an urgent alert to the care team; low mood gets crisis-appropriate deterministic wording; mild and wellness prompts get bounded general guidance with no symptom-report confirmation; nothing contains private reasoning. SAFE-002 also needs the peer safety review by Ganesh; log wording you doubt. SAFE-001-H has no new UI; confirm only that clinician actions still work for a clinician with an active assignment and fail for one without.

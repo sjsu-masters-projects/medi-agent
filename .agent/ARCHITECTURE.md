@@ -55,7 +55,7 @@ payloads. Provider acceptance and confirmed delivery remain different states.
 The `email_dispatch` job runs after each reminder run.
 
 Deployed October 12 (migrations 057/058); production status and open items are in the
-[contract](specs/email-001-email-flows.md#production-status--october-12).
+[contract](../docs/features/messaging-and-alerts.md).
 
 ## Worker and service boundaries
 
@@ -66,7 +66,7 @@ unknown language, without writing source, summary or approval state. Schema,
 number/unit counts, negation and clear language-mismatch checks reject unverified
 output. The saved patient locale owns presentation; the portal rejects responses
 for a stale document/locale/account and exposes only the visible text to speech/chat.
-Details and local verification: [record clarity](specs/rec-001-patient-record-clarity.md).
+Details and local verification: [record clarity](../docs/features/patient-records.md).
 Migration 102 stores only validated derivative presentations, one per document and
 supported locale, behind service-only privileges. Every request authorizes the
 current source before cache access. Its exact-summary fingerprint and presentation
@@ -84,7 +84,7 @@ removal requests reuse private care-team messages with explicit recipient, draft
 preparation and Send; they neither change clinical truth nor introduce another queue.
 
 PAT-002-B's source audit and confirmation contract are recorded in the
-[confirmed symptom intake plan](specs/pat-002-b-confirmed-symptom-intake-plan.md).
+[confirmed symptom intake plan](../docs/features/symptom-intake.md).
 Current implementation and activation prerequisites are described below. Migrations
 059/060 and the checksum-pinned `071_confirmed_symptom_handoff.sql` are recorded as
 applied; the 071 handoff adds durable confirmed-report ADR work. These migrations reuse
@@ -122,7 +122,7 @@ cleared on sign-out, falling back to `Accept-Language`) is a presentation hint o
 never identity or authorization. COM-002 stores an approved activity
 reference in a private message; its explicit review transaction opens/reuses an
 audited draft under the existing evidence fence. Messages and replies do not
-publish or change reminders. Contract and rollout: [combined plan](specs/demo-care-loop-followups.md).
+publish or change reminders. Contract and rollout: [combined plan](../docs/features/care-plans-and-today.md).
 
 ## Nora's knowledge and conversations (NORA-002)
 
@@ -135,7 +135,7 @@ by patient-scoped tools whose patient comes from session state, never from the m
 reply's source line is written by the server from the tool results. Chat messages belong
 to a conversation (`session_id`): one per day by default, plus any the patient starts; the
 model's recap is built from stored messages, so a restart loses nothing. Design and
-checks: [NORA-002](specs/nora-002-grounded-answers.md).
+checks: [NORA-002](../docs/features/nora-chat.md).
 
 PAT-001-A adds the opt-in `turn_protocol=1` websocket contract: a patient/session
 turn claim saves the user message atomically, fences execution with a lease and
@@ -144,7 +144,7 @@ process memory; retries reuse the original identity and cannot repeat uncertain
 clinical actions. Document identity and evidence version are fixed at submission,
 independent of later focus changes. The older socket contract remains explicitly
 available during rollout, without durable retry guarantees. See the
-[turn recovery contract](specs/pat-001-a-nora-turn-recovery.md) for rollout and tests.
+[turn recovery contract](../docs/features/nora-chat.md) for rollout and tests.
 
 ## Human conversations (COM-001-B)
 
@@ -157,7 +157,7 @@ blocks further access. Nora transcripts and legacy operational notifications are
 separate stores and UI views. A clinician explicitly sending their own text is the
 approval action; the model does not generate or send human conversation messages.
 
-The contract is `.agent/specs/com-001-two-way-conversations.md`. Merged in #139 and
+The contract is `docs/features/messaging-and-alerts.md`. Merged in #139 and
 deployed; live acceptance is recorded in TASKS (COM-001-B Done). No real-PHI production
 readiness is claimed.
 
@@ -170,7 +170,7 @@ presentation state, not approval or clinical resolution. Private-message events 
 bound to the addressed patient/clinician thread; shared work follows current clinical
 assignment and source state. Signed bulk-read snapshots exclude later arrivals.
 Merged in #148 and #149 and deployed; `051_notification_centre.sql` and 052–056 were
-applied October 11. See `.agent/specs/not-001-notification-centre.md` for the contract.
+applied October 11. See `docs/features/messaging-and-alerts.md` for the contract.
 
 The workflow completion increment separates notification signing from login JWT
 signing and supports an independent server-only root. Migration 079 captures new
@@ -179,7 +179,7 @@ creates medication/ADR truth. Alerts also reads current external-candidate work
 directly, separately from unread counts. Its clinic-scoped pages retain failed
 same-scope snapshots but never reuse old-clinic rows. Patient Timeline is a bounded,
 read-only source projection; private messages still use exact-conversation RPC
-authorization. See `.agent/specs/expo-workflow-completion.md` for rollout and tests.
+authorization. See `docs/features/patient-records.md` for rollout and tests.
 
 ## Reviewed care-handoff summaries (CON-001)
 
@@ -190,7 +190,7 @@ author's own care-team link may see (shared core, that team's plan and work, the
 approves a pinned version, and only that approved version exports (printable view or a FHIR
 R4B document Bundle with Provenance). Versions and audit events are append-only in migration
 089, reached only through `service_role` functions that re-check the actor's link. Contract:
-[`specs/con-001-care-handoff-summary.md`](specs/con-001-care-handoff-summary.md).
+[handoff summary](../docs/features/clinics-and-care-teams.md#handoff-summary).
 
 ## Evidence, FHIR, and safety
 
@@ -219,7 +219,7 @@ private source URL, or the original file. See
 [`docs/document-format-policy.md`](../docs/document-format-policy.md).
 
 The current model decision is recorded in
-[`docs/decisions/ai-runtime-2026-09.md`](../docs/decisions/ai-runtime-2026-09.md).
+[`docs/features/ai-runtime-and-workers.md`](../docs/features/ai-runtime-and-workers.md).
 
 ## Internal tools and worker delegation
 

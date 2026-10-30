@@ -34,28 +34,30 @@ requirements and verification evidence have separate homes.
 Operating guides contain commands that may change external systems. Reading or
 merging a guide is not permission to run those commands.
 
-## Product and workflow contracts
+## Features
 
-Read the task's linked specification before implementing a change. Specifications
-remain contracts after their implementation is merged.
+Each feature doc says what the feature does, the rules it must keep, why it was built that way
+and where the code is. Read the one for your area before changing it. Status lives in the
+[task board](../.agent/TASKS.md), and proof of what was tested lives in [evidence](evidence/README.md).
 
-| Area | Canonical requirements |
+| Feature | Reference |
 | --- | --- |
-| Approved plans and Today | [PAT-005](../.agent/specs/pat-005-clinician-approved-today-feed-plan.md), [upload evidence gate](patient-upload-care-plan-review-gate.md) |
-| Clinics and care-team plan ownership | [CLN-003](../.agent/specs/clin-003-multi-clinic-clinicians.md), [PLAN-002](../.agent/specs/plan-002-care-plans-per-care-team.md) |
-| Bilingual review | [LOC-001](../.agent/specs/loc-001-bilingual-approved-wording.md), [interface wording review](../.agent/specs/loc-001-interface-review.md), [LOC-003](../.agent/specs/loc-003-english-first-clinician-review.md), [source-linked review pack](spanish-draft-review-pack.md) |
-| Confirmed symptoms and follow-up | [PAT-002-B](../.agent/specs/pat-002-b-confirmed-symptom-intake-plan.md), [ADR loop](../.agent/specs/pv-001-c-adr-loop-gap-fixes/requirements.md), [Naranjo answer coverage](../.agent/specs/pv-001-d-naranjo-answer-coverage.md) |
-| Nora and durable conversations | [Grounded answers](../.agent/specs/nora-002-grounded-answers.md), [recovery and document focus](../.agent/specs/pat-001-a-nora-turn-recovery.md), [voice](../.agent/specs/voice-001-voice-mode.md) |
-| Private human messages and visits | [Conversations](../.agent/specs/com-001-two-way-conversations.md), [scheduling](../.agent/specs/sch-001-appointment-scheduling.md) |
-| Alerts and selective email | [Notification centre](../.agent/specs/not-001-notification-centre.md), [email flows](../.agent/specs/email-001-email-flows.md) |
-| Records and reconciliation | [Workflow completion](../.agent/specs/expo-workflow-completion.md), [record clarity](../.agent/specs/rec-001-patient-record-clarity.md), [FHIR/SMART plan](../.agent/specs/int-002-003-interoperability-plan.md) |
-| Care handoff | [Handoff summary and sharing](../.agent/specs/con-001-care-handoff-summary.md) |
-| Safety and dependency security | [Safety hardening](../.agent/specs/safety-release-completion.md), [COM and SAFE gap audit](../.agent/specs/com-safe-gap-audit-2026-10.md), [dependency audit](../.agent/specs/sec-004-dependency-audit.md) |
-| Portal design changes | [Reference redesign](../.agent/specs/ux-002-reference-redesign.md), [ADR and MedWatch workspace](../.agent/specs/ux-005-adr-medwatch-workspace.md), [clinician schedule](../.agent/specs/ux-006-clinician-schedule.md) |
-| Other task acceptance | [Backlog requirements](../.agent/specs/project-backlog-acceptance.md) |
-| Synthetic care-plan rehearsal | [Scenario](pat-005-synthetic-scenario.md), [grouped acceptance contract](../.agent/specs/demo-care-loop-followups.md) |
+| Nora chat and grounded answers | [Nora chat](features/nora-chat.md) |
+| Voice | [Voice mode](features/voice-mode.md) |
+| Confirmed symptoms | [Symptom intake](features/symptom-intake.md), [question releases](../backend/src/app/intake/question_library/README.md) |
+| Adverse events, Naranjo and MedWatch | [Adverse events](features/adverse-events.md) |
+| Approved plans and Today | [Care plans and Today](features/care-plans-and-today.md), [upload evidence gate](patient-upload-care-plan-review-gate.md), [synthetic scenario](pat-005-synthetic-scenario.md) |
+| Clinics, care teams and handoff | [Clinics and care teams](features/clinics-and-care-teams.md) |
+| Bilingual wording | [Language](features/language.md), [source-linked review pack](spanish-draft-review-pack.md) |
+| Private messages, alerts and email | [Messaging and alerts](features/messaging-and-alerts.md) |
+| Visits | [Scheduling](features/scheduling.md) |
+| Records, reconciliation and FHIR/SMART | [Patient records](features/patient-records.md), [provenance](clinical-facts-provenance.md), [FHIR mapping](smart-fhir-review-mapping.md) |
+| Safety floor and clinical actions | [Safety](features/safety.md) |
+| Models, workers and realtime | [AI runtime and workers](features/ai-runtime-and-workers.md) |
+| Portal layout and motion | [Portal design](features/portal-design.md), [design system](../.agent/DESIGN_SYSTEM.md) |
+| Work not yet built | [Backlog requirements](../.agent/specs/project-backlog-acceptance.md) |
 
-## Technical reference and decisions
+## Technical reference
 
 | Topic | Reference |
 | --- | --- |
@@ -63,9 +65,9 @@ remain contracts after their implementation is merged.
 | Patient and clinician application setup | [Patient README](../apps/patient-portal/README.md), [clinician README](../apps/clinician-portal/README.md) |
 | Clinical-fact provenance and import review | [Provenance](clinical-facts-provenance.md), [FHIR mapping](smart-fhir-review-mapping.md) |
 | Upload types and safety | [Document format policy](document-format-policy.md) |
-| Document processing architecture | [Document intelligence decision](decisions/document-intelligence.md) |
-| Model routing, safety and evaluation limits | [Runtime decision](decisions/ai-runtime-2026-09.md), [quality requirements](../.agent/specs/ai-005-agent-quality.md), [repeatable evaluation](demo-ai-evaluation.md) |
-| Chat transport and workers | [Runtime decision](decisions/realtime-and-workers-2026-10.md), [worker contract](../.agent/specs/ops-006-workers-and-event-stream.md) |
+| Document processing architecture | [Patient records](features/patient-records.md) |
+| Model routing, safety and evaluation limits | [AI runtime](features/ai-runtime-and-workers.md), [Nora chat](features/nora-chat.md), [repeatable evaluation](demo-ai-evaluation.md) |
+| Chat transport and workers | [AI runtime and workers](features/ai-runtime-and-workers.md) |
 | Portal design and icons | [Design system](../.agent/DESIGN_SYSTEM.md), [icon integration](brand-icons.md) |
 | Deferred database optimization | [Performance follow-up](deferred_database_performance_work.md) |
 
@@ -87,7 +89,7 @@ docs/
   README.md                 Find a guide by purpose
   development.md            Configuration and local troubleshooting
   maintaining-docs.md       Documentation rules and review checklist
-  decisions/                Architecture and runtime decisions
+  features/                 What each feature does and the rules it must keep
   evidence/                 Dated verification reports and their index
   email-templates/          Installable reset template and guidance
     reference/              Design references for future email work; nothing sends them
@@ -97,7 +99,7 @@ docs/
   TASKS.md                  Current work and remaining acceptance
   PROJECT.md                Product boundaries
   ARCHITECTURE.md           System design and contracts
-  specs/                    Detailed feature requirements
+  specs/                    Requirements for work not yet built
 ```
 
 Keep one source per subject. Link to it rather than copying its status, commands

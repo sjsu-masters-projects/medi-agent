@@ -717,5 +717,5 @@ across screens; do not infer that similar strings have the same clinical context
 Stored care-plan wording, historical human messages, question-library content and
 generated clinical translations require their own source-linked review. They are
 not replaced by this interface pack. Existing clinical safety copy is unchanged.
-The linked [LOC-001 contract](../.agent/specs/loc-001-bilingual-approved-wording.md)
+The linked [LOC-001 contract](features/language.md)
 owns approval semantics; [the task board](../.agent/TASKS.md) owns current status.

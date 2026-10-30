@@ -3,7 +3,7 @@
 This folder holds one template that can be installed and three design references. No
 application code loads any file here: the backend renders its own emails in
 `backend/src/app/services/email_templates.py`. The delivery and acceptance contract is
-[EMAIL-001](../../.agent/specs/email-001-email-flows.md).
+[EMAIL-001](../features/messaging-and-alerts.md).
 
 | File | Status | Use |
 | --- | --- | --- |
