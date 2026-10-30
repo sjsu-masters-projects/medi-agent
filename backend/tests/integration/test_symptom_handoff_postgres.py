@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.safety.triage_floor import FLOOR_RULE_URGENCY
 from tests.integration.test_symptom_intake_postgres import (
     CLINICIAN,
     MIGRATIONS,
@@ -345,3 +346,70 @@ def test_readiness_is_exact_and_not_browser_callable(handoff):
     assert wrong["eligibility_matches"] is False
     db(f"SET ROLE authenticated; SELECT symptom_intake_readiness({args});", succeeds=False)
     db(f"SET ROLE anon; SELECT symptom_intake_readiness({args});", succeeds=False)
+
+
+@pytest.mark.parametrize("rule,urgency", sorted(FLOOR_RULE_URGENCY.items()))
+def test_all_floor_rules_interrupt_intake_without_report_or_private_answer_alert(
+    handoff, rule, urgency
+):
+    db = handoff
+    db((MIGRATIONS / "103_intake_medication_error_interrupt.sql").read_text())
+    row = start(db)
+    payload = {
+        "intake_id": row["id"],
+        "expected_revision": 0,
+        "mutation_id": str(uuid4()),
+        "safety": {
+            "safety_rule": rule,
+            "rule_version": "triage-floor/1",
+            "result": "interrupted_safety",
+        },
+    }
+    result = json.loads(db(call_sql("interrupt", payload)))
+    assert result["status"] == "interrupted_safety"
+    db(call_sql("interrupt", payload))
+    assert db("SELECT count(*) FROM symptom_intake_safety_alerts;") == "1"
+    assert db("SELECT urgency FROM symptom_intake_safety_alerts;") == urgency
+    assert db("SELECT count(*) FROM symptom_reports;") == "0"
+    assert db("SELECT count(*) FROM a2a_tasks;") == "0"
+    db("SELECT deliver_symptom_intake_safety_alerts();")
+    db("SELECT deliver_symptom_intake_safety_alerts();")
+    assert db("SELECT count(*) FROM clinician_messages;") == "1"
+    body = db("SELECT body FROM clinician_messages;")
+    assert "Private answers are not included" in body
+    if urgency == "urgent":
+        assert "not an emergency alert" in body
+        assert db("SELECT subject FROM clinician_messages;").startswith("Same-day review")
+
+
+def test_medication_error_after_high_severity_review_gets_its_own_durable_alert(handoff):
+    db = handoff
+    db((MIGRATIONS / "103_intake_medication_error_interrupt.sql").read_text())
+    row = answer(db, start(db), "severity", 8)
+    db("SELECT deliver_symptom_intake_safety_alerts();")
+    payload = {
+        "intake_id": row["id"],
+        "mutation_id": str(uuid4()),
+        "safety": {"safety_rule": "urgent_medication_error", "rule_version": "triage-floor/1"},
+    }
+    db(call_sql("interrupt", payload))
+    assert db("SELECT count(*) FROM symptom_intake_safety_alerts;") == "2"
+    db("""CREATE FUNCTION private.fail_intake_delivery() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'Synthetic outage'; END $$;
+      CREATE TRIGGER fail_intake_delivery BEFORE INSERT ON clinician_messages
+        FOR EACH ROW EXECUTE FUNCTION private.fail_intake_delivery();""")
+    db("SELECT deliver_symptom_intake_safety_alerts();", succeeds=False)
+    assert (
+        db(
+            "SELECT delivery_state FROM symptom_intake_safety_alerts WHERE alert_kind='medication_error';"
+        )
+        == "pending"
+    )
+    db("DROP TRIGGER fail_intake_delivery ON clinician_messages;")
+    db("SELECT deliver_symptom_intake_safety_alerts();")
+    db("SELECT deliver_symptom_intake_safety_alerts();")
+    assert db("SELECT count(*) FROM clinician_messages;") == "2"
+    assert "high-severity" in db("SELECT body FROM clinician_messages ORDER BY created_at LIMIT 1;")
+    db(call_sql("interrupt", {**payload, "mutation_id": str(uuid4())}))
+    db("SELECT deliver_symptom_intake_safety_alerts();")
+    assert db("SELECT count(*) FROM clinician_messages;") == "2"

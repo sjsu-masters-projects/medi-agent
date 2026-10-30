@@ -246,8 +246,6 @@ class ADRInformationRequestRead(BaseModel):
     suspect_medication_name: str
     requested_information: list[NaranjoQuestion]
     patient_message: str
-    current_naranjo_score: int = Field(..., ge=-4, le=13)
-    current_causality: NaranjoCausality
     status: ADRInformationRequestStatus
     created_at: str
 
@@ -308,13 +306,11 @@ class ADRFollowUpOverviewRead(BaseModel):
 
 
 class ADRInformationResponseRead(BaseModel):
-    """Updated deterministic assessment after confirmed patient answers."""
+    """Patient-safe receipt for confirmed follow-up answers."""
 
     request_id: UUID
     adr_assessment_id: UUID
     status: ADRInformationRequestStatus
-    naranjo_score: int = Field(..., ge=-4, le=13)
-    causality: NaranjoCausality
     responded_at: str
 
 

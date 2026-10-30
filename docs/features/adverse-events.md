@@ -20,7 +20,8 @@ review, approve and download. MediAgent never files anything with the FDA.
 - **Patient** (`/chat?view=follow-up`, under Care team messages and Today, never in Nora)
   sees the care team's message and questions in the saved locale. Yes and No need a
   description (max 500); I am not sure needs none. Review, confirm, send. The request then
-  reads as answered (own answers) or closed. No score or causality is ever shown.
+  reads as answered (own answers) or closed. No score or causality is returned by either patient follow-up endpoint; direct
+  patient reads of the assessment table are also denied by RLS.
 - **Clinician MedWatch** (`/medwatch/[draftId]`): Complete (missing items first), Preview
   (real filled PDF, watermarked "DRAFT - not for submission"), Approve, Download. A draft, or
   an approved one with no recorded submission, can be discarded with a reason; the case
@@ -176,8 +177,5 @@ split by fixture (see `backend/tests/TESTING_GUIDE.md`). Portals: `npm run lint`
   mobile ("Open in new tab" is the fallback).
 - The queue filters client-side and caps at 200 cases; notification links still use the old
   `/medwatch?assessment=` redirect.
-- The older patient endpoint `/patients/me/adr-information-requests` still returns the Naranjo
-  score and causality (`ADRInformationRequestRead`); the portal never renders them, but the
-  patient API should not carry them.
 - Peer and safety review of the answer coverage; reassessment on new evidence beyond patient
   and clinician saves is not built.

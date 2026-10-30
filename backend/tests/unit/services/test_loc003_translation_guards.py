@@ -392,3 +392,26 @@ class TestSourceEvidenceLocale:
         }
         assert CarePlanService._source_evidence_locale(english_fact) == "en-US"
         assert CarePlanService._source_evidence_locale(None) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["validation", "provider"])
+async def test_failed_fact_batch_never_logs_model_or_fact_text(caplog, failure):
+    private = "synthetic-sensitive-model-content"
+
+    async def fake(*_args, **_kwargs):
+        if failure == "provider":
+            raise RuntimeError(private)
+        return SimpleNamespace(text='{"items": ' + private, telemetry=None)
+
+    with patch.object(facts, "generate_for_workload", fake):
+        assert (
+            await facts.translate_facts_to_english(
+                [("a", "condition", {"notes": "synthetic private fact"})]
+            )
+            == {}
+        )
+    assert "batch of 1 failed" in caplog.text
+    assert private not in caplog.text
+    assert "synthetic private fact" not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)

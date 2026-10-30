@@ -13,8 +13,8 @@ see operational alerts and approve every clinical action.
   other messages continue to bounded general guidance.
 - **Clinician.** The active care team gets one in-app operational alert per safety turn,
   with a short message excerpt: an "urgent chat escalation" for emergencies and a "not an
-  emergency alert" notice for a medication error. A turn only the model escalates gets a
-  plainer in-app message.
+  emergency alert" notice for a medication error. A turn the model or an override escalates enters the same durable alert queue,
+  linked to its saved user and assistant messages with rule and urgency.
 - **Clinical actions.** A recommendation, approval by an assigned clinician other than the
   proposer, then an envelope recording execution. Care-plan publication is the only live
   executor, through its own SQL functions.
@@ -33,10 +33,12 @@ see operational alerts and approve every clinical action.
 4. Every rule the floor can emit is listed in `FLOOR_RULE_URGENCY` and accepted by the
    persistence RPC and database constraint; guard tests enumerate it, so a new rule cannot
    ship unsaved.
-5. Direction is sent first and never waits for storage, retrieval or a model. The turn's
+5. Direction is sent first and never waits for storage, retrieval or a model. For floor turns,
    messages and a pending alert are saved by one atomic RPC; a storage failure keeps the
    direction and reports the save as uncertain. Worker retry sends pending alerts, so
-   `A2A_RETRY_WORKER_ENABLED` must stay on.
+   `A2A_RETRY_WORKER_ENABLED` must stay on. Model/override alerts register against the
+   saved turn before terminal socket events, without rewriting its messages. Registration
+   retries once; exhaustion reports uncertain rather than claiming delivery.
 6. Alert state is honest: `delivered` means an in-app message was persisted, not read;
    `no_recipients` is never sent later to a newly assigned clinician; recipients are active
    care-team members, deduplicated. Source messages and terminal safety records are
@@ -100,7 +102,8 @@ see operational alerts and approve every clinical action.
   `core/exception_handlers.py`, `core/action_tiers.py`.
 - Migrations: `019_clinical_action_approvals`, `033` (denial events),
   `059_chat_safety_alerts`, `097_medication_error_safety_persistence`,
-  `098_safety_audit_retention`.
+  `098_safety_audit_retention`, `103_intake_medication_error_interrupt`,
+  `104_model_escalation_delivery`.
 - Tests (`backend/tests/`): `unit/safety/`, `unit/adk/test_safety_floor_plugin.py`,
   `unit/core/test_action_tiers.py`, `unit/services/test_clinical_action_service.py`,
   `integration/routers/test_chat_emergency_copy.py`,
@@ -131,6 +134,5 @@ PostgreSQL modules need a disposable local database; see each module's header.
   actor) have no route to exercise, and the diagnostic script is not in CI.
 - `record_outcome` accepts any assigned clinician; envelope creation and its audit row are
   separate writes.
-- A turn only the model escalates gets a best-effort message with no rule id, delivery
-  state or retry. A turn with no rule and no raised urgency leaves no record.
-- The floor's `escalation_recommended` event says `emergency` even for a medication error.
+- A turn with no rule and no raised urgency leaves no safety audit. A failed alert
+  registration remains uncertain; delivery retry can only process persisted pending alerts.

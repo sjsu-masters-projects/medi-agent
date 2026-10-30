@@ -87,7 +87,7 @@ def test_clinician_generic_put_cannot_change_standalone_lifecycle(
 
 
 def test_assigned_clinician_can_still_edit_standalone_metadata(client, appointment_update):
-    actor, row, _, chain = appointment_update
+    actor, row, db, chain = appointment_update
     actor.role = "clinician"
     actor.id = uuid4()
     changed = {**row, "location": "Synthetic clinic, Suite 3"}
@@ -96,12 +96,21 @@ def test_assigned_clinician_can_still_edit_standalone_metadata(client, appointme
         SimpleNamespace(data=[{"id": row["care_team_id"]}]),
         SimpleNamespace(data=[changed]),
     ]
+    db.rpc.return_value.execute.return_value = SimpleNamespace(data={"appointment": changed})
     response = client.put(
         f"/api/v1/appointments/{row['id']}", json={"location": changed["location"]}
     )
     assert response.status_code == 200
     assert response.json()["location"] == changed["location"]
-    chain.update.assert_called_once_with({"location": changed["location"]})
+    chain.update.assert_not_called()
+    db.rpc.assert_called_once_with(
+        "edit_appointment_details",
+        {
+            "p_actor_id": str(actor.id),
+            "p_appointment_id": row["id"],
+            "p_changes": {"location": changed["location"]},
+        },
+    )
 
 
 @pytest.mark.parametrize(

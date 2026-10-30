@@ -176,15 +176,21 @@ async def test_details_of_a_confirmed_visit_from_an_offer_can_be_edited():
     me = uuid4()
     group = str(uuid4())
     changed = _row("confirmed", clinician=me, group=group, location="Suite 3")
-    service, _, chain = _service([_row("confirmed", clinician=me, group=group)], [changed])
+    service, db, chain = _service(
+        [_row("confirmed", clinician=me, group=group)], rpc={"appointment": changed}
+    )
     out = await service.update_for_user(
         user_id=me,
         role="clinician",
         appointment_id=uuid4(),
         data={"location": "Suite 3", "appointment_type": "routine"},
     )
-    chain.update.assert_called_once_with({"location": "Suite 3", "appointment_type": "routine"})
-    chain.eq.assert_any_call("id", chain.eq.call_args_list[-1].args[1])
+    chain.update.assert_not_called()
+    assert db.rpc.call_args.args[0] == "edit_appointment_details"
+    assert db.rpc.call_args.args[1]["p_changes"] == {
+        "location": "Suite 3",
+        "appointment_type": "routine",
+    }
     assert out["location"] == "Suite 3"
 
 
@@ -192,15 +198,15 @@ async def test_details_of_a_confirmed_visit_from_an_offer_can_be_edited():
 async def test_details_of_an_open_offer_reach_every_open_slot():
     me = uuid4()
     group = str(uuid4())
-    service, _, chain = _service(
+    service, db, chain = _service(
         [_row("proposed", clinician=me, group=group)],
-        [_row("proposed", clinician=me, group=group, reason="New")],
+        rpc={"appointment": _row("proposed", clinician=me, group=group, reason="New")},
     )
     await service.update_for_user(
         user_id=me, role="clinician", appointment_id=uuid4(), data={"reason": "New"}
     )
-    chain.eq.assert_any_call("proposal_group_id", group)
-    chain.eq.assert_any_call("status", "proposed")
+    chain.update.assert_not_called()
+    assert db.rpc.call_args.args[1]["p_changes"] == {"reason": "New"}
 
 
 @pytest.mark.asyncio

@@ -18,8 +18,6 @@ interface ADRInformationRequestApiRecord {
     suspect_medication_name: string;
     requested_information: PatientADRQuestion[];
     patient_message: string;
-    current_naranjo_score: number;
-    current_causality: string;
     status: "pending";
     created_at: string;
 }
@@ -45,8 +43,6 @@ export interface ADRInformationResponseResult {
     request_id: string;
     adr_assessment_id: string;
     status: "answered";
-    naranjo_score: number;
-    causality: string;
     responded_at: string;
 }
 

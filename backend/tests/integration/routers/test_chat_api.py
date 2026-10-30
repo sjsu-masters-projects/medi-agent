@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -551,6 +551,21 @@ class TestChatWebSocket:
         patient_id,
         monkeypatch,
     ):
+        registered = AsyncMock(
+            return_value={
+                "alert_id": "synthetic-turn",
+                "safety_rule": "model_classification",
+                "delivery_state": "pending",
+                "persistence_status": "saved",
+            }
+        )
+        delivered = AsyncMock(
+            return_value={"delivery_state": "delivered", "clinicians_notified": 1}
+        )
+        monkeypatch.setattr(
+            "app.routers.chat.ChatSafetyService.record_model_escalation_safely", registered
+        )
+        monkeypatch.setattr("app.routers.chat.ChatSafetyService.deliver_safely", delivered)
         token_user = CurrentUser(id=patient_id, email="patient@test.com", role="patient")
         monkeypatch.setattr("app.routers.chat.decode_access_token", lambda _token: token_user)
 
@@ -639,6 +654,12 @@ class TestChatWebSocket:
             escalation_event = websocket.receive_json()
             assert escalation_event["type"] == "escalation_recommended"
             assert escalation_event["clinicians_notified"] == 1
+            assert escalation_event["urgency"] == "urgent"
+            assert escalation_event["delivery_state"] == "delivered"
+            assert escalation_event["persistence_status"] == "saved"
+            assert registered.await_args.args[1] == user_row["id"]
+            assert registered.await_args.args[2]["assistant_message_id"] == assistant_row["id"]
+            assert registered.await_args.args[2]["safety_rule"] == "model_classification"
 
     def test_websocket_returns_validation_error_when_service_raises(
         self,
