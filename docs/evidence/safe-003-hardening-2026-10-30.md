@@ -18,7 +18,8 @@ is claimed.
   registration retry. Migration 104 reuses the existing pending alert queue and
   worker; delivery is idempotent and remains pending after an outage. Failure to
   register is reported uncertain, never delivered. Saved links are immutable and
-  cross-patient/session links are rejected.
+  cross-patient/session links are rejected. Delivery retains the saved assistant
+  intent rather than labelling every model escalation as a symptom.
 - Patient ADR list and answer receipts omit score/causality at the response schema;
   the list service does not select those fields. Migration 106 also removes the
   legacy patient read policy on assessments; assigned-clinician policies remain.
@@ -87,3 +88,17 @@ ledger procedure only after explicit authorization for the exact target, before
 merging/deploying dependent backend code. Keep the retry worker enabled. Safety/peer
 review and synthetic deployed checks in both locales remain. No remote SQL,
 deployment or merge was performed, and unrelated local files remain excluded.
+
+
+## Final review and dependency follow-up
+
+The fresh CI audit found newly reported pyasn1/pypdf advisories. The
+[shared security patch](sec-004-pr233-ci-2026-10-30.md) updates just those versions,
+passes the unchanged audit and reproduces both locks. Full backend under the patched
+lock: **5,051 passed, 946 skipped, 91.08% coverage**; Ruff/mypy pass.
+
+Final SQL review preserves the saved assistant intent in model notifications.
+All eight model-alert PostgreSQL regressions passed again after that dispatcher
+change (`test_chat_safety_postgres.py -k model_ --no-cov -q`, zero skipped).
+The earlier 84-contract run covers the other authorization, intake and audit paths.
+The replacement remote CI run will validate the complete final tree.

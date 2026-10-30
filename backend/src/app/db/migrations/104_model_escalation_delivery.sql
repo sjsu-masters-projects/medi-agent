@@ -52,3 +52,65 @@ END; $$;
 REVOKE ALL ON FUNCTION public.record_model_chat_safety_alert(uuid,uuid,jsonb)
   FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.record_model_chat_safety_alert(uuid,uuid,jsonb) TO service_role;
+
+-- Preserve the saved model intent rather than describing every model alert as a symptom.
+CREATE OR REPLACE FUNCTION public.deliver_chat_safety_alerts(p_limit integer DEFAULT 25, p_alert_id uuid DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_alert public.chat_safety_alerts;
+  v_source public.chat_messages;
+  v_team public.care_teams;
+  v_recipients uuid[];
+  v_intent text;
+  v_subject text;
+  v_body text;
+  v_results jsonb := '[]'::jsonb;
+BEGIN
+  IF p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 200 THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='Invalid safety batch';
+  END IF;
+  FOR v_alert IN SELECT * FROM public.chat_safety_alerts
+    WHERE delivery_state='pending' AND (p_alert_id IS NULL OR id=p_alert_id)
+    ORDER BY evaluated_at, id LIMIT p_limit FOR UPDATE SKIP LOCKED LOOP
+    SELECT * INTO STRICT v_source FROM public.chat_messages
+      WHERE id=v_alert.source_message_id AND patient_id=v_alert.patient_id AND role::text='user'
+      FOR SHARE;
+    v_recipients := ARRAY[]::uuid[];
+    -- Assignment updates serialize with dispatch; multiple roles do not duplicate recipients.
+    FOR v_team IN SELECT * FROM public.care_teams
+      WHERE patient_id=v_alert.patient_id AND status='active' ORDER BY id FOR SHARE LOOP
+      IF NOT v_team.clinician_id=ANY(v_recipients) THEN
+        v_recipients := array_append(v_recipients, v_team.clinician_id);
+      END IF;
+    END LOOP;
+    v_intent := CASE v_alert.safety_rule
+      WHEN 'emergency_mental_health_keyword' THEN 'mental_health'
+      WHEN 'urgent_medication_error' THEN 'medication_question'
+      ELSE 'symptom' END;
+    IF v_alert.safety_rule IN ('model_classification','adverse_effect_signal') THEN
+      SELECT coalesce(intent,'general') INTO v_intent FROM public.chat_messages
+        WHERE id=v_alert.assistant_message_id;
+    END IF;
+    IF v_alert.safety_rule = 'urgent_medication_error' THEN
+      v_subject := 'Same-day review: possible patient medication error';
+      v_body := 'Possible medication error reported in chat (urgent/' || v_intent
+        || '). Same-day review is recommended; this is not an emergency alert. Latest message: '
+        || left(v_source.content, 280);
+    ELSE
+      v_subject := 'Urgent patient chat escalation';
+      v_body := 'Chat escalation flagged (' || v_alert.urgency || '/' || v_intent
+        || '). Latest message: ' || left(v_source.content, 280);
+    END IF;
+    INSERT INTO public.clinician_messages(clinician_id, patient_id, channel, subject, body)
+      SELECT recipient, v_alert.patient_id, 'in_app', v_subject, v_body
+      FROM unnest(v_recipients) recipient;
+    UPDATE public.chat_safety_alerts SET
+      delivery_state=CASE WHEN cardinality(v_recipients)>0 THEN 'delivered' ELSE 'no_recipients' END,
+      clinicians_notified=cardinality(v_recipients), delivered_at=clock_timestamp()
+      WHERE id=v_alert.id RETURNING * INTO v_alert;
+    v_results := v_results || jsonb_build_array(jsonb_build_object('alert_id', v_alert.id,
+      'delivery_state', v_alert.delivery_state, 'clinicians_notified', v_alert.clinicians_notified));
+  END LOOP;
+  RETURN v_results;
+END;
+$$;

@@ -598,9 +598,9 @@ def model_alert_sql(*, patient=PATIENT, reply=None, rule="model_classification",
 
 
 def seed_model_turn(sql, *, session="default", patient=PATIENT):
-    sql(f"""INSERT INTO chat_messages(id,patient_id,role,content,session_id)
-      VALUES('{TURN}','{PATIENT}','user','Synthetic symptom','default'),
-      ('00000000-0000-0000-0000-000000000005','{patient}','assistant','Synthetic guidance','{session}');""")
+    sql(f"""INSERT INTO chat_messages(id,patient_id,role,content,session_id,intent)
+      VALUES('{TURN}','{PATIENT}','user','Synthetic symptom','default',NULL),
+      ('00000000-0000-0000-0000-000000000005','{patient}','assistant','Synthetic guidance','{session}','medication_question');""")
 
 
 @pytest.mark.parametrize("urgency", ["urgent", "emergency"])
@@ -622,7 +622,7 @@ def test_model_escalation_is_durable_idempotent_and_retryable(sql, rule, urgency
     assert json.loads(sql(deliver_sql()))[0]["delivery_state"] == "delivered"
     assert json.loads(sql(deliver_sql())) == []
     assert sql("SELECT count(*) FROM clinician_messages;") == "1"
-    assert f"({urgency}/" in sql("SELECT body FROM clinician_messages;")
+    assert f"({urgency}/medication_question)" in sql("SELECT body FROM clinician_messages;")
     sql(model_alert_sql(rule=rule, urgency=urgency))
     assert sql("SELECT count(*) FROM chat_messages;") == "2"
     sql("UPDATE chat_messages SET content='changed' WHERE role::text='user';", succeeds=False)
