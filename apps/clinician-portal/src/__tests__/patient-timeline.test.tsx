@@ -28,6 +28,23 @@ afterEach(() => {
 });
 
 describe("PatientTimeline", () => {
+    it("preserves recorded names and filenames while expanding status codes", async () => {
+        vi.mocked(fetchPatientTimeline).mockResolvedValue({
+            ...snapshot,
+            events: [
+                { ...snapshot.events[0]!, details: { name: "metformin_er", status: "pending_review" } },
+                { ...snapshot.events[1]!, details: { file_name: "lab_results.pdf" } },
+            ],
+        });
+        render(<PatientTimeline patientId="synthetic-patient" />);
+        await screen.findByRole("heading", { name: "Medication recorded" });
+        expect(screen.getAllByText("metformin_er")).toHaveLength(2);
+        expect(screen.getAllByText("lab_results.pdf")).toHaveLength(2);
+        expect(screen.getByText("Pending review")).toBeInTheDocument();
+        expect(screen.queryByText("Metformin er")).not.toBeInTheDocument();
+        expect(screen.queryByText("Lab results pdf")).not.toBeInTheDocument();
+    });
+
     it("loads actual source dates and links to exact records and own conversation", async () => {
         vi.mocked(fetchPatientTimeline).mockResolvedValue(snapshot);
         const { container } = render(<PatientTimeline patientId="synthetic-patient" />);
@@ -47,7 +64,11 @@ describe("PatientTimeline", () => {
         expect(document.getElementById("source-medication-record")).not.toHaveAttribute("open");
         fireEvent.click(link);
         expect(document.getElementById("source-medication-record")).toHaveAttribute("open");
-        expect(screen.getByText("Unknown / not recorded")).toBeInTheDocument();
+        expect(screen.getByText("Not recorded")).toBeInTheDocument();
+        expect(screen.getByText("End date")).toBeInTheDocument();
+        expect(screen.getByText("Medications", { selector: "span" })).toBeInTheDocument();
+        expect(screen.queryByText(/medications\.created_at/)).not.toBeInTheDocument();
+        expect(link).not.toHaveAccessibleName(/synthetic-medication/);
         expect(screen.getByText(/More records exist outside this view/)).toBeInTheDocument();
     });
 

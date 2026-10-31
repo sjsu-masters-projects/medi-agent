@@ -127,22 +127,57 @@ function extractValidationMessages(details: unknown[]): string[] {
     return Array.from(new Set(messages));
 }
 
+const STATUS_MESSAGES: Record<number, string> = {
+    400: "That request couldn't be completed. Check the details and try again.",
+    401: "Your session has ended. Sign in again.",
+    403: "You don't have access to do this. Ask a clinic admin if you need it.",
+    404: "This item is no longer available. Refresh the page to see the latest.",
+    405: "That request couldn't be completed. Check the details and try again.",
+    409: "This action conflicts with the current information. Refresh to check the latest details before trying again.",
+    413: "That file is too large to upload.",
+    415: "That file type isn't supported.",
+    422: "Some details are missing or invalid. Check the form and try again.",
+    429: "Too many requests. Wait a moment and try again.",
+};
+
+/** Plain words for a status when the server gave nothing written for people (UX-007). */
+export function friendlyStatusMessage(status: number): string {
+    if (status >= 500) return "MediAgent couldn't complete this right now. Try again in a moment.";
+    return STATUS_MESSAGES[status] ?? "Something went wrong. Try again.";
+}
+
+// Framework defaults and bare codes say what failed, not what to do next.
+const FRAMEWORK_PHRASE = /^(?:bad request|forbidden|not found|method not allowed|conflict|payload too large|unsupported media type|unprocessable (?:entity|content)|too many requests)\.?$/i;
+const BARE_CODE = /^[A-Z][A-Z0-9_]+$/;
+
+function readableOr(status: number, message: string): string {
+    const text = message.trim();
+    // 401 text is kept as sent: sign-in screens map it themselves.
+    if (status === 401) return text || friendlyStatusMessage(status);
+    if (status >= 500 || !text || FRAMEWORK_PHRASE.test(text) || BARE_CODE.test(text)) {
+        return friendlyStatusMessage(status);
+    }
+    return text;
+}
+
 function parseApiErrorMessage(status: number, payload: unknown): string {
+    // Server failures can contain internal details in any payload shape.
+    if (status >= 500) return friendlyStatusMessage(status);
     if (!isJsonObject(payload)) {
-        return `HTTP ${status}`;
+        return friendlyStatusMessage(status);
     }
 
     const nestedError = payload.error;
     if (isJsonObject(nestedError) && typeof nestedError.message === "string") {
-        return nestedError.message;
+        return readableOr(status, nestedError.message);
     }
 
     if (typeof payload.message === "string") {
-        return payload.message;
+        return readableOr(status, payload.message);
     }
 
     if (typeof payload.detail === "string") {
-        return payload.detail;
+        return readableOr(status, payload.detail);
     }
 
     if (Array.isArray(payload.detail)) {
@@ -152,7 +187,7 @@ function parseApiErrorMessage(status: number, payload: unknown): string {
         }
     }
 
-    return `HTTP ${status}`;
+    return friendlyStatusMessage(status);
 }
 
 export class ApiClientError extends Error {

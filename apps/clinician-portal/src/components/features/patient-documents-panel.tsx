@@ -32,6 +32,12 @@ import {
 } from "@/types";
 import type { ClinicianDocumentSource, ExtractedDocumentFact } from "@/services/clinicians";
 import { formatClinicianDate, formatClinicianDateTime } from "@/utils/dates";
+import { readableError as errorText } from "@/services/error-text";
+
+const UPLOADER_LABELS: Record<string, string> = {
+    patient: "Uploaded by the patient",
+    clinician: "Uploaded by a clinician",
+};
 
 const compactSecondary =
     "ma-press inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-line-strong bg-surface px-3 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8]";
@@ -143,9 +149,7 @@ export function PatientDocumentsPanel({
         try {
             setSource(await fetchClinicianDocumentSource(patientId, document.id));
         } catch (error) {
-            setSourceError(
-                error instanceof Error ? error.message : "Unable to open this source document.",
-            );
+            setSourceError(errorText(error, "Unable to open this source document."));
         } finally {
             setSourceLoading(false);
         }
@@ -162,9 +166,7 @@ export function PatientDocumentsPanel({
                 requireClaim(documentId);
                 return;
             }
-            setReviewError(
-                error instanceof Error ? error.message : "Unable to approve document review.",
-            );
+            setReviewError(errorText(error, "Unable to approve document review."));
         } finally {
             setReviewingDocumentId(null);
         }
@@ -189,9 +191,7 @@ export function PatientDocumentsPanel({
                 setRejectNote("");
                 return;
             }
-            setReviewError(
-                error instanceof Error ? error.message : "Unable to reject document review.",
-            );
+            setReviewError(errorText(error, "Unable to reject document review."));
         } finally {
             setReviewingDocumentId(null);
         }
@@ -204,9 +204,7 @@ export function PatientDocumentsPanel({
             await retryClinicianDocumentIngestion(patientId, documentId);
             onRefresh();
         } catch (error) {
-            setReviewError(
-                error instanceof Error ? error.message : "Unable to retry document processing.",
-            );
+            setReviewError(errorText(error, "Unable to retry document processing."));
         } finally {
             setRetryingDocumentId(null);
         }
@@ -219,11 +217,7 @@ export function PatientDocumentsPanel({
             await retryClinicianDocumentSummary(patientId, documentId);
             onRefresh();
         } catch (error) {
-            setReviewError(
-                error instanceof Error
-                    ? error.message
-                    : "Unable to retry the patient explanation.",
-            );
+            setReviewError(errorText(error, "Unable to retry the patient explanation."));
         } finally {
             setRetryingSummaryId(null);
         }
@@ -243,35 +237,35 @@ export function PatientDocumentsPanel({
         }
         if (document.summaryStatus === "failed") {
             return document.summaryFailureCode === "summary_empty"
-                ? "The patient explanation came back empty. Extraction and review candidates are unaffected; you can request it again."
-                : "The patient explanation is unavailable after repeated attempts. Extraction and review candidates are unaffected; you can request it again.";
+                ? "The patient explanation came back empty. Extracted facts and their review are unaffected; you can request it again."
+                : "The patient explanation is unavailable after repeated attempts. Extracted facts and their review are unaffected; you can request it again.";
         }
         if (document.summaryStatus === "not_required") {
             return "No extracted information in this document needs a patient explanation.";
         }
         if (document.summaryStatus === "processing") {
-            return "The patient explanation is being generated. The clinical extraction and review candidates are unaffected.";
+            return "The patient explanation is being written. Extracted facts and their review are unaffected.";
         }
         if (document.summaryFailureCode === "provider_unavailable") {
             const attempt = document.summaryAttempts ?? 0;
             const attemptLabel = attempt > 0 ? ` (attempt ${attempt} of 3)` : "";
             if (document.summaryNextAttemptAt) {
-                return `The patient explanation will retry automatically${attemptLabel}. The clinical extraction and review candidates are unaffected.`;
+                return `The patient explanation will retry automatically${attemptLabel}. Extracted facts and their review are unaffected.`;
             }
-            return `The patient explanation is being prepared${attemptLabel}. The clinical extraction and review candidates are unaffected.`;
+            return `The patient explanation is being prepared${attemptLabel}. Extracted facts and their review are unaffected.`;
         }
         return "The patient explanation has not been generated yet. It is queued and does not block review.";
     }
 
     function parseMessage(document: ClinicianPatientDocument): string | null {
         if (document.parseStatus === "duplicate") {
-            return "These exact file contents were already processed for this patient. This copy is stored, but it created no new extracted facts or care-plan proposals. Its upload review is separate; approval does not copy another document's evidence.";
+            return "This exact file was already uploaded for this patient. This copy is stored, but it created no new extracted facts or care-plan proposals. Review this upload on its own; approving it does not copy the other document's evidence.";
         }
         if (document.parseStatus === "needs_ocr") {
-            return "This document has no usable embedded text. It is stored safely; OCR review is required and no candidate was generated.";
+            return "This scan has no readable text, so nothing was extracted. The file is stored; review the original.";
         }
         if (document.parseStatus === "needs_evidence_review") {
-            return "Extraction did not provide verifiable source evidence. No unverified candidate was generated.";
+            return "Extracted values couldn't be matched to the page, so none were saved. Review the original.";
         }
         if (document.parseStatus === "failed") {
             return "Processing could not be completed. You can retry while attempts remain.";
@@ -321,8 +315,8 @@ export function PatientDocumentsPanel({
                                         <div className="flex min-w-0 items-start gap-1.5"><SourceFileIcon className="mt-0.5" name={doc.fileName} /><div className="min-w-0">{doc.displayTitle?.["en-US"] ? <p className="break-words text-sm font-semibold text-ink">{doc.displayTitle["en-US"]}</p> : null}<p className={doc.displayTitle?.["en-US"] ? "break-all font-mono text-[11px] text-muted" : "break-words text-sm font-semibold text-ink"}>{doc.fileName}</p></div></div>
                                         <p className="mt-0.5 text-xs text-muted">
                                             <span className="capitalize">{getDocumentTypeLabel(doc.documentType)}</span> ·{" "}
-                                            <time className="font-mono" dateTime={doc.createdAt}>{formatClinicianDate(doc.createdAt)}</time> ·
-                                            uploaded by {doc.uploadedByRole}
+                                            <time className="font-mono" dateTime={doc.createdAt}>{formatClinicianDate(doc.createdAt)}</time>
+                                            {UPLOADER_LABELS[doc.uploadedByRole ?? ""] ? <> · {UPLOADER_LABELS[doc.uploadedByRole ?? ""]}</> : null}
                                         </p>
                                         {doc.uploadedByRole === UploaderRole.PATIENT &&
                                             doc.reviewStatus &&
@@ -562,7 +556,7 @@ export function PatientDocumentsPanel({
                 <div className="space-y-3">
                     <p className="flex items-start gap-2.5 rounded-xl border border-warn-line bg-warn-soft px-4 py-3 text-sm font-semibold text-warn-ink">
                         <Icon name="alert" aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
-                        <span>Pending clinician review — these are evidence-backed candidates, not clinical truth.</span>
+                        <span>Pending clinician review — these values were read automatically from the document and are not yet part of the chart.</span>
                     </p>
                     {factsLoading ? <p className="flex items-center gap-2 text-sm text-ink-2">Loading extracted facts…<ProcessingDots /></p> : null}
                     {factsError ? <p className="flex items-start gap-2.5 rounded-xl border border-risk-line bg-risk-soft px-4 py-3 text-sm text-risk-ink"><Icon name="alert" aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" /><span>{factsError}</span></p> : null}
@@ -570,7 +564,7 @@ export function PatientDocumentsPanel({
                     {facts.length > 0 ? (
                         <div className="grid gap-4 lg:grid-cols-2">
                             <div className="space-y-2.5">
-                                <AiChip>AI-extracted candidates</AiChip>
+                                <AiChip>AI-extracted facts</AiChip>
                                 <ExtractedFactCandidates facts={facts} onSelect={setSelectedFactId} patientId={patientId} selectedFactId={selectedFactId} />
                             </div>
                             <div className="min-h-80 space-y-3">

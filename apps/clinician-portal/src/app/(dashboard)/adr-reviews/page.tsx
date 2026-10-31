@@ -63,7 +63,7 @@ function QueueRow({ item, from, showClinic }: { item: ADRReviewQueueItem; from: 
                 >
                     <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-ink" title={name}>{name}</p>
-                        <p className="truncate text-xs text-muted">Severity {item.severity}/10</p>
+                        <p className="truncate text-xs text-muted">{item.severity === null || item.severity === undefined ? "Severity not reported" : `Severity ${item.severity}/10`}</p>
                         {showClinic ? <ClinicChip className="mt-0.5" name={item.clinicName} /> : null}
                     </div>
                     <p className="truncate text-sm text-ink-2" title={item.symptom}>{item.symptom}</p>

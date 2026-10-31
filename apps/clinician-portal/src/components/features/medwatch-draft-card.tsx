@@ -38,6 +38,7 @@ import {
     blankProduct,
     blankTestRow,
     fieldPathLabel,
+    legacyKeyLabel,
     gateIssueLabel,
     isAttestationIssue,
     nameWarningLabel,
@@ -732,7 +733,7 @@ export function MedWatchDraftCard({
                         <Section id="M" legend="MediAgent review (not part of Form 3500)" missing={missingIn("M")} showStatus={editable} workspace={inWorkspace}>
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-line bg-surface-2 px-3.5 py-3 text-sm text-ink-2">
                                 <span>
-                                    Deterministic Naranjo score:{" "}
+                                    Calculated Naranjo score:{" "}
                                     <strong className="font-mono font-medium text-ink">
                                         {form.mediagent_review.naranjo_score ?? "—"}
                                     </strong>
@@ -757,7 +758,7 @@ export function MedWatchDraftCard({
                         <dl className="divide-y divide-line border-t border-line">
                             {Object.entries(form.legacy).map(([key, value]) => (
                                 <div className="px-4 py-2.5 text-sm" key={key}>
-                                    <dt className={`font-mono text-xs text-muted ${wrapClass}`}>{key}</dt>
+                                    <dt className={`text-xs font-medium text-muted ${wrapClass}`}>{legacyKeyLabel(key)}</dt>
                                     <dd className={`mt-1 text-ink-2 ${wrapClass}`}>{value}</dd>
                                 </div>
                             ))}
@@ -774,7 +775,7 @@ export function MedWatchDraftCard({
                         {draft.sourceEvidence.map((source, index) => (
                             <li className="min-w-0 space-y-1.5 px-4 py-3 text-sm" key={`${source.source_type}-${index}`}>
                                 <p className={`font-medium text-ink ${wrapClass}`}>{source.attribution}</p>
-                                <p className={`text-xs text-muted ${wrapClass}`}>{source.field_paths.join(", ")}</p>
+                                <p className={`text-xs text-muted ${wrapClass}`}>Used for: {source.field_paths.map(fieldPathLabel).join(", ")}</p>
                                 {source.excerpt ? (
                                     <blockquote className={`max-w-[72ch] border-l-2 border-line-strong pl-3 leading-relaxed text-ink-2 ${wrapClass}`}>
                                         “{source.excerpt}”
@@ -1222,9 +1223,15 @@ export function MedWatchDraftCard({
                         </span>
                     </div>
                     <p className="mt-1 text-xs text-muted">
-                        Revision <span className="font-mono">{baseline.revision}</span> · Draft ID{" "}
-                        <span className="font-mono break-all">{draft.id}</span>
+                        Last saved{" "}
+                        <time className="font-mono" dateTime={draft.updatedAt}>{formatReviewTimestamp(draft.updatedAt)}</time>
                     </p>
+                    {/* Support and audit identifiers; the save counter is not a form field. */}
+                    <details className="ma-disclosure mt-1 text-xs text-muted">
+                        <summary className="min-h-8 py-1 text-[12px] font-medium">Technical details</summary>
+                        <p>Saved version {baseline.revision}</p>
+                        <p>Draft ID <span className="font-mono break-all">{draft.id}</span></p>
+                    </details>
                 </div>
                 <Badge variant="warning">
                     {submitted ? "Not submitted to FDA by MediAgent" : "Not submitted to FDA"}

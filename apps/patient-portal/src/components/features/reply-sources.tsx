@@ -4,6 +4,7 @@ import { useState } from "react";
 import { getReplySourcesCopy } from "@/content/reply-sources-copy";
 import { fetchReplyEvidence, type ReplySourceApi } from "@/services/chat-api";
 import type { Locale } from "@/types";
+import { cleanRecordTitle } from "./record-row";
 
 interface ReplySourcesProps {
     patientId: string;
@@ -19,7 +20,9 @@ const RECORD_TOOL = "get_patient_context";
 function titleOf(source: ReplySourceApi, locale: Locale, fallback: string): string {
     const title = source.title;
     const picked = typeof title === "string" ? title : title?.[locale] ?? Object.values(title ?? {})[0];
-    return picked || source.file_name || source.source || fallback;
+    // A cleaned file name, or a reference's publisher; never another internal source key.
+    const publisher = source.kind === "reference" && typeof source.source === "string" ? source.source : "";
+    return picked || (source.file_name ? cleanRecordTitle(source.file_name) : "") || publisher || fallback;
 }
 
 /**

@@ -232,7 +232,7 @@ describe("Reminder settings", () => {
     await screen.findByText("After-walking check");
     expect(
       screen.getByText("17:30").closest("div"),
-    ).toHaveTextContent(/Mon.*17:30.*America\/New York/);
+    ).toHaveTextContent(/Mon.*17:30.*Eastern Time · New York/);
     expect(screen.getByText("Review old reminder")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Edit reminder" }),

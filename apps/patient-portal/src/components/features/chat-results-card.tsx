@@ -8,6 +8,7 @@ import type { DocumentResult } from "@/services/documents";
 import type { ChatDocumentResultsAttachment, Locale } from "@/types";
 import { printedValue, resultChip, ResultStatusChip } from "./document-results";
 import { recordsCopy } from "./records-copy";
+import { cleanRecordTitle } from "./record-row";
 
 /** Records opens this document directly from `?document=`. */
 export function buildRecordsDocumentHref(documentId: string): string {
@@ -29,7 +30,8 @@ function documentTitle(
 ): { text: string; lang?: Locale } {
   const titled = language ? attachment.title[language] : undefined;
   if (titled) return { text: titled, lang: language };
-  return { text: attachment.fileName ?? fallback };
+  // A cleaned file name reads as a title; the raw name stays on the record itself.
+  return { text: attachment.fileName ? cleanRecordTitle(attachment.fileName) : fallback };
 }
 
 /**

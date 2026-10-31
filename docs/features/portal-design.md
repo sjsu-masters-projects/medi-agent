@@ -47,6 +47,16 @@ token values, and [brand icons](../brand-icons.md) covers assets. This page keep
    grid floor and the optional source-page tilt (off under reduced motion). None in the
    patient app. Sign-in loops pause when the page is hidden.
 
+8. **Readable labels preserve provenance.** Translate known codes to plain labels, but
+   keep original names and filenames exact. Unknown linkage stays unknown. Internal ids,
+   raw records and versions belong under Technical details; clinical review and approval
+   labels remain visible. Display saved time zones by name. Error wording must not expose
+   server details or claim another person made a change without evidence.
+9. **Context stays understandable.** Symptom previews retain labels for multiple values
+   (result, unit, range, dose and date). Record requests name the document and original
+   file rather than inserting a database id into the patient's message. Source links
+   promise only the destination they can open.
+
 ## Why it was built this way
 
 - One identity with two compositions: warm and thumb-first for patients, dense and

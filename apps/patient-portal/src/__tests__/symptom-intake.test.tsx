@@ -36,7 +36,8 @@ it.each(["en-US", "es-MX"] as const)("names intake regions by their actual saved
 it("recovers the owned draft without writing or mirroring answers into chat", async () => {
     render(panel());
     expect(await screen.findByText("Draft — not submitted")).toBeInTheDocument();
-    expect(screen.getByText(/America\/Los_Angeles/)).toBeInTheDocument();
+    expect(screen.getByText(/Times use Pacific Time/)).toBeInTheDocument();
+    expect(screen.queryByText(/America\/Los_Angeles/)).not.toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
     act(() => window.dispatchEvent(new Event("symptom-intake-updated")));
     await waitFor(() => expect(active).toHaveBeenCalledTimes(2));
@@ -256,7 +257,10 @@ it("blocks a spoken confirm reply and hides internal identifiers in the preview"
     active.mockResolvedValue({ ...draft, status: "ready_for_confirmation", current_question: null, can_review: true, can_confirm: true,
         preview_hash: "a".repeat(64), preview: { schema_version: "symptom-report/1", answers: {}, summary: "My original account",
             context: { purpose: "patient_symptom_preview", version: "symptom-context/1", medications: [{ name: "Test medicine", source_id: "private-source-uuid" }],
-                facts: [{ fact_type: "dose", value: { amount: "5 mg" }, source_id: "private-fact-uuid" }], excerpts: [] },
+                facts: [
+                    { fact_type: "dose", value: { amount: "5 mg" }, source_id: "private-fact-uuid" },
+                    { fact_type: "lab_result", value: { value: "5.8", unit: "mmol/L", reference_range: "3.5–5.1" }, source_id: "private-result-uuid" },
+                ], excerpts: [] },
             source_message_id: "private-source-turn", session_id: "default" } });
     render(<Provider store={store}><SymptomIntakePanel locale="en-US" registerReply={register} /></Provider>);
     await screen.findByText("My original account");
@@ -265,7 +269,13 @@ it("blocks a spoken confirm reply and hides internal identifiers in the preview"
     expect(screen.getByRole("checkbox")).not.toBeChecked();
     expect(screen.getByText("Confirm and share with my care team")).toBeDisabled();
     expect(screen.queryByText(/private-source-uuid|private-fact-uuid|private-source-turn/)).not.toBeInTheDocument();
-    expect(screen.getByText(/amount: 5 mg/)).toBeInTheDocument();
+    // Record details name the kind of fact in words and show values without internal keys.
+    expect(screen.getByText(/Dose: 5 mg/)).toBeInTheDocument();
+    expect(screen.queryByText(/amount:/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Test result: Result: 5.8 · Unit: mmol\/L · Report range: 3.5–5.1/)).toBeInTheDocument();
+    expect(screen.queryByText(/reference_range|private-result-uuid/)).not.toBeInTheDocument();
+    // A medication with no dose or frequency has no dangling separators.
+    expect(screen.getByText("Test medicine")).toBeInTheDocument();
 });
 
 it("shows no start control or placeholder on an ordinary chat with no draft", async () => {

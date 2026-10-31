@@ -56,7 +56,7 @@ async function openFacts(facts: ExtractedDocumentFact[]) {
         />,
     );
     fireEvent.click(screen.getByRole("button", { name: /review extracted facts/i }));
-    await screen.findByRole("list", { name: "Extracted fact candidates" });
+    await screen.findByRole("list", { name: "Extracted facts" });
 }
 
 function fact(id: string, fact_type: string, value: Record<string, unknown>, excerpt = "synthetic excerpt"): ExtractedDocumentFact {
@@ -79,7 +79,7 @@ describe("PatientDocumentsPanel", () => {
             parseStatus: "duplicate", summaryStatus: "not_required",
             createdAt: "2026-10-10T18:00:00Z", uploadedByRole: "patient", reviewStatus: "pending",
         }]} onRefresh={vi.fn()} patientId="synthetic-patient" />);
-        expect(screen.getByText("Duplicate upload — extraction skipped")).toBeInTheDocument();
+        expect(screen.getByText("Duplicate — already on file")).toBeInTheDocument();
         expect(screen.getByText(/created no new extracted facts or care-plan proposals/)).toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "Review extracted facts" })).not.toBeInTheDocument();
         expect(screen.queryByText(/No extracted information in this document/)).not.toBeInTheDocument();
@@ -336,7 +336,7 @@ describe("PatientDocumentsPanel", () => {
 
         // The clinician is told the clinical record is intact, not just that a box is empty.
         expect(
-            screen.getByText(/Extraction and review candidates are unaffected/i),
+            screen.getByText(/Extracted facts and their review are unaffected/i),
         ).toBeInTheDocument();
 
         fireEvent.click(

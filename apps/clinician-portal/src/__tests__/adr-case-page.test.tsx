@@ -235,7 +235,7 @@ describe("ADR case page", () => {
         render(<ADRCasePage />);
         expect(await screen.findByText("Patient answered")).toBeInTheDocument();
         expect(screen.getByText(/It improved after my clinician lowered the dose/)).toBeInTheDocument();
-        expect(screen.getByText(/deterministic score above includes/i)).toBeInTheDocument();
+        expect(screen.getByText(/calculated score above includes/i)).toBeInTheDocument();
         expect(screen.getByText("Information requested")).toBeInTheDocument();
     });
 

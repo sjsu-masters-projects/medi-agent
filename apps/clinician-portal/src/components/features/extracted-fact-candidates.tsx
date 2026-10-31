@@ -193,7 +193,11 @@ export function groupFactsForReview(facts: ExtractedDocumentFact[]): FactReviewE
 function candidateState(fact: ExtractedDocumentFact): string {
     return fact.review_state === "pending_review"
         ? "Pending clinician review"
-        : fact.review_state.replaceAll("_", " ");
+        : fact.review_state === "approved"
+          ? "Approved"
+          : fact.review_state === "rejected"
+            ? "Rejected"
+            : "Review state unavailable";
 }
 
 function MedicationActionBadge({ action }: { action: string }) {
@@ -385,7 +389,7 @@ export function ExtractedFactCandidates({ facts, selectedFactId, onSelect, patie
     /* LOC-003 item 2: one request covers every Spanish excerpt on screen. */
     const glosses = useEvidenceGlosses(patientId, facts.map((fact) => fact.citations?.[0]?.excerpt));
     return (
-        <div className="space-y-2.5" role="list" aria-label="Extracted fact candidates">
+        <div className="space-y-2.5" role="list" aria-label="Extracted facts">
             {groupFactsForReview(facts).map((entry, index) =>
                 entry.kind === "fact" ? (
                     <div key={entry.fact.id} role="listitem">

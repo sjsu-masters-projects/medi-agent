@@ -5,7 +5,20 @@ import { api } from "@/services/api";
 import type { DocumentApiRecord } from "@/services/documents";
 import type { ConversationDraft } from "@/types/care-conversations";
 import type { Locale } from "@/types";
+import { useSharedPatientProfile } from "@/contexts/patient-profile-context";
 import { recordTitle } from "./record-row";
+
+/** The date the record was added, in the saved time zone; omitted when either is unknown. */
+function addedDate(value: string | null | undefined, locale: Locale, timezone: string | null | undefined) {
+  if (!value || !timezone) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  try {
+    return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: timezone }).format(date);
+  } catch {
+    return null;
+  }
+}
 
 /** Prepare an ordinary private message; no chart write or automatic send occurs here. */
 export function RecordRequestComposer({
@@ -26,6 +39,7 @@ export function RecordRequestComposer({
   onDraft: (draft: ConversationDraft) => void;
 }) {
   const spanish = locale === "es-MX";
+  const timezone = useSharedPatientProfile()?.profile?.timezone;
   const [attempt, setAttempt] = useState(0);
   const key = JSON.stringify([documentId, patientId, locale, token, attempt]);
   const [source, setSource] = useState<{
@@ -74,9 +88,11 @@ export function RecordRequestComposer({
       },
       locale,
     );
+    // The patient's own words name the record; the database id is not written into them.
+    const added = addedDate(document.created_at, locale, timezone);
     const body = spanish
-      ? `Me gustaría solicitar una corrección o la eliminación de este documento.\n\nDocumento: ${title}\nArchivo original: ${document.file_name}\nReferencia del documento: ${document.id}\n\nMi solicitud: `
-      : `I would like to request a correction or removal of this record.\n\nDocument: ${title}\nOriginal file: ${document.file_name}\nRecord reference: ${document.id}\n\nMy request: `;
+      ? `Me gustaría solicitar una corrección o la eliminación de este documento.\n\nDocumento: ${title}${added ? ` (agregado el ${added})` : ""}\nArchivo original: ${document.file_name}\n\nMi solicitud: `
+      : `I would like to request a correction or removal of this record.\n\nDocument: ${title}${added ? ` (added ${added})` : ""}\nOriginal file: ${document.file_name}\n\nMy request: `;
     onDraft({ body });
   }
   return (

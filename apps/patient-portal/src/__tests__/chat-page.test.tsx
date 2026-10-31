@@ -289,7 +289,8 @@ describe("Patient chat page", () => {
         changePreferredLanguage(Language.EN);
         expect(screen.getByText("My original English question")).toBeInTheDocument();
         expect(MockWebSocket.instances).toHaveLength(sockets);
-        expect(screen.getByText(/Original language: English/)).toBeInTheDocument();
+        // Now in the patient's own language, so no language label sits under it.
+        expect(screen.queryByText(/Original language|Idioma original/)).not.toBeInTheDocument();
     });
 
     it("offers the Sources line only under a reply the server says has evidence", async () => {

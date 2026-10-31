@@ -306,6 +306,18 @@ message may already exist. Preparation does not send it.
 
 Conversations shipped in #139 (COM-001-B) with live bilingual persistence verified.
 
+## Interface text (UX-007)
+
+Screens lead with what a clinician needs to decide; ids, versions and raw source
+records sit behind a collapsed **Technical details** disclosure (external records,
+symptom reports, risk explanation, MedWatch draft header). Codes are mapped to
+labels (document processing, reconciliation, Naranjo answers, invitation roles and
+delivery). `services/api.ts` replaces status-only, 5xx and framework errors with
+plain copy, and `services/error-text.ts` shows only API, transport and MedWatch
+error text, falling back to each screen's own sentence. Scheduling shows zone
+names ("Pacific Time") via `timezoneName`. See the
+[UX-007 spec](../../.agent/specs/ux-007-interface-noise.md).
+
 ## Notes
 
 Patient detail distinguishes 403 access denial and 404 missing records from transient

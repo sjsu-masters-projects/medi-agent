@@ -47,8 +47,8 @@ export function appointmentTimeToUtc(value: string, timezone: string): string {
   if (matches.length !== 1) {
     throw new Error(
       matches.length === 0
-        ? `That time does not exist in ${timezone} because of a clock change. Choose another time.`
-        : `That time occurs twice in ${timezone} because of a clock change. Choose another time.`,
+        ? `That time does not exist in ${timezoneName(timezone)} because of a clock change. Choose another time.`
+        : `That time occurs twice in ${timezoneName(timezone)} because of a clock change. Choose another time.`,
     );
   }
   return new Date(matches[0]!).toISOString();
@@ -78,6 +78,25 @@ export function formatSchedulingTime(value: string, timezone: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
+}
+
+/**
+ * A zone as people say it: "Pacific Time" (long) or "PT" (short), not "America/Los_Angeles".
+ * An id the browser cannot name falls back to the id with spaces.
+ */
+export function timezoneName(timezone: string, style: "long" | "short" = "long") {
+  try {
+    const name = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      timeZoneName: style === "long" ? "longGeneric" : "shortGeneric",
+    })
+      .formatToParts(new Date())
+      .find((part) => part.type === "timeZoneName")?.value;
+    if (name) return name;
+  } catch {
+    /* fall through */
+  }
+  return timezone.replaceAll("_", " ");
 }
 
 /** Clock time only (for example "9:00 AM") in the given timezone. */

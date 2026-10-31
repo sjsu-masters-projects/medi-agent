@@ -27,6 +27,7 @@ import { profileCopy, profileGenderLabels } from "./profile-copy";
 import { useSharedPatientProfile } from "@/hooks/use-patient-profile";
 import { EmailPreferences } from "@/components/features/email-preferences";
 import { clearPatientLocale } from "@/content/patient-locale";
+import { formatTimezoneLabel } from "@/content/timezone-label";
 
 interface PatientProfileResponse {
     id: string;
@@ -307,18 +308,8 @@ function ProfilePageContent() {
     const eyebrowClass = "px-[22px] pt-5 pb-2 font-mono text-xs uppercase tracking-[0.08em] text-muted";
     const chevron = <Icon name="chevron" className="h-[18px] w-[18px] shrink-0 text-faint" />;
     const initialsOf = (first?: string, last?: string) => `${first?.charAt(0) ?? ""}${last?.charAt(0) ?? ""}`.toUpperCase() || "?";
-    // "America/Los_Angeles" reads as "Pacific Time · Los Angeles"; unknown zones fall back to the raw name.
-    const formatTimezone = (zone: string) => {
-        try {
-            const name = new Intl.DateTimeFormat(locale, { timeZone: zone, timeZoneName: "longGeneric" })
-                .formatToParts(new Date())
-                .find((part) => part.type === "timeZoneName")?.value;
-            const city = zone.includes("/") ? zone.split("/").pop()?.replaceAll("_", " ") : null;
-            return name && city ? `${name} · ${city}` : name ?? zone;
-        } catch {
-            return zone;
-        }
-    };
+    // "America/Los_Angeles" reads as "Pacific Time · Los Angeles".
+    const formatTimezone = (zone: string) => formatTimezoneLabel(zone, locale);
     const formatBirthDate = (value: string) => {
         const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
         if (!match) return value;

@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { getSymptomIntakeCopy, intakeErrorCopy, intakeValueCopy, offerAnswer } from "@/content/symptom-intake-copy";
+import { formatTimezoneLabel } from "@/content/timezone-label";
 import { useSymptomIntake } from "@/hooks/use-symptom-intake";
 import type { PrivateReplyHandler } from "@/hooks/use-patient-chat-session";
 import { IntakeAnswerForm } from "@/components/features/intake-answer-form";
@@ -27,11 +28,15 @@ type Props = {
     onFocusComposer?: () => void;
 };
 
-function recordValue(value: unknown): string {
+/** The record's printed values, without the internal field names (UX-007). */
+function recordValue(value: unknown, labels: Record<string, string>, fallback: string): string {
     if (typeof value === "string" || typeof value === "number") return String(value);
     if (!value || typeof value !== "object") return "";
-    return Object.entries(value).filter(([key, item]) => !/(?:^id$|_id$|source|patient)/i.test(key) && ["string", "number"].includes(typeof item))
-        .map(([key, item]) => `${key.replaceAll("_", " ")}: ${item}`).join(" · ");
+    const parts = Object.entries(value).filter(([key, item]) => !/(?:^id$|_id$|source|patient)/i.test(key) && ["string", "number"].includes(typeof item) && String(item).trim());
+    // A single amount is already labelled by its fact type. Multiple values need
+    // labels so a result cannot be confused with its range, dose or date.
+    if (parts.length === 1) return String(parts[0][1]);
+    return parts.map(([key, item]) => `${labels[key] ?? fallback}: ${item}`).join(" · ");
 }
 
 export function SymptomIntakePanel({ locale: appLocale, sessionId = "default",
@@ -184,7 +189,7 @@ export function SymptomIntakePanel({ locale: appLocale, sessionId = "default",
                 {intake.error && !intake.pending && <button className={button} onClick={() => onRestoreInput?.(unsaved.text)}>{copy.editReply}</button>}
             </div>}
             {active && <details className="w-full px-1" open={reportedOpen} onToggle={(event) => setReportedOpen(event.currentTarget.open)}><summary className="min-h-11 cursor-pointer py-2 text-sm font-medium text-ink-2">{copy.reported}</summary>
-                <p className="text-xs text-muted">{copy.timezone}: {draft.timezone}{draft.timezone_fallback ? ` (${copy.fallback})` : ""}</p>
+                <p className="text-xs text-muted">{draft.timezone_fallback ? copy.fallback : `${copy.timezone} ${formatTimezoneLabel(draft.timezone, locale)}`}</p>
                 <dl className="space-y-3">{Object.entries(draft.answers).map(([id, answer]) => <div key={id}>
                     <dt className="text-sm font-medium">{draft.questions?.find((q) => q.id === id)?.wording[locale] ?? copy.value}</dt>
                     <dd className="text-sm" lang={answer.locale}>{answer.state === "answered" ? intakeValueCopy(answer.value, locale) : copy.states[answer.state]}</dd>
@@ -201,8 +206,8 @@ export function SymptomIntakePanel({ locale: appLocale, sessionId = "default",
                 <p className="text-sm text-ink-2">{copy.productReported}</p>
                 <h3 className="font-semibold">{copy.context}</h3>
                 {!draft.preview.context.medications.length && !draft.preview.context.facts.length && <p>{copy.emptyContext}</p>}
-                {draft.preview.context.medications.map((med, i) => <p key={i}>{String(med.name)} · {String(med.dose ?? "")} · {String(med.frequency ?? "")}</p>)}
-                {draft.preview.context.facts.map((fact, i) => <p key={i}>{String(fact.fact_type).replaceAll("_", " ")}: {recordValue(fact.value)} <cite className="text-xs text-muted">({typeof fact.document_id === "string"
+                {draft.preview.context.medications.map((med, i) => <p key={i}>{[med.name, med.dose, med.frequency].filter((part) => typeof part === "string" || typeof part === "number").map(String).filter((part) => part.trim()).join(" · ")}</p>)}
+                {draft.preview.context.facts.map((fact, i) => <p key={i}>{copy.factLabels[String(fact.fact_type)] ?? copy.recordDetail}: {recordValue(fact.value, copy.factFieldLabels, copy.recordDetail)} <cite className="text-xs text-muted">({typeof fact.document_id === "string"
                     ? <Link className="underline" href={buildRecordsDocumentHref(fact.document_id)}>{copy.recordSource} {i + 1}</Link> : <>{copy.recordSource} {i + 1}</>})</cite></p>)}
                 {draft.preview.context.excerpts.map((excerpt, i) => <blockquote className="border-l-2 border-brand pl-3" key={i}>{String(excerpt.text)} <cite className="text-xs text-muted">{typeof excerpt.document_id === "string"
                     ? <Link className="underline" href={buildRecordsDocumentHref(excerpt.document_id)}>{copy.excerptSource} {i + 1}</Link> : <>{copy.excerptSource} {i + 1}</>}</cite></blockquote>)}

@@ -1,17 +1,44 @@
 "use client";
 
 import { useLayoutEffect, useRef, type TextareaHTMLAttributes } from "react";
+import { useSharedPatientProfile } from "@/contexts/patient-profile-context";
 
-export function chatDisplayTime(timestamp: Date | string, locale: string, now = new Date()) {
+/** A usable saved time zone, else undefined (the browser's own zone). */
+function usableZone(timeZone?: string | null) {
+  if (!timeZone) return undefined;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone });
+    return timeZone;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The patient's saved time zone for message times (UX-007). */
+export function useSavedTimezone() {
+  return useSharedPatientProfile()?.profile?.timezone ?? undefined;
+}
+
+/**
+ * "11:03", "Yesterday" or "Oct 3" for a message, judged in the patient's saved time zone so
+ * a device set to another zone does not move a message to the wrong day.
+ */
+export function chatDisplayTime(timestamp: Date | string, locale: string, now = new Date(), timeZone?: string | null) {
   const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
   if (Number.isNaN(date.getTime())) return "";
-  if (date.toDateString() === now.toDateString())
-    return new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit" }).format(date);
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString())
+  const zone = usableZone(timeZone);
+  const dayFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" });
+  const dayKey = (value: Date) => dayFormatter.format(value);
+  const today = dayKey(now);
+  const messageDay = dayKey(date);
+  if (messageDay === today)
+    return new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit", timeZone: zone }).format(date);
+  const yesterday = new Date(`${today}T12:00:00Z`);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  if (messageDay === yesterday.toISOString().slice(0, 10))
     return new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(-1, "day");
-  return new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", ...(date.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}) }).format(date);
+  const sameYear = messageDay.slice(0, 4) === today.slice(0, 4);
+  return new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", timeZone: zone, ...(sameYear ? {} : { year: "numeric" }) }).format(date);
 }
 
 export function ChatTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
