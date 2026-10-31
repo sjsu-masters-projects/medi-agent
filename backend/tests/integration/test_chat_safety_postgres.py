@@ -217,6 +217,7 @@ def sql(postgres):
         "059_chat_safety_alerts.sql",
         "097_medication_error_safety_persistence.sql",
         "098_safety_audit_retention.sql",
+        "104_model_escalation_delivery.sql",
     ):
         execute((MIGRATIONS / name).read_text())
     execute(f"""
@@ -580,3 +581,77 @@ def test_migration_098_reapplies_cleanly(sql):
     sql(audit_sql())
     sql((MIGRATIONS / "098_safety_audit_retention.sql").read_text())
     assert sql("SELECT count(*) FROM chat_turn_safety_audits;") == "1"
+
+
+def model_alert_sql(*, patient=PATIENT, reply=None, rule="model_classification", urgency="urgent"):
+    if reply is None:
+        reply = "00000000-0000-0000-0000-000000000005"
+    payload = json.dumps(
+        {
+            "assistant_message_id": reply,
+            "safety_rule": rule,
+            "urgency": urgency,
+            "rule_version": "triage-floor/1",
+        }
+    )
+    return f"SET ROLE service_role; SELECT record_model_chat_safety_alert('{patient}','{TURN}','{payload}');"
+
+
+def seed_model_turn(sql, *, session="default", patient=PATIENT):
+    sql(f"""INSERT INTO chat_messages(id,patient_id,role,content,session_id,intent)
+      VALUES('{TURN}','{PATIENT}','user','Synthetic symptom','default',NULL),
+      ('00000000-0000-0000-0000-000000000005','{patient}','assistant','Synthetic guidance','{session}','medication_question');""")
+
+
+@pytest.mark.parametrize("urgency", ["urgent", "emergency"])
+@pytest.mark.parametrize("rule", ["model_classification", "adverse_effect_signal"])
+def test_model_escalation_is_durable_idempotent_and_retryable(sql, rule, urgency):
+    seed_model_turn(sql)
+    saved = json.loads(sql(model_alert_sql(rule=rule, urgency=urgency)))
+    assert saved["delivery_state"] == "pending"
+    assert saved["urgency"] == urgency
+    sql(model_alert_sql(rule=rule, urgency=urgency))
+    assert sql("SELECT count(*) FROM chat_safety_alerts;") == "1"
+    sql("""CREATE FUNCTION public.fail_model_delivery() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'Synthetic delivery outage'; END $$;
+      CREATE TRIGGER fail_model_delivery BEFORE INSERT ON clinician_messages
+        FOR EACH ROW EXECUTE FUNCTION public.fail_model_delivery();""")
+    sql(deliver_sql(), succeeds=False)
+    assert sql("SELECT delivery_state FROM chat_safety_alerts;") == "pending"
+    sql("DROP TRIGGER fail_model_delivery ON clinician_messages;")
+    assert json.loads(sql(deliver_sql()))[0]["delivery_state"] == "delivered"
+    assert json.loads(sql(deliver_sql())) == []
+    assert sql("SELECT count(*) FROM clinician_messages;") == "1"
+    assert f"({urgency}/medication_question)" in sql("SELECT body FROM clinician_messages;")
+    sql(model_alert_sql(rule=rule, urgency=urgency))
+    assert sql("SELECT count(*) FROM chat_messages;") == "2"
+    sql("UPDATE chat_messages SET content='changed' WHERE role::text='user';", succeeds=False)
+
+
+@pytest.mark.parametrize("session,patient", [("other", PATIENT), ("default", OTHER)])
+def test_model_alert_rejects_cross_patient_or_session_reply(sql, session, patient):
+    seed_model_turn(sql, session=session, patient=patient)
+    sql(model_alert_sql(), succeeds=False)
+    assert sql("SELECT count(*) FROM chat_safety_alerts;") == "0"
+
+
+def test_model_alert_rejects_identity_changes_and_browser_writes(sql):
+    seed_model_turn(sql)
+    sql(model_alert_sql())
+    sql(model_alert_sql(urgency="emergency"), succeeds=False)
+    sql(model_alert_sql(patient=OTHER), succeeds=False)
+    sql(model_alert_sql(rule="unknown"), succeeds=False)
+    sql(
+        "SET ROLE authenticated; SELECT record_model_chat_safety_alert(NULL,NULL,'{}');",
+        succeeds=False,
+    )
+
+
+def test_model_alert_concurrent_registration_and_dispatch_do_not_duplicate(sql):
+    seed_model_turn(sql)
+    for statement in (model_alert_sql(), deliver_sql()):
+        children = [sql.start(statement), sql.start(statement)]
+        for child in children:
+            assert child.wait(timeout=10) == 0, child.stderr.read()
+    assert sql("SELECT count(*) FROM chat_safety_alerts;") == "1"
+    assert sql("SELECT count(*) FROM clinician_messages;") == "1"

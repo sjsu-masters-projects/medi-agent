@@ -85,6 +85,45 @@ class ChatSafetyService:
             },
         }
 
+    async def record_model_escalation_safely(
+        self, patient_id: str, turn_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Register the saved model turn in the same durable delivery queue as floor alerts."""
+        for _attempt in range(2):
+            try:
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        self.db.rpc(
+                            "record_model_chat_safety_alert",
+                            {
+                                "p_patient_id": patient_id,
+                                "p_turn_id": turn_id,
+                                "p_payload": payload,
+                            },
+                        ).execute
+                    ),
+                    timeout=5,
+                )
+                if (
+                    isinstance(result.data, dict)
+                    and result.data.get("alert_id") == turn_id
+                    and result.data.get("delivery_state")
+                    in {"pending", "delivered", "no_recipients"}
+                ):
+                    return {
+                        "safety_rule": payload["safety_rule"],
+                        **result.data,
+                        "persistence_status": "saved",
+                    }
+            except Exception:
+                logger.warning("Model escalation persistence unavailable; answer retained")
+        return {
+            "alert_id": turn_id,
+            "safety_rule": payload["safety_rule"],
+            "persistence_status": "uncertain",
+            "delivery_state": "unavailable",
+        }
+
     async def record_audit_safely(
         self, patient_id: str, turn_id: str, payload: dict[str, Any]
     ) -> bool:

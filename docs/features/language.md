@@ -69,6 +69,7 @@ Spanish only where it is exactly what the patient sees or the original evidence.
 12. Fact display fields are written at ingestion for the document's own facts only (batches
     of 15), guarded; a rejected one shows "Not translated" with the reason. Evidence
     excerpts are never altered in storage or on screen; glosses are capped at ten per request.
+    Batch failures log only count and exception type, with no traceback or model output.
     Record titles come from existing summaries, are rejected if they carry digits or run
     long, never send the patient's name to a model, and keep the file name as identity.
 13. Every machine translation in the clinician portal shows an affordance naming the model
@@ -127,9 +128,6 @@ interface-wording-review`. Clinician: `npx vitest run care-plan-wording`.
 
 ## Still open
 
-- Translation failures must log counts, codes and exception types, never wording, message or
-  fact text. `fact_display_translation.py` logs a traceback (`exc_info=True`) for a bad batch
-  response, which can echo model output.
 - An optional "bilingual colleague reviewed the Spanish" mark is not built; the portal only
   suggests asking one.
 - No patient-language chip in the clinician header or per-message language label (not found).

@@ -15,6 +15,7 @@ from tests.integration.test_email_postgres import account, delivery, verified
 from tests.integration.test_notification_centre_postgres import (
     CLINICIAN,
     FOREIGN,
+    MIGRATIONS,
     OTHER,
     PATIENT,
     TEAM,
@@ -446,3 +447,29 @@ def test_one_actionable_item_follows_the_pending_request(sql, sequence):
         current = sql(pending)
         active = [r for r in requested(sql) if r["actionable"]]
         assert [r["source_id"] for r in active] == ([current] if current else []), step
+
+
+def test_patient_cannot_read_raw_adr_scores_but_assigned_clinician_can(sql):
+    adr = assessment(sql)
+    sql((MIGRATIONS / "106_patient_adr_read_boundary.sql").read_text())
+    sql("""CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
+      SELECT nullif(current_setting('test.actor',true),'')::uuid $$;
+      GRANT SELECT ON public.adr_assessments,public.care_teams,public.clinicians TO authenticated;""")
+    assert (
+        sql(
+            f"SET ROLE authenticated; SELECT set_config('test.actor','{PATIENT}',false); SELECT count(*) FROM adr_assessments WHERE id='{adr}';"
+        ).splitlines()[-1]
+        == "0"
+    )
+    assert (
+        sql(
+            f"SET ROLE authenticated; SELECT set_config('test.actor','{CLINICIAN}',false); SELECT naranjo_score FROM adr_assessments WHERE id='{adr}';"
+        ).splitlines()[-1]
+        == "0"
+    )
+    assert (
+        sql(
+            f"SET ROLE authenticated; SELECT set_config('test.actor','{OTHER}',false); SELECT count(*) FROM adr_assessments WHERE id='{adr}';"
+        ).splitlines()[-1]
+        == "0"
+    )

@@ -89,6 +89,13 @@ across all their clinics. Both locales (`en-US`, `es-MX`); synthetic data only.
     both mean distinct patients with an active in-scope link. In the portal, changing
     range, clinic or filter shows loading until the matching response; stale ones drop.
 
+Visit edits use `edit_appointment_details`: authorization and current lifecycle are
+rechecked under row locks, changes to open grouped offers reach every proposed sibling,
+and changed fields are appended to `appointment_offer_events` with actor and before/after
+values. An audit failure rolls back all edits. A no-op adds no event. Booked time and
+status changes still require their existing response or offer workflows. Browser roles
+cannot invoke this RPC or modify audit history.
+
 ## Why it was built this way
 
 - Clinician offers, patient picks: fewer round trips than one time with accept/decline,
@@ -136,7 +143,6 @@ or invitations, SMS or push visit notices, any model step that picks a time.
 ## Still open
 
 - Withdrawing an open offer before the patient answers (no endpoint or control).
-- Editing a visit's details (`PUT /appointments/{id}`) writes no audit row of its own.
 - A patient-visible no-show message (none exists).
 - Undecided: one active offer per visit reason per patient.
 - Offset choice for a repeated DST hour (the clinician picks another time today).

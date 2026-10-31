@@ -510,3 +510,87 @@ def test_manage_appointment_is_not_executable_from_a_browser_role(sql):
         )
         == "f"
     )
+
+
+@pytest.fixture
+def audited_edits(sql):
+    sql((MIGRATIONS / "105_appointment_edit_audit.sql").read_text())
+    return sql
+
+
+def edit_visit(sql, key, changes, *, actor=CLINICIAN, succeeds=True):
+    data = json.dumps(changes).replace("'", "''")
+    out = sql(
+        f"SET ROLE service_role; SELECT edit_appointment_details('{actor}','{key}','{data}');",
+        succeeds=succeeds,
+    )
+    return json.loads(out) if succeeds else out
+
+
+def test_visit_detail_edit_audits_each_changed_field_and_noop_adds_no_event(audited_edits):
+    db = audited_edits
+    key = book(db, PATIENT, TEAM, 0)
+    result = edit_visit(
+        db,
+        key,
+        {
+            "location": "Synthetic Suite 4",
+            "reason": "Synthetic follow-up",
+            "appointment_type": "routine",
+        },
+    )
+    assert result["appointment"]["location"] == "Synthetic Suite 4"
+    audit = json.loads(
+        db(
+            f"SELECT changes FROM appointment_offer_events WHERE appointment_id='{key}' AND action='details_updated';"
+        )
+    )
+    assert audit["location"] == {"before": None, "after": "Synthetic Suite 4"}
+    assert audit["appointment_type"]["after"] == "routine"
+    assert set(audit) == {"location", "reason", "appointment_type"}
+    edit_visit(db, key, {"location": "Synthetic Suite 4"})
+    assert db(f"SELECT count(*) FROM appointment_offer_events WHERE appointment_id='{key}';") == "1"
+    db("SET ROLE service_role; UPDATE appointment_offer_events SET changes='{}';", succeeds=False)
+    db("SET ROLE authenticated; SELECT edit_appointment_details(NULL,NULL,'{}');", succeeds=False)
+
+
+def test_visit_edit_audit_failure_rolls_back_all_group_slots(audited_edits):
+    db = audited_edits
+    rows = propose(db, TEAM, [0, 60])["appointments"]
+    db("""CREATE FUNCTION public.fail_visit_audit() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN IF NEW.action='details_updated' THEN RAISE EXCEPTION 'Synthetic audit outage'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER fail_visit_audit BEFORE INSERT ON appointment_offer_events
+        FOR EACH ROW EXECUTE FUNCTION public.fail_visit_audit();""")
+    edit_visit(db, rows[0]["id"], {"location": "Changed"}, succeeds=False)
+    assert db("SELECT count(*) FROM appointments WHERE location='Changed';") == "0"
+    assert (
+        db("SELECT count(*) FROM appointment_offer_events WHERE action='details_updated';") == "0"
+    )
+    db("DROP TRIGGER fail_visit_audit ON appointment_offer_events;")
+    edit_visit(db, rows[0]["id"], {"location": "Changed"})
+    assert db("SELECT count(*) FROM appointments WHERE location='Changed';") == "2"
+    assert (
+        db("SELECT count(*) FROM appointment_offer_events WHERE action='details_updated';") == "2"
+    )
+
+
+@pytest.mark.parametrize("status", ["cancelled", "declined", "completed"])
+def test_visit_edit_rechecks_lifecycle_under_database_lock(audited_edits, status):
+    db = audited_edits
+    key = book(db, PATIENT, TEAM, 0, status=status)
+    assert edit_visit(db, key, {"location": "Changed"})["error"] == "stale"
+    assert (
+        db("SELECT count(*) FROM appointment_offer_events WHERE action='details_updated';") == "0"
+    )
+
+
+def test_visit_edit_rejects_outsiders_and_booked_time_changes(audited_edits):
+    db = audited_edits
+    key = book(db, PATIENT, TEAM, 0)
+    assert edit_visit(db, key, {"location": "Changed"}, actor=OTHER)["error"] == "forbidden"
+    assert edit_visit(db, key, {"location": "Changed"}, actor=PATIENT)["error"] == "forbidden"
+    assert edit_visit(db, key, {"duration_minutes": 60})["error"] == "stale"
+    assert edit_visit(db, key, {"status": "cancelled"})["error"] == "invalid"
+    assert (
+        db("SELECT count(*) FROM appointment_offer_events WHERE action='details_updated';") == "0"
+    )

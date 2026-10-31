@@ -80,6 +80,18 @@ source text nor review/clinical truth is rewritten. Missing cache schema returns
 unavailable explanation rather than triggering repeated generation. Apply 102 with
 explicit hosted-target authorization before the matching backend release.
 
+## Safety gap hardening rollout
+
+Additive migrations `103_intake_medication_error_interrupt.sql`,
+`104_model_escalation_delivery.sql`, `105_appointment_edit_audit.sql` and
+`106_patient_adr_read_boundary.sql` must precede
+the dependent backend release, using the authorized target and ledger procedure in
+the [migration guide](../docs/supabase_setup_guide.md). They retain existing RLS,
+service-only invocation and immutable audit/message boundaries. There is no automatic
+migration fallback: unavailable persistence is reported honestly, and failed visit edits
+return an error. Keep the retry worker enabled for pending safety alerts. No hosted
+application is implied by local tests or PR approval.
+
 ## Run
 
 ```bash

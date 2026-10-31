@@ -503,6 +503,8 @@ class TestADRInformationRequestRoutes:
 
         assert response.status_code == status.HTTP_200_OK
         assert response.json()[0]["requested_information"] == ["dose_response"]
+        for field in ("current_naranjo_score", "current_causality", "naranjo_score", "causality"):
+            assert field not in response.json()[0]
         override_patient_service.list_adr_information_requests.assert_awaited_once_with(patient_id)
 
     def test_submit_confirmed_response(
@@ -541,6 +543,8 @@ class TestADRInformationRequestRoutes:
 
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["status"] == "answered"
+        assert "naranjo_score" not in response.json()
+        assert "causality" not in response.json()
         args = override_patient_service.respond_to_adr_information_request.await_args.args
         assert args[0] == patient_id
         assert args[1] == request_id

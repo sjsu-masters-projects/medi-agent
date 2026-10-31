@@ -140,8 +140,9 @@ Portal: `npm run test -- chat`.
 
 ## Still open
 
-- The unsupported-dose check only logs; blocking needs measured false positives, and early
-  speech must then be off for those turns.
+- The unsupported-dose check remains monitoring-only by requester decision. Blocking
+  remains a separate decision needing measured false positives; early speech must then
+  be off for those turns.
 - Combination products; the unused `drug_knowledge_chunks` table has no drop migration;
   label XML is parsed with the standard library (`defusedxml` is not a dependency).
 - Triage evaluation shows over-triage of mild symptoms; real-provider behavior for wellness

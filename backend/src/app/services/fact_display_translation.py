@@ -232,9 +232,11 @@ async def translate_facts_to_english(
         try:
             response = await _translate_chunk(payload)
             parsed = _TranslatedFacts.model_validate_json(response.text)
-        except Exception:
-            # Never log fact text: the count is enough to see a batch failed.
-            logger.warning("Fact translation batch of %d failed", len(chunk), exc_info=True)
+        except Exception as exc:
+            # Validation errors can include model output; never log the exception or traceback.
+            logger.warning(
+                "Fact translation batch of %d failed (%s)", len(chunk), type(exc).__name__
+            )
             continue
         returned = {entry.id: entry.fields for entry in parsed.items}
         model_id = getattr(response.telemetry, "model", None)

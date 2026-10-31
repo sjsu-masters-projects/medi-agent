@@ -227,7 +227,7 @@ async def _send_safety_turn(
         {
             "type": "escalation_recommended",
             "message": decision.response_text,
-            "urgency": "emergency",
+            "urgency": decision.verdict.urgency,
             **delivery,
         }
     )
@@ -1208,6 +1208,20 @@ async def _process_chat_message(
     if attachments and not assistant_message.get("attachments"):
         # Saved as text only (migration 062 not applied); still show the card live.
         assistant_message = {**assistant_message, "attachments": attachments}
+    if escalation_required:
+        safety_service = ChatSafetyService(service.db)
+        alert = await safety_service.record_model_escalation_safely(
+            str(patient_id),
+            str(user_message["id"]),
+            {
+                "assistant_message_id": str(assistant_message["id"]),
+                "safety_rule": override_rule
+                if isinstance(override_rule, str)
+                else "model_classification",
+                "urgency": assistant_urgency,
+                "rule_version": SAFETY_RULE_VERSION,
+            },
+        )
     assistant_payload = _serialize_chat_message(assistant_message)
     conversation_history.append(assistant_payload)
     next_state = _build_conversation_state(
@@ -1265,14 +1279,7 @@ async def _process_chat_message(
             await ChatSafetyService(service.db).record_audit_safely(
                 str(patient_id), str(user_message["id"]), audit
             )
-        clinicians_notified = await service.notify_assigned_clinicians(
-            patient_id=str(patient_id),
-            payload={
-                "urgency": assistant_urgency,
-                "intent": assistant_intent,
-                "message_excerpt": incoming.content,
-            },
-        )
+        delivery = await safety_service.deliver_safely(alert)
         await websocket.send_json(
             {
                 "type": "escalation_recommended",
@@ -1280,7 +1287,10 @@ async def _process_chat_message(
                     "Please contact your care team today. If severe symptoms appear, seek "
                     "emergency care immediately."
                 ),
-                "clinicians_notified": clinicians_notified,
+                "urgency": assistant_urgency,
+                "safety_rule": alert.get("safety_rule"),
+                "persistence_status": alert["persistence_status"],
+                **delivery,
             }
         )
     return cast(dict[str, Any], conversation_state)

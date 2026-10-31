@@ -271,8 +271,8 @@ class PatientService:
                 db.table("adr_information_requests")
                 .select(
                     "id, adr_assessment_id, requested_information, patient_message, status, "
-                    "created_at, adr_assessments(suspect_medication_name, naranjo_score, "
-                    "causality, symptom_reports(symptom, severity))"
+                    "created_at, adr_assessments(suspect_medication_name, "
+                    "symptom_reports(symptom, severity))"
                 )
                 .eq("patient_id", str(patient_id))
                 .eq("status", "pending")
@@ -302,8 +302,6 @@ class PatientService:
                     "suspect_medication_name": assessment.get("suspect_medication_name") or "",
                     "requested_information": questions,
                     "patient_message": raw.get("patient_message") or "",
-                    "current_naranjo_score": assessment.get("naranjo_score") or 0,
-                    "current_causality": assessment.get("causality") or "Doubtful",
                     "status": raw["status"],
                     "created_at": raw["created_at"],
                 }

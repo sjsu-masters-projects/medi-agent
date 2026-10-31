@@ -87,3 +87,54 @@ def test_override_rule_id_names_the_rule_that_raised_urgency(message, model, fin
     from app.safety.escalation import override_rule_id
 
     assert override_rule_id(message, model, final) == expected
+
+
+@pytest.mark.asyncio
+async def test_model_escalation_retries_registration_and_keeps_pending_delivery():
+    db = MagicMock()
+    db.rpc.return_value.execute.side_effect = [
+        RuntimeError("synthetic private response"),
+        SimpleNamespace(data={"alert_id": "turn", "delivery_state": "pending"}),
+    ]
+    payload = {"safety_rule": "model_classification", "urgency": "urgent"}
+    service = ChatSafetyService(db)
+    saved = await service.record_model_escalation_safely("patient", "turn", payload)
+    assert saved["persistence_status"] == "saved"
+    assert db.rpc.return_value.execute.call_count == 2
+    db.rpc.assert_called_with(
+        "record_model_chat_safety_alert",
+        {
+            "p_patient_id": "patient",
+            "p_turn_id": "turn",
+            "p_payload": payload,
+        },
+    )
+    service.deliver_pending = AsyncMock(side_effect=RuntimeError("synthetic outage"))
+    assert await service.deliver_safely(saved) == {
+        "delivery_state": "pending",
+        "clinicians_notified": 0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_model_escalation_outage_reports_uncertain_without_logging_content(caplog):
+    db = MagicMock()
+    db.rpc.return_value.execute.side_effect = RuntimeError("synthetic private model output")
+    result = await ChatSafetyService(db).record_model_escalation_safely(
+        "patient", "turn", {"safety_rule": "model_classification"}
+    )
+    assert result["persistence_status"] == "uncertain"
+    assert result["delivery_state"] == "unavailable"
+    assert "synthetic private model output" not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("data", [None, {}, {"alert_id": "turn", "delivery_state": "sent"}])
+async def test_malformed_model_alert_receipt_is_not_claimed_saved(data):
+    db = MagicMock()
+    db.rpc.return_value.execute.return_value = SimpleNamespace(data=data)
+    result = await ChatSafetyService(db).record_model_escalation_safely(
+        "patient", "turn", {"safety_rule": "model_classification"}
+    )
+    assert result["persistence_status"] == "uncertain"
+    assert result["delivery_state"] == "unavailable"

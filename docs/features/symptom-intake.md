@@ -28,7 +28,8 @@ report. Patients use Nora and "My symptoms"; clinicians use the symptom report p
 3. A structured "yes" escalates only through a question with a reviewed
    `positive_safety_rule`; an isolated "yes" is never keyword-matched. A patient severity
    of 8 or more raises one urgent notice to the care team even if never confirmed, with no
-   private answers.
+   private answers. Medication errors interrupt the draft with their own urgent alert;
+   an earlier severity-review notice cannot suppress it. Replays do not duplicate either.
 4. Nothing reaches `symptom_reports` without explicit confirmation: `consent` true, the
    exact current `preview_hash`, expected revision and a client `confirmation_id`. A chat
    message, transcript, spoken assent or model action never confirms.
@@ -144,8 +145,5 @@ SYMPTOM_INTAKE_TEST_POSTGRES=1 PYTHONPATH=src .venv/bin/pytest \
 
 ## Still open
 
-- A medication-error phrase typed mid-draft shows the reviewed same-day copy, but the
-  interrupt RPC accepts only the two emergency rules, so the draft is not marked
-  interrupted and persistence is reported uncertain. No test covers it.
 - No question carries a reviewed `positive_safety_rule`, so a structured "yes" to a red
   flag escalates nothing by itself.

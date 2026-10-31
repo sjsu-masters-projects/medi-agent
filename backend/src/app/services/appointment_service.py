@@ -449,19 +449,15 @@ class AppointmentService:
                 "Offer new times to change when a booked visit takes place",
                 code="APPOINTMENT_TIME_CHANGE_VIA_OFFER",
             )
-        query = self.db.table("appointments").update(payload)
-        if grouped and status == "proposed":
-            # Every still-open slot of the offer shares its details.
-            query = query.eq("proposal_group_id", str(existing["proposal_group_id"])).eq(
-                "status", "proposed"
-            )
-        else:
-            query = query.eq("id", str(appointment_id))
-        result = await self._execute(query)
-        rows = [row for row in (result.data or []) if isinstance(row, dict)]
-        if not rows:
-            raise ExternalServiceError("Supabase", "Failed to update appointment")
-        row = next((item for item in rows if str(item.get("id")) == str(appointment_id)), rows[0])
+        result = await self._appointment_rpc(
+            "edit_appointment_details",
+            {
+                "p_actor_id": str(user_id),
+                "p_appointment_id": str(appointment_id),
+                "p_changes": payload,
+            },
+        )
+        row = dict(result["appointment"])
         row["clinic_name"] = existing.get("clinic_name")
         return row
 

@@ -403,6 +403,7 @@ def test_direction_survives_persistence_and_alert_failures(
                 break
         assert "".join(chunks) == TRIAGE_COPY[locale][copy_key]
         assert complete["message"]["content"] == TRIAGE_COPY[locale][copy_key]
+        assert event["urgency"] == complete["urgency"]
         assert event["clinicians_notified"] == 0
         assert event["delivery_state"] == ("unavailable" if failure == "persistence" else "pending")
         assert saved is (failure != "persistence")
