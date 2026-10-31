@@ -83,6 +83,7 @@ describe("readable patient record content", () => {
         locale="en-US"
       />,
     );
-    expect(screen.getByText("Uploader unavailable")).toBeVisible();
+    // An uploader that is not recorded adds no line, rather than a placeholder.
+    expect(screen.queryByText(/Uploader unavailable|Uploaded by/)).not.toBeInTheDocument();
   });
 });

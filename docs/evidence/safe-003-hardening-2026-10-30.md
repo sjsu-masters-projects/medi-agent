@@ -102,3 +102,31 @@ All eight model-alert PostgreSQL regressions passed again after that dispatcher
 change (`test_chat_safety_postgres.py -k model_ --no-cov -q`, zero skipped).
 The earlier 84-contract run covers the other authorization, intake and audit paths.
 The replacement remote CI run will validate the complete final tree.
+
+
+## Main sync after #232 merged
+
+October 30: merge main `93c9e0c6` into the existing safety branch. Only the task
+board conflicted. Preserve the implemented SAFE-003 row, main's UX-007 row and
+both dependency follow-up receipts; mark UX-007 merged with deployed acceptance
+still open. Backend and shared-package files are byte-identical to the previously
+reviewed safety head `0363dfe`; migrations 103–106 remain unchanged and unapplied
+remotely. No runtime safety behavior was edited during this conflict resolution.
+
+Combined-tree checks:
+
+- In both portals: `npm run lint`, `npm run typecheck`, and
+  `NODE_OPTIONS=--no-experimental-webstorage npm test -- --run` pass.
+  Patient: 97 files / 1,078 tests; clinician: 88 files / 851 tests.
+- `node --test scripts/extract-spanish-review.test.mjs scripts/tests/check-docs.test.mjs`:
+  seven pass.
+- `node scripts/check-docs.mjs --all`: 114 Markdown files, no link/fence errors.
+- `python3 backend/scripts/build_spanish_review_pack.py --check --require-reviewed`:
+  accepted source snapshot matches; no receipt renewal needed.
+- Existing project Python environment running `backend/scripts/validate_migrations.py`:
+  all 122 files parse. No unresolved entries or diff whitespace errors remain.
+
+Push the merge commit and rerun PR CI. Prior green checks belong to the previous
+head; they do not establish this merged head's remote result. Unrelated local
+migration-script edits and artifacts are preserved. No hosted SQL, deployment or
+GitHub PR merge is performed here.

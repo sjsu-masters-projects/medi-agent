@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Badge, Button } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { AppointmentStatus, type Appointment } from "@/types";
-import { formatSchedulingTime } from "@/utils/appointment-times";
+import { formatSchedulingTime, timezoneName } from "@/utils/appointment-times";
 import { ClinicChip } from "./clinic-chip";
 import { CalendarExportButton } from "./calendar-export-button";
 
@@ -153,7 +153,7 @@ export function AppointmentOfferHistory({
                       <span className="font-mono text-[12.5px] font-semibold text-ink">
                         {formatSchedulingTime(row.scheduledAt, timezone)}
                       </span>{" "}
-                      <span className="text-muted">· {timezone}</span>
+                      <span className="text-muted" title={timezoneName(timezone)}>· {timezoneName(timezone, "short")}</span>
                     </span>
                     {(patientName || (showClinic && row.clinicName)) && (
                       <span className="order-3 flex min-w-0 basis-full items-center gap-2 sm:order-2 sm:basis-auto">
@@ -186,7 +186,7 @@ export function AppointmentOfferHistory({
                       <span className="mt-0.5 block font-mono text-[11px] text-muted">
                         Available until{" "}
                         {formatSchedulingTime(row.proposalExpiresAt, timezone)}{" "}
-                        · {timezone}
+                        · {timezoneName(timezone, "short")}
                       </span>
                     )}
                 </li>

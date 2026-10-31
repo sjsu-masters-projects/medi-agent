@@ -10,7 +10,7 @@ import {
     type Form3500PreviewItem,
     type Form3500ProvenanceKind,
 } from "@/services/clinicians";
-import { gateIssueLabel, type MedWatchGateIssue } from "@/services/medwatch-form-3500";
+import { gateIssueLabel, legacyKeyLabel, type MedWatchGateIssue } from "@/services/medwatch-form-3500";
 import { TemplateSupersededNote } from "@/components/features/form-3500-download-dialog";
 
 const wrapClass = "break-words [overflow-wrap:anywhere]";
@@ -166,7 +166,7 @@ export function Form3500PreviewView({ preview }: { preview: Form3500Preview }) {
                 </h3>
                 <dl className="divide-y divide-line">
                     <div className="grid gap-x-4 gap-y-1 px-4 py-2.5 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-                        <dt>Deterministic Naranjo score</dt>
+                        <dt>Calculated Naranjo score</dt>
                         <dd className="font-mono text-ink">
                             {preview.mediagentReview.naranjoScore ?? "Not provided"}
                         </dd>
@@ -209,7 +209,7 @@ export function Form3500PreviewView({ preview }: { preview: Form3500Preview }) {
                     <dl className="divide-y divide-line">
                         {legacyEntries.map(([key, value]) => (
                             <div className="px-4 py-2.5" key={key}>
-                                <dt className={`font-mono text-xs text-muted ${wrapClass}`}>{key}</dt>
+                                <dt className={`text-xs font-medium text-muted ${wrapClass}`}>{legacyKeyLabel(key)}</dt>
                                 <dd className={`mt-1 text-ink ${wrapClass}`}>{value}</dd>
                             </div>
                         ))}
@@ -311,7 +311,7 @@ export function Form3500PreviewDialog({
             <div className="ma-print-root space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3" data-print-hide>
                     <p className="text-[13px] text-ink-2">
-                        Read-only. This shows the last saved revision.
+                        Read-only. This shows the version you last saved.
                     </p>
                     <Button
                         disabled={!preview || loading}

@@ -3,7 +3,7 @@ import { Icon } from "@/components/ui/icons";
 import { ProcessingDots } from "@/components/ui/motion";
 import { ChatRole, DEFAULT_LOCALE, getLocaleLabel, type ChatAttachment, type ChatDocumentResultsAttachment, type Locale } from "@/types";
 import { CARE_ASSISTANT_NAME, getChatControlsCopy } from "@/content/chat-copy";
-import { chatDisplayTime } from "./chat-presentation";
+import { chatDisplayTime, useSavedTimezone } from "./chat-presentation";
 import { ChatResultsCard } from "./chat-results-card";
 
 interface ChatBubbleProps {
@@ -36,8 +36,11 @@ export function ChatBubble({
     const copy = getChatControlsCopy(locale);
     const time = timestamp instanceof Date ? timestamp : new Date(timestamp);
     const validTime = !Number.isNaN(time.getTime());
-    const languageLabel = language ? copy.original + ": " + getLocaleLabel(language) : copy.originalUnknown;
-    const timeNode = validTime ? <time dateTime={time.toISOString()}>{chatDisplayTime(time, locale)}</time> : null;
+    const timezone = useSavedTimezone();
+    // LOC-001: label text that may be in the other language. A message already in the
+    // patient's language needs no label under every bubble.
+    const languageLabel = !language ? copy.originalUnknown : language === locale ? null : copy.original + ": " + getLocaleLabel(language);
+    const timeNode = validTime ? <time dateTime={time.toISOString()}>{chatDisplayTime(time, locale, undefined, timezone)}</time> : null;
 
     if (isUser) {
         return <div className="ma-bubble flex flex-col items-end gap-1" data-delivery={delivery}>
@@ -50,8 +53,8 @@ export function ChatBubble({
                 <button type="button" className="ma-press min-h-11 rounded-xl bg-brand-tint px-3 font-semibold text-brand-ink" onClick={onRetrySend}>{copy.retrySend}</button>
                 <button type="button" className="ma-press min-h-11 rounded-xl px-3 font-medium text-ink-2" onClick={onRemoveUnsent}>{copy.removeUnsent}</button>
             </div>}
-            {!delivery && <p className="max-w-[90%] px-1 text-right font-mono text-[11px] text-muted first-letter:uppercase">
-                {timeNode ? <>{timeNode} · </> : null}<span>{languageLabel}</span>
+            {!delivery && (timeNode || languageLabel) && <p className="max-w-[90%] px-1 text-right font-mono text-[11px] text-muted first-letter:uppercase">
+                {timeNode}{timeNode && languageLabel ? " · " : null}{languageLabel ? <span>{languageLabel}</span> : null}
             </p>}
         </div>;
     }
@@ -79,7 +82,7 @@ export function ChatBubble({
         </div>
         <p className="px-1 font-mono text-[11px] text-muted first-letter:uppercase">
             {isClinician ? null : <>{CARE_ASSISTANT_NAME}{timeNode ? " · " : ""}</>}{timeNode}
-            {isStreaming ? <span className="sr-only"> · {languageLabel}</span> : null}
+            {isStreaming && languageLabel ? <span className="sr-only"> · {languageLabel}</span> : null}
         </p>
     </div>;
 }

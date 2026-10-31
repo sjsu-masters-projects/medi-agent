@@ -95,7 +95,7 @@ export function Form3500DownloadDialog({
                 <p className="leading-relaxed">
                     The file is the official fillable Form FDA 3500 (revision{" "}
                     <span className="font-mono">{template.revision}</span>) filled from the approved
-                    revision. Review it, complete Section C or E in the PDF if they apply, and submit
+                    report. Review it, complete Section C or E in the PDF if they apply, and submit
                     it to FDA yourself. Each download is recorded in the audit trail.
                 </p>
                 <TemplateSupersededNote template={template} />

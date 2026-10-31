@@ -123,10 +123,11 @@ describe("human conversations", () => {
     expect(careConversations.send).not.toHaveBeenCalled();
     await select();
     fireEvent.click(await screen.findByRole("button", { name: "Prepare request" }));
-    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toContain("Record reference: source-record");
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toContain("Original file: synthetic-source.pdf");
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).not.toContain("source-record");
     expect(careConversations.send).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-    await waitFor(() => expect(careConversations.send).toHaveBeenCalledWith("synthetic-token", "thread-one", expect.stringContaining("Record reference: source-record"), expect.any(String)));
+    await waitFor(() => expect(careConversations.send).toHaveBeenCalledWith("synthetic-token", "thread-one", expect.stringContaining("Original file: synthetic-source.pdf"), expect.any(String)));
   });
 
   it("requires choosing a recipient again for a new request and retains an unrelated draft", async () => {
@@ -297,7 +298,9 @@ describe("human conversations", () => {
     await select();
     expect(screen.getByText("<img src=x onerror=alert(1)>")).toBeInTheDocument();
     expect(document.querySelector("img")).toBeNull();
-    expect(screen.getAllByText(/Dr. One · Clinician · Clinic One/).length).toBeGreaterThan(1);
+    // Each message names its sender; the clinic is named once, in the thread header.
+    expect(screen.getAllByText(/^Dr. One · Clinician ·/, { selector: "p" }).length).toBeGreaterThan(1);
+    expect(screen.queryAllByText(/Clinician · Clinic One/, { selector: "p" })).toHaveLength(0);
     await waitFor(() => expect(careConversations.read).toHaveBeenCalledWith("synthetic-token", thread.id, "two"));
     expect(careConversations.read).not.toHaveBeenCalledWith("synthetic-token", thread.id, "unseen");
   });

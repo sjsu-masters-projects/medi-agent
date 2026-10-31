@@ -14,10 +14,12 @@ function message(e: unknown): string {
   // Refusals (not an admin of that clinic, clinic required) say why; outages stay generic.
   return [403, 422].includes((e as { status?: number } | null)?.status ?? 0) ? clinicErrorMessage(e, UNAVAILABLE) : UNAVAILABLE;
 }
+// "Provider" here used to mean the email service, which read as the invited clinician.
 const deliveryLabels: Record<string, string> = {
-  queued: "Queued", sending: "Sending", accepted: "Provider accepted — delivery not confirmed",
-  delivered: "Provider confirmed delivery", bounced: "Bounced — invite again to send a new link", failed: "Delivery failed — invite again to send a new link", suppressed: "Delivery stopped",
+  queued: "Email waiting to send", sending: "Email sending", accepted: "Email sent — delivery not yet confirmed",
+  delivered: "Email delivered", bounced: "Email bounced — invite again to send a new link", failed: "Email not delivered — invite again to send a new link", suppressed: "Email stopped — this address can't receive invitations",
 };
+const roleLabels: Record<string, string> = { provider: "Provider", nurse: "Nurse", admin: "Clinic admin" };
 
 export function EmailInvitations({ clinicId = null, token, revision }: { clinicId?: string | null; token: string; revision: string | null }) {
   const [items, setItems] = useState<Invitation[] | null>(null);
@@ -61,9 +63,9 @@ export function EmailInvitations({ clinicId = null, token, revision }: { clinicI
         return <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
           <div className="min-w-0 space-y-1">
             <p className="break-all text-sm font-medium text-ink">{item.email}</p>
-            <p className="text-sm text-muted">{item.role} · {state}</p>
-            <p className="text-xs text-muted">{deliveryLabels[item.delivery_state ?? ""] ?? "Delivery status unavailable"}</p>
-            <p className="text-xs text-muted">Expires {new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.expires_at))}</p>
+            <p className="text-sm text-muted">{roleLabels[item.role] ?? item.role} · {state}</p>
+            <p className="text-xs text-muted">{deliveryLabels[item.delivery_state ?? ""] ?? "Email status unavailable"}</p>
+            <p className="text-xs text-muted">{expired ? "Expired" : "Expires"} {new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(new Date(item.expires_at))}</p>
           </div>
           {!item.accepted_at && !item.revoked_at && !expired ? <Button variant="secondary" disabled={busy !== null} onClick={() => void revoke(item.id)}>
             {busy === item.id ? "Revoking…" : "Revoke invitation"}

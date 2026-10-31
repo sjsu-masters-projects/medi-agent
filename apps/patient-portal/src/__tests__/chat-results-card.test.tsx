@@ -164,9 +164,10 @@ describe("ChatResultsCard", () => {
     );
   });
 
-  it("falls back to the file name when the message's language has no title", () => {
+  it("falls back to the cleaned file name when the message's language has no title", () => {
     renderCard({ attachment: attachment({ title: { "es-MX": "Reporte" } }), language: "en-US" });
-    expect(screen.getByRole("region", { name: "labs-2026-10-01.pdf" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Labs" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "labs-2026-10-01.pdf" })).not.toBeInTheDocument();
   });
 
   it("offers only measurements when a report has no lab results in range", () => {

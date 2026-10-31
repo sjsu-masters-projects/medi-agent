@@ -246,7 +246,7 @@ describe("My schedule", () => {
     }
     async function choosePatient(panel: HTMLElement, value = "team1") {
       fireEvent.change(within(panel).getByRole("combobox", { name: "Patient" }), { target: { value } });
-      await within(panel).findByLabelText("Option 1 (America/Los_Angeles)");
+      await within(panel).findByLabelText("Option 1 (Pacific Time)");
     }
 
     it("derives the clinic from the link, read-only and once", async () => {
@@ -265,7 +265,7 @@ describe("My schedule", () => {
       ]);
       const panel = await openPanel();
       await choosePatient(panel);
-      fireEvent.change(within(panel).getByLabelText("Option 1 (America/Los_Angeles)"), { target: { value: "2026-10-20T09:00" } });
+      fireEvent.change(within(panel).getByLabelText("Option 1 (Pacific Time)"), { target: { value: "2026-10-20T09:00" } });
       const busy = await within(panel).findByLabelText("Your booked times on 2026-10-20");
       expect(busy).toHaveTextContent("9:00–9:30 AM · Cedar Grove Community Health");
       expect(busy).not.toHaveTextContent("Maya");
@@ -276,7 +276,7 @@ describe("My schedule", () => {
       mocks.busy.mockResolvedValue([{ startsAt: "2026-10-20T16:00:00Z", endsAt: "2026-10-20T16:30:00Z", clinicName: "Only Clinic" }]);
       const panel = await openPanel();
       await choosePatient(panel);
-      fireEvent.change(within(panel).getByLabelText("Option 1 (America/Los_Angeles)"), { target: { value: "2026-10-20T09:00" } });
+      fireEvent.change(within(panel).getByLabelText("Option 1 (Pacific Time)"), { target: { value: "2026-10-20T09:00" } });
       const busy = await within(panel).findByLabelText("Your booked times on 2026-10-20");
       expect(busy).toHaveTextContent("9:00–9:30 AM");
       expect(busy).not.toHaveTextContent("Only Clinic");
@@ -285,8 +285,8 @@ describe("My schedule", () => {
     it("sends the offer from the sticky footer and refreshes the schedule", async () => {
       const panel = await openPanel();
       await choosePatient(panel);
-      fireEvent.change(within(panel).getByLabelText("Option 1 (America/Los_Angeles)"), { target: { value: "2026-10-20T09:00" } });
-      fireEvent.change(within(panel).getByLabelText("Option 2 (America/Los_Angeles)"), { target: { value: "2026-10-21T14:00" } });
+      fireEvent.change(within(panel).getByLabelText("Option 1 (Pacific Time)"), { target: { value: "2026-10-20T09:00" } });
+      fireEvent.change(within(panel).getByLabelText("Option 2 (Pacific Time)"), { target: { value: "2026-10-21T14:00" } });
       fireEvent.submit(within(panel).getByRole("form", { name: "Appointment offer" }));
       await screen.findByText(/Appointment offer sent/);
       expect(mocks.propose).toHaveBeenCalledWith(
@@ -306,8 +306,8 @@ describe("My schedule", () => {
       );
       const panel = await openPanel();
       await choosePatient(panel);
-      fireEvent.change(within(panel).getByLabelText("Option 1 (America/Los_Angeles)"), { target: { value: "2026-10-20T09:00" } });
-      fireEvent.change(within(panel).getByLabelText("Option 2 (America/Los_Angeles)"), { target: { value: "2026-10-21T14:00" } });
+      fireEvent.change(within(panel).getByLabelText("Option 1 (Pacific Time)"), { target: { value: "2026-10-20T09:00" } });
+      fireEvent.change(within(panel).getByLabelText("Option 2 (Pacific Time)"), { target: { value: "2026-10-21T14:00" } });
       fireEvent.submit(within(panel).getByRole("form", { name: "Appointment offer" }));
       expect(await within(panel).findByRole("alert")).toHaveTextContent("You already have an appointment at Willow Terrace");
       expect(within(panel).getByText("Change the conflicting time to send.")).toBeInTheDocument();
@@ -319,8 +319,8 @@ describe("My schedule", () => {
       mocks.propose.mockReturnValue(new Promise<Appointment[]>((done) => { resolve = done; }));
       const panel = await openPanel();
       await choosePatient(panel);
-      fireEvent.change(within(panel).getByLabelText("Option 1 (America/Los_Angeles)"), { target: { value: "2026-10-20T09:00" } });
-      fireEvent.change(within(panel).getByLabelText("Option 2 (America/Los_Angeles)"), { target: { value: "2026-10-21T14:00" } });
+      fireEvent.change(within(panel).getByLabelText("Option 1 (Pacific Time)"), { target: { value: "2026-10-20T09:00" } });
+      fireEvent.change(within(panel).getByLabelText("Option 2 (Pacific Time)"), { target: { value: "2026-10-21T14:00" } });
       const form = within(panel).getByRole("form", { name: "Appointment offer" });
       fireEvent.submit(form);
       fireEvent.submit(form);
@@ -337,7 +337,7 @@ describe("My schedule", () => {
       await within(panel).findByText("Could not load the patient's timezone");
       expect(screen.queryByText("private server detail")).not.toBeInTheDocument();
       fireEvent.click(within(panel).getByRole("button", { name: "Try again" }));
-      await within(panel).findByLabelText("Option 1 (America/Los_Angeles)");
+      await within(panel).findByLabelText("Option 1 (Pacific Time)");
     });
   });
 

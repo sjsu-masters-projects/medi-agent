@@ -7,6 +7,7 @@ import { proposeAppointmentOffer, type BusyInterval } from "@/services/appointme
 import {
   appointmentTimeToUtc,
   formatSchedulingClock,
+  timezoneName,
   validateAppointmentTimes,
 } from "@/utils/appointment-times";
 import { formatBusyRange } from "@/utils/schedule";
@@ -171,7 +172,7 @@ export function AppointmentOfferForm({
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5">
           <p className="text-[13px] text-muted">
             Enter 2–4 options in{" "}
-            <strong className="font-mono text-xs font-medium text-ink-2">{timezone}</strong>. The
+            <strong className="font-medium text-ink-2" title={timezone}>{timezoneName(timezone)}</strong>, the patient&apos;s time zone. The
             patient chooses one. Offers expire after seven days; each time is unavailable once it
             starts.
           </p>
@@ -190,7 +191,7 @@ export function AppointmentOfferForm({
                   <div className="flex items-end gap-2">
                     <div className="min-w-0 flex-1">
                       <Input
-                        label={`Option ${index + 1} (${timezone})`}
+                        label={`Option ${index + 1} (${timezoneName(timezone)})`}
                         type="datetime-local"
                         className="font-mono"
                         required

@@ -5,14 +5,14 @@
   "scope": "exact paired interface copy only; no professional translation or clinical validation",
   "evidence": "spanish-interface-wording-2026-10-22.md",
   "snapshot": {
-    "row_count": 650,
-    "pairs_sha256": "c2131acc123c5e5b09ead5b45622c04654d4d72d16f7fd6a0b9fb9672650cf48",
+    "row_count": 685,
+    "pairs_sha256": "bdeae7a1ef4cb912edd34228df32582d98a7595e86f16941faf684d085842cfc",
     "source_sha256": {
       "apps/patient-portal/src/content/chat-copy.ts": "68a36cfc9b2fd6a4724fb0f60b3f29ae0f66d83bc367d332363db6192af39d9a",
       "apps/patient-portal/src/content/care-team-copy.ts": "043b9a1eb79c7803a2f2e581463ac018fbf5917a34dc15713cdc6d8247eaedd9",
       "apps/patient-portal/src/content/symptom-history-copy.ts": "ba6a78638dd125919467d021b4a3cc35168937b84dee74c4c523353309a4f02e",
       "apps/patient-portal/src/content/visits-copy.ts": "f757d83730909d6a74f3ec372db59a018d9c522e7b351680042f53e4e3efca41",
-      "apps/patient-portal/src/content/symptom-intake-copy.ts": "33d153f8b24540b8b1a32b926188aa840fabe420ee5de81b2de9f2b52c92edc8",
+      "apps/patient-portal/src/content/symptom-intake-copy.ts": "b3513a4ac75cf3f422e9390b4405fa24f5a7528629860f6936ee10a021338e85",
       "apps/patient-portal/src/content/medication-confirmation-copy.ts": "eeea959753c65c6c5efdec12daf9eb2a72070fce236c42deebbdb40138c8756c",
       "apps/patient-portal/src/content/reply-sources-copy.ts": "4c51318bbb6d181aa343bf8f496feedacb58032f5870fce18179d6fb2a824fda",
       "apps/patient-portal/src/app/(app)/profile/profile-copy.ts": "a8df7495058e93e633c6adb8f75bc7958c7226dbe72820d7734f70ba1a0e2bcc",
@@ -39,6 +39,12 @@
       "date": "2026-10-28",
       "scope": "PV-001-D Naranjo answer coverage: two notification question pairs in the inventory (event_after_drug, improved_on_dechallenge) and six patient follow-up strings in adr-follow-up-copy.ts (outside the inventory); two wording corrections",
       "method": "requester_accepted_model_assisted_bilingual_meaning_and_safety_review"
+    },
+    {
+      "date": "2026-10-30",
+      "scope": "UX-007: all 37 changed/new symptom-context interface pairs (34 distinct), plus six explicitly reviewed out-of-inventory contexts; three wording corrections",
+      "method": "requester_accepted_model_assisted_bilingual_meaning_and_safety_review",
+      "evidence": "ux-007-spanish-review-2026-10-30.md"
     }
   ]
 }

@@ -67,7 +67,9 @@ describe("MedWatchDraftCard refresh sync", () => {
             screen.getByRole("checkbox", { name: "Hospitalization (Initial or prolonged)" }),
         ).toBeChecked();
         expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
-        expect(screen.getByText(/^Revision/)).toHaveTextContent("Revision 2");
+        expect(screen.getByText(/^Saved version/)).toHaveTextContent("Saved version 2");
+        expect(screen.getByText(/^Saved version/).closest("details")).not.toHaveAttribute("open");
+        expect(screen.getByText(/^Last saved/)).toBeVisible();
     });
 
     it("keeps dirty edits on a new revision and saves against the old baseline", async () => {
@@ -98,7 +100,7 @@ describe("MedWatchDraftCard refresh sync", () => {
         card.rerender(makeDraft({ revision: 2, formData: saved }));
         expect(screen.getByLabelText(NARRATIVE)).toHaveValue("Recovering");
         expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
-        expect(screen.getByText(/^Revision/)).toHaveTextContent("Revision 2");
+        expect(screen.getByText(/^Saved version/)).toHaveTextContent("Saved version 2");
     });
 });
 
@@ -230,7 +232,8 @@ describe("MedWatchDraftCard status and approval", () => {
         expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
         expect(screen.queryByText("Needs approval")).not.toBeInTheDocument();
         expect(screen.getByLabelText(NARRATIVE)).toBeDisabled();
-        const time = container.querySelector("time");
+        // The header's "Last saved" time comes first; read the approval time itself.
+        const time = container.querySelector(`time[datetime="${approvedAt}"]`);
         expect(time).toHaveAttribute("dateTime", approvedAt);
         expect(time).toHaveTextContent(formatReviewTimestamp(approvedAt));
         expect(screen.getByRole("button", { name: "Export approved JSON" })).toBeInTheDocument();

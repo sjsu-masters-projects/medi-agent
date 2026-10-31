@@ -98,7 +98,7 @@ describe("Dashboard presentation", () => {
     it("does not invent a versioned explanation for an older snapshot", () => {
         render(<DashboardPage />);
         fireEvent.click(screen.getByRole("button", { name: "Explain review priority for Synthetic Patient" }));
-        expect(screen.getByRole("dialog")).toHaveTextContent("Versioned explanation is unavailable");
+        expect(screen.getByRole("dialog")).toHaveTextContent("The explanation for this priority isn't available");
     });
 
     it("disables dashboard refresh while loading", () => {

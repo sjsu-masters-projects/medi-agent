@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -95,11 +96,49 @@ describe("SMART import review panel", () => {
 
   it("keeps source identifiers in expandable audit details while source review stays available", async () => {
     render(<SmartImportReviewPanel patientId="patient-1" />);
-    const metadata = await screen.findByText("MedicationRequest · med-1 · version 2");
+    const metadata = await screen.findByText("MedicationRequest med-1");
     expect(metadata.closest("details")).not.toHaveAttribute("open");
+    expect(metadata.closest("details")).toHaveTextContent("Technical details");
     expect(metadata).not.toBeVisible();
+    // The FHIR type is not repeated as a chip beside the "Medication" heading.
+    expect(screen.getAllByText("MedicationRequest", { exact: false })).toHaveLength(1);
     expect(screen.getByRole("button", { name: /source/i })).toBeEnabled();
     expect(post).not.toHaveBeenCalled();
+  });
+
+  it("leads a document source with the cited page and a link to the document, keeping ids under Technical details", async () => {
+    const documentFact = {
+      ...reviewResponse.facts[0],
+      reconciliation_state: "kept_existing",
+      source: {
+        issuer: "document ingestion",
+        resource_type: "Document evidence",
+        external_resource_id: "doc-7",
+        version_id: "document-intelligence/1;pymupdf/1.28.2",
+        mapping_warnings: [],
+        validation_errors: [],
+        source_kind: "document" as const,
+      },
+    };
+    get.mockResolvedValueOnce({ ...reviewResponse, facts: [documentFact] });
+    render(<SmartImportReviewPanel patientId="patient-1" />);
+    expect(await screen.findByText("Kept existing")).toBeInTheDocument();
+    expect(screen.getByText("document-intelligence 1, pymupdf 1.28.2")).not.toBeVisible();
+    expect(screen.queryByText("Document evidence")).not.toBeInTheDocument();
+
+    get.mockResolvedValueOnce({
+      ...documentFact.source,
+      raw_resource: { resourceType: "DocumentEvidence", source_reference: "doc-7", location: { page: 3 } },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /source/i }));
+    const dialog = await screen.findByRole("dialog", { name: "Document source" });
+    expect(dialog).toHaveTextContent("Uploaded document");
+    expect(within(dialog).getByRole("link", { name: /Open the document/ })).toHaveAttribute(
+      "href",
+      "/patients/patient-1?tab=documents#document-doc-7",
+    );
+    const raw = within(dialog).getByText((_, element) => element?.tagName === "PRE");
+    expect(raw.closest("details")).not.toHaveAttribute("open");
   });
   afterEach(() => {
     cleanup();
@@ -115,9 +154,7 @@ describe("SMART import review panel", () => {
     render(<SmartImportReviewPanel patientId="patient-1" />);
 
     expect(await screen.findByText("Metformin")).toBeInTheDocument();
-    expect(
-      screen.getByText("MedicationRequest · med-1 · version 2"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("MedicationRequest med-1")).toBeInTheDocument();
     expect(screen.getByText(/frequency was not supplied/i)).toBeInTheDocument();
     expect(
       screen.getByText(/field-by-field reconciliation decision/i),

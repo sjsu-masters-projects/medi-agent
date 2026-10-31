@@ -10,7 +10,7 @@ import { groupRecordDates, RecordRow, recordTitle } from "@/components/features/
 import { Icon } from "@/components/ui/icons";
 import { PullToRefresh } from "@/components/ui/pull-to-refresh";
 import { RecordActions } from "@/components/features/record-actions";
-import { RecordOrigin } from "@/components/features/record-origin";
+import { RecordOrigin, recordOriginLabel } from "@/components/features/record-origin";
 import { RecordReviewStatus } from "@/components/features/record-review-status";
 import {
   EXPLANATION_SLOW_MS,
@@ -114,7 +114,7 @@ const SUMMARY_UNAVAILABLE_MESSAGES: Record<string, string> = {
   failed:
     "A plain-language explanation is not available for this document right now. Your document and your records are unchanged, and your care team can request it again.",
   not_required:
-    "There is no extracted information in this document to explain. You can still open the original document above or ask your care team about it.",
+    "There are no saved details from this document to explain. You can still open the original document above or ask your care team about it.",
   pending:
     "The plain-language explanation is still being prepared. You can read the original document above and check back shortly.",
 };
@@ -133,8 +133,8 @@ function describeMissingSummary(
 
 function duplicateUploadMessage(locale: Locale): string {
   return locale === "es-MX"
-    ? "Este mismo archivo ya se procesó. Se guardó esta copia, pero no se extrajeron datos nuevos ni se agregaron instrucciones al plan de cuidado. Puedes abrir el original o consultar a tu equipo de atención."
-    : "These exact file contents were already processed for you. This copy is stored, but no new facts or care-plan instructions were created. You can open the original or ask your care team about it.";
+    ? "Este mismo archivo ya está en tus documentos. Guardamos esta copia sin agregar nuevos datos médicos ni indicaciones al plan de atención. Puedes abrir el original o consultar a tu equipo de atención."
+    : "This file is already in your records. We kept this copy without adding new medical details or care-plan instructions. You can open the original or ask your care team about it.";
 }
 const INITIAL_POLL_DELAY_MS = 3_000;
 const MAX_POLL_DELAY_MS = 30_000;
@@ -281,7 +281,8 @@ function mapDocument(record: DocumentApiRecord): PortalDocument {
     reviewedAt: record.reviewed_at ?? undefined,
     parsed: record.parsed,
     patientId: record.patient_id,
-    provider: record.source_clinic ?? "Care team",
+    // The recorded clinic only; who uploaded it is shown separately (RecordOrigin).
+    provider: record.source_clinic ?? "",
     sourceClinic: record.source_clinic ?? undefined,
     uploadedBy: record.uploaded_by,
     uploadedByRole: record.uploaded_by_role,
@@ -744,17 +745,23 @@ function RecordsWorkspace() {
     }
 
     const documentName = recordTitle(selectedDocument, explanationLang, patientName);
+    const handoffProvider =
+      displayProvider(selectedDocument) ??
+      recordOriginLabel(selectedDocument, explanationLang) ??
+      undefined;
     storePendingChatDocumentContext({
       documentId: selectedDocument.id,
       documentName,
       documentType: selectedDocument.documentType,
       preferredLanguage: explanationLang,
-      provider: selectedDocument.provider,
+      // Shown on Nora's "about this record" card, so it must be patient wording in the
+      // patient's language, never the internal upload marker.
+      provider: handoffProvider,
       suggestedQuestion: buildSuggestedDocumentQuestion({
         documentName,
         documentType: selectedDocument.documentType,
         preferredLanguage: explanationLang,
-        provider: selectedDocument.provider,
+        provider: handoffProvider,
       }),
       summary: explanationAvailable
         ? explanation.data?.summary
@@ -823,10 +830,12 @@ function RecordsWorkspace() {
       stalledDocIds.has(selectedDocument.id) &&
       !parsingDocIds.has(selectedDocument.id),
   );
-  const displayProvider = (document: PortalDocument) => {
-    if (document.provider === "Patient uploaded document") return spanish ? "Tu documento" : "Your upload";
-    if (document.provider === "Clinician uploaded document") return spanish ? "De tu equipo de atención" : "From your care team";
-    return copy(document.provider);
+  // A real clinic name, or nothing. Upload markers repeated the origin line ("Your upload"
+  // beside "Uploaded by you"), and a "Care team" placeholder could contradict it.
+  const displayProvider = (document: PortalDocument): string | null => {
+    const clinic = document.provider.trim();
+    if (!clinic || clinic === "Patient uploaded document" || clinic === "Clinician uploaded document") return null;
+    return clinic;
   };
   const shortDate = (value: string, withYear = false) => {
     const date = new Date(value);
@@ -876,8 +885,8 @@ function RecordsWorkspace() {
           {/* Keeps the last successful count during a refresh so the list does not jump. */}
           {hasLoaded && !(pageError && documents.length === 0) && <p className="mt-1 text-sm text-muted" role="status">
             {spanish
-              ? `${documents.length} ${documents.length === 1 ? "documento" : "documentos"} · ${processingCount} en proceso`
-              : `${documents.length} ${documents.length === 1 ? "record" : "records"} · ${processingCount} processing`}
+              ? `${documents.length} ${documents.length === 1 ? "documento" : "documentos"}${processingCount ? ` · ${processingCount} en proceso` : ""}`
+              : `${documents.length} ${documents.length === 1 ? "record" : "records"}${processingCount ? ` · ${processingCount} processing` : ""}`}
           </p>}
           <p className="sr-only" role="status">{outcomeAnnouncement}</p>
         </header>
@@ -1135,7 +1144,7 @@ function RecordsWorkspace() {
                   ? [getDocumentTypeLabel(selectedDocument.documentType, locale), displayProvider(selectedDocument), shortDate(selectedDocument.createdAt, true)].filter(Boolean).join(" · ")
                   : null}
               </p>
-              <p className="break-words font-mono text-xs text-muted [overflow-wrap:anywhere]">{selectedDocument?.fileName}</p>
+              {/* The original file name lives with the source below, not under the title. */}
               {selectedDocument ? <RecordOrigin document={selectedDocument} locale={locale} /> : null}
               <RecordReviewStatus status={selectedDocument?.reviewStatus} locale={locale} />
               {selectedDocument?.reviewStatus === "approved" ? <p className="text-sm leading-6 text-muted">{copy("Source approval does not approve this explanation or change your treatment.")}</p> : null}
@@ -1148,9 +1157,9 @@ function RecordsWorkspace() {
               </summary>
               {/* Restarts its enter animation each time the disclosure opens. */}
               <div className="ma-enter border-t border-line px-4 pt-3 pb-4">
-                {selectedDocument?.sourceClinic ? (
-                  <p className="mb-2 break-words text-sm text-ink-2">
-                    {copy("Source")}: {copy(selectedDocument.sourceClinic)}
+                {selectedDocument?.fileName ? (
+                  <p className="mb-2 break-words text-sm text-ink-2 [overflow-wrap:anywhere]">
+                    {copy("Original file")}: {selectedDocument.fileName}
                   </p>
                 ) : null}
                 <DocumentSourceViewer

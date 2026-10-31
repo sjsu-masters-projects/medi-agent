@@ -84,8 +84,7 @@ export function MedWatchApprovalDialog({
         <Modal onClose={onClose} open={open} title="Approve Form 3500 draft">
             <div className="space-y-4 text-sm text-ink-2">
                 <p className="leading-relaxed">
-                    Approval is checked against the last saved revision (
-                    <span className="font-mono">{draft.revision}</span>). It makes the draft
+                    Approval applies to the version you last saved. It makes the draft
                     exportable; it does not submit anything to FDA.
                 </p>
 

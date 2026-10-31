@@ -88,7 +88,8 @@ export function RecordRow({
   patientName?: string;
   locale: Locale;
   typeLabel: string;
-  provider: string;
+  /** A real clinic name; omitted when the record has none. */
+  provider?: string | null;
   date: string;
   statusLabel?: string;
   onOpen: () => void;
@@ -134,7 +135,8 @@ export function RecordRow({
           </h3>
           <span className="sr-only">{document.fileName}</span>
           <span className="mt-0.5 block break-words text-[13px] leading-snug text-muted first-letter:uppercase">
-            <span>{typeLabel}</span> · {provider} · {date}
+            <span>{typeLabel}</span>
+            {[provider, date].filter(Boolean).map((part) => ` · ${part}`).join("")}
           </span>
           <RecordOrigin document={document} locale={locale} />
           <RecordReviewStatus status={document.reviewStatus} locale={locale} />

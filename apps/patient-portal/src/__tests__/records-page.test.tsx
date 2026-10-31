@@ -233,16 +233,28 @@ describe("RecordsPage", () => {
     let resolve!: (rows: unknown[]) => void;
     get.mockReturnValue(new Promise((done) => { resolve = done; }));
     render(<RecordsPage />);
-    expect(screen.queryByText("0 records · 0 processing")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 records")).not.toBeInTheDocument();
     resolve([]);
-    expect(await screen.findByText("0 records · 0 processing")).toBeInTheDocument();
+    expect(await screen.findByText("0 records")).toBeInTheDocument();
   });
 
   it("does not describe a failed records request as zero records", async () => {
     get.mockRejectedValue(new Error("synthetic read failure"));
     render(<RecordsPage />);
     await screen.findByText("We could not load your documents. Please try again.");
-    expect(screen.queryByText("0 records · 0 processing")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 records")).not.toBeInTheDocument();
+  });
+  it("names the uploader once, with no placeholder clinic, and keeps the original filename with the source", async () => {
+    get.mockResolvedValue([sourceRecord("pending")]);
+    render(<RecordsPage />);
+    const row = await screen.findByRole("button", { name: /Metformin.pdf/ });
+    expect(within(row).getByText("Uploaded by you")).toBeVisible();
+    expect(within(row).queryByText(/Your upload|Care team/)).not.toBeInTheDocument();
+    fireEvent.click(row);
+    const dialog = screen.getByRole("dialog");
+    const original = within(dialog).getByText("Original file: Metformin.pdf");
+    expect(original.closest("details")).not.toHaveAttribute("open");
+    expect(within(dialog).getAllByText("Uploaded by you")).toHaveLength(1);
   });
   it("opens only the requested authorized document, retaining the original filename", async () => {
     destination.params = new URLSearchParams("document=exact-record");
@@ -263,10 +275,10 @@ describe("RecordsPage", () => {
     authState.value = { ...authState.value, accessToken: "new-account-token", user: { id: "patient-2" } };
     get.mockResolvedValueOnce([]);
     rerender(<RecordsPage />);
-    await screen.findByText("0 records · 0 processing");
+    await screen.findByText("0 records");
     await act(async () => finishOld([sourceRecord("approved")]));
     expect(screen.queryByRole("button", { name: /Metformin.pdf/ })).not.toBeInTheDocument();
-    expect(screen.getByText("0 records · 0 processing")).toBeInTheDocument();
+    expect(screen.getByText("0 records")).toBeInTheDocument();
   });
 
   it("ignores an older refresh result after a token refresh starts a newer read", async () => {
@@ -277,10 +289,10 @@ describe("RecordsPage", () => {
     authState.value = { ...authState.value, accessToken: "refreshed-token" };
     get.mockResolvedValueOnce([]);
     rerender(<RecordsPage />);
-    await screen.findByText("0 records · 0 processing");
+    await screen.findByText("0 records");
     await act(async () => finishOld([sourceRecord("approved")]));
     expect(screen.queryByRole("button", { name: /Metformin.pdf/ })).not.toBeInTheDocument();
-    expect(screen.getByText("0 records · 0 processing")).toBeInTheDocument();
+    expect(screen.getByText("0 records")).toBeInTheDocument();
   });
 
   it("does not open another document for an unavailable requested record", async () => {
@@ -352,7 +364,7 @@ describe("RecordsPage", () => {
       screen.getByRole("button", { name: /April Lab Report\.txt/i }),
     );
 
-    expect(await screen.findAllByText(/City Health/i)).toHaveLength(3);
+    expect(await screen.findAllByText(/City Health/i)).toHaveLength(2);
     expect(await screen.findByText(/Your lab values are stable/i)).toBeInTheDocument();
     expect(
       screen.getByText(/not a newly approved care plan/i),
@@ -370,13 +382,13 @@ describe("RecordsPage", () => {
     });
   });
 
-  it("shows a duplicate explanation in both languages without asking the model to reprocess it", async () => {
+  it.each(["patient", "clinician"])("shows a duplicate explanation in both languages without assuming its uploader (%s)", async (uploader) => {
     get.mockResolvedValue([
       {
         id: "duplicate-doc",
         patient_id: "patient-1",
-        uploaded_by: "patient-1",
-        uploaded_by_role: "patient",
+        uploaded_by: uploader === "patient" ? "patient-1" : "clinician-1",
+        uploaded_by_role: uploader,
         document_type: DocumentType.OTHER,
         file_name: "duplicate.pdf",
         file_url: "https://example.test/duplicate.pdf",
@@ -395,19 +407,19 @@ describe("RecordsPage", () => {
     expect(screen.getByText("Duplicate upload")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /duplicate.pdf/ }));
     expect(
-      screen.getByText(/These exact file contents were already processed/),
+      screen.getByText(/This file is already in your records/),
     ).toBeInTheDocument();
     profileSettings.locale = "es-MX";
     rerender(<RecordsPage />);
     expect(
-      screen.getByText(/Este mismo archivo ya se procesó/),
+      screen.getByText(/Este mismo archivo ya está en tus documentos/),
     ).toBeInTheDocument();
     // The explanation and disclaimer follow the saved patient language.
     expect(screen.getByText(/Esta explicación describe el documento subido/)).toHaveAttribute("lang", "es-MX");
     profileSettings.locale = "en-US";
     rerender(<RecordsPage />);
     expect(
-      screen.getByText(/These exact file contents were already processed/),
+      screen.getByText(/This file is already in your records/),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/Stale duplicate summary/),
@@ -1051,15 +1063,15 @@ describe("RecordsPage", () => {
     it("keeps the last count and says a refresh failed when records are already shown", async () => {
       get.mockResolvedValueOnce([sourceRecord("approved")]);
       render(<RecordsPage />);
-      expect(await screen.findByText("1 record · 0 processing")).toBeInTheDocument();
+      expect(await screen.findByText("1 record")).toBeInTheDocument();
       let fail!: (error: Error) => void;
       get.mockReturnValueOnce(new Promise((_, reject) => { fail = reject; }));
       fireEvent.click(screen.getByRole("button", { name: "Refresh records" }));
-      expect(screen.getByText("1 record · 0 processing")).toBeInTheDocument();
+      expect(screen.getByText("1 record")).toBeInTheDocument();
       await act(async () => fail(new Error("synthetic refresh failure")));
       expect(await screen.findByText("Could not refresh records")).toBeInTheDocument();
       expect(screen.queryByText("Action failed")).not.toBeInTheDocument();
-      expect(screen.getByText("1 record · 0 processing")).toBeInTheDocument();
+      expect(screen.getByText("1 record")).toBeInTheDocument();
     });
   });
 });
