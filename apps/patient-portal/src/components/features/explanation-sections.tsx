@@ -91,7 +91,7 @@ export function ExplanationSections({
       role="region"
       aria-label={spanish ? "Resumen del documento" : "Document summary"}
       lang={locale}
-      className="ma-enter mt-4 space-y-4 text-base leading-7 text-ink"
+      className="ma-enter mt-4 max-w-[65ch] space-y-4 text-base leading-7 text-ink"
     >
       {overview.map((item, index) => (
         <p key={index} className="break-words">

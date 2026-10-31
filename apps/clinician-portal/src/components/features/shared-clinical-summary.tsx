@@ -57,7 +57,7 @@ export function sharedSummaryApplies(summary: SharedClinicalSummary | null): sum
 
 export function SharedConditionsCard({ summary }: { summary: SharedClinicalSummary }) {
     return <section className="rounded-[14px] border border-line bg-surface p-5" aria-label="Active conditions across care teams">
-        <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Active Conditions</h3>
+        <h3 className="mb-3 ma-section-heading">Active Conditions</h3>
         {summary.conditions.length === 0 && !summary.some_conditions_private ? <p className="text-sm text-muted">None documented</p> : null}
         {summary.conditions.length > 0 ? <ul className="flex flex-wrap gap-2">
             {summary.conditions.map((condition) => <li className="inline-flex max-w-full flex-col rounded-[7px] border border-line bg-surface-2 px-2.5 py-1.5 text-[13px] font-medium text-ink" key={condition.id}>
@@ -73,7 +73,7 @@ export function SharedConditionsCard({ summary }: { summary: SharedClinicalSumma
 
 export function SharedAllergiesCard({ summary }: { summary: SharedClinicalSummary }) {
     return <section className="rounded-[14px] border border-line bg-surface p-5" aria-label="Allergies across care teams">
-        <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Allergies</h3>
+        <h3 className="mb-3 ma-section-heading">Allergies</h3>
         {summary.allergies.length === 0 ? <p className="text-sm text-muted">Not documented</p> : <ul className="flex flex-wrap gap-2">
             {summary.allergies.map((allergy) => <li className="inline-flex max-w-full flex-col rounded-[7px] border border-risk-line bg-risk-soft px-2.5 py-1.5 text-[13px] font-medium text-risk-ink" key={allergy.id}>
                 <span className="inline-flex flex-wrap items-center gap-1.5"><Icon name="alert" className="h-3.5 w-3.5 shrink-0" /><span className="min-w-0 break-words">{allergy.allergen}</span>
@@ -89,7 +89,7 @@ export function OtherCareTeams({ summary }: { summary: SharedClinicalSummary }) 
     const others = summary.care_teams.filter((team) => !team.is_mine);
     if (others.length === 0) return null;
     return <section className="rounded-[14px] border border-line bg-surface p-5 md:col-span-2" aria-labelledby="other-care-teams">
-        <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.06em] text-muted" id="other-care-teams">Also cared for by</h3>
+        <h3 className="mb-3 ma-section-heading" id="other-care-teams">Also cared for by</h3>
         <ul className="grid gap-2 md:grid-cols-2">
             {others.map((team, index) => <li className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm" key={team.care_team_id ?? index}>
                 <span className="block break-words font-semibold text-ink">{[team.specialty, team.clinician_name].filter(Boolean).join(" · ") || "Care team"}</span>
@@ -105,7 +105,7 @@ export function OtherCareTeams({ summary }: { summary: SharedClinicalSummary }) 
 /** The shared medication list with the care team that recorded each entry. */
 export function SharedMedicationList({ summary }: { summary: SharedClinicalSummary }) {
     return <section aria-labelledby="shared-medications" className="space-y-2">
-        <h3 className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted" id="shared-medications">Shared medication list</h3>
+        <h3 className="ma-section-heading" id="shared-medications">Shared medication list</h3>
         {summary.medications.length === 0 ? <p className="text-sm text-muted">No active medications</p> : <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
             {summary.medications.map((medication) => <li className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 px-4 py-3" key={medication.id}>
                 <span className="min-w-0 flex-1 basis-56">

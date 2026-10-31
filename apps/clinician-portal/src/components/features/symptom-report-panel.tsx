@@ -109,7 +109,7 @@ export function SymptomReportPanel({ patientId, reportId, onClose, onReviewed }:
                         <header className="space-y-2">
                             <h3 className="break-words text-base font-semibold text-ink" lang={report.locale}>{report.symptom}</h3>
                             <div className="flex flex-wrap items-center gap-2">
-                                <Badge variant={report.severity === null ? "neutral" : report.severity >= 8 ? "danger" : report.severity >= 5 ? "warning" : "success"}>
+                                <Badge variant={report.severity === null ? "neutral" : report.severity >= 8 ? "danger" : report.severity >= 5 ? "warning" : "neutral"}>
                                     {report.severity === null ? "Severity unknown / not provided" : `Severity ${report.severity}/10`}
                                 </Badge>
                                 <Badge variant={reviewed ? "success" : "warning"}>{reviewed ? "Reviewed by you" : "Not reviewed by your team"}</Badge>
@@ -119,7 +119,7 @@ export function SymptomReportPanel({ patientId, reportId, onClose, onReviewed }:
                         </header>
 
                         <section aria-labelledby="report-answers">
-                            <h4 id="report-answers" className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Confirmed answers · {languageName(report.locale)}</h4>
+                            <h4 id="report-answers" className="ma-section-heading">Confirmed answers · {languageName(report.locale)}</h4>
                             {report.answers.length === 0 ? <p className="mt-2 text-sm text-muted">No answers were saved with this report.</p> : (
                                 <dl lang={report.locale} className="divide-y divide-line">
                                     {report.answers.map((answer) => (
@@ -131,7 +131,7 @@ export function SymptomReportPanel({ patientId, reportId, onClose, onReviewed }:
                         </section>
 
                         <section aria-labelledby="report-triage">
-                            <h4 id="report-triage" className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Safety outcome</h4>
+                            <h4 id="report-triage" className="ma-section-heading">Safety outcome</h4>
                             <dl className="divide-y divide-line">
                                 <Row label="Emergency rule check at confirmation">
                                     {report.triage.safety_result === "no_existing_rule_matched"
@@ -153,7 +153,7 @@ export function SymptomReportPanel({ patientId, reportId, onClose, onReviewed }:
                         </section>
 
                         <section aria-labelledby="report-provenance">
-                            <h4 id="report-provenance" className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Report details</h4>
+                            <h4 id="report-provenance" className="ma-section-heading">Report details</h4>
                             <dl className="divide-y divide-line">
                                 <Row label="Confirmed">{when(report.provenance.confirmed_at, report.provenance.timezone)}</Row>
                                 <Row label="Patient language">{languageName(report.provenance.language)}</Row>
@@ -172,7 +172,7 @@ export function SymptomReportPanel({ patientId, reportId, onClose, onReviewed }:
                         </section>
 
                         <section aria-labelledby="report-events">
-                            <h4 id="report-events" className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Recorded events</h4>
+                            <h4 id="report-events" className="ma-section-heading">Recorded events</h4>
                             <ol className="mt-2 space-y-2">
                                 {report.events.map((event) => (
                                     <li key={`${event.kind}-${event.at}`} className="text-sm text-ink-2">

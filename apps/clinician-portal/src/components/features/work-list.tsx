@@ -246,7 +246,7 @@ export function ListTable({
         >
             <div
                 aria-hidden="true"
-                className="hidden gap-4 border-b border-line px-[22px] py-3 font-mono text-[11px] uppercase tracking-[0.06em] text-muted md:grid"
+                className="hidden gap-4 border-b border-line-strong bg-surface-2 px-[22px] py-3 ma-table-heading md:grid"
                 style={{ gridTemplateColumns: columns }}
             >
                 {headers.map((header, index) => (

@@ -42,7 +42,7 @@ const ANSWER_LABEL: Record<ConfirmationAnswer, string> = {
   unsure: "Not sure",
 };
 
-const EYEBROW = "font-mono text-[11px] uppercase tracking-[0.06em] text-muted";
+const EYEBROW = "ma-field-label";
 const SECONDARY_BUTTON = "ma-press inline-flex h-[34px] items-center justify-center gap-1.5 rounded-[9px] border border-line-strong bg-surface px-3.5 text-[13px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8] disabled:hover:bg-surface";
 
 function describe(name: unknown, dosage: unknown, frequency: unknown): string {

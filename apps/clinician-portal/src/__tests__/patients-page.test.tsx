@@ -1,9 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { dispatch, push, state } = vi.hoisted(() => ({
+const { dispatch, state } = vi.hoisted(() => ({
     dispatch: vi.fn(),
-    push: vi.fn(),
     state: {
         dashboard: {
             patients: [
@@ -26,9 +25,6 @@ const { dispatch, push, state } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/use-clinic-filter", async () => (await import("@/test/clinic-filter-mock")).clinicFilterModule);
-vi.mock("next/navigation", () => ({
-    useRouter: () => ({ push }),
-}));
 
 vi.mock("react-redux", () => ({
     useDispatch: () => dispatch,
@@ -37,6 +33,8 @@ vi.mock("react-redux", () => ({
 
 import PatientsPage from "@/app/(dashboard)/patients/page";
 import { clinicFilterState, resetClinicFilter } from "@/test/clinic-filter-mock";
+
+const originalPatient = { ...state.dashboard.patients[0] };
 
 const twoClinics = [
     { clinic_id: "clinic-a", clinic_code: "AAA111", clinic_name: "City Health", role: "admin", status: "active" },
@@ -47,10 +45,9 @@ const twoClinics = [
 describe("PatientsPage", () => {
     beforeEach(() => {
         dispatch.mockReset();
-        push.mockReset();
         state.dashboard.error = null;
         state.dashboard.loading = false;
-        state.dashboard.patients[0] = { ...state.dashboard.patients[0], clinic_id: "clinic-b", clinic_name: "Bay Clinic" } as never;
+        state.dashboard.patients = [{ ...originalPatient, clinic_id: "clinic-b", clinic_name: "Bay Clinic" } as never];
         resetClinicFilter();
     });
 
@@ -64,7 +61,7 @@ describe("PatientsPage", () => {
     it("shows the clinic chip after the name and a Clinic filter with several clinics", () => {
         clinicFilterState.clinics = twoClinics;
         render(<PatientsPage />);
-        const row = screen.getByRole("button", { name: /maya patel/i });
+        const row = screen.getByRole("link", { name: /maya patel/i });
         expect(row).toHaveTextContent("Maya Patel");
         expect(screen.getByText("Bay Clinic", { selector: "span" })).toHaveAttribute("title", "Bay Clinic");
         expect(screen.getByLabelText("Clinic")).toHaveValue("");
@@ -87,12 +84,12 @@ describe("PatientsPage", () => {
     it("loads and opens the real authorized patient identifier", () => {
         render(<PatientsPage />);
 
-        expect(screen.getByRole("button", { name: /maya patel/i })).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: /maya patel/i })).toHaveAccessibleName("Maya Patel");
         expect(screen.queryByText("patient-1")).not.toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole("button", { name: /maya patel/i }));
-
-        expect(push).toHaveBeenCalledWith("/patients/d5cff0c5-0e56-4451-91ac-d13f7fce7e10");
+        expect(screen.getByRole("link", { name: /maya patel/i })).toHaveAttribute(
+            "href", "/patients/d5cff0c5-0e56-4451-91ac-d13f7fce7e10",
+        );
     });
 
     it("offers retry when the live roster request fails", () => {
@@ -104,4 +101,43 @@ describe("PatientsPage", () => {
         fireEvent.click(screen.getByRole("button", { name: "Retry" }));
         expect(dispatch).toHaveBeenCalled();
     });
+    it("associates roster values with native column and patient row headers", () => {
+        render(<PatientsPage />);
+        const table = screen.getByRole("table", { name: "Patient roster" });
+        expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual([
+            "Patient", "Risk level", "Adherence", "Active meds", "Last activity", "ADR alerts",
+        ]);
+        for (const header of within(table).getAllByRole("columnheader")) {
+            expect(header).toHaveAttribute("scope", "col");
+        }
+        expect(within(table).getByRole("rowheader", { name: /maya patel/i })).toHaveAttribute("scope", "row");
+        expect(within(table).getAllByRole("cell")).toHaveLength(5);
+        expect(screen.queryByRole("button", { name: /maya patel/i })).not.toBeInTheDocument();
+    });
+
+    it("preserves sort and risk filtering with ordinary patient links", () => {
+        state.dashboard.patients.push({ ...originalPatient, patient_id: "second", first_name: "Robin", last_name: "Lee", adherence_score: .4, risk_level: "low", last_activity: "5m ago" } as never);
+        render(<PatientsPage />);
+        const paths = () => within(screen.getByRole("table")).getAllByRole("link").map((link) => link.getAttribute("href"));
+        expect(paths()).toEqual([`/patients/${originalPatient.patient_id}`, "/patients/second"]);
+        fireEvent.change(screen.getByLabelText("Sort patients"), { target: { value: "adherence" } });
+        expect(paths()).toEqual(["/patients/second", `/patients/${originalPatient.patient_id}`]);
+        fireEvent.change(screen.getByLabelText("Sort patients"), { target: { value: "activity" } });
+        expect(paths()).toEqual(["/patients/second", `/patients/${originalPatient.patient_id}`]);
+        fireEvent.change(screen.getByLabelText("Filter patients by risk"), { target: { value: "low" } });
+        expect(paths()).toEqual(["/patients/second"]);
+    });
+
+    it("keeps unavailable adherence distinct from zero and spans the empty table state", () => {
+        state.dashboard.patients = [{ ...originalPatient, risk_level: "unknown", adherence_score: 0 } as never];
+        render(<PatientsPage />);
+        expect(screen.getByText("Not enough data")).toBeInTheDocument();
+        expect(screen.queryByText("0%")).not.toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText("Filter patients by risk"), { target: { value: "high" } });
+        const empty = within(screen.getByRole("table")).getByRole("cell");
+        expect(empty).toHaveAttribute("colspan", "6");
+        expect(empty).toHaveTextContent("No assigned patients match these filters.");
+        expect(screen.queryByRole("link", { name: /maya/i })).not.toBeInTheDocument();
+    });
+
 });

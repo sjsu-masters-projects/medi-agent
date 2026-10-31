@@ -35,7 +35,9 @@ Foundation PR. Track scope and evidence in [TASKS.md](TASKS.md).
   gold Nora accents. Mobile PWA shell, thumb-friendly navigation, next action first.
 - Clinician: dark navy sidebar, light fluid workspace, blue primary actions and
   teal approval states. Dense but readable tables and efficient review panes.
-- Geist for prose; Geist Mono only for times, versions, counts, scores and eyebrows.
+- Geist for prose and operational headings/labels. Geist Mono is for times, versions,
+  counts, scores and decorative entry-screen eyebrows. Table and review headings use
+  sans text: 14px semibold column/field labels and 16px semibold section headings.
 - Use the supplied M-check assets unchanged. No recoloring or replacement marks.
 - Use tokens from each app's globals.css, not competing ad hoc palettes.
 - A check seal communicates actual clinician approval/verification. A sparkle chip
@@ -62,6 +64,8 @@ never animation-gated.
 - Text, including small timestamps, needs readable contrast: at least 4.5:1 for
   normal text. Use the muted token instead of the reference's lighter faint gray.
 - Patient controls retain at least 44×44px touch areas even when visually smaller.
+- Keyboard focus uses an opaque 3px brand/action outline with a light halo, including
+  fields; system Highlight is used in forced colors. Component border feedback stays.
 - Visible keyboard focus, accessible icon labels, Escape, focus trapping and focus
   return are mandatory for dialogs and sheets. Help works on tap, not hover alone.
 - Preserve zoom, safe-area insets and long Spanish wrapping. Never truncate clinical

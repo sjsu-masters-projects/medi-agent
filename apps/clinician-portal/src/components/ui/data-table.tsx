@@ -1,27 +1,31 @@
 import type { ReactNode } from "react";
 
-interface DataTableProps {
-    headers: string[];
-    children: ReactNode;
-    columns?: string;
+interface DataTableColumn {
+    label: string;
+    width?: string;
+    align?: "left" | "right";
 }
 
-export function DataTable({ children, columns, headers }: DataTableProps) {
-    const gridTemplate = columns ?? `repeat(${headers.length}, minmax(0, 1fr))`;
+interface DataTableProps {
+    caption: string;
+    headers: readonly DataTableColumn[];
+    children: ReactNode;
+}
 
+/** Native table relationships stay available when the viewport requires horizontal scrolling. */
+export function DataTable({ children, caption, headers }: DataTableProps) {
     return (
-        <div className="overflow-x-auto rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]" role="region" aria-label="Scrollable data table" tabIndex={0}>
-            <div className="min-w-[640px]">
-            <div
-                className="grid gap-4 border-b border-line px-[22px] py-3 font-mono text-[11px] uppercase tracking-[0.06em] text-muted"
-                style={{ gridTemplateColumns: gridTemplate }}
-            >
-                {headers.map((header) => (
-                    <span key={header}>{header}</span>
-                ))}
-            </div>
-            <div className="[&>*]:border-b [&>*]:border-line [&>*:last-child]:border-b-0">{children}</div>
-            </div>
+        <div className="overflow-x-auto rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]" role="region" aria-label={`${caption} table`} tabIndex={0}>
+            <table className="w-full min-w-[840px] table-fixed text-sm">
+                <caption className="sr-only">{caption}</caption>
+                <colgroup>{headers.map((header) => <col key={header.label} style={{ width: header.width }} />)}</colgroup>
+                <thead className="border-b border-line-strong bg-surface-2">
+                    <tr>{headers.map((header) => (
+                        <th className={`ma-table-heading px-4 py-3 ${header.align === "right" ? "text-right" : "text-left"}`} scope="col" key={header.label}>{header.label}</th>
+                    ))}</tr>
+                </thead>
+                <tbody className="divide-y divide-line">{children}</tbody>
+            </table>
         </div>
     );
 }

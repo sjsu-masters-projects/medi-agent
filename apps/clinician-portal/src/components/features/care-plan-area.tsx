@@ -145,7 +145,7 @@ export function CarePlanArea({ patientId, onPublished, reviewId }: { patientId: 
             </ul> : <p className="mt-4 text-sm text-muted">You have no plan for this patient yet.</p>}
 
             {orphaned.length > 0 ? <div className="mt-5 space-y-2">
-                <h3 className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Needs an owner</h3>
+                <h3 className="ma-section-heading">Needs an owner</h3>
                 <ul className="divide-y divide-line rounded-xl border border-warn-line bg-warn-soft">
                     {orphaned.map((plan) => <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3" key={plan.care_plan_id}>
                         <div className="min-w-0 flex-1 basis-56">
@@ -161,7 +161,7 @@ export function CarePlanArea({ patientId, onPublished, reviewId }: { patientId: 
             </div> : null}
 
             {others.length > 0 ? <div className="mt-5 space-y-2">
-                <h3 className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Other care teams&apos; plans</h3>
+                <h3 className="ma-section-heading">Other care teams&apos; plans</h3>
                 <ul aria-label="Other care teams' plans" className="divide-y divide-line rounded-xl border border-line bg-surface-2/60">
                     {others.map((plan) => <li className="px-4 py-2.5 text-[13px] text-ink-2" key={plan.care_plan_id}>
                         <span className="break-words font-semibold text-ink">{[plan.owner.specialty, plan.owner.clinician_name, plan.owner.clinic_name].filter(Boolean).join(" · ") || "Care team"}</span>

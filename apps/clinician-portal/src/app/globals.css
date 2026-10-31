@@ -76,20 +76,43 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Text roles shared by operational screens. Clinical/source wording stays exact. */
+@utility ma-section-heading {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-ink);
+}
+@utility ma-field-label {
+  font-family: var(--font-sans);
+  font-size: .875rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-ink-2);
+}
+@utility ma-table-heading {
+  font-family: var(--font-sans);
+  font-size: .875rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-ink-2);
+}
+
 /* Desktop controls stay at least 32px tall; patient-grade 44px targets are not required here. */
 button, summary {
   min-height: 32px;
 }
 
 :focus-visible {
-  outline: 2px solid rgba(37, 99, 235, .55);
+  outline: 3px solid var(--color-primary);
   outline-offset: 2px;
+  /* The light halo keeps focus visible on dark and colored surfaces too. */
+  box-shadow: 0 0 0 2px var(--color-surface);
 }
 
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible {
-  outline: none;
+@media (forced-colors: active) {
+  :focus-visible { outline-color: Highlight; box-shadow: none; }
 }
 
 /* Native selects share one caret so compact toolbar selects line up. */

@@ -351,3 +351,9 @@ retry worker must run. Follow the
 The saved patient symptom timeline remains PAT-002-C.
 
 Chat results card: an assistant message may carry `attachments` of type `document_results`, built by the server from the cited document's extracted results (never from the reply text). The chat shows them under the reply: critical results first with a contact-your-care-team line, out-of-range results with chips, the rest behind a toggle, and a link to the document in Records.
+
+
+## Readability
+
+Operational text, focus indicators and reading widths follow the
+[portal design rules](../../docs/features/portal-design.md). Explanations keep paragraphs and bullets within a 65ch reading column while source previews keep their available width. Keyboard focus remains visible on fields and actions.

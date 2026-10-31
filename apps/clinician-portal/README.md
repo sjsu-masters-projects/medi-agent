@@ -413,3 +413,9 @@ rows on failure and clears old scope immediately. Medication comparison includes
 explicit-click public reference lookup: only the drug name is looked up, references
 show cache/source dates, and neither the RxNorm ingredient nor reference text is
 automatically applied to clinical records. Deploy the backend endpoints before UI.
+
+
+## Readability
+
+Operational text, focus indicators and reading widths follow the
+[portal design rules](../../docs/features/portal-design.md). The roster uses a native table with ordinary patient links; medication and adherence headers share its readable hierarchy. Review status remains separate from reported severity.

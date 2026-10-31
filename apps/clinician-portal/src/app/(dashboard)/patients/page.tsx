@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useDispatch, useSelector } from "react-redux";
 import { ClinicChip, ClinicFilterEmpty, ClinicFilterField } from "@/components/features/clinic-chip";
 import { RiskBadge } from "@/components/features/risk-badge";
@@ -33,7 +33,6 @@ function activityRank(lastActivity: string): number {
 
 export default function PatientsPage() {
     const dispatch = useDispatch<AppDispatch>();
-    const router = useRouter();
     const patients = useSelector((state: RootState) => state.dashboard.patients);
     const loading = useSelector((state: RootState) => state.dashboard.loading);
     const error = useSelector((state: RootState) => state.dashboard.error);
@@ -67,8 +66,15 @@ export default function PatientsPage() {
         });
     }, [filter, patients, sortBy]);
 
-    const flip = useFlip<HTMLButtonElement>(visiblePatients.map((patient) => patient.patient_id).join(","));
-    const columns = "minmax(200px,1.4fr) 120px minmax(150px,1fr) 110px minmax(150px,1fr) 110px";
+    const flip = useFlip<HTMLTableRowElement>(visiblePatients.map((patient) => patient.patient_id).join(","));
+    const headers = [
+        { label: "Patient", width: "27%" },
+        { label: "Risk level", width: "14%" },
+        { label: "Adherence", width: "18%", align: "right" as const },
+        { label: "Active meds", width: "12%", align: "right" as const },
+        { label: "Last activity", width: "17%" },
+        { label: "ADR alerts", width: "12%", align: "right" as const },
+    ];
 
     return (
         <div className="ma-page space-y-5">
@@ -108,40 +114,37 @@ export default function PatientsPage() {
                     {Array.from({ length: 5 }).map((_, index) => <div className="flex h-[66px] items-center gap-3 px-[22px]" key={index}><Skeleton className="h-[34px] w-[34px]" variant="circle" /><Skeleton className="h-4 w-48" variant="text" /></div>)}
                 </div>
             ) : (
-                <DataTable columns={columns} headers={["Patient", "Risk level", "Adherence", "Active meds", "Last activity", "ADR alerts"]}>
+                <DataTable caption="Patient roster" headers={headers}>
                     {visiblePatients.map((patient) => {
                         const adherence = Math.round(patient.adherence_score * 100);
                         return (
-                    <button
-                        className="grid w-full items-center gap-4 bg-surface px-[22px] py-4 text-left transition-colors duration-[160ms] hover:bg-[rgba(100,116,139,.05)]"
-                        key={patient.patient_id}
-                        onClick={() => router.push(`/patients/${patient.patient_id}`)}
-                        ref={flip(patient.patient_id)}
-                        style={{ gridTemplateColumns: columns }}
-                        type="button"
-                    >
-                        <span className="flex min-w-0 items-center gap-3">
-                            <span aria-hidden="true" className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-track text-xs font-semibold text-ink-2">{`${patient.first_name.charAt(0)}${patient.last_name.charAt(0)}`.toUpperCase()}</span>
-                            <span className="flex min-w-0 flex-col items-start gap-0.5">
-                                <span className="min-w-0 break-words text-[15px] font-semibold text-ink">
-                                    {patient.first_name} {patient.last_name}
-                                </span>
-                                <ClinicChip name={clinicFilter.multi ? patient.clinic_name : null} />
-                            </span>
-                        </span>
-                        <span><RiskBadge level={patient.risk_level} /></span>
-                        {patient.risk_level === "unknown" ? <span className="text-[13px] text-muted">Not enough data</span> : <span className="flex items-center gap-2.5">
-                            <span aria-hidden="true" className="h-1.5 w-full max-w-[96px] overflow-hidden rounded-[3px] bg-track"><span className={`block h-full rounded-[3px] ${adherence < 60 ? "bg-risk" : "bg-primary"}`} style={{ width: `${adherence}%` }} /></span>
-                            <span className="font-mono text-[13px] font-medium text-ink">{adherence}%</span>
-                        </span>}
-                        <span className="font-mono text-[13px] text-ink-2">{patient.active_med_count}</span>
-                        <span className="text-[13px] text-ink-2">{patient.last_activity}</span>
-                        <span className={`font-mono text-[13px] ${patient.open_adr_count > 0 ? "font-medium text-risk-ink" : "text-muted"}`}>{patient.open_adr_count}</span>
-                    </button>
+                            <tr className="transition-colors duration-[160ms] hover:bg-surface-2 focus-within:bg-surface-2" key={patient.patient_id} ref={flip(patient.patient_id)}>
+                                <th scope="row" className="px-4 py-3 text-left font-normal">
+                                    <Link href={`/patients/${patient.patient_id}`} className="group flex min-h-10 items-center gap-3 rounded-md">
+                                        <span aria-hidden="true" className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-track text-xs font-semibold text-ink-2">{`${patient.first_name.charAt(0)}${patient.last_name.charAt(0)}`.toUpperCase()}</span>
+                                        <span className="flex min-w-0 flex-col items-start gap-0.5">
+                                            <span className="break-words text-[15px] font-semibold text-primary underline decoration-primary/40 underline-offset-4 group-hover:text-primary-hover group-hover:decoration-primary">
+                                                {patient.first_name} {patient.last_name}
+                                            </span>
+                                            <ClinicChip name={clinicFilter.multi ? patient.clinic_name : null} />
+                                        </span>
+                                    </Link>
+                                </th>
+                                <td className="px-4 py-3"><RiskBadge level={patient.risk_level} /></td>
+                                <td className="px-4 py-3 text-right">
+                                    {patient.risk_level === "unknown" ? <span className="text-sm text-muted">Not enough data</span> : <span className="flex items-center justify-end gap-2.5">
+                                        <span aria-hidden="true" className="h-1.5 w-full max-w-[72px] overflow-hidden rounded-[3px] bg-track"><span className={`block h-full rounded-[3px] ${adherence < 60 ? "bg-risk" : "bg-primary"}`} style={{ width: `${adherence}%` }} /></span>
+                                        <span className="font-mono text-sm font-medium tabular-nums text-ink">{adherence}%</span>
+                                    </span>}
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono tabular-nums text-ink-2">{patient.active_med_count}</td>
+                                <td className="break-words px-4 py-3 text-ink-2">{patient.last_activity}</td>
+                                <td className={`px-4 py-3 text-right font-mono tabular-nums ${patient.open_adr_count > 0 ? "font-semibold text-risk-ink" : "text-muted"}`}>{patient.open_adr_count}</td>
+                            </tr>
                         );
                     })}
                     {visiblePatients.length === 0 && (
-                        <p className="px-4 py-10 text-center text-sm text-muted">{error ? "The roster is unavailable. Retry to check assigned patients." : clinicFilter.clinicId && patients.length === 0 ? <ClinicFilterEmpty filter={clinicFilter} /> : patients.length ? "No assigned patients match these filters." : "No patients assigned yet."}</p>
+                        <tr><td colSpan={headers.length} className="px-4 py-10 text-center text-sm text-muted">{error ? "The roster is unavailable. Retry to check assigned patients." : clinicFilter.clinicId && patients.length === 0 ? <ClinicFilterEmpty filter={clinicFilter} /> : patients.length ? "No assigned patients match these filters." : "No patients assigned yet."}</td></tr>
                     )}
                 </DataTable>
             )}

@@ -1210,7 +1210,7 @@ function RecordsWorkspace() {
                     locale={locale}
                   />
                 ) : (
-                  <p lang={locale} className="mt-3 break-words text-base leading-7 text-ink">{explanationText}</p>
+                  <p lang={locale} className="mt-3 max-w-[65ch] break-words text-base leading-7 text-ink">{explanationText}</p>
                 )}
                 {selectedStalled ? (
                   <div className="ma-enter mt-3 flex flex-wrap items-center gap-3">
@@ -1225,7 +1225,7 @@ function RecordsWorkspace() {
                 {explanation.failed ? <Button variant="secondary" size="sm" onClick={explanation.retry} className="mt-3">{copy("Try again")}</Button> : null}
               </div>
               {readbackActive ? <p role="status" className="mt-2 text-sm text-brand-ink">{copy("Reading aloud…")}</p> : null}
-              <p className="mt-3 border-t border-line-strong pt-3 text-[13px] leading-5 text-muted" lang={explanationLang}>
+              <p className="mt-3 max-w-[65ch] border-t border-line-strong pt-3 text-sm leading-6 text-ink-2" lang={explanationLang}>
                 {explanationLang === "es-MX"
                   ? "Esta explicación describe el documento subido. No es un nuevo plan de atención aprobado ni una recomendación para cambiar el tratamiento. Sigue las instrucciones aprobadas por tu equipo de atención."
                   : "This explanation describes the uploaded document. It is not a newly approved care plan or a recommendation to change treatment. Follow your care team's approved instructions."}
