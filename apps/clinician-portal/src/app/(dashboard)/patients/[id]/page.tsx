@@ -351,7 +351,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                         <div className="grid gap-4 md:grid-cols-2">
                             {/* Conditions */}
                             {crossTeam ? <SharedConditionsCard summary={crossTeam} /> : <section className="rounded-[14px] border border-line bg-surface p-5">
-                                <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
+                                <h3 className="mb-3 ma-section-heading">
                                     Active Conditions
                                 </h3>
                                 {patient.conditions.length === 0 ? (
@@ -373,7 +373,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
 
                             {/* Allergies */}
                             {crossTeam ? <SharedAllergiesCard summary={crossTeam} /> : <section className="rounded-[14px] border border-line bg-surface p-5">
-                                <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
+                                <h3 className="mb-3 ma-section-heading">
                                     Allergies
                                 </h3>
                                 {patient.allergies.length === 0 ? (
@@ -403,7 +403,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                             {/* Active Medications */}
                             <section className="overflow-hidden rounded-[14px] border border-line bg-surface md:col-span-2">
                                 <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-3 pt-5">
-                                    <h3 className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
+                                    <h3 className="ma-section-heading">
                                         Active Medications
                                     </h3>
                                     <p className="text-[13px] text-muted">
@@ -415,14 +415,14 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                 ) : (
                                     <div className="overflow-x-auto">
                                         <table className="w-full min-w-[720px] text-sm">
-                                            <thead>
-                                                <tr className="border-y border-line font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
-                                                    <th className="px-5 py-3 text-left font-normal">Name</th>
-                                                    <th className="px-3 py-3 text-left font-normal">Dosage</th>
-                                                    <th className="px-3 py-3 text-left font-normal">Frequency</th>
-                                                    <th className="px-3 py-3 text-left font-normal">Route</th>
-                                                    <th className="px-3 py-3 text-left font-normal">Source Provider</th>
-                                                    <th className="px-5 py-3 text-left font-normal">Reminders</th>
+                                            <thead className="bg-surface-2">
+                                                <tr className="border-y border-line-strong">
+                                                    <th scope="col" className="px-5 py-3 text-left ma-table-heading">Name</th>
+                                                    <th scope="col" className="px-3 py-3 text-left ma-table-heading">Dosage</th>
+                                                    <th scope="col" className="px-3 py-3 text-left ma-table-heading">Frequency</th>
+                                                    <th scope="col" className="px-3 py-3 text-left ma-table-heading">Route</th>
+                                                    <th scope="col" className="px-3 py-3 text-left ma-table-heading">Source provider</th>
+                                                    <th scope="col" className="px-5 py-3 text-left ma-table-heading">Reminders</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -467,7 +467,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                             </section>
 
                             <section className="overflow-hidden rounded-[14px] border border-line bg-surface md:col-span-2">
-                                <h3 className="px-5 pb-3 pt-5 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
+                                <h3 className="px-5 pb-3 pt-5 ma-section-heading">
                                     Active care activities
                                 </h3>
                                 {patient.obligations?.length ? (
@@ -539,7 +539,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                         {/* Symptom list */}
                         {patient.symptom_reports.length > 0 && (
                             <div className="mt-6">
-                                <h3 className="mb-2 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
+                                <h3 className="mb-2 ma-section-heading">
                                     Recent Symptoms
                                 </h3>
                                 <div className="overflow-hidden rounded-[14px] border border-line">
@@ -689,7 +689,7 @@ function PatientDeepDivePageContent({ patientId, enabled }: { patientId: string;
                                                     <span aria-hidden="true" className="flex h-5 w-5 items-center justify-center rounded-[5px] bg-ai-tint font-mono text-[11px] font-medium uppercase text-ai-ink">
                                                         {section[0]}
                                                     </span>
-                                                    <h3 className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
+                                                    <h3 className="ma-section-heading">
                                                         {section}
                                                     </h3>
                                                 </div>

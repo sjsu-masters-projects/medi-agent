@@ -29,7 +29,7 @@ export function SegmentedControl<T extends string>({ label, options, value, onCh
 export function CompactField({ label, children, className = "" }: { label: string; children: ReactNode; className?: string }) {
     return (
         <label className={`flex h-10 items-center md:h-[34px] gap-2 rounded-[9px] border border-line-strong bg-surface pl-3 text-[13px] transition-colors focus-within:border-primary focus-within:ring-4 focus-within:ring-[rgba(37,99,235,.12)] hover:border-[rgba(100,116,139,.36)] ${className}`}>
-            <span className="shrink-0 text-muted">{label}</span>
+            <span className="shrink-0 font-semibold text-ink-2">{label}</span>
             {children}
         </label>
     );

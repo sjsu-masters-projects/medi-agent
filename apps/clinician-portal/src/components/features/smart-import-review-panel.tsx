@@ -162,7 +162,7 @@ interface SourceDetail extends ReviewSource {
 const PAGE_SIZE = 25;
 const PROJECTABLE_TYPES = new Set(["medication", "condition", "allergy"]);
 
-const EYEBROW = "font-mono text-[11px] uppercase tracking-[0.06em] text-muted";
+const EYEBROW = "ma-field-label";
 const CHIP = "inline-flex items-center gap-1.5 rounded-[7px] px-2 py-1 text-xs font-medium";
 const BUTTON_BASE = "ma-press inline-flex h-[34px] items-center justify-center gap-1.5 rounded-[9px] px-3.5 text-[13px] disabled:cursor-not-allowed";
 const SECONDARY_BUTTON = `${BUTTON_BASE} border border-line-strong bg-surface font-medium text-ink-2 hover:bg-surface-2 hover:text-ink disabled:text-[#94A3B8] disabled:hover:bg-surface`;
@@ -172,7 +172,7 @@ const DANGER_BUTTON = `${BUTTON_BASE} border border-risk-line bg-surface font-se
 const ICON_BUTTON = "ma-press flex h-8 w-8 items-center justify-center rounded-lg border border-line-strong bg-surface text-ink-2 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-[#94A3B8] disabled:hover:bg-surface";
 const INPUT = "h-[42px] w-full rounded-[10px] border border-line-strong bg-surface px-3.5 text-sm font-normal text-ink outline-none transition placeholder:text-[#94A3B8] focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)]";
 const TEXTAREA = "w-full rounded-[10px] border border-line-strong bg-surface px-3.5 py-2.5 text-sm font-normal text-ink outline-none transition placeholder:text-[#94A3B8] focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)]";
-const FILTER_LABEL = "flex flex-col gap-1 font-mono text-[11px] uppercase tracking-[0.06em] text-muted";
+const FILTER_LABEL = "flex flex-col gap-1 ma-field-label";
 const FILTER_CONTROL = "h-[34px] min-w-[9rem] rounded-[9px] border border-line-strong bg-surface px-3 text-[13px] font-normal normal-case tracking-normal text-ink outline-none transition focus:border-primary focus:ring-4 focus:ring-[rgba(37,99,235,.12)]";
 
 const FACT_LABELS: Record<string, string> = {
@@ -443,7 +443,7 @@ function FactDetails({
         const dated = DATE_FIELDS.has(key) && /\d{4}/.test(text);
         return (
           <div className="min-w-0" key={key}>
-            <dt className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
+            <dt className="ma-field-label">
               {label}
             </dt>
             <dd className={`mt-1 break-words ${dated ? "font-mono text-[13px]" : "text-sm"} ${text === "Not supplied" ? "text-muted" : "text-ink"}`}>

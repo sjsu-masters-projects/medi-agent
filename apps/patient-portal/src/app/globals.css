@@ -87,16 +87,14 @@ a {
 }
 
 :focus-visible {
-  outline: 3px solid rgba(20, 116, 101, 0.45);
-  outline-offset: 3px;
-  border-radius: 12px;
+  outline: 3px solid var(--color-brand);
+  outline-offset: 2px;
+  /* The light halo keeps focus visible on dark and colored surfaces too. */
+  box-shadow: 0 0 0 2px var(--color-surface);
 }
 
-/* Fields show focus with their own border and ring. */
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible {
-  outline: none;
+@media (forced-colors: active) {
+  :focus-visible { outline-color: Highlight; box-shadow: none; }
 }
 
 .app-shell {

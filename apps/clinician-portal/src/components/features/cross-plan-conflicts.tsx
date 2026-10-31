@@ -132,7 +132,7 @@ export function ConflictComparison({ conflict }: { conflict: CrossPlanConflict }
         {/* Two columns when the pane is wide enough to read them, stacked in the narrow review pane and on phones. */}
         <div className="@container"><div className="grid gap-3 @xl:grid-cols-2">
             <section aria-label="This draft" className="rounded-xl border border-line-strong bg-surface p-3.5">
-                <h4 className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">This draft</h4>
+                <h4 className="mb-1.5 ma-field-label">This draft</h4>
                 <InstructionLines medication={conflict.ours} />
             </section>
             <section aria-label={`${otherPlanLabel(conflict.other_plan)}${date ? ` · ${date}` : ""}`} className="rounded-xl border border-line-strong bg-surface p-3.5">

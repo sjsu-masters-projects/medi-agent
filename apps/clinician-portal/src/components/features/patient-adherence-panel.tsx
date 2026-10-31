@@ -187,7 +187,7 @@ function DailyResponses({ patient }: { patient: PatientDeepDive }) {
             responses may include barriers; they are not automatically missed
             doses.
           </caption>
-          <thead className="border-y border-line">
+          <thead className="border-y border-line-strong bg-surface-2">
             <tr>
               {[
                 "Date (UTC)",
@@ -196,7 +196,7 @@ function DailyResponses({ patient }: { patient: PatientDeepDive }) {
                 "Total recorded",
                 "Completion",
               ].map((label) => (
-                <th className="px-5 py-3 font-mono text-[11px] font-normal uppercase tracking-[0.06em] text-muted" scope="col" key={label}>
+                <th className="px-5 py-3 ma-table-heading" scope="col" key={label}>
                   {label}
                 </th>
               ))}

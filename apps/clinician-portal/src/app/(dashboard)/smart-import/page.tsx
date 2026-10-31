@@ -319,7 +319,7 @@ export default function SmartImportPage() {
                     )}
                     {handoff.resources.length > 0 && (
                         <div>
-                            <div aria-hidden="true" className="hidden grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] gap-4 border-b border-line px-[22px] py-3 font-mono text-[11px] uppercase tracking-[0.06em] text-muted sm:grid">
+                            <div aria-hidden="true" className="hidden grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] gap-4 border-b border-line-strong bg-surface-2 px-[22px] py-3 ma-table-heading sm:grid">
                                 <span>Resource type</span>
                                 <span>Source identifier</span>
                                 <span>Status</span>

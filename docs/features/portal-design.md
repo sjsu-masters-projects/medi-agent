@@ -57,6 +57,27 @@ token values, and [brand icons](../brand-icons.md) covers assets. This page keep
    file rather than inserting a database id into the patient's message. Source links
    promise only the destination they can open.
 
+10. **Readable text roles.** Clinician operational headings use `ma-section-heading`
+    (16px semibold), field labels `ma-field-label` and column labels `ma-table-heading`
+    (14px semibold dark slate). Table headers have a distinct light surface. Metadata
+    stays secondary; source values and clinical text remain exact. Shared clinician
+    buttons use 13px small / 14px normal labels with wrapping room.
+11. **Tables keep their meaning.** The roster uses native column headers, patient row
+    headers and a caption; patient names are ordinary links, including browser new-tab
+    navigation. Numeric columns align right. Filters, sorts, unknown values and empty
+    states retain their existing meaning. Narrow viewports scroll the table rather than
+    the page. Medication and adherence tables retain their native structure.
+12. **Focus survives every surface.** Both portals use an opaque 3px action/brand outline
+    with a 2px light halo and offset. Fields retain the shared outline alongside their
+    border feedback. Forced colors use system Highlight without the halo.
+13. **Measurements and review are distinct.** Lower reported symptom severity uses neutral
+    styling; recorded review retains its explicit review label and success treatment.
+    Urgent/severe treatments and thresholds do not change.
+14. **Comfortable reading measure.** Patient explanations keep heading-free paragraphs
+    and bullets at the existing 16px/28px rhythm, capped at 65ch in wide dialogs. Source
+    previews retain their full available width. The explanation's treatment/approval
+    notice uses readable 14px text, without weakening its wording.
+
 ## Why it was built this way
 
 - One identity with two compositions: warm and thumb-first for patients, dense and

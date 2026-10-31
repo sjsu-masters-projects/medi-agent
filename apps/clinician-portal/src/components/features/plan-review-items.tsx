@@ -138,11 +138,11 @@ export function PlanReviewItemRow({ item, patientLabel, clinicName, highlighted,
             {item.request_note ? <p className="whitespace-pre-wrap break-words rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink-2"><span className="font-semibold text-ink">{fromAsker ? "Their reply: " : "Their message: "}</span>{item.request_note}</p> : null}
             <div className="grid gap-3 md:grid-cols-2">
                 <section aria-label={fromAsker ? "Your draft" : "Their draft"} className="rounded-xl border border-line-strong bg-surface p-3.5">
-                    <h4 className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">{fromAsker ? "Your draft" : "Their draft"}</h4>
+                    <h4 className="mb-1.5 ma-field-label">{fromAsker ? "Your draft" : "Their draft"}</h4>
                     <InstructionLines medication={medication(item.summary.ours)} />
                 </section>
                 <section aria-label={fromAsker ? "Their plan" : "Your plan"} className="rounded-xl border border-line-strong bg-surface p-3.5">
-                    <h4 className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">{fromAsker ? "Their plan" : "Your plan"}</h4>
+                    <h4 className="mb-1.5 ma-field-label">{fromAsker ? "Their plan" : "Your plan"}</h4>
                     <InstructionLines medication={medication(item.summary.theirs)} />
                 </section>
             </div>
